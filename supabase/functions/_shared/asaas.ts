@@ -9,6 +9,39 @@ if (IS_PRODUCTION && !CORS_ORIGIN) {
     console.error('CRITICAL: CORS_ORIGIN must be set in production. All requests will be blocked.');
 }
 
+// Allowlist of origins that may call these functions. Includes the configured
+// production origin (CORS_ORIGIN, e.g. the Vercel URL) plus local dev origins so
+// `npm run dev` on localhost:5173 is not blocked by CORS in production.
+const STATIC_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'https://worki-opal.vercel.app',
+];
+
+const ALLOWED_ORIGINS = [
+    ...(CORS_ORIGIN ? [CORS_ORIGIN] : []),
+    ...STATIC_ALLOWED_ORIGINS,
+];
+
+/**
+ * Returns CORS headers with the Access-Control-Allow-Origin dynamically
+ * reflected from the request's Origin header when it is in the allowlist.
+ * Falls back to the configured ALLOWED_ORIGIN otherwise.
+ */
+export function getCorsHeaders(req?: Request) {
+    const requestOrigin = req?.headers.get('Origin') ?? '';
+    const origin = ALLOWED_ORIGINS.includes(requestOrigin)
+        ? requestOrigin
+        : ALLOWED_ORIGIN;
+    return {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Vary': 'Origin',
+    };
+}
+
+// Backward-compatible static export (no request context). Prefer getCorsHeaders(req).
 export const corsHeaders = {
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
