@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { corsHeaders, ASAAS_API_URL, getAsaasHeaders } from '../_shared/asaas.ts';
+import { getCorsHeaders, ASAAS_API_URL, getAsaasHeaders } from '../_shared/asaas.ts';
 import { isRateLimited } from '../_shared/rate-limit.ts';
 
 function validateCPF(cpf: string): boolean {
@@ -51,6 +51,7 @@ function validateCNPJ(cnpj: string): boolean {
 }
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }

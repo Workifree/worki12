@@ -1,9 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/asaas.ts';
+import { getCorsHeaders } from '../_shared/asaas.ts';
 import { isRateLimited } from '../_shared/rate-limit.ts';
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
