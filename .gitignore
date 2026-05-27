@@ -16,3 +16,6 @@ supabase/.env
 frontend/test-results/
 frontend/playwright-report/
 .vercel
+
+# Agent worktrees (nested git checkouts - never commit)
+.claude/worktrees/
