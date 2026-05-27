@@ -193,7 +193,12 @@ export default function MyJobs() {
 
                         const todayDate = new Date();
                         const startTime = setMinutes(setHours(todayDate, startH), startM);
-                        const endTime = setMinutes(setHours(todayDate, endH), endM);
+                        let endTime = setMinutes(setHours(todayDate, endH), endM);
+
+                        // Turno que cruza a meia-noite (ex.: 20:00–02:00): fim cai no dia seguinte
+                        if (endTime.getTime() <= startTime.getTime()) {
+                            endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
+                        }
 
                         // Add 30 min buffer before start and 1 hour after end
                         const startBuffer = new Date(startTime.getTime() - 30 * 60 * 1000);
