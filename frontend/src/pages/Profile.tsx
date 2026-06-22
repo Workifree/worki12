@@ -1,11 +1,12 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface WorkerProfile {
     id: string;
@@ -112,10 +113,16 @@ export default function Profile() {
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
 
+    // QR de identidade
+    const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [workerId, setWorkerId] = useState<string | null>(null);
+
     useEffect(() => {
         const fetchProfile = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return navigate('/login');
+
+            setWorkerId(user.id);
 
             const { data, error } = await supabase
                 .from('workers')
@@ -309,7 +316,7 @@ export default function Profile() {
             <div className="relative mb-12 group">
                 <div className="h-48 bg-gray-900 rounded-3xl border-2 border-black overflow-hidden relative">
                     {profile.cover_url ? (
-                        <img src={profile.cover_url} className="w-full h-full object-cover" />
+                        <img src={profile.cover_url} alt="Foto de capa do perfil" className="w-full h-full object-cover" />
                     ) : (
                         <div className="w-full h-full bg-gradient-to-r from-gray-900 to-black"></div>
                     )}
@@ -404,9 +411,18 @@ export default function Profile() {
                                 </button>
                             </>
                         ) : (
-                            <button onClick={() => setIsEditing(true)} className="bg-white text-black px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-primary hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                <Edit2 size={16} className="inline mr-2" /> Editar Perfil
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => setQrModalOpen(true)}
+                                    aria-label="Ver meu QR de identidade"
+                                    className="bg-white text-black p-2 rounded-xl border-2 border-black hover:bg-gray-100 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                    <QrCode size={18} />
+                                </button>
+                                <button onClick={() => setIsEditing(true)} className="bg-white text-black px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-primary hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                    <Edit2 size={16} className="inline mr-2" /> Editar Perfil
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -435,7 +451,7 @@ export default function Profile() {
                     </div>
 
                     {/* Stats */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-sm">
+                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
                         <h3 className="text-lg font-black uppercase mb-4">Estatísticas</h3>
                         <div className="space-y-4">
                             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
@@ -456,7 +472,7 @@ export default function Profile() {
                     </div>
 
                     {/* Payments */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-sm">
+                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-black uppercase flex items-center gap-2">
                                 <CreditCard size={20} /> Recebimento
@@ -473,7 +489,7 @@ export default function Profile() {
                     </div>
 
                     {/* Contact Info */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-sm">
+                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
                         <h3 className="text-lg font-black uppercase mb-4">Contato</h3>
                         <div className="space-y-4 text-sm font-bold text-gray-600">
                             <div className="flex items-center gap-2">
@@ -514,14 +530,14 @@ export default function Profile() {
                                         onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
                                         placeholder="Função Principal (ex: Bartender)"
                                         aria-label="Funcao principal"
-                                        className="w-full border p-2 rounded-lg"
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none"
                                     />
                                     <textarea
                                         value={formData.roles}
                                         onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
                                         placeholder="Outras habilidades (separe por vírgula)"
                                         aria-label="Especialidades"
-                                        className="w-full border p-2 rounded-lg h-20"
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-20"
                                     />
                                     <p className="text-xs text-gray-400">Separe as especialidades por vírgula.</p>
                                 </div>
@@ -546,7 +562,7 @@ export default function Profile() {
                                     value={formData.bio}
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                                     aria-label="Sobre voce"
-                                    className="w-full border p-2 rounded-lg h-32"
+                                    className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-32"
                                     placeholder="Conte um pouco sobre sua experiência..."
                                 />
                             ) : (
@@ -571,7 +587,7 @@ export default function Profile() {
                     </div>
 
                     {/* Reviews Section - Placeholder for now until we have reviews table populated */}
-                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-sm">
+                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
                         <h3 className="text-xl font-black uppercase mb-6 flex items-center gap-2">
                             <Star size={20} /> Avaliações Recentes
                         </h3>
@@ -650,6 +666,41 @@ export default function Profile() {
             </div>
 
         </div>
+
+        {/* Modal QR de identidade */}
+        {qrModalOpen && workerId && (
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,166,81,1)]">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-black uppercase tracking-tight">Meu QR de Identidade</h2>
+                        <button onClick={() => setQrModalOpen(false)} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    <p className="text-sm font-bold text-gray-600 mb-5 text-center">
+                        Mostre este QR para uma empresa te adicionar à equipe. Cada scan é único para você.
+                    </p>
+                    <div className="flex justify-center mb-5">
+                        <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                            <QRCodeSVG
+                                value={workerId}
+                                size={200}
+                                level="M"
+                                includeMargin={false}
+                            />
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 text-center">
+                        <p className="text-xs font-bold uppercase text-gray-400 mb-1">Worki ID</p>
+                        <p className="font-mono text-xs font-bold text-gray-700 break-all">{workerId}</p>
+                    </div>
+                    {/* TODO v1.1: scanner de câmera para empresa ler o QR diretamente no app */}
+                    <p className="text-xs text-gray-400 text-center mt-3 font-bold">
+                        Scanner por câmera (empresa lê aqui) disponível na v1.1.
+                    </p>
+                </div>
+            </div>
+        )}
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (

@@ -61,6 +61,7 @@ export interface Job {
   display_code?: string;
   title: string;
   description?: string;
+  briefing?: string;
   type?: string;
   status: string;
   location: string;
@@ -87,19 +88,107 @@ export interface Job {
 // APPLICATION
 // =============================================
 
+/**
+ * Status de application (pull = candidatura worker; push = convite empresa).
+ * 'invited'  — empresa convidou; aguarda resposta do freela (R5/R7).
+ * 'declined' — freela recusou; NEUTRO, zero punição (R7).
+ * Demais status: fluxo pull legado.
+ */
+export type ApplicationStatus =
+  | 'pending'
+  | 'reviewing'
+  | 'interview'
+  | 'hired'
+  | 'in_progress'
+  | 'completed'
+  | 'rejected'
+  | 'invited'
+  | 'declined';
+
+/**
+ * Resposta do freela a um convite push.
+ * NULL enquanto o convite está pendente.
+ */
+export type InvitationResponse = 'accepted' | 'declined';
+
 export interface Application {
   id: string;
   job_id: string;
   worker_id: string;
-  status: string;
+  /** Usa ApplicationStatus — restrinja ao tipo ao criar/actualizar. */
+  status: ApplicationStatus | string;
   cover_letter?: string;
   created_at?: string;
   worker_checkin_at?: string | null;
   worker_checkout_at?: string | null;
   company_checkin_confirmed_at?: string | null;
   company_checkout_confirmed_at?: string | null;
+  // --- campos de convite push (nullable — null = fluxo pull) ---
+  /** Quando a empresa criou o convite. NULL = aplicação pull. */
+  invited_by_company_at?: string | null;
+  /** Quando o freela respondeu ao convite. */
+  invitation_responded_at?: string | null;
+  /** Resposta do freela: 'accepted' | 'declined' | null (pendente). */
+  invitation_response?: InvitationResponse | null;
+  /** Data-limite para o freela responder (R8). Após esta data, slot reabre. */
+  invitation_expires_at?: string | null;
   worker?: Partial<WorkerProfile>;
   job?: Partial<Job>;
+}
+
+// =============================================
+// TEAM CONNECTIONS
+// =============================================
+
+/**
+ * Status da aresta consentida empresa↔freela (R1/R2).
+ * 'pending'  — empresa convidou, aguarda aceite do freela.
+ * 'accepted' — freela aceitou; handshake concluído (1x).
+ * 'blocked'  — freela saiu/bloqueou a empresa.
+ */
+export type TeamConnectionStatus = 'pending' | 'accepted' | 'blocked';
+
+/**
+ * Canal pelo qual a empresa adicionou o freela ao roster.
+ */
+export type TeamConnectionSource = 'qr' | 'link' | 'phone';
+
+/**
+ * Espelha a tabela `team_connections`.
+ * Gerado à mão conforme migration `20260622000000_team_connections.sql`.
+ */
+export interface TeamConnection {
+  id: string;
+  company_id: string;
+  worker_id: string;
+  status: TeamConnectionStatus;
+  source: TeamConnectionSource;
+  /** auth.uid() de quem bloqueou (auditoria). */
+  blocked_by?: string | null;
+  created_at: string;
+  accepted_at?: string | null;
+  updated_at: string;
+  // --- joins opcionais para UI ---
+  worker?: Partial<WorkerProfile>;
+  company?: Partial<CompanyProfile>;
+}
+
+/**
+ * Membro da equipe: conexão aceita com perfil do worker embutido.
+ * Retornado por TeamConnectionService.listTeamMembers().
+ */
+export interface TeamMember {
+  connection: TeamConnection;
+  worker: WorkerProfile;
+}
+
+/**
+ * "Minha loja": conexão aceita vista pelo worker, com dados da empresa.
+ * Retornado por TeamConnectionService.listMyStores().
+ */
+export interface MyStore {
+  connection: TeamConnection;
+  company: CompanyProfile;
 }
 
 // =============================================
@@ -140,13 +229,34 @@ export interface CompanyConversationItem extends ConversationItem {
 // REVIEW
 // =============================================
 
+/**
+ * Direção da avaliação (coluna adicionada em `20260622000200_company_rating_trigger.sql`).
+ * 'worker'  → empresa avaliou o freela (reviewed_id é worker).
+ * 'company' → freela avaliou a empresa (reviewed_id é company).
+ * NULL = legado (pre-migration).
+ * IMPORTANTE: reviewer_id/reviewed_id são TEXT no DB (não UUID).
+ */
+export type ReviewDirection = 'worker' | 'company';
+
 export interface Review {
   id: string;
   rating: number;
   comment?: string;
+  /** TEXT no DB — não cast para UUID. */
   reviewer_id: string;
+  /** TEXT no DB — não cast para UUID. */
+  reviewed_id?: string;
+  /** @deprecated use reviewed_id */
   reviewee_id?: string;
   application_id?: string;
+  /**
+   * Direção explícita: quem é o avaliado.
+   * Passar SEMPRE ao inserir: 'worker' quando empresa avalia freela;
+   * 'company' quando freela avalia empresa.
+   * O trigger BEFORE INSERT (`set_review_direction`) preenche automaticamente
+   * se omitido, mas o service DEVE passar explicitamente (ADR-001).
+   */
+  direction?: ReviewDirection | null;
   created_at?: string;
   company?: { name: string };
 }

@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, MessageSquare, Wallet, PlusCircle } from 'lucide-react';
+import { Home, Briefcase, User, MessageSquare, Wallet, PlusCircle, Users } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 interface BottomNavProps {
@@ -16,7 +16,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
 
     const companyNavItems = [
         { icon: Home, label: 'Início', path: '/company/dashboard' },
-        { icon: Briefcase, label: 'Vagas', path: '/company/jobs' },
+        { icon: Users, label: 'Equipe', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar', path: '/company/create' },
         { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
         { icon: User, label: 'Perfil', path: '/company/profile' },

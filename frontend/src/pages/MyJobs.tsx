@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2 } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -9,7 +9,9 @@ import { ptBR } from 'date-fns/locale';
 import RateModal from '../components/RateModal';
 import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
-import { logError } from '../lib/logger'
+import { logError } from '../lib/logger';
+import { useWorkerInvites } from '../hooks/useShiftInvites';
+import type { ReviewDirection } from '../types';
 
 type Step = { label: string; status: 'complete' | 'active' | 'pending' }
 
@@ -64,10 +66,12 @@ interface JobApplication {
     company_checkout_confirmed_at: string | null;
 }
 
+type ActiveTab = 'invites' | 'applied' | 'in_progress' | 'scheduled' | 'history';
+
 export default function MyJobs() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'applied' | 'in_progress' | 'scheduled' | 'history'>('scheduled');
+    const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
     const [jobs, setJobs] = useState<{
         applied: JobApplication[],
         in_progress: JobApplication[],
@@ -80,7 +84,11 @@ export default function MyJobs() {
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
     const { addToast } = useToast();
+
+    // Hook de convites push
+    const { pendingInvites, loading: invitesLoading, respondingId, respond } = useWorkerInvites();
 
     const fetchJobs = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -95,7 +103,6 @@ export default function MyJobs() {
         const reviewedSet = new Set(myReviews?.map(r => r.job_id) || []);
         setReviewedJobIds(reviewedSet);
 
-        // Fetch applications with job details and company details
         const { data, error } = await supabase
             .from('applications')
             .select(`
@@ -122,6 +129,8 @@ export default function MyJobs() {
                 )
             `)
             .eq('worker_id', user.id)
+            // Excluir convites pending — eles ficam na aba Convites via hook
+            .not('status', 'eq', 'invited')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -159,7 +168,6 @@ export default function MyJobs() {
             }
 
             (data as unknown as ApplicationRow[]).forEach((app) => {
-                // Normalize app object for easier consumption
                 const application: JobApplication = {
                     id: app.id,
                     job_id: app.job?.id || '',
@@ -182,7 +190,6 @@ export default function MyJobs() {
                     company_checkout_confirmed_at: app.company_checkout_confirmed_at
                 };
 
-                // Check if job is happening now (same day + within work hours)
                 const isJobToday = application.raw_date && isToday(parseISO(application.raw_date));
                 let isWithinWorkHours = false;
 
@@ -195,12 +202,10 @@ export default function MyJobs() {
                         const startTime = setMinutes(setHours(todayDate, startH), startM);
                         let endTime = setMinutes(setHours(todayDate, endH), endM);
 
-                        // Turno que cruza a meia-noite (ex.: 20:00–02:00): fim cai no dia seguinte
                         if (endTime.getTime() <= startTime.getTime()) {
                             endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
                         }
 
-                        // Add 30 min buffer before start and 1 hour after end
                         const startBuffer = new Date(startTime.getTime() - 30 * 60 * 1000);
                         const endBuffer = new Date(endTime.getTime() + 60 * 60 * 1000);
 
@@ -218,7 +223,7 @@ export default function MyJobs() {
                     in_progress.push(application);
                 } else if (app.status === 'hired') {
                     scheduled.push(application);
-                } else if (['completed', 'rejected', 'cancelled'].includes(app.status)) {
+                } else if (['completed', 'rejected', 'cancelled', 'declined'].includes(app.status)) {
                     history.push(application);
                 }
             });
@@ -233,9 +238,6 @@ export default function MyJobs() {
     }, [fetchJobs]);
 
     const handleCancelApplication = async (appId: string) => {
-        if (!window.confirm('Tem certeza que deseja cancelar esta candidatura? Esta acao nao pode ser desfeita.')) {
-            return;
-        }
         setActionLoading(appId);
         try {
             const { error } = await supabase
@@ -298,6 +300,7 @@ export default function MyJobs() {
         setRateModalOpen(true);
     };
 
+    // Fix R10: direction explícito ('company' quando worker avalia empresa)
     const handleSubmitRate = async (rating: number, comment: string) => {
         if (!selectedJobToRate) return;
 
@@ -305,12 +308,15 @@ export default function MyJobs() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
+            const direction: ReviewDirection = 'company';
+
             const { error } = await supabase.from('reviews').insert({
                 job_id: selectedJobToRate.job_id,
                 reviewer_id: user.id,
-                reviewed_id: selectedJobToRate.company_id, // Rate the company
-                rating: rating,
-                comment: comment
+                reviewed_id: selectedJobToRate.company_id, // empresa sendo avaliada
+                direction,
+                rating,
+                comment
             });
 
             if (error) throw error;
@@ -328,7 +334,7 @@ export default function MyJobs() {
         <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse">
             <div className="h-10 bg-gray-200 rounded w-1/3" />
             <div className="flex gap-2">
-                {[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-gray-200 rounded-xl w-24" />)}
+                {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-gray-200 rounded-xl w-24" />)}
             </div>
             <div className="space-y-4">
                 {[...Array(4)].map((_, i) => (
@@ -346,17 +352,18 @@ export default function MyJobs() {
                 <h2 className="text-4xl font-black uppercase tracking-tighter">Meus Jobs</h2>
             </header>
 
-            {/* Tabs */}
+            {/* Tabs — Convites PRIMEIRO */}
             <div className="flex gap-2 border-b-2 border-gray-200 pb-1 overflow-x-auto scrollbar-hide">
                 {[
-                    { id: 'applied', label: 'Candidaturas', count: jobs.applied.length },
-                    { id: 'in_progress', label: 'Em Andamento', count: jobs.in_progress.length },
-                    { id: 'scheduled', label: 'Agendados', count: jobs.scheduled.length },
-                    { id: 'history', label: 'Histórico', count: jobs.history.length }
+                    { id: 'invites' as ActiveTab, label: 'Convites', count: pendingInvites.length, urgent: true },
+                    { id: 'applied' as ActiveTab, label: 'Candidaturas', count: jobs.applied.length },
+                    { id: 'in_progress' as ActiveTab, label: 'Em Andamento', count: jobs.in_progress.length },
+                    { id: 'scheduled' as ActiveTab, label: 'Agendados', count: jobs.scheduled.length },
+                    { id: 'history' as ActiveTab, label: 'Histórico', count: jobs.history.length }
                 ].map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={`
                             px-6 py-2 rounded-t-xl font-bold uppercase transition-all whitespace-nowrap flex items-center gap-2
                             ${activeTab === tab.id
@@ -365,8 +372,14 @@ export default function MyJobs() {
                         `}
                     >
                         {tab.label}
-                        {tab.count > 0 && tab.id === 'in_progress' && (
-                            <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full animate-pulse">
+                        {tab.count > 0 && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${
+                                tab.urgent
+                                    ? 'bg-primary text-white animate-pulse'
+                                    : tab.id === 'in_progress'
+                                        ? 'bg-red-500 text-white animate-pulse'
+                                        : 'bg-gray-200 text-gray-700'
+                            }`}>
                                 {tab.count}
                             </span>
                         )}
@@ -377,13 +390,150 @@ export default function MyJobs() {
             {/* Content */}
             <div className="grid gap-4">
 
-                {/* Empty States */}
+                {/* ── ABA CONVITES ── */}
+                {activeTab === 'invites' && (
+                    <>
+                        {invitesLoading && (
+                            <div className="space-y-4 animate-pulse">
+                                {[...Array(2)].map((_, i) => (
+                                    <div key={i} className="h-32 bg-gray-200 rounded-2xl" />
+                                ))}
+                            </div>
+                        )}
+
+                        {!invitesLoading && pendingInvites.length === 0 && (
+                            <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                                <Bell size={48} className="mx-auto mb-4 opacity-30" />
+                                <p className="font-bold text-lg">Nenhum convite pendente.</p>
+                                <p className="text-sm mt-2">Quando uma empresa te convidar para um turno, aparecerá aqui.</p>
+                            </div>
+                        )}
+
+                        {!invitesLoading && pendingInvites.map((invite) => {
+                            const job = invite.job;
+                            const companyName = (job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
+                            const companyLogo = (job?.company as { logo_url?: string | null } | undefined)?.logo_url ?? null;
+                            const jobTitle = job?.title ?? 'Turno';
+                            const budget = job?.budget ?? 0;
+                            const startDate = job?.start_date
+                                ? new Date(job.start_date).toLocaleDateString('pt-BR')
+                                : 'Data a definir';
+                            const startTime = job?.work_start_time ?? '';
+                            const endTime = job?.work_end_time ?? '';
+                            const location = job?.location ?? 'Local a definir';
+                            const isResponding = respondingId === invite.id;
+
+                            return (
+                                <div key={invite.id} className="bg-white border-2 border-black rounded-2xl p-6 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                                    {/* Empresa */}
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                            {companyLogo ? (
+                                                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <Building2 size={20} className="text-gray-400" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold uppercase text-gray-400">Convite de</p>
+                                            <p className="font-black uppercase">{companyName}</p>
+                                        </div>
+                                        <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
+                                            Novo convite
+                                        </span>
+                                    </div>
+
+                                    {/* Detalhes do turno */}
+                                    <h3 className="font-black text-xl uppercase mb-3">{jobTitle}</h3>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+                                            <Clock size={14} /> {startDate}{startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-primary-light text-primary px-3 py-1.5 rounded-xl">
+                                            <DollarSign size={14} /> R$ {budget.toFixed(2).replace('.', ',')}
+                                        </span>
+                                        {location && (
+                                            <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+                                                <MapPin size={14} /> {location}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Briefing */}
+                                    {(job?.briefing || job?.description) && (
+                                        <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-4">
+                                            <p className="text-xs font-bold uppercase text-gray-400 mb-1">Briefing</p>
+                                            <p className="text-sm font-medium text-gray-700 line-clamp-3">{job.briefing || job.description}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Expiração */}
+                                    {invite.invitation_expires_at && (
+                                        <p className="text-xs font-bold text-yellow-600 mb-4 flex items-center gap-1">
+                                            <Clock size={12} />
+                                            Expira {formatDistanceToNow(new Date(invite.invitation_expires_at), { addSuffix: true, locale: ptBR })}
+                                        </p>
+                                    )}
+
+                                    {/* Ações */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => respond(invite.id, 'accepted')}
+                                            disabled={isResponding}
+                                            className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                                            Aceitar
+                                        </button>
+                                        <button
+                                            onClick={() => respond(invite.id, 'declined')}
+                                            disabled={isResponding}
+                                            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-xl font-black uppercase border-2 border-gray-300 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
+                                            Recusar
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-400 text-center mt-2 font-bold">
+                                        Recusar não afeta sua reputação.
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </>
+                )}
+
+                {/* ── ABA CANDIDATURAS ── */}
                 {activeTab === 'applied' && jobs.applied.length === 0 && (
                     <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                         <p className="font-bold">Você não tem candidaturas pendentes.</p>
                         <button onClick={() => navigate('/dashboard')} className="mt-4 text-primary underline font-bold">Buscar Vagas</button>
                     </div>
                 )}
+                {activeTab === 'applied' && jobs.applied.map((job) => (
+                    <div key={job.id} className="bg-white border-2 border-gray-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center opacity-80 hover:opacity-100 transition-opacity gap-4">
+                        <div>
+                            <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
+                            <p className="text-sm font-bold text-gray-500">{job.company_name} • {job.location}</p>
+                            <span className="inline-block mt-2 bg-yellow-100 text-yellow-700 text-xs font-black px-2 py-1 rounded-xl uppercase">
+                                {job.status === 'pending' ? 'Aguardando' : job.status === 'interview' ? 'Em Entrevista' : 'Em Análise'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setConfirmCancelId(job.id)}
+                            disabled={actionLoading === job.id}
+                            className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors self-end md:self-center disabled:opacity-50"
+                            title="Cancelar Candidatura"
+                            aria-label="Cancelar candidatura"
+                        >
+                            {actionLoading === job.id ? <Loader2 className="animate-spin" size={24} /> : <XCircle size={24} />}
+                        </button>
+                    </div>
+                ))}
+
+                {/* ── ABA EM ANDAMENTO ── */}
                 {activeTab === 'in_progress' && jobs.in_progress.length === 0 && (
                     <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                         <AlertCircle size={48} className="mx-auto mb-4 opacity-30" />
@@ -391,41 +541,8 @@ export default function MyJobs() {
                         <p className="text-sm mt-2">Trabalhos agendados para hoje aparecerão aqui durante o horário de trabalho.</p>
                     </div>
                 )}
-                {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Nenhum job agendado no momento.</p>
-                    </div>
-                )}
-                {activeTab === 'history' && jobs.history.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Seu histórico está vazio.</p>
-                    </div>
-                )}
-
-                {/* Applied Tab */}
-                {activeTab === 'applied' && jobs.applied.map((job, i) => (
-                    <div key={i} className="bg-white border-2 border-gray-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center opacity-80 hover:opacity-100 transition-opacity gap-4">
-                        <div>
-                            <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
-                            <p className="text-sm font-bold text-gray-500">{job.company_name} • {job.location}</p>
-                            <span className="inline-block mt-2 bg-yellow-100 text-yellow-700 text-xs font-black px-2 py-1 rounded-md uppercase">
-                                {job.status === 'pending' ? 'Aguardando' : job.status === 'interview' ? 'Em Entrevista' : 'Em Análise'}
-                            </span>
-                        </div>
-                        <button
-                            onClick={() => handleCancelApplication(job.id)}
-                            disabled={actionLoading === job.id}
-                            className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors self-end md:self-center disabled:opacity-50"
-                            title="Cancelar Candidatura"
-                        >
-                            {actionLoading === job.id ? <Loader2 className="animate-spin" size={24} /> : <XCircle size={24} />}
-                        </button>
-                    </div>
-                ))}
-
-                {/* In Progress Tab */}
-                {activeTab === 'in_progress' && jobs.in_progress.map((job, i) => (
-                    <div key={i} className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 p-6 rounded-2xl shadow-lg">
+                {activeTab === 'in_progress' && jobs.in_progress.map((job) => (
+                    <div key={job.id} className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 p-6 rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]">
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div className="flex gap-4 items-start">
                                 <div className="bg-green-600 text-white p-3 rounded-xl min-w-[70px] text-center animate-pulse">
@@ -453,16 +570,12 @@ export default function MyJobs() {
                                     )}
                                 </div>
                             </div>
-
                         </div>
-                        {/* Job Lifecycle Stepper */}
                         <div className="border-t border-gray-100 mt-3 pt-3">
                             <JobLifecycleStepper steps={computeWorkerSteps(job)} />
                         </div>
                         <div className="flex flex-col gap-3 mt-3">
-                            {/* Check-in/Check-out Section (reorganizado para ficar abaixo do stepper) */}
                             <div className="flex flex-col gap-3 min-w-[200px]">
-                                {/* Worker Check-in */}
                                 {!job.worker_checkin_at ? (
                                     <button
                                         onClick={() => handleCheckin(job.id)}
@@ -472,9 +585,7 @@ export default function MyJobs() {
                                         {actionLoading === job.id ? (
                                             <Loader2 className="animate-spin" size={20} />
                                         ) : (
-                                            <>
-                                                <Play size={20} /> Check-in
-                                            </>
+                                            <><Play size={20} /> Check-in</>
                                         )}
                                     </button>
                                 ) : (
@@ -484,22 +595,16 @@ export default function MyJobs() {
                                     </div>
                                 )}
 
-                                {/* Company Confirmation */}
                                 {job.worker_checkin_at && (
                                     <div className={`px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 ${job.company_checkin_confirmed_at ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                         {job.company_checkin_confirmed_at ? (
-                                            <>
-                                                <CheckCircle2 size={16} /> Empresa confirmou chegada
-                                            </>
+                                            <><CheckCircle2 size={16} /> Empresa confirmou chegada</>
                                         ) : (
-                                            <>
-                                                <Clock size={16} /> Aguardando confirmação da empresa
-                                            </>
+                                            <><Clock size={16} /> Aguardando confirmação da empresa</>
                                         )}
                                     </div>
                                 )}
 
-                                {/* Worker Check-out */}
                                 {job.worker_checkin_at && !job.worker_checkout_at && (
                                     <button
                                         onClick={() => handleCheckout(job.id)}
@@ -509,9 +614,7 @@ export default function MyJobs() {
                                         {actionLoading === job.id ? (
                                             <Loader2 className="animate-spin" size={20} />
                                         ) : (
-                                            <>
-                                                <Square size={20} /> Check-out
-                                            </>
+                                            <><Square size={20} /> Check-out</>
                                         )}
                                     </button>
                                 )}
@@ -527,9 +630,14 @@ export default function MyJobs() {
                     </div>
                 ))}
 
-                {/* Scheduled Tab */}
-                {activeTab === 'scheduled' && jobs.scheduled.map((job, i) => (
-                    <div key={i} className="bg-white border-2 border-black p-6 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col md:flex-row justify-between md:items-center gap-4 group hover:-translate-y-1 transition-transform">
+                {/* ── ABA AGENDADOS ── */}
+                {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
+                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                        <p className="font-bold">Nenhum job agendado no momento.</p>
+                    </div>
+                )}
+                {activeTab === 'scheduled' && jobs.scheduled.map((job) => (
+                    <div key={job.id} className="bg-white border-2 border-black p-6 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col md:flex-row justify-between md:items-center gap-4 group hover:-translate-y-1 transition-transform">
                         <div className="flex gap-4 items-center">
                             <div className="bg-black text-white p-3 rounded-xl border-2 border-black min-w-[70px] text-center group-hover:bg-primary group-hover:border-primary transition-colors">
                                 <span className="block text-xs font-bold uppercase">{job.month}</span>
@@ -558,9 +666,14 @@ export default function MyJobs() {
                     </div>
                 ))}
 
-                {/* History Tab */}
-                {activeTab === 'history' && jobs.history.map((job, i) => (
-                    <div key={i} className="bg-gray-50 border-2 border-transparent hover:border-black p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center transition-all cursor-pointer gap-2">
+                {/* ── ABA HISTÓRICO ── */}
+                {activeTab === 'history' && jobs.history.length === 0 && (
+                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                        <p className="font-bold">Seu histórico está vazio.</p>
+                    </div>
+                )}
+                {activeTab === 'history' && jobs.history.map((job) => (
+                    <div key={job.id} className="bg-gray-50 border-2 border-transparent hover:border-black p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center transition-all cursor-pointer gap-2">
                         <div>
                             <h3 className="font-black text-lg uppercase mb-1 text-gray-700">{job.title}</h3>
                             <p className="text-sm font-bold text-gray-400">{job.date} • {job.company_name}</p>
@@ -569,13 +682,13 @@ export default function MyJobs() {
                             <span className="block font-black text-gray-600">R$ {job.pay}</span>
                             {job.status === 'completed' ? (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-black text-green-600 flex items-center gap-1 uppercase bg-green-100 px-2 py-1 rounded-md">
+                                    <span className="text-xs font-black text-green-600 flex items-center gap-1 uppercase bg-green-100 px-2 py-1 rounded-xl">
                                         <CheckCircle2 size={12} /> Pago
                                     </span>
                                     {!reviewedJobIds.has(job.job_id) ? (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                            className="text-xs font-black text-white bg-black hover:bg-yellow-500 hover:text-black flex items-center gap-1 uppercase px-3 py-1.5 rounded-md transition-colors"
+                                            className="text-xs font-black text-white bg-black hover:bg-yellow-500 hover:text-black flex items-center gap-1 uppercase px-3 py-1.5 rounded-xl transition-colors"
                                         >
                                             <Star size={12} /> Avaliar
                                         </button>
@@ -586,8 +699,8 @@ export default function MyJobs() {
                                     )}
                                 </div>
                             ) : (
-                                <span className="text-xs font-black text-red-500 flex items-center gap-1 uppercase bg-red-100 px-2 py-1 rounded-md">
-                                    <XCircle size={12} /> {job.status === 'rejected' ? 'Não Selecionado' : 'Cancelado'}
+                                <span className="text-xs font-black text-red-500 flex items-center gap-1 uppercase bg-red-100 px-2 py-1 rounded-xl">
+                                    <XCircle size={12} /> {job.status === 'rejected' ? 'Não Selecionado' : job.status === 'declined' ? 'Recusado' : 'Cancelado'}
                                 </span>
                             )}
                         </div>
@@ -605,6 +718,29 @@ export default function MyJobs() {
                 subtitle={selectedJobToRate?.title}
             />
 
+            {/* Modal de confirmação de cancelamento */}
+            {confirmCancelId && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
+                        <h3 className="text-xl font-black uppercase mb-2">Cancelar candidatura?</h3>
+                        <p className="text-sm font-bold text-gray-500 mb-6">Esta ação não pode ser desfeita.</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setConfirmCancelId(null)}
+                                className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-gray-100 transition-colors"
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                onClick={() => { const id = confirmCancelId; setConfirmCancelId(null); handleCancelApplication(id); }}
+                                className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-sm transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { WalletService } from '../../services/walletService';
-import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Zap, Calendar, Clock, Globe, Wallet, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Zap, Calendar, Clock, Globe, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { logError } from '../../lib/logger'
+import { logError } from '../../lib/logger';
+import { useCompanyTeam } from '../../hooks/useTeamConnections';
+import { useCompanyInvites } from '../../hooks/useShiftInvites';
+import type { TeamMember } from '../../types';
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -15,17 +17,18 @@ export default function CompanyCreateJob() {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState<{ name: string, slug: string }[]>([]);
-    const [companyBalance, setCompanyBalance] = useState<number>(0);
-    const [balanceLoading, setBalanceLoading] = useState(true);
+    const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+    const [showInvitePanel, setShowInvitePanel] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
         category: '',
         type: 'freelance', // freelance, full-time
         description: '',
         requirements: '',
+        briefing: '',
         location: '',
         budget: '',
-        budget_type: 'hourly', // hourly, daily, project
+        budget_type: 'daily', // hourly, daily, project — postpago v1 = fixo por turno
         start_date: '',
         scope: 'on-site', // on-site, remote, hybrid
         work_start_time: '',
@@ -34,6 +37,10 @@ export default function CompanyCreateJob() {
     });
 
     const [predictedCandidates, setPredictedCandidates] = useState(12);
+
+    // Hooks de equipe e convites — carregados após criação do job
+    const { teamMembers, loading: teamLoading } = useCompanyTeam();
+    const { invite, invitingWorkerId } = useCompanyInvites(createdJobId ?? '');
 
     useEffect(() => {
         // Fetch Categories
@@ -55,24 +62,7 @@ export default function CompanyCreateJob() {
             }
         }
         loadCategories();
-        loadCompanyBalance();
     }, []);
-
-    // Fetch company balance
-    const loadCompanyBalance = async () => {
-        setBalanceLoading(true);
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const wallet = await WalletService.getOrCreateWallet(user.id, 'company');
-                setCompanyBalance(wallet?.balance || 0);
-            }
-        } catch (error) {
-            logError('Error loading balance:', error);
-        } finally {
-            setBalanceLoading(false);
-        }
-    };
 
     // Fetch Job Data if Editing
     useEffect(() => {
@@ -102,6 +92,7 @@ export default function CompanyCreateJob() {
                     type: data.type,
                     description: data.description,
                     requirements: data.requirements,
+                    briefing: data.briefing || '',
                     location: data.location || '',
                     budget: data.budget?.toString() || '',
                     budget_type: data.budget_type,
@@ -148,19 +139,12 @@ export default function CompanyCreateJob() {
 
             const budgetAmount = parseFloat(formData.budget) || 0;
 
-            // For new jobs, verify balance and reserve escrow
-            if (!isEditing) {
-                if (budgetAmount <= 0) {
-                    addToast('Por favor, defina um valor para a vaga.', 'error');
-                    setLoading(false);
-                    return;
-                }
-
-                if (companyBalance < budgetAmount) {
-                    addToast(`Saldo insuficiente. Voce tem R$ ${companyBalance.toFixed(2)} mas precisa de R$ ${budgetAmount.toFixed(2)}.`, 'error');
-                    setLoading(false);
-                    return;
-                }
+            // Modelo postpago (Slice 1): sem reserva de escrow na criação — apenas inserir o job.
+            // A cobrança acontece na conclusão do turno (Slice 2).
+            if (!isEditing && budgetAmount <= 0) {
+                addToast('Por favor, defina um valor para o turno.', 'error');
+                setLoading(false);
+                return;
             }
 
             const payload = {
@@ -170,6 +154,7 @@ export default function CompanyCreateJob() {
                 type: formData.type,
                 description: formData.description,
                 requirements: formData.requirements,
+                briefing: formData.briefing,
                 location: formData.location,
                 budget: budgetAmount,
                 budget_type: formData.budget_type,
@@ -184,25 +169,17 @@ export default function CompanyCreateJob() {
             if (isEditing) {
                 const { error } = await supabase.from('jobs').update(payload).eq('id', id);
                 if (error) throw error;
+                addToast('Vaga atualizada com sucesso!', 'success');
+                navigate('/company/dashboard');
             } else {
-                // Create job first
+                // Criar turno — SEM reservar escrow (postpago, Slice 2)
                 const { data: newJob, error } = await supabase.from('jobs').insert(payload).select().single();
                 if (error) throw error;
 
-                // Reserve escrow for the job
-                const escrowResult = await WalletService.reserveEscrow(newJob.id, budgetAmount, user.id);
-                if (!escrowResult.success) {
-                    // Rollback: delete the job if escrow fails
-                    await supabase.from('jobs').delete().eq('id', newJob.id);
-                    throw new Error(escrowResult.error || 'Erro ao reservar pagamento');
-                }
-
-                // Update local balance (exact budget amount, fees already paid on deposit)
-                setCompanyBalance(prev => prev - budgetAmount);
+                addToast('Turno criado! Convide um freela da sua equipe.', 'success');
+                setCreatedJobId(newJob.id);
+                setShowInvitePanel(true);
             }
-
-            addToast(isEditing ? 'Vaga atualizada com sucesso!' : 'Vaga criada com sucesso!', 'success');
-            navigate('/company/dashboard');
         } catch (error: unknown) {
             logError('Error saving job:', error);
             addToast(error instanceof Error ? error.message : 'Erro ao salvar vaga. Verifique os dados.', 'error');
@@ -252,7 +229,7 @@ export default function CompanyCreateJob() {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold uppercase tracking-wide">Categoria</label>
                                     <select
@@ -288,7 +265,7 @@ export default function CompanyCreateJob() {
 
                             <div className="space-y-2">
                                 <label className="text-xs font-bold uppercase tracking-wide">Formato de Trabalho</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                     {[
                                         { id: 'on-site', label: 'Presencial', icon: MapPin },
                                         { id: 'remote', label: 'Remoto', icon: Globe },
@@ -339,6 +316,19 @@ export default function CompanyCreateJob() {
                                     }}
                                 />
                             </div>
+
+                            <div className="space-y-2">
+                                <label htmlFor="briefing" className="text-xs font-bold uppercase tracking-wide">Briefing do Turno</label>
+                                <p className="text-xs text-gray-400 font-bold">Regras da casa, cardápio, procedimentos, dress code — o freela vê isso no convite.</p>
+                                <textarea
+                                    id="briefing"
+                                    aria-label="Briefing do Turno"
+                                    className="w-full h-28 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
+                                    placeholder="Ex: Uniforme preto obrigatório. Cardápio fixo do bar. Início pontual às 18h..."
+                                    value={formData.briefing}
+                                    onChange={(e) => setFormData({ ...formData, briefing: e.target.value })}
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -346,52 +336,21 @@ export default function CompanyCreateJob() {
                     {step === 3 && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                             <h2 className="text-xl font-black uppercase flex items-center gap-2">
-                                <DollarSign size={20} /> Orçamento & Cronograma
+                                <DollarSign size={20} /> Valor & Cronograma
                             </h2>
 
-                            {/* Balance Card */}
-                            {!isEditing && (() => {
-                                const budgetVal = parseFloat(formData.budget || '0');
-                                const insufficientBalance = budgetVal > companyBalance;
+                            {/* Aviso postpago */}
+                            {!isEditing && (
+                                <div className="p-4 rounded-xl border-2 bg-blue-50 border-blue-200 flex items-start gap-3">
+                                    <DollarSign size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="text-xs font-black uppercase text-blue-700 block mb-1">Pagamento postpago</span>
+                                        <p className="text-xs text-blue-600 font-bold">Nenhum depósito antecipado. O freela é pago na conclusão do turno (Slice 2).</p>
+                                    </div>
+                                </div>
+                            )}
 
-                                return (
-                                    <>
-                                        <div className={`p-4 rounded-xl border-2 flex items-center justify-between ${insufficientBalance
-                                            ? 'bg-red-50 border-red-300'
-                                            : 'bg-green-50 border-green-300'
-                                            }`}>
-                                            <div className="flex items-center gap-3">
-                                                <Wallet size={24} className={insufficientBalance ? 'text-red-500' : 'text-green-600'} />
-                                                <div>
-                                                    <span className="text-xs font-bold uppercase text-gray-500 block">Seu Saldo Disponivel</span>
-                                                    <span className={`text-2xl font-black ${insufficientBalance ? 'text-red-600' : 'text-green-700'}`}>
-                                                        {balanceLoading ? '...' : `R$ ${companyBalance.toFixed(2).replace('.', ',')}`}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {insufficientBalance && (
-                                                <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
-                                                    <AlertTriangle size={16} />
-                                                    <span>Saldo insuficiente</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Budget info - no extra fees */}
-                                        {budgetVal > 0 && (
-                                            <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-4 space-y-2 text-sm">
-                                                <div className="flex justify-between border-b border-gray-200 pb-2">
-                                                    <span className="font-black uppercase">Orcamento do servico</span>
-                                                    <span className="font-black text-lg">R$ {budgetVal.toFixed(2).replace('.', ',')}</span>
-                                                </div>
-                                                <p className="text-xs text-gray-400 mt-1">Taxas ja foram cobradas no deposito. O valor debitado do seu saldo e exatamente o orcamento, sem custos extras.</p>
-                                            </div>
-                                        )}
-                                    </>
-                                );
-                            })()}
-
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold uppercase tracking-wide">Tipo de Pagamento</label>
                                     <select
@@ -427,7 +386,7 @@ export default function CompanyCreateJob() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold uppercase tracking-wide">Início</label>
                                     <div className="relative">
@@ -448,7 +407,7 @@ export default function CompanyCreateJob() {
                                 <h3 className="text-sm font-black uppercase flex items-center gap-2 text-gray-500">
                                     <Clock size={16} /> Horário de Trabalho
                                 </h3>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold uppercase tracking-wide">Entrada</label>
                                         <input
@@ -524,7 +483,7 @@ export default function CompanyCreateJob() {
                         <button
                             onClick={step === 3 ? handleSubmit : handleNext}
                             disabled={loading}
-                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-green-600 hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50"
+                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50"
                         >
                             {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Publicar Vaga') : 'Próximo'}
                             {!loading && step < 3 && <ChevronRight size={20} />}
@@ -553,6 +512,85 @@ export default function CompanyCreateJob() {
                     </div>
                 </div>
             </div>
+
+            {/* Painel de convite pós-criação */}
+            {showInvitePanel && createdJobId && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-2xl font-black uppercase tracking-tight">Convidar Freela</h2>
+                            <button
+                                onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                                aria-label="Fechar e ir para dashboard"
+                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <p className="text-sm font-bold text-gray-600 mb-5">
+                            Turno criado! Convide um freela da sua equipe para este turno.
+                        </p>
+
+                        {teamLoading && (
+                            <div className="space-y-3 animate-pulse">
+                                {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
+                            </div>
+                        )}
+
+                        {!teamLoading && teamMembers.length === 0 && (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+                                <Users size={32} className="mx-auto mb-2 opacity-30" />
+                                <p className="font-bold text-sm">Sua equipe está vazia.</p>
+                                <p className="text-xs mt-1">Adicione freelas em <strong>Minha Equipe</strong> primeiro.</p>
+                            </div>
+                        )}
+
+                        {!teamLoading && teamMembers.length > 0 && (
+                            <div className="space-y-3 max-h-72 overflow-y-auto">
+                                {teamMembers.map((member: TeamMember) => {
+                                    const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
+                                    const isInviting = invitingWorkerId === member.worker.id;
+                                    return (
+                                        <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
+                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                {avatarUrl ? (
+                                                    <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
+                                                        {member.worker.full_name[0]?.toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
+                                                {member.worker.primary_role && (
+                                                    <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => invite(member.worker.id)}
+                                                disabled={isInviting}
+                                                className="bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                            >
+                                                {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                                                {isInviting ? '...' : 'Convidar'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                            className="w-full mt-5 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
+                        >
+                            Convidar depois
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

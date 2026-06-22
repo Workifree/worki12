@@ -37,6 +37,7 @@ const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails')
 const CompanyJobCandidates = lazy(() => import('./pages/company/CompanyJobCandidates'));
 const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
 const CompanyWallet = lazy(() => import('./pages/company/CompanyWallet'));
+const CompanyTeam = lazy(() => import('./pages/company/CompanyTeam'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
@@ -47,6 +48,7 @@ const Admin = lazy(() => import('./pages/Admin'));
 const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
+const InviteAccept = lazy(() => import('./pages/InviteAccept'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
@@ -138,6 +140,9 @@ function App() {
                     <Route path="/company/onboarding" element={<CompanyOnboarding />} />
                     <Route path="/worker/onboarding" element={<WorkerOnboarding />} />
 
+                    {/* Convite de equipe via link (worker-facing, fora do MainLayout para tela dedicada) */}
+                    <Route path="/convite/:token" element={<InviteAccept />} />
+
                     {/* Worker Layout Routes */}
                     <Route path="/" element={<MainLayout />}>
                       <Route path="dashboard" element={<Dashboard />} />
@@ -164,6 +169,7 @@ function App() {
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="wallet" element={<CompanyWallet />} />
                       <Route path="analytics" element={<CompanyAnalytics />} />
+                      <Route path="team" element={<CompanyTeam />} />
                       <Route path="notifications" element={<Notifications />} />
                     </Route>
 
