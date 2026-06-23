@@ -330,3 +330,136 @@ export interface JobCategory {
   name: string;
   slug: string;
 }
+
+// =============================================
+// INTELIGÊNCIA FINANCEIRA — Slice 3 (R12-R16)
+// =============================================
+
+/**
+ * Teto de gasto mensal por empresa (migration 20260623000000_company_spend_limits.sql).
+ * alert_thresholds: limiares em % que disparam alerta in-app (default {80,90,100}).
+ * scope: '' = empresa inteira (v1 single-store, NOT NULL DEFAULT ''); rótulo de loja para multi-loja (Fase 2).
+ */
+export interface SpendLimit {
+  id: string;
+  company_id: string;
+  period: 'month';
+  amount: number;
+  alert_thresholds: number[];
+  scope: string;
+  financial_contact_email: string | null;
+  financial_contact_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Faturamento mensal declarado pela empresa (migration 20260623000100_company_monthly_revenue.sql).
+ * year_month: DATE ancorada no dia 1 (ex: 2026-06-01). Normalizar com date_trunc('month') no service.
+ * amount: faturamento bruto BRL >= 0 (0 = informou que não faturou).
+ */
+export interface MonthlyRevenue {
+  id: string;
+  company_id: string;
+  /** DATE string no formato YYYY-MM-DD, sempre ancorada no dia 1 do mês. */
+  year_month: string;
+  amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Shapes de resultado das queries de BI (FinancialBIService) ---
+
+/**
+ * BI-1: Gasto acumulado do período.
+ * Derivado de escrow_transactions WHERE status IN ('released','captured').
+ */
+export interface AccumulatedSpend {
+  /** Gasto total em BRL no período. */
+  totalAmount: number;
+  /** Início do período (primeiro dia do mês, ISO string). */
+  periodStart: string;
+  /** Início do próximo período (exclusive, ISO string). */
+  periodEnd: string;
+}
+
+/**
+ * BI-2: Gasto e horas por freela no período.
+ * Horas reais quando há checkout; fallback jobs.estimated_hours.
+ */
+export interface SpendByWorker {
+  workerId: string;
+  workerName: string;
+  workerAvatarUrl?: string | null;
+  /** Total gasto com este freela no período (BRL). */
+  totalAmount: number;
+  /** Total de horas (real ou estimada). */
+  totalHours: number;
+  /** Fonte das horas: 'real' (checkout - checkin) ou 'estimated' (jobs.estimated_hours). */
+  hoursSource: 'real' | 'estimated' | 'mixed';
+  /** Número de turnos concluídos no período. */
+  shiftsCount: number;
+}
+
+/**
+ * BI-3: Ratio custo/hora e custo como % do faturamento.
+ * costPercentRevenue é null quando não há faturamento informado para o mês.
+ */
+export interface CostRatio {
+  /** Custo médio por hora no período (BRL/h). Null quando horas = 0. */
+  costPerHour: number | null;
+  /** Custo total no período. */
+  totalCost: number;
+  /** Horas totais no período. */
+  totalHours: number;
+  /** Custo como % do faturamento. Null quando faturamento não foi informado. */
+  costPercentRevenue: number | null;
+  /** Faturamento declarado no mês (null = não informado — exibir CTA). */
+  declaredRevenue: number | null;
+}
+
+/**
+ * BI-4: Custo de no-show estimado no período (heurística v1).
+ * ROTULADO COMO ESTIMATIVA — sem coluna explícita de no-show na v1.
+ */
+export interface NoShowCost {
+  /** Número de potenciais no-shows (convite aceito + turno passou + sem checkout). */
+  estimatedCount: number;
+  /**
+   * Valor potencialmente perdido/desperdiçado.
+   * No postpago sem captura, o hold foi liberado (custo real = 0). Expõe o custo de oportunidade.
+   */
+  estimatedAmount: number;
+  /** Sempre true: indica que este é um dado estimado (heurística v1, sem marcador explícito). */
+  isEstimate: true;
+}
+
+/**
+ * BI-5: Flag de concentração de horas por freela (risco de vínculo trabalhista — R16).
+ * Flag quando horas/dias cruzam o limiar de produto (constante no service).
+ */
+export interface ConcentrationFlag {
+  workerId: string;
+  workerName: string;
+  /** Total de horas no período. */
+  totalHours: number;
+  /** Número de dias distintos trabalhados no período. */
+  distinctDays: number;
+  /** true quando cruzou o limiar de produto. */
+  flagged: boolean;
+  /** Limiar de horas usado para a flag. */
+  hoursThreshold: number;
+  /** Limiar de dias usado para a flag. */
+  daysThreshold: number;
+}
+
+/**
+ * Shape consolidado do hook useFinancialBI — todos os BI do período.
+ */
+export interface FinancialBIData {
+  accumulatedSpend: AccumulatedSpend;
+  spendByWorker: SpendByWorker[];
+  costRatio: CostRatio;
+  noShowCost: NoShowCost;
+  concentrationFlags: ConcentrationFlag[];
+}

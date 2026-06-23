@@ -217,6 +217,46 @@ export const PaymentMethodService = {
 `invokeFunction`. Leituras usam `supabase` direto. Sem React Query (Article 5 — inconsistência). Service exporta
 objeto com métodos; no frontend chamar via `services/api.ts invokeFunction()` + error handling centralizado em `lib/logger.ts`.
 
+## Idempotência de alerta via link estável + SELECT-before-INSERT (Slice 3)
+
+```ts
+// Service: spendLimitService.evaluateSpendAlert
+async evaluateSpendAlert(companyId: string, now: Date = new Date()): Promise<void> {
+  // 1. Computar gasto e comparar com teto
+  const spend = await computeAccumulatedSpend(companyId, now);
+  const highestCrossed = determineHighestThreshold(spend, limit); // null | number | 'OVER'
+  if (!highestCrossed) return;
+
+  // 2. Construir chave de idempotência (link estável por período/threshold)
+  const alertLink = `/company/financeiro?alert=${companyId}:${yyyymm(now)}:${highestCrossed}`;
+
+  // 3. SELECT-before-INSERT: verificar se já existe
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', ownerId)
+    .eq('link', alertLink)
+    .limit(1)
+    .maybeSingle();
+  
+  if (existing) return; // Idempotência: alerta já enviado
+
+  // 4. Inserir notificação (novo — policy 20260623000200 destrava INSERT para authenticated)
+  await supabase.from('notifications').insert({
+    user_id: ownerId,
+    type: 'payment',
+    title, message, link: alertLink,
+  });
+}
+```
+
+**Razão:** alerta pode rodar múltiplas vezes no período (retry, cron, etc.). Link estável (companyId:YYYYMM:threshold) como chave de idempotência
+garante que o mesmo alerta NÃO é gravado em dobro. SELECT-before-INSERT cai em race condition? Não: notifications INSERT é rápido
+e o pior caso (dois alerts chegam simultâneos) expõe 2 notificações idênticas por 1 segundo — UX aceitável em alerta (não dinheiro).
+Policy `WITH CHECK (auth.uid() = user_id)` (nova 20260623000200) destrava INSERT do client (spendLimitService roda com role authenticated, owner inserindo para si).
+
+---
+
 ## Padrões a serem extraídos
 
 > Conforme novas tasks consolidam padrões, popular aqui via `harness-memory-updater` ou edição direta.

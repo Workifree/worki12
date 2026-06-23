@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { invokeFunction } from './api';
 import { logError } from '../lib/logger';
 import { PaymentMethodService } from './paymentMethodService';
+import { SpendLimitService } from './spendLimitService';
 
 export interface Wallet {
     id: string;
@@ -222,12 +223,36 @@ export const WalletService = {
           kind = (escrow?.kind as 'prepaid' | 'postpaid' | undefined) ?? 'prepaid';
         }
 
+        let result: { success: boolean; error?: string };
         if (kind === 'postpaid') {
-          return await PaymentMethodService.capturePayment(jobId, workerId);
+          result = await PaymentMethodService.capturePayment(jobId, workerId);
+        } else {
+          // prepaid: fluxo legado (asaas-checkout → release_escrow)
+          result = await WalletService.releaseEscrow(jobId, '', workerId);
         }
 
-        // prepaid: fluxo legado (asaas-checkout → release_escrow)
-        return await WalletService.releaseEscrow(jobId, '', workerId);
+        // Avaliar alerta de teto FORA da RPC de saldo (best-effort, NÃO bloqueia o pagamento).
+        // Buscar companyId via job_id → jobs.company_id (necessário para o alerta).
+        if (result.success) {
+          void (async () => {
+            try {
+              const { data: jobRow } = await supabase
+                .from('jobs')
+                .select('company_id')
+                .eq('id', jobId)
+                .maybeSingle();
+              const companyId = (jobRow as { company_id?: string } | null)?.company_id;
+              if (companyId) {
+                await SpendLimitService.evaluateSpendAlert(companyId);
+              }
+            } catch (alertErr) {
+              // Best-effort — nunca propaga para não quebrar o pagamento
+              logError('walletService.releaseOrCaptureEscrow.spendAlert', alertErr);
+            }
+          })();
+        }
+
+        return result;
       } catch (error) {
         logError('walletService.releaseOrCaptureEscrow', error);
         return { success: false, error: 'Erro ao processar pagamento do turno.' };

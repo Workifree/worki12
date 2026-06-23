@@ -112,3 +112,27 @@ Prepago usa `'reserved' | 'released' | 'refunded'` (sem authorized/captured).
 **Review direction (direção de avaliação)** — Campo em `reviews.direction` ('worker' | 'company') indicando quem é avaliado.
 Possibilita rating bidirecional: worker avalia company (→direction='company'); company avalia worker (→direction='worker').
 Triggers de rating (`update_worker_rating_on_review`, `update_company_rating_on_review`) atualizam a tabela correta.
+
+**Teto de gasto / Spend limit** — Limite mensal de gasto que a empresa configura (tabela `company_spend_limits`). Quando o gasto
+acumulado (via escrow liberado/capturado) cruza 80%/90%/100% do teto, alerta in-app é disparo (NUNCA bloqueia contratação).
+Configuração por empresa/período, escopo (v1: '' = empresa inteira).
+
+**BI (Business Intelligence)** — Indicadores derivados do gasto de uma empresa em um período, computados por queries direto em
+`escrow_transactions` (sem materializar em tabela): BI-1 gasto acumulado; BI-2 gasto+horas por freela; BI-3 ratio custo/hora e
+custo-%-faturamento; BI-4 custo de no-show estimado (heurística); BI-5 flag de concentração de horas/dias por freela (risco
+de vínculo trabalhista).
+
+**Ratio custo-%-faturamento** — Métrica de ouro para operação de serviços (ex: food service): custo de pessoal como % do
+faturamento total. Requer que a empresa declare o faturamento mensal bruto (tabela `company_monthly_revenue`, input manual).
+Cálculo: (gasto acumulado / faturamento declarado) × 100. NULL se não informado → exibir CTA "Informar faturamento".
+
+**company_monthly_revenue** — Tabela com faturamento mensal declarado pela empresa. Campos: `company_id, year_month (DATE dia 1),
+amount`. Upsert por (company_id, year_month). Input manual pela empresa; RLS por owner. Sem saldo/RPC de saldo.
+
+**Flag de concentração / Concentração de vínculo** — Sinalizador em BI-5 quando um freela trabalha AMBOS:
+horas totais >= 150h E dias distintos >= 20 dias no período. Indica risco potencial de vínculo trabalhista (CLT).
+Limiares são constantes de produto no service, não no DB (CONCENTRATION_HOURS_THRESHOLD, CONCENTRATION_DAYS_THRESHOLD).
+
+**Idempotência de alerta (Slice 3)** — Alerta de teto usa link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`
+como chave de idempotência. SELECT-before-INSERT verifica se já existe notificação com este link no user_id (company owner).
+Se existe, skip; caso contrário, insere. Protege contra duplicação se avaliação roda multiplas vezes no período.

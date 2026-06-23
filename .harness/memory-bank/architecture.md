@@ -150,6 +150,40 @@ empresa, mas sem explicitação. Slice 1 torna direction mandatório e consultá
 auto-preenche direction pela presença do `reviewed_id` em companies/workers, mantendo compatibilidade com clients que não enviam
 direction. Backfill resolveu reviews legados (≥2 migrations para worker e company ratings).
 
+## Camada de inteligência financeira (Slice 3: operação)
+
+Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show estimado e concentração de horas (risco de vínculo).
+
+**Tabelas novas:**
+- **`company_spend_limits`** — teto de gasto mensal por empresa (scope='' = empresa inteira em v1). Campos: `amount`, `alert_thresholds` (default [80,90,100]), `financial_contact_email/phone`. RLS por owner. Não toca saldo (Article 8).
+- **`company_monthly_revenue`** — faturamento mensal declarado pela empresa (input para custo-%-faturamento). Campo: `amount`, `year_month` (DATE ancorada no dia 1). RLS por owner.
+
+**Policy adicional:**
+- **`notifications` INSERT** — nova policy `WITH CHECK (auth.uid() = user_id)` (migration 20260623000200) destrava a inserção de alerta in-app pelo cliente (spendLimitService.evaluateSpendAlert).
+
+**Fluxo de alerta (R12):**
+1. Empresa configura teto em `company_spend_limits` (RLS permite owner criar/editar).
+2. Alerta é **best-effort, post-pagamento:** após releaseEscrow bem-sucedido, chama `spendLimitService.evaluateSpendAlert` (não bloqueia).
+3. Service computa gasto acumulado (BI-1) via query direto em `escrow_transactions` (não materializado), compara com teto.
+4. Se cruzou limiar (80/90/100 ou OVER), insere notificação idempotente em `notifications` com link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`.
+5. Idempotência: SELECT-before-INSERT verifica link existente antes de inserir.
+6. Notificação chega em tempo real via Realtime (NotificationContext).
+7. WhatsApp = Slice 4 (pendente).
+
+**BI (Business Intelligence) — derivado de escrow_transactions, sem views:**
+- **BI-1: Gasto acumulado** — SUM(amount) WHERE status IN ('released','captured') no período (COALESCE(captured_at, released_at, created_at)).
+- **BI-2: Gasto + horas por freela** — agrupado por worker_id. Horas reais se checkout_at/checkin_at existem; fallback jobs.estimated_hours.
+- **BI-3: Ratio custo/hora + custo-%-faturamento** — custo/horas; custo/faturamento declarado (null se não informado).
+- **BI-4: Custo de no-show estimado** — heurística v1, rotulado como estimativa (application com status='hired'/invitation_response='accepted', turno passou, sem checkout).
+- **BI-5: Flag de concentração de horas/dias** — worker flagged se >= 150h AND >= 20 dias (constantes de produto em service, não DB). Sinaliza risco de vínculo trabalhista.
+
+**Services:**
+- **`spendLimitService`** — CRUD de teto + revenue, `evaluateSpendAlert(companyId, now?)` idempotente (fora da RPC, best-effort).
+- **`financialBIService`** — 4 queries paralelas (getAccumulatedSpend, getSpendByWorker, getCostRatio, getNoShowCost, getConcentrationFlags), método `getAllBI` reutiliza para evitar dupla execução. Sem React Query (Article 5).
+
+**UI:**
+- Nova página `pages/company/CompanyFinancial` (`/company/financeiro`) com cards de BI, alertas, input de faturamento, config de teto.
+
 ## Dependências externas
 
 | Dependência | Uso | Crítico? |

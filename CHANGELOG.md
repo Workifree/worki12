@@ -40,8 +40,21 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 - Aviso in-app quando a autorização do cartão falha
 - Turno fica pendente de pagamento até que o cartão seja aceito
 
+#### Slice 3 — Inteligência Financeira (BI da Empresa)
+
+**Empresa:**
+- Página "Painel Financeiro" (`/company/financeiro`) — acessível pelo menu Sidebar e card na Carteira
+- **Teto de gasto mensal:** configurar limite, barra de progresso colorida (80%/90%/100%), alertas in-app
+- **Faturamento do mês:** CTA para informar, destrava indicador de custo % faturamento
+- **Indicadores de custo:** custo total, custo/hora, custo % faturamento
+- **Gasto por freelancer:** ranking com horas, turnos, fonte das horas (estimada/mista/checada), valor total
+- **Custo de no-show (estimativa):** contagem de turnos aceitos sem checkout, custo de oportunidade
+- **Alerta de concentração:** flag quando freela ultrapassa 150h E 20 dias distintos (risco de vínculo trabalhista)
+- **Seletor de período:** análise por mês atual ou mês anterior
+
 ### Alterado
 
 - Fluxo de criação de turno: freelancers da equipe em vez de candidatos anônimos no feed
 - Modelo de convite: aceite/recusa substituem candidatura automática em vagas
 - Modelo de pagamento: postpago (cartão on-file) é agora a opção padrão; pré-pago (depósito) permanece funcional
+- Card "Painel Financeiro" adicionado na Carteira da Empresa como atalho para Financeiro

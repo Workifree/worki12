@@ -175,3 +175,91 @@ seguranca: B1/B2/B3 + fallback + 409 RE-CONFIRMADOS fechados em codigo
 spec_coverage: A3 PASS; A5 PASS manual / PARCIAL cron; A9 PARCIAL (test nao-verde S2-F1); R4/R9 cobertos
 next_step: builder_retry (corrigir S2-F1 - atualizar o teste; producao esta correta)
 ```
+
+---
+
+# Verification - Slice 3 (inteligencia financeira in-app)
+
+> Avaliacao cetica independente (harness-evaluator). Branch feat/v1-loop-relacional. Escopo: Camada 2 R12 (teto+alerta in-app), R13 (BI gasto/horas), R14 (ratio/custo-pct-faturamento), R15 (no-show estimativa), R16 (concentracao para vinculo). R17 (import MOMMA) concierge/pendente N/A. WhatsApp do alerta Slice 4 N/A. Iteracao 1 - 2026-06-23. PASS (0 BLOCKER, 0 ALTO; findings ja-fechados re-confirmados em codigo).
+
+## Gates deterministicos
+
+| ID | Criterio | Status |
+|---|---|---|
+| C-BUILD-GREEN | Build passa Art.3 | PASS (built 18.62s; tsc -b + vite ok; chunk CompanyFinancial 29.39 kB) |
+| C-LINT-GREEN | Lint sem erro NOSSO Art.3 | PASS (3 erros PRE-EXISTENTES set-state-in-effect: DepositModal.tsx:36, Admin.tsx:162, Admin.tsx:431 identicos a main; 0 erros/0 warnings nos 4 arquivos do Slice 3) |
+| C-TESTS-GREEN | Testes relevantes verdes | PASS p/ Slice 3 (sem testes novos; suites do wire passam: walletService 21, CompanyWallet 8, CompanyJobCandidates 6 - S2-F1 fechado). 16 falhas em BottomNav/DepositModal/MyJobs/Wallet PRE-EXISTENTES: provado por git stash do Slice 3, mesmas 16 falhas no baseline. Nenhum desses componentes tocado pelo Slice 3 |
+
+## Gates de dominio (LLM)
+
+| ID | Criterio Article | Status | Evidencia |
+|---|---|---|---|
+| C-TS-STRICT | Sem any tipado Art.2 | PASS | grep any/as-any vazio nos 4 arquivos do Slice 3 |
+| C-TYPES-CENTRAL | Tipos em types/index.ts Art.2 | PASS | SpendLimit 343, MonthlyRevenue 361, AccumulatedSpend 377, SpendByWorker 390, CostRatio 408, NoShowCost 425, ConcentrationFlag 441, FinancialBIData 459 a mao |
+| C-FETCH-PATTERN | useState/useEffect + supabase direto Art.5 | PASS | grep useQuery/useMutation vazio; hooks useState/useEffect/useCallback; services supabase.from direto. Views REJEITADAS |
+| C-ROLE-ISOLATION | Rota empresa correta Art.1,12 | PASS | rota financeiro sob /company + CompanyLayout App.tsx:174 dentro de ProtectedRoute. Link mobile em CompanyWallet com aria-label |
+| C-AUTH-GATE | Guard de sessao para login Art.12 | PASS | useSpendLimit/useFinancialBI supabase.auth.getUser para navigate login useFinancialBI.ts:78-81,131-134,250-252,298-300 |
+| C-SUPABASE | Acesso via lib/supabase + RLS Art.4 | PASS | todos importam lib/supabase; BI nao filtra company_id por seguranca RLS garante so por UX |
+| C-ASAAS-ONLY | Nenhum gateway alem de Asaas Art.6 | PASS | grep stripe vazio nos 4 arquivos + 3 migrations |
+| C-CENTRAL-WALLET | Sem subcontas Art.7 | PASS | Slice 3 so LE escrow/wallets BI. Nao cria subconta nem espelha saldo |
+| C-ESCROW-ATOMIC | Saldo so por RPC Art.8 | PASS | grep UPDATE-wallets/RPCs de saldo nas 3 migrations vazio (unica ocorrencia comentario NAO-toca-saldo 0100:10). Alerta FORA da RPC walletService.ts:236-253 IIFE void pos result.success |
+| C-IDEMPOTENT | reference_id estavel UNIQUE Art.9 | PASS | Slice 3 sem escrita financeira. Idempotencia do ALERTA por convencao de link + SELECT-before-INSERT spendLimitService.ts:335,353-365. notifications_user_id_idx cobre user_id. wallet_transactions UNIQUE intacta |
+| C-NO-SERVICE-ROLE | service_role fora do frontend Art.10 | PASS | grep service_role vazio em frontend/src. GRANTs de service_role nas migrations correto p/ path edge/cron futuro |
+| C-CORS-PREFLIGHT | Edge function trata OPTIONS Art.11 | N/A | Slice 3 nao cria edge function. Alerta INSERT direto em notifications via client autenticado RLS |
+| C-RLS-NEW-TABLE | Tabela nova com RLS por dono Art.4 | PASS | company_spend_limits ENABLE RLS 113 + 4 policies SELECT/INSERT/UPDATE/DELETE todas company_id IN companies WHERE owner_id auth.uid 127-148 + REVOKE anon + GRANT authenticated/service_role. company_monthly_revenue idem 70-101 |
+| C-NOTIF-INSERT-POLICY | INSERT de notifications correto novo | PASS | 20260623000200 WITH CHECK auth.uid user_id FOR authenticated owner insere SO na propria caixa. notifications tinha SELECT+UPDATE faltava INSERT deny implicito finding fechado. Triggers SECURITY DEFINER + service_role bypass intactos. Nome unico DROP IF EXISTS idempotente |
+| C-DESIGN | Neo-brutalismo + cor por papel Art.13 | PASS | border-2 border-black + shadow offset solido 6px + rounded-2xl + uppercase font-black. Barra de progresso AZUL bg-blue-600 empresa no normal escalando amarelo/vermelho por threshold CompanyFinancial.tsx:85-92 |
+| C-MOBILE | Mobile-first grid-cols-1 base | PASS | grid-cols-1 sm:grid-cols-2 no-show:602; skeletons base 1-col. Acesso mobile via card em CompanyWallet BottomNav sem slot |
+| C-A11Y | Acessibilidade do dashboard novo | PASS | progressbar role + aria-valuenow/min/max + aria-label 191-196; toggle aria-expanded + aria-controls + id correspondente 528,575-576; botoes aria-label |
+| C-TOAST-FEEDBACK | Feedback via Toast nao alert Art.13 | PASS | grep alert/confirm vazio; addToast em handleSave CompanyFinancial.tsx:106,113,117 |
+| C-LIST-KEY | key estavel em listas | PASS | key workerId nas listas de freela e concentracao. Skeletons com index em Array(n) estaticos aceitavel |
+| C-NO-LEGACY | Nao toca legados Art.15 | PASS | sem referencia a backend_legacy ou frontend-angular-backup |
+| C-LGPD | PII nao vaza em log/Sentry | PASS | logError carrega so chave-de-contexto + erro; sem CPF/CNPJ/e-mail/telefone. financial_contact_email/phone so na config RLS por dono |
+
+## Cobertura de requisitos (Slice 3)
+
+| Req | Status | Evidencia |
+|---|---|---|
+| R12 teto + alerta in-app nunca bloqueio | PASS | upsertSpendLimit scope vazio upsert idempotente via onConflict company_id period scope sem teto duplicado. evaluateSpendAlert BI-1 released/captured vs teto dispara SO o maior threshold cruzado nao-alertado (acima de 100 = OVER) idempotente por link INSERT pro owner. NUNCA bloqueia: roda FORA da RPC best-effort void mensagem contratacoes-continuam-funcionando. Contratacao NAO consulta o teto |
+| R13 BI gasto/horas por freela/periodo | PASS | getAccumulatedSpend BI-1 + getSpendByWorker BI-2 horas reais checkout-checkin com fallback jobs.estimated_hours hoursSource real/estimated/mixed exposto. Carimbo COALESCE captured/released/created filtrado JS-side |
+| R14 ratio custo/hora + custo-pct-faturamento | PASS | getCostRatio costPerHour null se horas 0; costPercentRevenue null se faturamento ausente UI CTA informe-o-faturamento-acima CompanyFinancial.tsx:506-507 nao inventa numero. company_monthly_revenue year_month dia-1 UNIQUE |
+| R15 custo de no-show estimativa | PASS | getNoShowCost heuristica aceito/hired + turno passado + sem checkout isEstimate sempre true UI badge Estimativa + nota heuristica-v1-sem-coluna-explicita 594-595,616-619. GAP documentado. budget/estimated_hours existem em Job |
+| R16 concentracao para vinculo | PASS | getConcentrationFlags horas BI-2 + COUNT DISTINCT date start_date flag quando horas maior-igual 150 E dias maior-igual 20 constantes de produto no service nao no banco. UI aviso vermelho + badge 625-637 |
+| R17 import MOMMA | N/A | Concierge/pendente fora do build de codigo |
+
+## Checklist seguranca/dominio
+
+- Isolamento cross-company queries BI dependem da RLS de escrow_transactions company_wallet_id IN wallets WHERE user_id auth.uid migration 001:58-61. companyId resolvido de companies.owner_id user.id. Mesmo se o client forjasse company_wallet_id o RLS bloqueia. Config tables isoladas por owner. SEM vazamento.
+- Dinheiro so por RPC nenhuma das 3 migrations toca saldo/RPC; alerta roda fora da RPC best-effort.
+- Idempotencia do alerta link estavel + SELECT-before-INSERT nao duplica threshold/mes. notifications_user_id_idx existe.
+- service_role ausente do frontend. Asaas-only sem Stripe. CORS N/A sem edge nova.
+- Findings ja-fechados re-confirmados: notifications INSERT policy auth.uid user_id; scope NOT NULL DEFAULT vazio upsert sem duplicata; barra azul empresa; acesso mobile via CompanyWallet; aria do progressbar/aria-controls; border-2.
+
+## Anti-regressao (Slice 1/2 intactos)
+
+- Pagamento NAO regrediu releaseOrCaptureEscrow mantem ramificacao postpaid=capturePayment / prepaid=releaseEscrow walletService.ts:227-232. Alerta adicionado APOS result.success em IIFE void com try/catch que nunca propaga 236-253 nao altera o retorno nem bloqueia o pagamento.
+- Suites do caminho tocado verdes walletService.test.ts 21 CompanyWallet.test.tsx 8 CompanyJobCandidates.test.tsx 6. O S2-F1 Slice 2 fechado.
+- As 16 falhas de teste pre-existentes baseline da main provado por stash: mocks supabase desatualizados em BottomNav/DepositModal/MyJobs/Wallet nenhum tocado pelo Slice 3.
+
+## Findings - Slice 3
+
+| ID | Sev | Tipo | Arquivo:linha | Descricao | Fix |
+|---|---|---|---|---|---|
+| S3-F1 | INFO | a | financialBIService.ts:442-510 | No-show heuristica sem coluna explicita no_show. JA mitigado isEstimate true + rotulo Estimativa + nota. GAP previsto no contrato BI-4 | Se piloto exigir precisao architect cria marcador explicito de no-show em applications migration menor |
+| S3-F2 | INFO | a | financialBIService.ts:104-113,180-184 | BI-1/BI-2 filtram periodo em JS PostgREST nao suporta COALESCE em filtro. Aceitavel no volume v1 documentado | Se volume crescer mover agregacao p/ RPC SQL SECURITY INVOKER ou indice por carimbo |
+
+## Resultado (Slice 3)
+
+```
+verdict: PASS
+blockers: nenhum
+altos: nenhum
+infos_aceitos: S3-F1 (no-show heuristica ja rotulada), S3-F2 (filtro de periodo JS-side ok no volume v1)
+lint_passed: true (3 erros pre-existentes em DepositModal/Admin nao-Slice-3)
+build_passed: true
+tests_passed: true (p/ Slice 3; 16 falhas pre-existentes na main nao-regressao provado por stash)
+seguranca: isolamento cross-company (RLS escrow), saldo-so-RPC, idempotencia de alerta, notifications INSERT policy, sem service_role/Stripe - todos OK
+spec_coverage: R12 PASS R13 PASS R14 PASS R15 PASS R16 PASS; R17 N/A (concierge); WhatsApp N/A (Slice 4)
+next_step: approved (Phase 3.7 memory-updater + commit)
+```
+

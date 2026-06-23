@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import type { WalletTransaction, EscrowTransaction } from '../../services/walletService';
-import { DollarSign, ArrowDownLeft, ArrowUpRight, History, Lock, Wallet, TrendingUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { DollarSign, ArrowDownLeft, ArrowUpRight, History, Lock, Wallet, TrendingUp, BarChart2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import DepositModal from '../../components/DepositModal';
 import PaymentMethodsSection from '../../components/PaymentMethodsSection';
 
@@ -126,6 +126,22 @@ export default function CompanyWallet() {
                 <h2 className="text-4xl font-black uppercase tracking-tighter mb-2">Carteira da Empresa</h2>
                 <p className="text-gray-500">Gerencie seu saldo e pagamentos</p>
             </header>
+
+            {/* Acesso ao Financeiro — tela irmã (mobile: BottomNav nao tem slot) */}
+            <Link
+                to="/company/financeiro"
+                className="flex items-center justify-between gap-3 bg-white border-2 border-black rounded-2xl px-5 py-4 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all group"
+                aria-label="Ir para o painel financeiro"
+            >
+                <div className="flex items-center gap-3">
+                    <BarChart2 size={20} strokeWidth={3} className="shrink-0" />
+                    <div>
+                        <p className="text-sm font-black uppercase">Painel Financeiro</p>
+                        <p className="text-xs text-gray-500">Teto de gasto, faturamento e indicadores</p>
+                    </div>
+                </div>
+                <ArrowUpRight size={18} className="text-gray-400 group-hover:text-black transition-colors shrink-0" />
+            </Link>
 
             {/* Main Balance Card */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-8 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">

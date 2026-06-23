@@ -76,15 +76,20 @@
 
 ## Banco de dados
 
-- **PostgreSQL + RLS** em todas as tabelas. 52+ migrations em `supabase/migrations/`.
+- **PostgreSQL + RLS** em todas as tabelas. 55+ migrations em `supabase/migrations/`.
 - **RPCs atômicas (escrow prepago/postpago):**
   - Prepago: `reserve_escrow`, `release_escrow`, `refund_escrow`, `credit_deposit`, `update_wallet_balance`
   - Postpago (Slice 2): `authorize_escrow_postpago`, `capture_escrow_postpago`, `release_hold_postpago`
   - Todas **requerem** `GRANT EXECUTE ... TO service_role, authenticated`.
 - **Constraint crítica:** `wallet_transactions` UNIQUE deve ser `(wallet_id, reference_id)`, não `reference_id` só.
   Idempotência postpago usa `reference_id` estável tipo `job_id:worker_id:attempt_#`.
+- **Config tables (Slice 3, sem RPC de saldo — Article 8):**
+  - **`company_spend_limits`** (20260623000000) — teto mensal por empresa. Campos: `company_id, period='month', amount, alert_thresholds[]` (default [80,90,100]), `scope` ('' = empresa inteira, v1 single-store), `financial_contact_email/phone`. RLS por owner. Sem saldo.
+  - **`company_monthly_revenue`** (20260623000100) — faturamento mensal declarado (input para BI-3). Campos: `company_id, year_month` (DATE dia 1), `amount`. Upsert (company_id, year_month). RLS por owner.
+- **Policy adicional (20260623000200):**
+  - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
 - Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,
-  `escrow_transactions`, `notifications`, `analytics_events`, **`payment_methods`** (nova).
+  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova).
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
   `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir.

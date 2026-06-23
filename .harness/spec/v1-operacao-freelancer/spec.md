@@ -122,12 +122,29 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
 - [ ] **R12 — Teto de gasto + alertas.** Contato financeiro define teto (por mês, por loja). Alertas em
   **80% / 90% / 100% / acima**, entregues por **WhatsApp + app**. **Alerta, nunca bloqueio** (bloquear deixa
   turno descoberto).
+  - [x] _Camada de dados (Slice 3):_ tabela `company_spend_limits` (period='month', amount, alert_thresholds
+    default {80,90,100}, scope=rótulo de loja NÃO-FK nullable, financial_contact_email/phone) + RLS por dono +
+    REVOKE anon/GRANT service_role — `20260623000000_company_spend_limits.sql`. Alertas REUSAM `notifications`
+    (sem tabela nova). Idempotência de threshold por convenção de `link` (contrato no rodapé). Gasto acumulado
+    = derivado de escrow (não materializado). Avaliação/insert da notification = service/edge (builder).
 - [ ] **R13 — BI de gasto/horas.** Gasto e horas por freela / loja / período, com tendência.
+  - [x] _Camada de dados (Slice 3):_ SEM tabela/view nova — gasto/horas são QUERIES derivadas de
+    `escrow_transactions` + `jobs` + `applications` (contrato BI-1/BI-2 no rodapé). Decisão: views REJEITADAS
+    (RLS não propaga seguro por view; mantém padrão service Art. 5). Builder = `FinancialBIService`.
 - [ ] **R14 — Ratio equilibrado.** Custo-por-hora de cobertura (dado interno). **Custo como % do faturamento**
   quando a empresa digita 1 número/mês (faturamento) — unlock barato da métrica de ouro do food service.
+  - [x] _Camada de dados (Slice 3):_ tabela `company_monthly_revenue` (year_month DATE ancorada no dia 1,
+    amount, UNIQUE (company_id, year_month)) + RLS por dono + REVOKE anon/GRANT service_role —
+    `20260623000100_company_monthly_revenue.sql`. Custo-por-hora e custo-%-faturamento = derivados (contrato
+    BI-3 no rodapé). Tipos `CompanySpendLimit`/`CompanyMonthlyRevenue` à mão (`types/index.ts`) = builder.
 - [ ] **R15 — Custo de no-show.** Quantificar "pagou R$X / Y faltas" no período.
+  - [x] _Camada de dados (Slice 3):_ SEM tabela nova — derivado de `applications` (contrato BI-4 no rodapé).
+    GAP sinalizado: não há coluna explícita `no_show`; a heurística v1 usa expiração + aceite-sem-checkout.
+    Se o piloto exigir precisão, builder/architect adicionam marcador de no-show (migration menor).
 - [ ] **R16 — Flag de concentração → risco de vínculo.** Sinalizar freela com horas/dias concentrados
   ("freela X: 180h em 26 dias — parece emprego"). Une valor financeiro + alarme jurídico precoce.
+  - [x] _Camada de dados (Slice 3):_ SEM tabela nova — derivado de `jobs`+`applications` por freela
+    (contrato BI-5 no rodapé). Limiar (h/dias) é config de produto no service, não no banco.
 - [ ] **R17 — (concierge) Importar histórico da MOMMA** da ferramenta interna → BI nasce cheio no dia 1.
 
 ## Workflow canônico (máquina de estados) — decisões A–G resolvidas
@@ -229,3 +246,72 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
   on-file cobrado na conclusão, ou PIX. Justificativa: operação embedded em empresas confiáveis → fricção é o
   inimigo, não o calote. Garantia upfront (hold/escrow) retorna ao expandir além de relações confiáveis.
   Troca pré-pago→postpago mexe no contrato de pagamento → `harness-architect` + ADR no build.
+
+## Contratos de dados/BI — Slice 3 (architect → builder)
+
+> Camada de dados do Slice 3 = 2 tabelas de config (`company_spend_limits`, `company_monthly_revenue`) +
+> queries derivadas. **Nenhuma view criada** (decisão registrada abaixo). **Nenhuma RPC de saldo.** O builder
+> implementa estas queries no service (`FinancialBIService` + `SpendLimitService`), padrão `supabase.from(...)`
+> (Art. 5). RLS já isola por empresa — toda query roda autenticada como a empresa (não precisa filtrar
+> company_id no client por segurança, só por UX; o RLS garante).
+
+### Decisão: views REJEITADAS (sem ADR — reversível, sem artefato de schema)
+- Views planas sobre `escrow_transactions`/`jobs`/`applications` **não propagam RLS com segurança** (uma view
+  dona de `postgres` bypassaria o isolamento de empresa → vazaria gasto cross-company). `security_invoker`
+  resolveria mas adiciona risco/superfície sem ganho. As agregações são parametrizadas (período/escopo) e
+  read-heavy no dashboard → pertencem ao service (consistente com o resto do projeto). **Builder NÃO cria view.**
+
+### Fonte da verdade do GASTO (usada por R12, R13, R14, R15)
+- Gasto = `escrow_transactions` com `status IN ('released','captured')` (dinheiro efetivamente comprometido/pago
+  ao freela). `amount` é o valor. **NÃO** somar `reserved`/`authorized` (ainda não virou gasto) nem `refunded`.
+- Carimbo de período: `COALESCE(captured_at, released_at, created_at)` (postpago usa captured_at; prepaid legado
+  usa released_at; fallback created_at). Filtrar o mês por este carimbo.
+- A empresa da linha = `company_wallet_id → wallets.user_id`. O freela = `worker_wallet_id → wallets.user_id`.
+  A loja/turno = via `job_id → jobs`. O freela também alcançável por `application_id → applications.worker_id`.
+
+### BI-1 — Gasto acumulado do período (input do teto R12)
+- `SELECT COALESCE(SUM(amount),0) FROM escrow_transactions e JOIN wallets w ON w.id = e.company_wallet_id
+   WHERE w.user_id = :companyId AND e.status IN ('released','captured')
+   AND COALESCE(e.captured_at, e.released_at, e.created_at) >= :monthStart
+   AND COALESCE(e.captured_at, e.released_at, e.created_at) < :nextMonthStart`
+  (filtrar por `scope` quando o teto for por loja — ver nota de scope: v1 single-store, normalmente NULL).
+
+### BI-2 — Gasto e horas por freela / período (R13)
+- Gasto por freela: agrupar BI-1 por `worker_wallet_id`/`applications.worker_id`.
+- HORAS: preferir REAL quando houver checkout — `EXTRACT(EPOCH FROM (worker_checkout_at - worker_checkin_at))/3600`
+  de `applications` (com check-in/out preenchidos). Fallback v1 (sem QR check-in, R3 = FIXO por turno): usar
+  `jobs.estimated_hours` do turno concluído. Documentar no service qual fonte foi usada (real vs estimada).
+
+### BI-3 — Ratio (R14)
+- Custo-por-hora = BI-2.gasto / BI-2.horas (no período). Guardar contra divisão por zero (horas=0 → null/“—”).
+- Custo-%-faturamento = BI-1.gasto / `company_monthly_revenue.amount` do mesmo `year_month`. Se não houver
+  faturamento informado naquele mês → métrica fica oculta/CTA “informe seu faturamento” (não inventar número).
+
+### BI-4 — Custo de no-show (R15) — heurística v1 + GAP sinalizado
+- **GAP:** não há coluna explícita `no_show`. Heurística v1: convite `invitation_response='accepted'`
+  (ou status `hired`) cujo turno já passou (`jobs.start_date < now()`) E sem `worker_checkout_at`/sem conclusão
+  → candidato a falta. “Pagou R$X / Y faltas” = contagem dessas + soma do que ainda foi pago (raro no postpago,
+  pois no-show antes da captura libera o hold sem gasto via `release_hold_postpago`). O builder deve ser
+  conservador e rotular como estimativa. Se o piloto exigir precisão, escalar p/ architect → marcador explícito
+  de no-show em `applications` (migration menor, fora deste slice).
+
+### BI-5 — Concentração → vínculo (R16)
+- Por freela na empresa, no período: somar HORAS (BI-2) e contar DIAS DISTINTOS trabalhados
+  (`COUNT(DISTINCT date(jobs.start_date))` em turnos concluídos). Flag quando horas/dias cruzam um limiar de
+  **produto** (ex.: ≥150h em ≤30 dias) — limiar é constante no service, **não** no banco (fácil calibrar).
+
+### Contrato de ALERTA de teto (R12) — reusa `notifications`, idempotência sem tabela nova
+- Alerta = INSERT em `public.notifications` (`type='payment'`, `user_id` = owner da empresa / contato financeiro;
+  título/mensagem com %, valor gasto, teto; `link` = rota do BI). **Não criar tabela de alertas.**
+- **Quando avaliar:** (a) a cada captura/liberação de pagamento (no `capture_escrow_postpago`/release path, no
+  service que orquestra a conclusão — NÃO dentro da RPC de saldo) e (b) on-demand quando o dashboard de BI abre.
+- **Idempotência (não duplicar o alerta do mesmo threshold no mesmo período):** `notifications` NÃO tem
+  constraint de idempotência e o architect **não** adiciona uma agora (evitar tocar tabela quente). Convenção
+  pro builder: derivar uma chave estável e checar antes do insert —
+  `link = '/company/financeiro?alert=' || :companyId || ':' || to_char(:monthStart,'YYYYMM') || ':' || :threshold`
+  e fazer `SELECT 1 FROM notifications WHERE user_id=:owner AND link=:thatLink LIMIT 1` (índice `notifications_user_id_idx`
+  cobre o user_id). Se já existe → não reinsere. Dispara só o MAIOR threshold cruzado ainda não alertado
+  naquele período (ex.: cruzou direto 92% → manda só o de 90, não 80+90). O threshold `>100` (“acima”) usa
+  chave `:threshold='OVER'`. Avaliar contra `company_spend_limits.alert_thresholds` (default {80,90,100}).
+- WhatsApp do alerta = Slice 4 (usa `financial_contact_phone`); v1 entrega app (`notifications`) + e-mail
+  (`send-notification`).
