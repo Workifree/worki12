@@ -46,9 +46,15 @@
 - Helper compartilhado: `supabase/functions/_shared/asaas.ts` (+ `getCorsHeaders()`)
 - Modelo: **carteira central** (sem subcontas); saldo por usuário no DB (`wallets.balance`)
 - Tipos de pagamento: PIX, Boleto, Cartão de Crédito
-- Fluxos: `DepositModal` → `asaas-deposit`; saque `asaas-withdraw`; checkout `asaas-checkout`;
-  sync `asaas-sync`; webhook `asaas-webhook`
-- Lógica de carteira no frontend: `frontend/src/services/walletService.ts`
+- **Fluxos prepago (Slice 1):** `DepositModal` → `asaas-deposit`; saque `asaas-withdraw`; checkout `asaas-checkout`; sync `asaas-sync`; webhook `asaas-webhook`
+- **Fluxos postpago (Slice 2):** `asaas-tokenize-card` (salva cartão); `asaas-authorize-payment` (pré-autorização); `asaas-capture-payment` (captura hold); `asaas-release-hold` (cancela hold)
+- **Endpoints Asaas utilizados:**
+  - `POST /v3/creditCard` — tokenizar cartão (Slice 2)
+  - `POST /v3/payments` com `authorizeOnly=true` — pré-autorização/hold (Slice 2)
+  - `POST /v3/payments/{id}/capture` — capturar hold autorizado (Slice 2)
+  - `DELETE /v3/payments/{id}` — cancelar charge/hold (Slice 2)
+- **Env para postpago:** `ASAAS_POSTPAGO_MODE` (`'authorize' | 'charge_on_demand'`; default: `'charge_on_demand'`). Fallback: se hold não aprovado ou expirado, captura em charge_on_demand.
+- Lógica de carteira no frontend: `frontend/src/services/walletService.ts`; novo `paymentMethodService.ts` para cartão on-file
 
 ## Edge Functions (Deno, `supabase/functions/`)
 
@@ -56,22 +62,29 @@
 |---|---|---|
 | `_shared/` | `asaas.ts`, `email.ts`, `rate-limit.ts` | (lib) |
 | `admin-data` | dados de admin (auth própria) | **`--no-verify-jwt`** |
-| `asaas-checkout` | criar checkout de pagamento | normal |
+| `asaas-checkout` | liberar escrow prepago → release_escrow RPC | normal |
 | `asaas-deposit` | depósito/top-up de carteira | normal |
 | `asaas-sync` | reconciliar status de transação | normal |
 | `asaas-webhook` | receber webhook Asaas (sem JWT Supabase) | **`--no-verify-jwt`** |
 | `asaas-withdraw` | saque (transferência PIX) | normal |
+| `asaas-tokenize-card` | tokenizar cartão (Slice 2) → payment_methods | normal |
+| `asaas-authorize-payment` | pré-autorizar pagamento postpago → authorize_escrow_postpago RPC | normal |
+| `asaas-capture-payment` | capturar hold postpago → capture_escrow_postpago RPC | normal |
+| `asaas-release-hold` | liberar hold (cancel/no-show) → release_hold_postpago RPC | normal |
 | `delete-account` | exclusão de conta | normal |
 | `send-notification` | enviar notificação | normal |
 
 ## Banco de dados
 
-- **PostgreSQL + RLS** em todas as tabelas. 52 migrations em `supabase/migrations/`.
-- **RPCs atômicas (escrow/carteira):** `reserve_escrow`, `release_escrow`, `refund_escrow`,
-  `credit_deposit`, `update_wallet_balance`. **Requerem** `GRANT EXECUTE ... TO service_role, authenticated`.
+- **PostgreSQL + RLS** em todas as tabelas. 52+ migrations em `supabase/migrations/`.
+- **RPCs atômicas (escrow prepago/postpago):**
+  - Prepago: `reserve_escrow`, `release_escrow`, `refund_escrow`, `credit_deposit`, `update_wallet_balance`
+  - Postpago (Slice 2): `authorize_escrow_postpago`, `capture_escrow_postpago`, `release_hold_postpago`
+  - Todas **requerem** `GRANT EXECUTE ... TO service_role, authenticated`.
 - **Constraint crítica:** `wallet_transactions` UNIQUE deve ser `(wallet_id, reference_id)`, não `reference_id` só.
+  Idempotência postpago usa `reference_id` estável tipo `job_id:worker_id:attempt_#`.
 - Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,
-  `escrow_transactions`, `notifications`, `analytics_events`.
+  `escrow_transactions`, `notifications`, `analytics_events`, **`payment_methods`** (nova).
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
   `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir.

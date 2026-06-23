@@ -24,6 +24,92 @@ import type {
 } from '../types';
 
 // ---------------------------------------------------------------------------
+// Tipos do resultado estruturado de autorização de pagamento
+// ---------------------------------------------------------------------------
+
+export type AuthorizePaymentOutcome =
+  | { kind: 'ok'; asaasPaymentId: string }
+  | { kind: 'fallback_charge_on_demand'; reason: string }
+  | { kind: 'card_declined'; errorMsg: string };
+
+// ---------------------------------------------------------------------------
+// Helper interno: disparar pré-autorização postpago (best-effort, não bloqueia o aceite)
+// ---------------------------------------------------------------------------
+
+/**
+ * Invoca asaas-authorize-payment após o aceite do convite.
+ * Retorna um resultado estruturado:
+ *  - 'ok'                    : hold criado com sucesso.
+ *  - 'fallback_charge_on_demand': pré-auth não habilitada; cobrança será na conclusão.
+ *  - 'card_declined'         : cartão recusado — empresa deve verificar o método de pagamento.
+ *
+ * Falha NÃO reverte o status 'hired' — o aceite já aconteceu no DB.
+ * Em 'card_declined', uma notificação in-app é criada para a empresa.
+ */
+async function dispatchAuthorizePayment(
+  jobId: string,
+  applicationId: string,
+  companyOwnerId: string,
+): Promise<AuthorizePaymentOutcome> {
+  try {
+    // invokeFunction lança se HTTP status >= 400 (comportamento padrão de api.ts)
+    const result = await invokeFunction('asaas-authorize-payment', { jobId, applicationId }) as {
+      success?: boolean;
+      status?: string;
+      fallback?: boolean;
+      reason?: string;
+      asaasPaymentId?: string;
+    };
+
+    if (result?.status === 'charge_on_demand') {
+      return { kind: 'fallback_charge_on_demand', reason: result.reason ?? '' };
+    }
+
+    return { kind: 'ok', asaasPaymentId: result?.asaasPaymentId ?? '' };
+  } catch (authErr) {
+    const errMsg = authErr instanceof Error ? authErr.message : 'Erro desconhecido na autorização.';
+
+    // Detectar estado terminal (HTTP 409): o escrow deste turno já passou por captura/liberação.
+    // A mensagem vinda da edge function contém "estado terminal" ou "já está em estado" (409).
+    // Neste caso o turno já foi pago — NÃO é recusa de cartão; não notificar a empresa.
+    const isTerminalState =
+      errMsg.includes('estado terminal') ||
+      errMsg.includes('já está em estado') ||
+      errMsg.includes('Não é possível criar novo hold');
+
+    if (isTerminalState) {
+      // Logar para rastreabilidade, mas sem notificação de "cartão recusado"
+      logError('shiftInvite.authorizePayment (terminal state — turno já pago)', authErr);
+      return { kind: 'fallback_charge_on_demand', reason: errMsg };
+    }
+
+    // Detectar recusa de cartão: a Edge Function agora lança erros específicos (não engole mais
+    // recusas). Qualquer erro que não seja "pré-auth não disponível" nem "estado terminal" é
+    // tratado como card_declined para fins de notificação.
+    logError('shiftInvite.authorizePayment (best-effort)', authErr);
+
+    // Notificar empresa sobre falha no cartão (best-effort — não bloqueia o aceite)
+    if (companyOwnerId) {
+      try {
+        await supabase.from('notifications').insert({
+          user_id: companyOwnerId,
+          type: 'payment',
+          title: 'Falha na autorização do cartão',
+          message:
+            `A autorização do pagamento para o turno falhou: ${errMsg}. ` +
+            'Verifique o método de pagamento cadastrado para garantir que o freela receba.',
+          link: '/company/wallet',
+        });
+      } catch (notifErr) {
+        logError('shiftInvite.authorizePayment.notif', notifErr);
+      }
+    }
+
+    return { kind: 'card_declined', errorMsg: errMsg };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tipos de parâmetros e resultado
 // ---------------------------------------------------------------------------
 
@@ -299,39 +385,47 @@ export const ShiftInviteService = {
         return { success: false, error: 'Erro ao registrar resposta.' };
       }
 
-      // 4. Notificação in-app para a empresa (best-effort)
+      // 4. Resolver o owner da empresa (necessário tanto para notificação de aceite quanto
+      //    para notificação de falha de cartão em dispatchAuthorizePayment).
+      let companyOwnerId: string | null = null;
       if (response === 'accepted') {
-        // Buscar company para notificar o operador
-        const { data: job } = await supabase
+        const { data: jobRow } = await supabase
           .from('applications')
           .select('job:jobs(company_id)')
           .eq('id', applicationId)
           .maybeSingle();
 
-        // job.job é um objeto com company_id
-        const companyId = (job?.job as { company_id?: string } | null)?.company_id;
-
+        const companyId = (jobRow?.job as { company_id?: string } | null)?.company_id;
         if (companyId) {
-          // Buscar owner da empresa
-          const { data: company } = await supabase
+          const { data: companyRow } = await supabase
             .from('companies')
             .select('owner_id')
             .eq('id', companyId)
             .maybeSingle();
+          companyOwnerId = companyRow?.owner_id ?? null;
+        }
+      }
 
-          if (company?.owner_id) {
-            const { error: notifErr } = await supabase.from('notifications').insert({
-              user_id: company.owner_id,
-              type: 'status_change',
-              title: 'Freela aceitou o turno',
-              message: 'Um freela aceitou seu convite de turno.',
-              link: `/company/jobs/${current.job_id}/candidates`,
-            });
+      // 5. Pré-autorização postpago (best-effort — não bloqueia o aceite em caso de falha).
+      //    Modo 'authorize': cria hold no cartão da empresa. Modo 'charge_on_demand': no-op aqui.
+      //    A captura (ou cobrança direta) ocorre na conclusão via asaas-capture-payment.
+      //    Em card_declined, dispatchAuthorizePayment já envia notificação à empresa.
+      if (response === 'accepted') {
+        await dispatchAuthorizePayment(current.job_id, applicationId, companyOwnerId ?? '');
+      }
 
-            if (notifErr) {
-              logError('shiftInvite.respondToInvite.notif', notifErr);
-            }
-          }
+      // 6. Notificação in-app para a empresa sobre o aceite (best-effort)
+      if (response === 'accepted' && companyOwnerId) {
+        const { error: notifErr } = await supabase.from('notifications').insert({
+          user_id: companyOwnerId,
+          type: 'status_change',
+          title: 'Freela aceitou o turno',
+          message: 'Um freela aceitou seu convite de turno.',
+          link: `/company/jobs/${current.job_id}/candidates`,
+        });
+
+        if (notifErr) {
+          logError('shiftInvite.respondToInvite.notif', notifErr);
         }
       }
 

@@ -137,6 +137,86 @@ carregamento, refresh — sem React Query. Mantém consistência com o resto do 
 `job_invitations` evita join/migração de dados e mantém o ciclo inteiro (check-in/checkout/confirmação) 
 na mesma aresta. ADR-001 (Slice 1) explica a opção.
 
+## RPC idempotente com RETURNING id INTO (não IF FOUND)
+
+```sql
+CREATE OR REPLACE FUNCTION capture_escrow_postpago(
+  p_job_id UUID,
+  p_worker_id UUID,
+  p_amount NUMERIC
+)
+RETURNS RECORD AS $$
+DECLARE
+  v_txn_id UUID;
+BEGIN
+  INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, ...)
+  VALUES (wallet_id, p_amount, 'escrow_release', 'job:' || p_job_id || ':capture', ...)
+  RETURNING id INTO v_txn_id;  -- ← obrigatório: evita race condition
+
+  RETURN ROW(v_txn_id, ...);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Razão:** `IF FOUND` após INSERT é anti-padrão — cria janela de race condition (concurrent retry enxerga duplicata
+antes do INSERT ser visível). **RETURNING + INTO** garante atomicidade: insert sucede OU falha por constraint,
+nunca deixa estado indeterminado. Idempotência fica no application layer (reference_id UNIQUE).
+
+**Onde:** Postpago `capture_escrow_postpago`, `authorize_escrow_postpago`, `release_hold_postpago`. Prepago legado
+não toca este padrão (usa IF FOUND histórico, refactor futuro).
+
+## Tokenize + authorize separado de capture (cartão on-file)
+
+```ts
+// Slice 2 padrão: nunca chamar asaas-authorize e asaas-capture na mesma operação.
+// Motivo: empresa precisa confirmar turno (check-in, worker validação, etc.) ANTES de capturar.
+
+// 1. Onboarding / config:  empresa salva cartão
+const card = await PaymentMethodService.savePaymentMethod({ number, cvv, ... });
+
+// 2. Aceite de convite: apenas cria escrow sem saldo (push logic):
+// — NÃO chama authorize ainda
+// — worker faz check-in/checkout livremente
+
+// 3. Empresa confirma conclusão: ENTÃO autoriza + captura
+await WalletService.releaseOrCaptureEscrow(jobId, workerId, 'postpaid');
+// → asaas-authorize-payment → authorize_escrow_postpago RPC (hold criado)
+// → asaas-capture-payment → capture_escrow_postpago RPC (cobrança real + credita worker)
+```
+
+**Razão:** separação de concern. Tokenize é config (1x por cartão, sem jobId). Authorize é "vou cobrar" (job-específico,
+criado late porque precisa de validação do worker). Capture é "cobrei de verdade" (worker crédito confirmado).
+Permite retry + fallback (se authorize falha, convida novamente; se capture falha, refaz). Idempotência por
+`reference_id` estável em wallet_transactions.
+
+## Service pattern: PaymentMethodService (sem React Query, direto supabase + invokeFunction)
+
+```ts
+export const PaymentMethodService = {
+  async savePaymentMethod(input: SaveCardInput): Promise<SaveCardResult> {
+    // invokeFunction para privilégio (asaas tokenize)
+    const result = await invokeFunction('asaas-tokenize-card', input);
+    return { success: result.success, paymentMethodId: result.paymentMethodId, ... };
+  },
+
+  async capturePayment(jobId: string, workerId: string): Promise<CapturePaymentResult> {
+    // invokeFunction para operação de pagamento
+    const result = await invokeFunction('asaas-capture-payment', { jobId, workerId });
+    return { success: result.success, chargeOnDemand: result.chargeOnDemand };
+  },
+
+  async listPaymentMethods(): Promise<PaymentMethod[]> {
+    // supabase direto para leitura (RLS já filtra company_id por owner)
+    const { data } = await supabase.from('payment_methods').select('*').eq('company_id', companyId);
+    return data ?? [];
+  }
+};
+```
+
+**Razão:** padrão existente (`walletService`, `teamConnectionService`). Operações privilegiadas (I/O Asaas) usam
+`invokeFunction`. Leituras usam `supabase` direto. Sem React Query (Article 5 — inconsistência). Service exporta
+objeto com métodos; no frontend chamar via `services/api.ts invokeFunction()` + error handling centralizado em `lib/logger.ts`.
+
 ## Padrões a serem extraídos
 
 > Conforme novas tasks consolidam padrões, popular aqui via `harness-memory-updater` ou edição direta.

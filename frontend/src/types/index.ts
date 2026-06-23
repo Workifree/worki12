@@ -192,6 +192,40 @@ export interface MyStore {
 }
 
 // =============================================
+// PAGAMENTO POSTPAGO (Slice 2) — cartão on-file da empresa
+// =============================================
+
+/**
+ * Método de pagamento on-file da empresa (cartão tokenizado no Asaas).
+ * Espelha public.payment_methods (migration 20260622000600). NUNCA carrega o PAN —
+ * só o token opaco do Asaas + metadados não-sensíveis (PCI / Article 10).
+ */
+export interface PaymentMethod {
+  id: string;
+  /** company_id = auth.uid() da empresa (= jobs.company_id = wallets.user_id). */
+  company_id: string;
+  /** creditCardToken opaco do Asaas (não é o número do cartão). */
+  asaas_credit_card_token: string;
+  brand?: string | null;
+  /** 4 dígitos finais para exibição ("•••• 1234"). */
+  last4?: string | null;
+  holder_name?: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** prepaid = fluxo pull legado (saldo pré-depositado); postpaid = push Slice 2 (hold no cartão). */
+export type EscrowKind = 'prepaid' | 'postpaid';
+
+/**
+ * Estados do escrow. Prepago: reserved→released|refunded. Postpago: authorized→captured→released,
+ * ou authorized→refunded (cancel/no-show). Espelha o CHECK de escrow_transactions.status
+ * (migration 20260622000700).
+ */
+export type EscrowStatus = 'reserved' | 'authorized' | 'captured' | 'released' | 'refunded';
+
+// =============================================
 // MESSAGING
 // =============================================
 

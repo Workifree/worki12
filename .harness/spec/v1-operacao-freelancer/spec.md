@@ -69,6 +69,14 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
   o Worki cobra o método da empresa e paga o freela. Onde o Asaas suportar, fazer **pré-autorização (hold) no
   aceite + captura na conclusão** (como o Uber) — garante o freela sem depósito. Worki **não adianta dinheiro**
   (não é crédito). No piloto embedded/confiável, mesmo sem hold o calote é ~inexistente.
+  - [x] _Camada de dados (Slice 2):_ tabela `payment_methods` (cartão on-file: token Asaas opaco +
+    brand/last4/holder_name, `is_default` único por empresa, UNIQUE (company_id, token)) + RLS por dono +
+    REVOKE anon/GRANT service_role — `20260622000600_payment_methods.sql`. Escrow estendido com estados
+    postpago (`authorized`/`captured`, `kind`, `asaas_payment_id`) — `20260622000700_escrow_postpago_states.sql`.
+    RPC atômica idempotente `authorize_escrow_postpago` (grava o hold, sem saldo) + GRANT EXECUTE —
+    `20260622000800_postpago_escrow_rpcs.sql`. Tipos `PaymentMethod`/`EscrowKind`/`EscrowStatus` à mão
+    (`types/index.ts`). Edge Functions `asaas-tokenize-card`/`asaas-authorize-payment` = builder (contrato no ADR).
+    Architect + ADR: `.harness/memory-bank/decisions/ADR-20260622-pagamento-postpago.md`.
 - [ ] **R5 — Convidar (3 portas, 1 primitiva).** Convite-pra-turno é UMA primitiva com 3 entradas: convidar da
   equipe; "recorrente" = convidar de novo (v1 manual, sem motor de recorrência); QR-na-hora = mesmo convite
   com identidade vinda do scan.
@@ -94,6 +102,13 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
 - [ ] **R9 — Conclusão → cobrança + pagamento.** Operador confirma conclusão → Worki **captura o cartão
   on-file (ou cobra o PIX) da empresa** e **paga o freela** (RPCs atômicas no ledger, idempotentes).
   **Auto-processamento** após janela de carência pós-conclusão protege o freela de inação da empresa.
+  - [x] _Camada de dados (Slice 2):_ RPC atômica idempotente `capture_escrow_postpago` (captura o hold:
+    `authorized`→`released` + credita o worker via reuso de `escrow_release`, idempotência `(wallet_id,
+    reference_id=job_id)`) e `release_hold_postpago` (cancel/no-show antes da captura: `authorized`→`refunded`,
+    sem saldo, devolve `asaas_payment_id`) + GRANT EXECUTE — `20260622000800_postpago_escrow_rpcs.sql`.
+    Trigger `auto_reserve_escrow_on_hire` confirmado SÓ pulando no aceite de convite (pagamento fora de
+    trigger) — `20260622000900_postpago_no_escrow_in_trigger.sql`. Edge Functions `asaas-capture-payment`/
+    `asaas-release-hold` + auto-processamento (cron de carência) = builder (contrato no ADR).
 - [ ] **R10 — Avaliação bidirecional.** Após conclusão, empresa avalia freela e freela avalia empresa (forma
   mais simples: compareceu? + nota 1-5). Acumula calado (valor é Fase 2, coleta começa no dia 1).
   - [x] _Camada de dados:_ coluna `reviews.direction` (worker/company, auto-preenchida) + trigger

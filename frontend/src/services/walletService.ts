@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { invokeFunction } from './api';
 import { logError } from '../lib/logger';
+import { PaymentMethodService } from './paymentMethodService';
 
 export interface Wallet {
     id: string;
@@ -16,7 +17,7 @@ export interface WalletTransaction {
     id: string;
     wallet_id: string;
     amount: number;
-    type: 'credit' | 'debit' | 'escrow_reserve' | 'escrow_release' | 'initial_balance' | 'platform_fee';
+    type: 'credit' | 'debit' | 'escrow_reserve' | 'escrow_release' | 'initial_balance' | 'platform_fee' | 'escrow_authorize' | 'escrow_void';
     description: string | null;
     reference_id: string | null;
     created_at: string;
@@ -29,7 +30,14 @@ export interface EscrowTransaction {
     amount: number;
     company_wallet_id: string;
     worker_wallet_id: string | null;
-    status: 'reserved' | 'released' | 'refunded';
+    // Postpago (Slice 2): 'authorized'/'captured' coexistem com os estados prepago.
+    status: 'reserved' | 'authorized' | 'captured' | 'released' | 'refunded';
+    // prepaid = pull legado (saldo); postpaid = push Slice 2 (hold no cartão). Default 'prepaid' no DB.
+    kind?: 'prepaid' | 'postpaid';
+    // id da cobrança no Asaas (authorizeOnly:true). NULL para prepago.
+    asaas_payment_id?: string | null;
+    authorized_at?: string | null;
+    captured_at?: string | null;
     created_at: string;
     released_at: string | null;
     job?: { title: string };
@@ -182,6 +190,48 @@ export const WalletService = {
             .single();
 
         return data as EscrowTransaction | null;
+    },
+
+    /**
+     * Libera ou captura o escrow dependendo do kind do turno.
+     *
+     * kind='prepaid' (pull legado): invoca asaas-checkout → release_escrow.
+     * kind='postpaid' (push Slice 2): invoca asaas-capture-payment → capture_escrow_postpago.
+     *
+     * Este é o ponto de ramificação por kind para a empresa confirmar a conclusão do turno.
+     * Deve substituir chamadas diretas a releaseEscrow em fluxos que podem ser postpago.
+     *
+     * @param jobId      UUID do turno.
+     * @param workerId   UUID do worker.
+     * @param escrowKind 'prepaid' | 'postpaid'. Se omitido, busca do DB.
+     */
+    async releaseOrCaptureEscrow(
+      jobId: string,
+      workerId: string,
+      escrowKind?: 'prepaid' | 'postpaid'
+    ): Promise<{ success: boolean; error?: string }> {
+      try {
+        // Se kind não foi passado, buscar do DB
+        let kind = escrowKind;
+        if (!kind) {
+          const { data: escrow } = await supabase
+            .from('escrow_transactions')
+            .select('kind')
+            .eq('job_id', jobId)
+            .maybeSingle();
+          kind = (escrow?.kind as 'prepaid' | 'postpaid' | undefined) ?? 'prepaid';
+        }
+
+        if (kind === 'postpaid') {
+          return await PaymentMethodService.capturePayment(jobId, workerId);
+        }
+
+        // prepaid: fluxo legado (asaas-checkout → release_escrow)
+        return await WalletService.releaseEscrow(jobId, '', workerId);
+      } catch (error) {
+        logError('walletService.releaseOrCaptureEscrow', error);
+        return { success: false, error: 'Erro ao processar pagamento do turno.' };
+      }
     },
 
     async getCompanyEscrows(companyUserId: string): Promise<EscrowTransaction[]> {

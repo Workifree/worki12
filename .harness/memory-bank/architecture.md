@@ -47,7 +47,7 @@ Browser (SPA React 19)
 | `pages/`, `pages/company/`, `pages/worker/` | Telas de rota por papel. Lógica de tela + fetch direto. |
 | `components/` | UI reutilizável cross-papel (cards, modais, navegação, guards). |
 | `contexts/` | Estado global de sessão, notificações, toasts. |
-| `services/` | Lógica de negócio não-UI: `walletService` (escrow), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `analytics`, `api` (edge functions). |
+| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `analytics`, `api` (edge functions). |
 | `lib/` | Config e utilitários: `supabase` (client), `gamification`, `validation`, `logger`. |
 | `types/` | Contrato de tipos do domínio (à mão — fonte da verdade). |
 | `supabase/functions/` | Operações privilegiadas (Asaas, admin, notificações) — Deno + service_role. |
@@ -81,24 +81,53 @@ trigger `auto_reserve_escrow_on_hire` pula a reserva no aceite de convite (ADR-2
 legado** (candidatura → hired) ainda reserva no aceite (modelo prepago original, inalterado). O pagamento do
 push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem depósito antecipado).
 
-## Modelo de pagamento (carteira central + escrow)
+## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
+
+### Fluxo prepago (Slice 1 — pull legado; intacto)
 
 ```
 Empresa deposita (PIX) ──→ asaas-deposit ──→ Asaas ──webhook──→ credit_deposit (RPC) ──→ wallets.balance↑ (empresa)
-Empresa contrata worker (pull legado) ──→ reserve_escrow (RPC) ──→ trava saldo em escrow_transactions
-Empresa convida worker (push, Slice 1)  ──→ worker aceita ──→ SEM reserva (pagamento postpago = Slice 2)
-Turno confirmado         ──→ release_escrow (RPC, atômico) ──→ credita wallets.balance do worker
-Cancelamento             ──→ refund_escrow  (RPC, atômico) ──→ devolve saldo à empresa
+Empresa contrata worker (pull) ──→ reserve_escrow (RPC) ──→ trava saldo em escrow_transactions
+Turno confirmado         ──→ releaseEscrow (edge function) ──→ release_escrow (RPC) ──→ credita wallets.balance do worker
+Cancelamento             ──→ refund_escrow (RPC, atômico) ──→ devolve saldo à empresa
 Worker saca (PIX)        ──→ asaas-withdraw ──→ transferência da conta master ──→ wallets.balance↓ (worker)
 ```
 
+**Kind:** `escrow_transactions.kind = 'prepaid'` (default histórico).
+
+### Fluxo postpago (Slice 2 — push com cartão on-file; NOVO)
+
+```
+Empresa cadastra cartão ──→ asaas-tokenize-card ──→ token opaco Asaas em payment_methods (NUNCA PAN/CVV)
+Empresa convida worker ──→ application.status='invited' ──→ Worker aceita (→'hired') ──→ SEM reserva
+Worker faz check-in/checkout ──→ Empresa confirma conclusão (confirma turno + autoriza pagamento)
+Confirma conclusão ──→ asaas-authorize-payment ──→ authorize_escrow_postpago (RPC, pré-autorização/hold) ──→ escrow.status='authorized'
+Captura autorização ──→ asaas-capture-payment ──→ capture_escrow_postpago (RPC) ──→ escrow.status='captured' + credita worker
+Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpago (RPC, type='escrow_void') ──→ devolve crédito à empresa
+```
+
+**Kind:** `escrow_transactions.kind = 'postpaid'`. Fluxo: `authorized` → `captured` → `released`, ou `authorized` → `refunded` (cancel).
+
+### Estrutura de dados
+
+- **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
+  RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
+- **`escrow_transactions`** (estendida):
+  - `kind`: `'prepaid'` (default) | `'postpaid'`
+  - `status`: `'reserved' | 'authorized' | 'captured' | 'released' | 'refunded'`
+  - `asaas_payment_id`: id do hold/charge no Asaas (NULL para prepago)
+  - `authorized_at`, `captured_at`: timestamps das transições
+- **`wallet_transactions`** (novo type): `'escrow_authorize'` | `'escrow_void'` para rastrear holds.
+
+### Princípios
+
 - **Carteira central:** uma conta master Asaas; NÃO há subcontas. Saldo por usuário é só DB.
-- **Atomicidade:** reserva/liberação/estorno/depósito são RPCs Postgres atômicas — nunca update manual
-  de saldo no client.
-- **Taxa de plataforma:** 5% no saque do worker (taxa da empresa no escrow a definir, ~10%).
-- **Idempotência:** `wallet_transactions` UNIQUE `(wallet_id, reference_id)` evita crédito duplicado de webhook.
-- **Slice 1 (push):** o aceite de convite NÃO reserva escrow (trigger pula). O pagamento postpago (cartão na
-  conclusão) é o Slice 2. O pull legado segue reservando no aceite da candidatura (prepago), inalterado.
+- **Atomicidade:** todas as operações de escrow (reserve/release/authorize/capture/release_hold/refund) são RPCs Postgres atômicas.
+- **Idempotência:** `wallet_transactions` UNIQUE `(wallet_id, reference_id)` evita crédito duplicado. Postpago usa `reference_id` estável
+  (`job_id:worker_id:attempt_#`) para retry-safe.
+- **Taxa de plataforma:** 5% no saque (worker), TBD no escrow (empresa).
+- **Coexistência:** prepago e postpago rodam em paralelo por `kind`. Ramificação acontece em `walletService.releaseOrCaptureEscrow(jobId, workerId, kind)`
+  que despacha para `asaas-checkout` (prepago) ou `asaas-capture-payment` (postpago).
 
 ## Segurança
 

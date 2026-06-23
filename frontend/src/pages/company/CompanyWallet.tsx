@@ -5,6 +5,7 @@ import type { WalletTransaction, EscrowTransaction } from '../../services/wallet
 import { DollarSign, ArrowDownLeft, ArrowUpRight, History, Lock, Wallet, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DepositModal from '../../components/DepositModal';
+import PaymentMethodsSection from '../../components/PaymentMethodsSection';
 
 export default function CompanyWallet() {
     const navigate = useNavigate();
@@ -160,7 +161,7 @@ export default function CompanyWallet() {
             />
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-2xl border-2 border-black">
                     <div className="flex items-center gap-2 mb-2 text-orange-600">
                         <Lock size={20} /> <span className="text-xs font-black uppercase">Em Escrow</span>
@@ -198,6 +199,9 @@ export default function CompanyWallet() {
                     </div>
                 </section>
             )}
+
+            {/* Payment Methods — cartoes on-file para postpago */}
+            <PaymentMethodsSection />
 
             {/* Transactions List */}
             <section className="bg-white border-2 border-black rounded-2xl p-6">

@@ -9,35 +9,11 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
 import EscrowStatusBadge from '../../components/EscrowStatusBadge';
+import type { Application } from '../../types';
 
 export default function CompanyJobCandidates() {
     const { id } = useParams();
     const navigate = useNavigate();
-    interface WorkerProfile {
-        id: string;
-        full_name: string;
-        avatar_url?: string;
-        city?: string;
-        level?: number;
-        rating_average?: number;
-        reviews_count?: number;
-        tags?: string[];
-    }
-
-    interface Application {
-        id: string;
-        job_id: string;
-        worker_id: string;
-        status: string;
-        cover_letter?: string;
-        created_at: string;
-        worker?: WorkerProfile;
-        job?: { title: string };
-        worker_checkin_at?: string;
-        worker_checkout_at?: string;
-        company_checkin_confirmed_at?: string;
-        company_checkout_confirmed_at?: string;
-    }
 
     const [candidates, setCandidates] = useState<Application[]>([]);
     const [jobTitle, setJobTitle] = useState('');
@@ -126,7 +102,8 @@ export default function CompanyJobCandidates() {
 
     const handleConfirmDelivery = async (app: Application) => {
         setReleasing(true);
-        const result = await WalletService.releaseEscrow(app.job_id, app.id, app.worker_id);
+        // Slice 2: ramifica por escrow.kind — postpaid captura o hold no cartao; prepaid libera escrow legado.
+        const result = await WalletService.releaseOrCaptureEscrow(app.job_id, app.worker_id);
         if (!result.success) {
             addToast('Erro ao liberar pagamento. Tente novamente.', 'error');
             setReleasing(false);
@@ -320,7 +297,7 @@ export default function CompanyJobCandidates() {
                     </div>
                 ) : (
                     candidates.map((app) => (
-                        <div key={app.id} role="button" tabIndex={0} className="bg-white border-2 border-gray-100 hover:border-black rounded-xl p-6 transition-all group shadow-sm hover:shadow-md cursor-pointer" onClick={() => navigate(`/company/worker/${app.worker_id}`)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/company/worker/${app.worker_id}`); } }}>
+                        <div key={app.id} role="button" tabIndex={0} className="bg-white border-2 border-gray-100 hover:border-black rounded-xl p-6 transition-all group hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer" onClick={() => navigate(`/company/worker/${app.worker_id}`)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/company/worker/${app.worker_id}`); } }}>
                             <div className="flex flex-col md:flex-row gap-6">
                                 {/* Avatar */}
                                 <div className="flex-shrink-0">
@@ -350,7 +327,7 @@ export default function CompanyJobCandidates() {
                                                     {app.worker?.rating_average ? Number(app.worker.rating_average).toFixed(1) : '5.0'}
                                                     <span className="text-gray-400 font-medium ml-1">({app.worker?.reviews_count || 0} avaliações)</span>
                                                 </span>
-                                                <span className="flex items-center gap-1"><Clock size={12} /> Aplicou {formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR })}</span>
+                                                <span className="flex items-center gap-1"><Clock size={12} /> Aplicou {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
                                             </div>
                                         </div>
 
@@ -360,7 +337,9 @@ export default function CompanyJobCandidates() {
 
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleChat(app); }}
-                                                className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors" title="Chat"
+                                                className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors"
+                                                title="Chat"
+                                                aria-label="Abrir chat com candidato"
                                             >
                                                 <MessageSquare size={24} />
                                             </button>
@@ -368,13 +347,17 @@ export default function CompanyJobCandidates() {
                                                 <>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
-                                                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors" title="Descartar"
+                                                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                                                        title="Descartar"
+                                                        aria-label="Descartar candidato"
                                                     >
                                                         <XCircle size={24} />
                                                     </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'interview'); }}
-                                                        className="p-2 hover:bg-green-50 text-gray-300 hover:text-green-600 rounded-lg transition-colors" title="Aprovar para Entrevista"
+                                                        className="p-2 hover:bg-green-50 text-gray-300 hover:text-green-600 rounded-lg transition-colors"
+                                                        title="Aprovar para Entrevista"
+                                                        aria-label="Aprovar candidato para entrevista"
                                                     >
                                                         <CheckCircle size={24} />
                                                     </button>
@@ -461,7 +444,7 @@ export default function CompanyJobCandidates() {
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && (
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); setConfirmDeliveryApp(app); }}
-                                                                    className="p-1 px-3 bg-primary text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-green-400 transition-colors flex items-center gap-1"
+                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
                                                                 >
                                                                     Confirmar Entrega
                                                                 </button>
@@ -537,7 +520,7 @@ export default function CompanyJobCandidates() {
                             <button
                                 onClick={() => handleConfirmDelivery(confirmDeliveryApp)}
                                 disabled={releasing}
-                                className="flex-1 py-3 bg-primary text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {releasing ? <><Loader2 size={16} className="animate-spin" /> Processando...</> : 'Confirmar'}
                             </button>
@@ -589,8 +572,9 @@ export default function CompanyJobCandidates() {
                         </div>
 
                         <div className="mb-6">
-                            <label className="block text-sm font-bold uppercase mb-2">Comentário (Opcional)</label>
+                            <label htmlFor="review-comment" className="block text-sm font-bold uppercase mb-2">Comentário (Opcional)</label>
                             <textarea
+                                id="review-comment"
                                 value={comment}
                                 onChange={(e) => setComment(e.target.value)}
                                 placeholder="Como foi a experiência?"

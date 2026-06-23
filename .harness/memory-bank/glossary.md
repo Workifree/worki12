@@ -84,8 +84,30 @@ e push (convite) coexistem: pull = worker se candidata; push = empresa convida c
 worker clica, autoriza (`/convite/:token`), entra na equipe accepted. Slice 1 também suporta convite por telefone (Worki ID) 
 e QR (v1.1).
 
-**Postpago** — Modelo de pagamento do Slice 1: criar turno NÃO reserva escrow. Reserva só ocorre quando a empresa 
-contrata (pull application) ou quando o freela aceita convite de turno (push). Slice 2 muda para prepago (depósito antes).
+**Postpago (Slice 2)** — Modelo de pagamento para turno via convite push: empresa cadastra cartão on-file (tokenização Asaas),
+convida freela (sem reserva de saldo antecipado); no aceite, nada muda; na conclusão, autoriza um hold (pré-autorização)
+no cartão, depois captura o pagamento transferindo o valor ao worker. Coexiste com prepago (pull legado).
+Tabela `escrow_transactions.kind='postpaid'`; estados `authorized` → `captured` → `released` ou `authorized` → `refunded`.
+
+**Pré-autorização / Hold (autorizeOnly)** — Bloqueio temporário de crédito no cartão (Asaas `authorizeOnly=true`).
+Não debita na hora; expira em 24-72h se não capturado. Slice 2 usa hold + captura para garantir
+que o crédito ao worker só ocorre quando o turno é confirmado (segurança contra chargebacks).
+
+**Captura (capture)** — Transformação de um hold autorizado em cobrança real. `asaas-capture-payment` invoca
+Asaas `POST /payments/{id}/capture` → RPC `capture_escrow_postpago` credita worker. Idempotente.
+
+**`payment_methods`** — Tabela com métodos de pagamento on-file da empresa. Campos: `id, company_id, asaas_credit_card_token,
+brand, last4, is_default`. NUNCA carrega PAN ou CVV (Article 10 — PCI). Token é opaco, gerado pelo Asaas.
+
+**Escrow `kind`** — Campo em `escrow_transactions` indicando tipo: `'prepaid'` (pull legado, saldo pré-depositado) ou 
+`'postpaid'` (push Slice 2, hold no cartão). Determina o fluxo de pagamento (`walletService.releaseOrCaptureEscrow` ramifica por `kind`).
+
+**Escrow `status` postpago** — Estados no fluxo postpago: `'authorized'` (hold criado), `'captured'` (cobrança real),
+`'released'` (crédito transferido ao worker), `'refunded'` (hold cancelado em no-show/cancelamento).
+Prepago usa `'reserved' | 'released' | 'refunded'` (sem authorized/captured).
+
+**`escrow_void`** — Tipo de `wallet_transactions` novo no Slice 2. Registra a reversão de um hold não capturado
+(cancel/no-show). Move crédito de volta à empresa.
 
 **Review direction (direção de avaliação)** — Campo em `reviews.direction` ('worker' | 'company') indicando quem é avaliado.
 Possibilita rating bidirecional: worker avalia company (→direction='company'); company avalia worker (→direction='worker').

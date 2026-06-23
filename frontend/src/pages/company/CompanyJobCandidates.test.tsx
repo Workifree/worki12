@@ -6,7 +6,7 @@ import CompanyJobCandidates from './CompanyJobCandidates'
 // Mock WalletService — must not reference outer variables in factory
 vi.mock('../../services/walletService', () => ({
   WalletService: {
-    releaseEscrow: vi.fn().mockResolvedValue({ success: true }),
+    releaseOrCaptureEscrow: vi.fn().mockResolvedValue({ success: true }),
     getOrCreateWallet: vi.fn().mockResolvedValue({ balance: 1000 }),
   },
 }))
@@ -183,12 +183,12 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
       expect(screen.queryByText(/O pagamento será liberado imediatamente ao profissional/)).not.toBeInTheDocument()
     })
 
-    expect(WalletService.releaseEscrow).not.toHaveBeenCalled()
+    expect(WalletService.releaseOrCaptureEscrow).not.toHaveBeenCalled()
   })
 
-  it('toast de sucesso aparece após releaseEscrow retornar sucesso', async () => {
+  it('toast de sucesso aparece após releaseOrCaptureEscrow retornar sucesso', async () => {
     const { mockAddToast } = setupMocksWithApps(APP_IN_PROGRESS)
-    vi.mocked(WalletService.releaseEscrow).mockResolvedValueOnce({ success: true })
+    vi.mocked(WalletService.releaseOrCaptureEscrow).mockResolvedValueOnce({ success: true })
 
     renderComponent()
 
@@ -216,9 +216,9 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     })
   })
 
-  it('toast de erro aparece quando releaseEscrow retorna success=false', async () => {
+  it('toast de erro aparece quando releaseOrCaptureEscrow retorna success=false', async () => {
     const { mockAddToast } = setupMocksWithApps(APP_IN_PROGRESS)
-    vi.mocked(WalletService.releaseEscrow).mockResolvedValueOnce({ success: false, error: 'Falha no pagamento' })
+    vi.mocked(WalletService.releaseOrCaptureEscrow).mockResolvedValueOnce({ success: false, error: 'Falha no pagamento' })
 
     renderComponent()
 
@@ -302,7 +302,7 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
       order: vi.fn().mockResolvedValue({ data: [], error: null }),
     })
 
-    vi.mocked(WalletService.releaseEscrow).mockResolvedValue({ success: true })
+    vi.mocked(WalletService.releaseOrCaptureEscrow).mockResolvedValue({ success: true })
     vi.mocked(WalletService.getOrCreateWallet).mockResolvedValue({ id: 'w1', balance: 500, user_id: 'company-user-1', user_type: 'company', created_at: '', updated_at: '' })
 
     vi.mocked(supabase.from).mockImplementation((table: string) => {

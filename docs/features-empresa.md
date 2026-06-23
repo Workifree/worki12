@@ -87,7 +87,39 @@ A avaliação ajuda ambos a construir reputação. **Recusar um convite não afe
 
 ---
 
+## Cartão de Crédito — Pagamento Postpago
+
+O Worki oferece agora **pagamento postpago**: você não precisa fazer depósito antecipado. Em vez disso, cadastra um cartão de crédito uma única vez. Quando o turno é concluído, **o Worki cobra automaticamente seu cartão e paga o freela** no mesmo instante.
+
+### Como cadastrar seu cartão
+
+1. Vá para **Carteira da Empresa** (no menu lateral)
+2. Procure pela seção **"Cartões de Crédito"**
+3. Clique em **"Adicionar"**
+4. Preencha:
+   - **Dados do cartão:** número, validade (mês/ano) e CVV
+   - **Nome do titular:** Quem é o dono do cartão
+   - **Dados pessoais:** nome completo, e-mail, CPF ou CNPJ, CEP, número do endereço e telefone
+5. Clique **"Salvar"**
+
+**Segurança:** O número do seu cartão (PAN) **não fica armazenado** no Worki. Ele é enviado diretamente para o gateway de pagamento (Asaas) e criptografado. O Worki só guarda informações públicas (bandeira, últimos 4 dígitos).
+
+### O que acontece na conclusão do turno
+
+1. Você (empresa) confirma a conclusão do turno no app
+2. O Worki autoriza uma cobrança no seu cartão pelo valor do turno
+3. Se a autorização passar:
+   - Seu cartão é debitado
+   - O freelancer recebe o valor na carteira dele **instantaneamente**
+4. Se a autorização falhar:
+   - Você recebe um aviso no app indicando que o pagamento foi recusado
+   - O turno **fica pendente de pagamento** — você pode tentar novamente ou usar outro método
+
+**Aviso importante:** Se o cartão for recusado repetidas vezes, o freelancer não receberá o pagamento. Certifique-se de manter um cartão válido cadastrado e com saldo disponível.
+
+---
+
 ## Próximos Passos
 
-- **Meus Dados** → Configure seu método de pagamento (cartão ou PIX)
+- **Carteira da Empresa** → Cadastre um cartão de crédito para pagar turnos
 - **Suporte** → Dúvidas? Entre em contato via chat no app
