@@ -1,0 +1,223 @@
+# .harness/harness.config.yaml — Worki (standalone, Claude + Gemini-para-frontend)
+#
+# Postura deste projeto:
+#   - Orchestrator: Claude Code (esta sessão). Invoca subagents via Agent tool.
+#   - Quase tudo roda em Claude (sem ralph dispatcher, sem async queue).
+#   - EXCEÇÃO: a construção de frontend (UI React/TSX) usa Gemini 3 — é o melhor nisso e foi o que
+#     construiu o frontend do Worki até agora. O subagent harness-frontend-builder (Claude/sonnet)
+#     despacha para o Gemini via scripts/gemini-dispatch.sh e grava/verifica os arquivos.
+#   - Tiers Claude por role: opus (reasoning profundo), sonnet (implementação/revisão), haiku (docs/memory).
+#     Override por chamada via Agent({ model: ... }).
+#
+# Esta config é REFERÊNCIA semântica para o orchestrator escolher modelo por role.
+# Não é consumida por um dispatcher automático.
+
+version: "v3.5-worki"
+project: worki
+mode: standalone
+
+# ============================================================
+# PROVIDERS — claude (tudo) + gemini (apenas frontend)
+# ============================================================
+providers:
+  claude:
+    auth: session
+    enabled: true
+    notes: "Provider nativo do Claude Code (esta sessão). Default para tudo, exceto construção de UI."
+
+  gemini:
+    auth: env:GEMINI_API_KEY
+    enabled: true
+    notes: |
+      Usado EXCLUSIVAMENTE para construção de frontend (UI React/TSX) via
+      scripts/gemini-dispatch.sh. A chave vem do ambiente (GEMINI_API_KEY / scripts/.gemini-key / .env),
+      NUNCA em plaintext no repo. Requer o `gemini` CLI instalado.
+
+# ============================================================
+# MATRIZ DE EFFORT
+# ============================================================
+effort_matrix:
+  low:
+    cli: claude
+    model: haiku
+    rationale: "Docs, CHANGELOG, updates incrementais de memory-bank. Barato e rápido."
+    default_timeout: 1800
+
+  medium:
+    cli: claude
+    model: sonnet
+    rationale: "Implementação padrão de features/refactors + revisões especializadas."
+    default_timeout: 3600
+
+  high:
+    cli: claude
+    model: opus
+    rationale: "Pensamento profundo: planner, evaluator, architect, debugger."
+    default_timeout: 7200
+
+  design:
+    cli: gemini
+    model: gemini-3-pro-preview
+    rationale: "Construção de UI React/TSX. Gemini 3 entrega o melhor frontend. Despacho via gemini-dispatch.sh."
+    default_timeout: 3600
+
+# ============================================================
+# ROLES — subagents habilitados (todos Claude via Agent tool)
+# ============================================================
+roles:
+  harness-planner:
+    cli: claude
+    model: opus
+    effort: high
+    rationale: "Features L/XL exigem reasoning profundo (breakdown, risco, ordem)."
+
+  harness-evaluator:
+    cli: claude
+    model: opus
+    effort: high
+    rationale: "QA cético independente; cortar custo aqui quebra a evaluation."
+
+  harness-architect:
+    cli: claude
+    model: opus
+    effort: high
+    rationale: "Decisões com reversibilidade difícil (migrations, escrow, contratos) exigem profundidade."
+
+  harness-debugger:
+    cli: claude
+    model: opus
+    effort: high
+    rationale: "Root-cause analysis em bugs sutis (RLS, escrow, webhook, CORS)."
+
+  harness-builder:
+    cli: claude
+    model: sonnet
+    effort: medium
+    modes:
+      feature:
+        rationale: "Implementação de novas features."
+      refactor:
+        rationale: "Transformações que preservam comportamento."
+        invariants_extra:
+          - build_green_before
+          - build_green_after
+          - no_behavior_change
+
+  harness-clarifier:
+    cli: claude
+    model: sonnet
+    effort: medium
+    rationale: "Detecção de ambiguidades em specs; produz spec.md testável."
+
+  harness-frontend-builder:
+    cli: gemini
+    model: gemini-3-pro-preview
+    effort: design
+    wrapper: claude/sonnet   # subagent Claude monta o contexto, despacha p/ Gemini, grava e verifica
+    rationale: "Gemini 3 escreve a UI React/TSX neo-brutalista (melhor frontend). Despacho via scripts/gemini-dispatch.sh."
+    fallback:
+      - { cli: claude, model: opus, note: "Se Gemini indisponível e a UI for bloqueante, Claude escreve seguindo o mesmo design system." }
+
+  harness-frontend-reviewer:
+    cli: claude
+    model: sonnet
+    effort: medium
+    rationale: "Revisão de UI pós-build: TS strict, design neo-brutalista, mobile-first, padrões React."
+    trigger: "Condicional: invocado quando o diff toca frontend/src/components/ ou frontend/src/pages/."
+
+  harness-security-reviewer:
+    cli: claude
+    model: sonnet
+    effort: medium
+    rationale: "Segurança: RLS, isolamento de papel, escrow/idempotência, service_role, CORS, Asaas, LGPD."
+    trigger: "Condicional: diff toca supabase/migrations/, supabase/functions/, wallet/escrow, auth, admin, ou PII."
+
+  harness-doc-writer:
+    cli: claude
+    model: haiku
+    effort: low
+    modes:
+      doc:
+        rationale: "README, CHANGELOG, docs de usuário derivados do diff."
+      spec:
+        rationale: "Specs em prosa estruturada."
+
+  harness-memory-updater:
+    cli: claude
+    model: haiku
+    effort: low
+    rationale: "Updates incrementais ao memory-bank pós-feature. Edição cirúrgica, nunca overwrite."
+
+# ============================================================
+# FALLBACK CHAINS — só o frontend-builder tem fallback (Gemini → Claude)
+# ============================================================
+# Os demais roles são Claude puro; "fallback" deles é decisão consciente do orchestrator
+# (ex.: rotacionar instância do builder no deadlock-break).
+fallback_chains_by_role:
+  harness-frontend-builder:
+    - { cli: claude, model: opus, note: "Gemini indisponível → Claude escreve a UI no mesmo design system." }
+
+# ============================================================
+# INVARIANTS
+# ============================================================
+invariants:
+  harness-architect:
+    - field: "adr_emitted"
+      must_equal: true
+      severity: blocker
+      message: "Architect deve emitir ADR para decisões com reversibilidade difícil (migration/escrow/contrato)."
+
+  harness-debugger:
+    - condition: "root_cause_hypothesis deve ter 1+ evidence_link antes de propor fix"
+      severity: blocker
+
+  harness-builder:
+    - condition: "se control.mode == 'refactor': build_green_before deve ser true"
+      severity: blocker
+      when_mode: refactor
+    - condition: "se control.mode == 'refactor': build_green_after deve ser true"
+      severity: blocker
+      when_mode: refactor
+
+  harness-clarifier:
+    - condition: "se control.status == 'needs_input': questions.length >= 1"
+      severity: blocker
+
+  harness-evaluator:
+    - condition: "evaluator deve falhar quando há ambiguidade não resolvida nos acceptance criteria"
+      severity: blocker
+
+  harness-doc-writer:
+    - condition: "se control.mode == 'spec': output deve ter sections {context, requirements, acceptance}"
+      severity: blocker
+      when_mode: spec
+
+  harness-memory-updater:
+    - condition: "memory updates devem ser incrementais — diff explícito, não overwrite total"
+      severity: blocker
+
+  harness-frontend-builder:
+    - condition: "build verde após gravar os arquivos do Gemini (cd frontend && npm run build)"
+      severity: blocker
+
+# ============================================================
+# LIMITS
+# ============================================================
+limits:
+  retry_on_validation_failure: 2
+  retry_on_transient_failure: 3
+  retry_backoff_seconds: [2, 4, 8]
+  builder_evaluator_max_iterations: 3
+  gemini_dispatch_max_attempts: 2
+
+# ============================================================
+# GEMINI DISPATCH — apenas para construção de frontend
+# ============================================================
+gemini_dispatch:
+  script: "scripts/gemini-dispatch.sh"
+  used_by: harness-frontend-builder
+  key_source: "env GEMINI_API_KEY | scripts/.gemini-key (gitignored) | .env"
+  default_model: "gemini-3-pro-preview"
+  cli_required: "gemini (npm install -g @google/gemini-cli)"
+  bypass_authorized: false
+  note: "Chave NUNCA em plaintext no repo (lição do Article 15 da Momma — não replicar o bypass)."

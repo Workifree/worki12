@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "required": [
+    "frontend/",
+    "supabase/functions/",
+    "supabase/migrations/",
+    "CLAUDE.md"
+  ],
+  "forbidden": [
+    "*.log",
+    ".DS_Store"
+  ],
+  "conditional": {}
+}

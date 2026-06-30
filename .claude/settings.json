@@ -1,0 +1,56 @@
+{
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "BASH_MAX_TIMEOUT_MS": "600000"
+  },
+  "hooks": {
+    "SubagentStart": [
+      {
+        "matcher": "harness-",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🔧 HARNESS: subagente iniciando' >&2"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "harness-",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ HARNESS: subagente concluido' >&2"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cd frontend && npm run lint*)",
+      "Bash(cd frontend && npm run build*)",
+      "Bash(cd frontend && npm run test*)",
+      "Bash(cd frontend && npm test*)",
+      "Bash(cd frontend && npx vitest*)",
+      "Bash(cd frontend && npx tsc*)",
+      "Bash(cd frontend && npx playwright*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run build*)",
+      "Bash(npm run test*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git checkout*)",
+      "Bash(git branch*)",
+      "Bash(git push*)",
+      "Bash(gh pr*)",
+      "Bash(gh repo view*)",
+      "Bash(bash scripts/gemini-dispatch.sh*)",
+      "Bash(MODEL=* bash scripts/gemini-dispatch.sh*)"
+    ]
+  }
+}

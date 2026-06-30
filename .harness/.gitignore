@@ -1,0 +1,9 @@
+# Artefatos efêmeros — não comitar
+sessions/
+.last-branch
+tmp/
+
+# Versionado (parte do projeto):
+# - constitution.md, memory-bank/, spec/, tasks/, reports/
+# - harness.config.yaml, MODELS.md, structure.json, playbooks/
+# - VERSION, .framework-version, README.md

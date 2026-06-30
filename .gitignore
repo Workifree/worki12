@@ -19,3 +19,6 @@ frontend/playwright-report/
 
 # Agent worktrees (nested git checkouts - never commit)
 .claude/worktrees/
+
+# Gemini API key for harness frontend-builder (do not commit)
+scripts/.gemini-key
