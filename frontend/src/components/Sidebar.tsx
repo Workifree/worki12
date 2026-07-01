@@ -68,8 +68,8 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const companyNavItems = [
         { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
         { icon: Users, label: 'Meu Elenco', path: '/company/team' },
-        { icon: PlusCircle, label: 'Criar Vaga', path: '/company/create' },
-        { icon: Briefcase, label: 'Minhas Vagas', path: '/company/jobs' },
+        { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
+        { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
         { icon: TrendingDown, label: 'Financeiro', path: '/company/financeiro' },

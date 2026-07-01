@@ -370,7 +370,7 @@ export const FinancialBIService = {
       // 4. Buscar perfis dos workers
       const { data: workers, error: workerErr } = await supabase
         .from('workers')
-        .select('id, full_name, avatar_url, photo_url')
+        .select('id, full_name, avatar_url')
         .in('id', workerIds);
 
       if (workerErr) {

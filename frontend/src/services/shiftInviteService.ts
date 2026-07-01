@@ -510,9 +510,7 @@ export const ShiftInviteService = {
           worker:workers (
             id,
             full_name,
-            avatar_url,
-            photo_url,
-            primary_role,
+            avatar_url,            primary_role,
             rating_average
           )
         `,
