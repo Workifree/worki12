@@ -47,7 +47,7 @@ Browser (SPA React 19)
 | `pages/`, `pages/company/`, `pages/worker/` | Telas de rota por papel. Lógica de tela + fetch direto. |
 | `components/` | UI reutilizável cross-papel (cards, modais, navegação, guards). |
 | `contexts/` | Estado global de sessão, notificações, toasts. |
-| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `analytics`, `api` (edge functions). |
+| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `paymentRecordService` (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `financialBIService` (BI unificado: escrow + shift_payments), `spendLimitService` (teto de gasto + alerta), `analytics`, `api` (edge functions). |
 | `lib/` | Config e utilitários: `supabase` (client), `gamification`, `validation`, `logger`. |
 | `types/` | Contrato de tipos do domínio (à mão — fonte da verdade). |
 | `supabase/functions/` | Operações privilegiadas (Asaas, admin, notificações) — Deno + service_role. |
@@ -83,6 +83,15 @@ push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem de
 
 ## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
 
+> ⚠️ **REVISADO por ADR-20260630-pagamento-opcional-piloto (2026-06-30).** No piloto o pagamento pelo Worki é
+> **OPCIONAL**. Três modos coexistem: **(A) pagamento externo registrado** — default do piloto, Worki registra
+> PIX/dinheiro fora + recibo, **sem mover saldo** (novo marcador de pagamento por turno, fora de
+> `escrow_transactions`); **(B) PIX-único → distribuição** — conveniência opt-in, 1 PIX da empresa distribuído
+> a N freelas via RPC atômica idempotente; **(C) postpago cartão on-file** — o fluxo descrito abaixo, agora
+> **opt-in / semente da expansão**, não o trilho padrão. Article 8/9 seguem valendo para B/C (todo movimento
+> de saldo por RPC atômica). O modo A não toca saldo. O BI de gasto passa a unir escrow (B/C) + marcador (A).
+> Diagramas abaixo = caminho postpago histórico, preservado.
+
 ### Fluxo prepago (Slice 1 — pull legado; intacto)
 
 ```
@@ -112,6 +121,9 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 
 - **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
+- **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, recorded_by_company_at, confirmed_by_worker_at, note, created_at)`.
+  UNIQUE parcial `(job_id)` WHERE `status='recorded'` — garante 1 registro pago por turno.
+  RLS bilateral: empresa vê seu registro, worker vê seu recibo. **NUNCA toca saldo** (auditoria, não liquidação).
 - **`escrow_transactions`** (estendida):
   - `kind`: `'prepaid'` (default) | `'postpaid'`
   - `status`: `'reserved' | 'authorized' | 'captured' | 'released' | 'refunded'`
@@ -170,16 +182,16 @@ Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show 
 6. Notificação chega em tempo real via Realtime (NotificationContext).
 7. WhatsApp = Slice 4 (pendente).
 
-**BI (Business Intelligence) — derivado de escrow_transactions, sem views:**
-- **BI-1: Gasto acumulado** — SUM(amount) WHERE status IN ('released','captured') no período (COALESCE(captured_at, released_at, created_at)).
-- **BI-2: Gasto + horas por freela** — agrupado por worker_id. Horas reais se checkout_at/checkin_at existem; fallback jobs.estimated_hours.
+**BI (Business Intelligence) — unificado: escrow + shift_payments, sem views:**
+- **BI-1: Gasto acumulado** — UNION de (escrow released/captured) + (shift_payments recorded), dedupe por job_id (escrow precede).
+- **BI-2: Gasto + horas por freela** — agrupado por worker_id, fonte unificada. Horas reais se checkout_at/checkin_at existem; fallback jobs.estimated_hours.
 - **BI-3: Ratio custo/hora + custo-%-faturamento** — custo/horas; custo/faturamento declarado (null se não informado).
-- **BI-4: Custo de no-show estimado** — heurística v1, rotulado como estimativa (application com status='hired'/invitation_response='accepted', turno passou, sem checkout).
+- **BI-4: Custo de no-show estimado** — heurística v1, rotulado como estimativa (application com status='hired'/invitation_response='accepted', turno passou, sem checkout e sem registro de pagamento).
 - **BI-5: Flag de concentração de horas/dias** — worker flagged se >= 150h AND >= 20 dias (constantes de produto em service, não DB). Sinaliza risco de vínculo trabalhista.
 
 **Services:**
-- **`spendLimitService`** — CRUD de teto + revenue, `evaluateSpendAlert(companyId, now?)` idempotente (fora da RPC, best-effort).
-- **`financialBIService`** — 4 queries paralelas (getAccumulatedSpend, getSpendByWorker, getCostRatio, getNoShowCost, getConcentrationFlags), método `getAllBI` reutiliza para evitar dupla execução. Sem React Query (Article 5).
+- **`financialBIService`** — queries paralelas (getAccumulatedSpend, getSpendByWorker, getCostRatio, getNoShowCost, getConcentrationFlags), método `getAllBI` reutiliza. Unifica escrow + shift_payments. Sem React Query (Article 5).
+- **`spendLimitService`** — CRUD de teto + revenue, `evaluateSpendAlert(companyId, now?)` idempotente (fora da RPC, best-effort). Delega a `financialBIService` para gasto unificado. Alerta dispara após qualquer registro de gasto (captura/liberação OU shift_payment).
 
 **UI:**
 - Nova página `pages/company/CompanyFinancial` (`/company/financeiro`) com cards de BI, alertas, input de faturamento, config de teto.
@@ -212,3 +224,6 @@ Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show 
 - Mover lógica privilegiada do Edge Function para o frontend.
 - Trocar o modelo de isolamento de papel (worker/company).
 - Mudar a direção postpago (Slice 1) para prepago — Slice 2 trata dessa migração.
+- Tornar o pagamento pelo Worki **obrigatório** de novo (reabrir postpago/hold como default), criar o marcador
+  de pagamento externo, ou a RPC de distribuição PIX-único — ver ADR-20260630 (pagamento opcional no piloto)
+  e seus gatilhos de reabertura.

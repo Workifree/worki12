@@ -43,6 +43,12 @@ provar que é confiável. Os dois querem a mesma coisa — **uma camada de confi
 
 > Metáfora pro freela (marketing, nunca jurídico): "a sua carteira de trabalho portátil que ninguém tira".
 
+### Naming (decidido jun/2026, com pesquisa de mercado)
+
+O produto trata cada lado como premium do seu jeito (naming assimétrico):
+- **Empresa** → sua lista de freelas se chama **"Meu Elenco"** (elenco curado que ela dirige/aciona — nunca "equipe"/"colaboradores").
+- **Freela** → sua lista de empresas se chama **"Carteira de Clientes"** — enquadra o freela como **empresário de si mesmo** (ter carteira de clientes = ter negócio). É o que mais converte ("freela não é bico, é carreira"; Brasil 3º em autônomos, formalizando CNPJ/MEI).
+
 ## O wedge (entrada) e o moat (defesa)
 
 - **Wedge (o cavalo de Troia):** **valor financeiro pra empresa** — centralizar a operação de freelancer
@@ -97,6 +103,14 @@ Fase 3 (financeirização) → cartão/parcela (banco floata), depois crédito/f
 | v1.5+ | **Processamento de cartão + parcela** (banco emissor da empresa floata; Asaas processa) | zero capital Worki |
 | Fase 2+ | **SaaS** de controle/BI/formalização (empresa paga pra reduzir risco e organizar) | baixo |
 | Fase 3 | Crédito/float/antecipação, produtos financeiros (regulado, exige capital + licença) | alto — futuro |
+
+### Postura de pagamento no piloto (revisado jun/2026 — owner)
+
+Pagamento pelo Worki é **opcional, não obrigatório**, no piloto. Empresa e freela **fecham pelo Worki** (avaliação,
+histórico, recibo, controle da relação/dado) mas **podem pagar direto entre si**. Take **0**. O trilho financeiro
+é *conveniência opt-in*, não pré-requisito: a empresa pode fazer **1 PIX ao Worki** e o Worki **distribui automático**
+a todos os freelas (útil quando são muitas contas). O valor do dia 1 é **controle + dado**, não custódia. A cobrança
+obrigatória via cartão (postpago/hold) é evolução posterior — reabri-la muda o contrato de pagamento (gate architect + ADR).
 
 ## Métrica polar
 

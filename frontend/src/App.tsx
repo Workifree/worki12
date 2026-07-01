@@ -27,6 +27,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
 const Wallet = lazy(() => import('./pages/Wallet'));
+const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
@@ -50,6 +51,7 @@ const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
@@ -144,6 +146,9 @@ function App() {
                     {/* Convite de equipe via link (worker-facing, fora do MainLayout para tela dedicada) */}
                     <Route path="/convite/:token" element={<InviteAccept />} />
 
+                    {/* Recibo de pagamento (modo A) — cross-papel (empresa e freela), fora dos layouts para impressão limpa */}
+                    <Route path="/recibo/:jobId" element={<ReceiptView />} />
+
                     {/* Worker Layout Routes */}
                     <Route path="/" element={<MainLayout />}>
                       <Route path="dashboard" element={<Dashboard />} />
@@ -151,6 +156,7 @@ function App() {
                       <Route path="my-jobs" element={<MyJobs />} />
                       <Route path="analytics" element={<Analytics />} />
                       <Route path="wallet" element={<Wallet />} />
+                      <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />
                       <Route path="notifications" element={<Notifications />} />

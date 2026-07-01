@@ -136,3 +136,21 @@ Limiares são constantes de produto no service, não no DB (CONCENTRATION_HOURS_
 **Idempotência de alerta (Slice 3)** — Alerta de teto usa link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`
 como chave de idempotência. SELECT-before-INSERT verifica se já existe notificação com este link no user_id (company owner).
 Se existe, skip; caso contrário, insere. Protege contra duplicação se avaliação roda multiplas vezes no período.
+
+**Modo A / Pagamento externo registrado (Slice 3)** — Default do piloto (ADR-20260630). Empresa paga worker direto
+(PIX/dinheiro, fora do Worki); o Worki registra o pagamento em `shift_payments` (marcador de auditoria, SEM mover saldo).
+Confirmação bilateral: empresa declara → worker confirma no recibo (`ReceiptView`). **Nunca toca `wallets` ou `escrow_transactions`.**
+
+**Modo B / PIX-único → distribuição (Slice 3 futuro)** — Opt-in de conveniência. Empresa faz 1 PIX ao Worki; o Worki
+distribui automaticamente a N freelancers via RPC atômica idempotente. Entra saldo em `wallets`; cada repasse tem
+`reference_id` estável para idempotência.
+
+**Modo C / Postpago cartão on-file (Slice 2 — agora opt-in)** — Fluxo original do `ADR-20260622`. Empresa cadastra cartão;
+no aceite de convite, hold no cartão; na conclusão, captura. Reservado para expansão além de relações confiáveis.
+
+**Recibo / Receipt** — Documento gerado após registro de pagamento externo (modo A). Página `ReceiptView` (`/recibo/:jobId`)
+exibe detalhes do turno, valor, método (PIX/dinheiro/outro), confirmação bilateral, para auditoria/arquivo.
+
+**Shift payment / Marcador de pagamento** — Registro em `shift_payments` indicando que um turno foi pago fora do Worki
+(modo A). Tabela: `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, recorded_by_company_at,
+confirmed_by_worker_at, note)`. UNIQUE `(job_id)` WHERE `status='recorded'` garante 1 pagamento por turno. NUNCA move saldo.

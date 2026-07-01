@@ -133,6 +133,7 @@ function buildChain(overrides: Record<string, unknown> = {}) {
   const chain: Record<string, unknown> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     order: vi.fn().mockResolvedValue({ data: [], error: null }),
     update: vi.fn().mockReturnThis(),
@@ -157,11 +158,7 @@ function setupMocks(apps: ApplicationRow[] = []) {
   })
 
   const appsChain = buildChain({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        order: vi.fn().mockResolvedValue({ data: apps, error: null }),
-      }),
-    }),
+    order: vi.fn().mockResolvedValue({ data: apps, error: null }),
   })
 
   vi.mocked(supabase.from).mockImplementation((table: string) => {
@@ -305,7 +302,9 @@ describe('MyJobs - Estado vazio por tab', () => {
       expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
     })
 
-    // Agendados is the default tab
+    // Convites e a tab padrao; trocar para Agendados
+    fireEvent.click(screen.getByText('Agendados'))
+
     await waitFor(() => {
       expect(screen.getByText('Nenhum job agendado no momento.')).toBeInTheDocument()
     })

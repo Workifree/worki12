@@ -64,7 +64,13 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
     validada no service — ADR-001), `blockConnection(id)` (→blocked, idempotente). Hooks: `useWorkerStores`.
 - [ ] **R3 — Criar turno.** Operador cria turno com: data, hora início-fim, função, **modelo de pagamento =
   FIXO por turno (v1)**, valor, local, **briefing** (texto/regras/cardápio). 
-- [ ] **R4 — Pagamento postpago (modelo Uber, sem valor antecipado).** Sem depósito prévio. A empresa
+> ⚠️ **REVISADO por ADR-20260630-pagamento-opcional-piloto (2026-06-30).** R4/R7/R9 abaixo descrevem o
+> postpago **obrigatório**; o owner tornou o pagamento pelo Worki **OPCIONAL** no piloto. Default do piloto =
+> **pagamento externo registrado** (Worki registra que houve PIX/dinheiro fora + recibo, sem mover saldo).
+> Postpago (cartão on-file, R4/R7/R9) vira **opt-in / evolução da expansão**; PIX-único→distribuição é
+> conveniência opt-in. O texto histórico abaixo fica preservado como o caminho opt-in C. Ver o ADR.
+
+- [ ] **R4 — Pagamento postpago (modelo Uber, sem valor antecipado).** _[opt-in — ver ADR-20260630]_ Sem depósito prévio. A empresa
   cadastra **um método uma vez** (cartão on-file ou PIX). Cria o turno e convida — nada mais. Na **conclusão**,
   o Worki cobra o método da empresa e paga o freela. Onde o Asaas suportar, fazer **pré-autorização (hold) no
   aceite + captura na conclusão** (como o Uber) — garante o freela sem depósito. Worki **não adianta dinheiro**
@@ -89,6 +95,8 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
   - [x] _Service-layer (Slice 1, parcial):_ app + e-mail entregues por `inviteWorkerToShift`. WhatsApp = Slice 4.
 - [ ] **R7 — Aceite/recusa.** Freela aceita ou recusa. **Aceite → escrow RESERVA** (RPC atômica) + turno
   confirmado nas duas agendas + no-show passa a contar. **Recusa → slot reabre, NEUTRO (zero punição).**
+  > _[REVISADO por ADR-20260630]_ A **reserva/hold no aceite deixa de ser obrigatória**. O aceite confirma a
+  > relação e a agenda; hold só no modo postpago opt-in (C). Recusa segue neutra.
   - [x] _Camada de dados (parcial):_ status `invited`/`declined` + colunas de resposta em `applications`
     (`invitation_response`, `invitation_responded_at`) — `20260622000100_invite_columns_applications.sql`.
     A reserva de escrow no aceite é **Slice 2** (postpago); aqui o aceite só muda status.
@@ -102,6 +110,9 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
 - [ ] **R9 — Conclusão → cobrança + pagamento.** Operador confirma conclusão → Worki **captura o cartão
   on-file (ou cobra o PIX) da empresa** e **paga o freela** (RPCs atômicas no ledger, idempotentes).
   **Auto-processamento** após janela de carência pós-conclusão protege o freela de inação da empresa.
+  > _[REVISADO por ADR-20260630]_ A cobrança na conclusão **deixa de ser obrigatória**. Conclusão confirma o
+  > turno e habilita o **registro de pagamento** (modo A externo, sem mover saldo) OU a captura/distribuição
+  > (modos C/B opt-in). Auto-processamento de captura só se aplica ao modo postpago (C).
   - [x] _Camada de dados (Slice 2):_ RPC atômica idempotente `capture_escrow_postpago` (captura o hold:
     `authorized`→`released` + credita o worker via reuso de `escrow_release`, idempotência `(wallet_id,
     reference_id=job_id)`) e `release_hold_postpago` (cancel/no-show antes da captura: `authorized`→`refunded`,
@@ -148,6 +159,12 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
 - [ ] **R17 — (concierge) Importar histórico da MOMMA** da ferramenta interna → BI nasce cheio no dia 1.
 
 ## Workflow canônico (máquina de estados) — decisões A–G resolvidas
+
+> ⚠️ **REVISADO por ADR-20260630 (2026-06-30):** o passo [0.5] (cadastrar método) e a cobrança nos passos
+> [2]/[5] passam a ser **opcionais** (postpago = opt-in C). No default do piloto o ciclo avança por
+> confirmação da relação (aceite → check-in/checkout → conclusão → avaliação) e o **pagamento é um passo
+> paralelo**: registrar pagamento externo (modo A, sem saldo) OU pagar via Worki (B/C). Diagrama abaixo
+> descreve o caminho postpago histórico.
 
 ```
 [0] Popular equipe ── QR scan │ link │ telefone ──► conexão ACEITA (handshake 1x) ──► freela na equipe
@@ -262,6 +279,11 @@ freela é forçado pela empresa a criar conta e usar — e ganha valor mínimo r
   read-heavy no dashboard → pertencem ao service (consistente com o resto do projeto). **Builder NÃO cria view.**
 
 ### Fonte da verdade do GASTO (usada por R12, R13, R14, R15)
+> ⚠️ **REVISADO por ADR-20260630.** Com pagamento OPCIONAL, o gasto tem **duas fontes** unidas por `job_id`
+> disjunto: (1) trilho Worki = `escrow_transactions` (abaixo); (2) **pagamento externo** = novo marcador de
+> pagamento por turno (modo A default do piloto), carimbo = data do pagamento declarado / conclusão. Dedupe
+> por `job_id` (um turno é pago por uma fonte; se ambos, escrow tem precedência). Enquanto o marcador não
+> existir (trabalho subsequente com gate), o BI reflete só o trilho Worki — limitação conhecida. Ver o ADR.
 - Gasto = `escrow_transactions` com `status IN ('released','captured')` (dinheiro efetivamente comprometido/pago
   ao freela). `amount` é o valor. **NÃO** somar `reserved`/`authorized` (ainda não virou gasto) nem `refunded`.
 - Carimbo de período: `COALESCE(captured_at, released_at, created_at)` (postpago usa captured_at; prepaid legado

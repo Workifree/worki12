@@ -51,6 +51,9 @@ export interface ConnectionInviteToken {
   url: string;
 }
 
+/** Prefixo que identifica um token de convite gerado por um WORKER (link transitivo). */
+const WORKER_TOKEN_PREFIX = 'w_';
+
 // ---------------------------------------------------------------------------
 // Helpers de query de empresa (session)
 // ---------------------------------------------------------------------------
@@ -173,9 +176,11 @@ export const TeamConnectionService = {
 
   /**
    * Resolve um token de link de convite → retorna o `company_id`.
-   * Retorna null se o token for inválido ou malformado.
+   * Retorna null se o token for inválido, malformado, ou for um token de worker
+   * (prefixo `w_` — ver `generateWorkerInviteToken`).
    */
   resolveInviteToken(token: string): string | null {
+    if (this.isWorkerInviteToken(token)) return null;
     try {
       // Reverter base64url → base64 padrão antes de decodificar
       const padded = token.replace(/-/g, '+').replace(/_/g, '/');
@@ -185,6 +190,89 @@ export const TeamConnectionService = {
     } catch {
       return null;
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Link transitivo — "meu link" (worker) + repasse de contato já conectado
+  // -------------------------------------------------------------------------
+
+  /**
+   * Gera um token de convite de link ESTÁVEL para um WORKER (direção inversa do
+   * `generateInviteToken`, que é empresa→worker).
+   *
+   * Uso (R-transitivo):
+   * - Worker gera o próprio link ("Meu link") e compartilha com uma empresa.
+   * - Empresa que JÁ tem esse worker no elenco pode repassar o MESMO link a
+   *   outra empresa (ex.: "tenho o Adriano no elenco → repasso o link dele
+   *   pro Gabriel"). Não é preciso pedir ao worker — a empresa já conhece o
+   *   `worker_id` via `team_connections`.
+   *
+   * Prefixo `w_` distingue de um token de empresa (`generateInviteToken`),
+   * que não tem prefixo. Resolução acontece em `resolveWorkerInviteToken`.
+   * A URL usa a MESMA rota `/convite/:token` — `InviteAccept` decide o fluxo
+   * pelo prefixo.
+   */
+  generateWorkerInviteToken(workerId: string): ConnectionInviteToken {
+    const encoded = btoa(workerId).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const token = `${WORKER_TOKEN_PREFIX}${encoded}`;
+    const url = `${window.location.origin}/convite/${token}`;
+    return { token, url };
+  },
+
+  /** true se o token for um link de worker (prefixo `w_`). */
+  isWorkerInviteToken(token: string): boolean {
+    return token.startsWith(WORKER_TOKEN_PREFIX);
+  },
+
+  /**
+   * Resolve um token de link de worker → retorna o `worker_id`.
+   * Retorna null se o token não tiver o prefixo `w_` ou for malformado.
+   */
+  resolveWorkerInviteToken(token: string): string | null {
+    if (!this.isWorkerInviteToken(token)) return null;
+    try {
+      const raw = token.slice(WORKER_TOKEN_PREFIX.length);
+      const padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+      const workerId = atob(padded);
+      if (!workerId || workerId.length < 30) return null;
+      return workerId;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Adiciona o worker do link (`w_...`) à equipe da EMPRESA autenticada.
+   *
+   * Direção inversa de `addToTeamByToken`: aqui quem abre o link precisa estar
+   * autenticado como EMPRESA (o worker é identificado pelo token, não pela
+   * sessão). Reusa `addToTeam` (mesma idempotência/RLS já usada pelo canal
+   * 'phone' — a empresa já pode adicionar qualquer `worker_id` que conheça).
+   *
+   * Se a sessão ativa não for de uma empresa, `addToTeam` retorna o erro de
+   * `getAuthenticatedCompanyId()` (ex.: "Perfil de empresa não encontrado.").
+   */
+  async addWorkerToTeamByToken(token: string): Promise<CreateConnectionResult> {
+    const workerId = this.resolveWorkerInviteToken(token);
+    if (!workerId) {
+      return { connection: null, error: 'Link de contato inválido ou expirado.' };
+    }
+
+    const { data: worker, error: workerErr } = await supabase
+      .from('workers')
+      .select('id')
+      .eq('id', workerId)
+      .maybeSingle();
+
+    if (workerErr) {
+      logError('teamConnection.addWorkerToTeamByToken.check', workerErr);
+      return { connection: null, error: 'Erro ao verificar o freela do link.' };
+    }
+    if (!worker) {
+      return { connection: null, error: 'Freela do link não encontrado.' };
+    }
+
+    return this.addToTeam(workerId, 'link');
   },
 
   /**

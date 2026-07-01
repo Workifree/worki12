@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, BarChart2, Wallet, FileText, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown } from 'lucide-react';
+import { Home, Briefcase, User, BarChart2, Wallet, FileText, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import NotificationBell from './NotificationBell';
@@ -60,12 +60,13 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: BarChart2, label: 'Analytics', path: '/analytics' },
         { icon: Wallet, label: 'Carteira', path: '/wallet' },
+        { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];
 
     const companyNavItems = [
         { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
-        { icon: Users, label: 'Minha Equipe', path: '/company/team' },
+        { icon: Users, label: 'Meu Elenco', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar Vaga', path: '/company/create' },
         { icon: Briefcase, label: 'Minhas Vagas', path: '/company/jobs' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },

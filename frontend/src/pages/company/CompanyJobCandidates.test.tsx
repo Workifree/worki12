@@ -46,6 +46,7 @@ function buildChain(overrides: Record<string, unknown> = {}) {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     order: vi.fn().mockResolvedValue({ data: [], error: null }),
     update: vi.fn().mockReturnThis(),
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -109,8 +110,16 @@ function setupMocksWithApps(apps: unknown[]) {
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
   })
 
+  // Por padrão, simula um turno com escrow prepago reservado (fluxo pull legado) —
+  // é o que faz renderCompletionAction() mostrar "Confirmar Entrega" em vez de cair
+  // no branch modo A ("Registrar Pagamento"). Testes específicos de modo A sobrescrevem.
+  // Nota: o fetch real é `.select(...).eq('job_id', id)` sem `.order()` — o mock
+  // precisa resolver direto no `eq()`, não em `order()`.
   const escrowChain = buildChain({
-    order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    eq: vi.fn().mockResolvedValue({
+      data: [{ application_id: 'app-1', status: 'reserved', kind: 'prepaid' }],
+      error: null,
+    }),
   })
 
   vi.mocked(supabase.from).mockImplementation((table: string) => {

@@ -19,5 +19,11 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Article 5 do projeto: o padrão de dados canônico é useEffect + setState (fetch/reset
+      // on mount/open). A regra set-state-in-effect (recommended do react-hooks) conflita com
+      // esse padrão constitucional; mantida como AVISO (visível), não como erro que quebra o build.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])

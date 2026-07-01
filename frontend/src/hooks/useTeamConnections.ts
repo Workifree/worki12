@@ -107,7 +107,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
       const result = await TeamConnectionService.addToTeam(workerId, source);
 
       if (result.alreadyExists) {
-        addToast('Este freela já está na sua equipe.', 'info');
+        addToast('Este freela já está no seu elenco.', 'info');
         return true;
       }
       if (result.error) {
@@ -115,7 +115,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
         return false;
       }
 
-      addToast('Convite de equipe enviado! Aguardando aceite do freela.', 'success');
+      addToast('Convite de elenco enviado! Aguardando aceite do freela.', 'success');
       load();
       return true;
     },
@@ -204,7 +204,7 @@ export function useWorkerStores(): UseWorkerStoresResult {
         addToast(result.error, 'error');
         return false;
       }
-      addToast('Você agora faz parte da equipe!', 'success');
+      addToast('Você agora faz parte do elenco!', 'success');
       load();
       return true;
     },
