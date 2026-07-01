@@ -4,14 +4,18 @@
  * Responsabilidades:
  *  1. CRUD do teto de gasto (company_spend_limits).
  *  2. CRUD do faturamento mensal declarado (company_monthly_revenue).
- *  3. evaluateSpendAlert — computa BI-1, compara com o teto, e insere alerta idempotente
- *     em `notifications` para o maior threshold cruzado ainda não alertado.
+ *  3. evaluateSpendAlert — computa o gasto acumulado (BI-1 unificado), compara com o teto,
+ *     e insere alerta idempotente em `notifications` para o maior threshold cruzado ainda
+ *     não alertado.
  *
- * Contratos do architect (spec Slice 3):
- *  - Gasto = escrow_transactions WHERE status IN ('released','captured').
- *  - Período: COALESCE(captured_at, released_at, created_at).
- *  - Empresa da linha: company_wallet_id → wallets.user_id = companyId.
- *  - Alerta NUNCA bloqueia contratação.
+ * Contratos do architect (spec Slice 3) + ADR-20260630-pagamento-opcional-piloto ("Impacto no BI"):
+ *  - Gasto = MESMA fonte unificada do FinancialBIService (BI-1): escrow_transactions
+ *    (status IN 'released'/'captured') ∪ shift_payments (status='recorded', modo A pagamento
+ *    externo), dedupe por job_id com precedência do escrow. Delega para
+ *    `FinancialBIService.getAccumulatedSpend` — NÃO duplica a query aqui (evita a fonte de
+ *    gasto divergir entre o dashboard e o alerta de teto).
+ *  - Período: mês corrente, mesma janela [monthStart, nextMonthStart).
+ *  - Alerta NUNCA bloqueia contratação nem o registro de pagamento externo.
  *  - Idempotência via link='/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>'
  *    + SELECT LIMIT 1 antes do INSERT.
  *  - Dispara APENAS o maior threshold cruzado ainda não alertado no período.
@@ -26,6 +30,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { FinancialBIService } from './financialBIService';
 import type { SpendLimit, MonthlyRevenue } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -53,13 +58,15 @@ function yyyymm(d: Date): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Calcula o gasto acumulado de uma empresa no mês corrente (BI-1).
- * Gasto = SUM(amount) de escrow_transactions com status IN ('released','captured')
- * filtrado pelo carimbo COALESCE(captured_at, released_at, created_at) dentro do mês.
+ * Calcula o gasto acumulado de uma empresa no mês corrente (BI-1 unificado).
+ * Delega para `FinancialBIService.getAccumulatedSpend` — MESMA fonte do dashboard
+ * financeiro (escrow released/captured ∪ shift_payments recorded, dedupe por job_id
+ * com precedência do escrow). Ver ADR-20260630-pagamento-opcional-piloto.md.
  *
- * A empresa é identificada via company_wallet_id → wallets.user_id = companyId.
- *
- * @returns { totalAmount, periodStart, periodEnd } ou null em caso de erro.
+ * Nota: `FinancialBIService.getAccumulatedSpend` já trata erros internamente (loga e
+ * retorna totalAmount=0) em vez de propagar — aqui isso é tratado como "gasto zero" para
+ * fins de alerta, nunca como bloqueio (o alerta é best-effort por natureza: um erro
+ * transiente na leitura, na pior hipótese, apenas deixa de disparar um alerta).
  */
 async function computeAccumulatedSpend(
   companyId: string,
@@ -68,51 +75,8 @@ async function computeAccumulatedSpend(
   try {
     const ps = monthStart(now);
     const pe = nextMonthStart(now);
-
-    // Buscar o wallet_id da empresa
-    const { data: wallet, error: walletErr } = await supabase
-      .from('wallets')
-      .select('id')
-      .eq('user_id', companyId)
-      .maybeSingle();
-
-    if (walletErr) {
-      logError('spendLimit.computeAccumulatedSpend.wallet', walletErr);
-      return null;
-    }
-    if (!wallet) return { totalAmount: 0, periodStart: ps, periodEnd: pe };
-
-    // Soma do gasto efetivo (released + captured) no período
-    // Filtra pelo carimbo: COALESCE(captured_at, released_at, created_at)
-    // PostgREST não suporta COALESCE em filtros → buscar as linhas e filtrar em JS.
-    // Volume esperado: dezenas/centenas por empresa por mês → ok.
-    const { data: rows, error: escrowErr } = await supabase
-      .from('escrow_transactions')
-      .select('amount, captured_at, released_at, created_at')
-      .eq('company_wallet_id', wallet.id)
-      .in('status', ['released', 'captured']);
-
-    if (escrowErr) {
-      logError('spendLimit.computeAccumulatedSpend.escrow', escrowErr);
-      return null;
-    }
-
-    const psDate = new Date(ps);
-    const peDate = new Date(pe);
-    let totalAmount = 0;
-
-    for (const row of rows ?? []) {
-      const stamp = new Date(
-        (row.captured_at as string | null) ??
-        (row.released_at as string | null) ??
-        (row.created_at as string),
-      );
-      if (stamp >= psDate && stamp < peDate) {
-        totalAmount += Number(row.amount ?? 0);
-      }
-    }
-
-    return { totalAmount, periodStart: ps, periodEnd: pe };
+    const result = await FinancialBIService.getAccumulatedSpend(companyId, { start: ps, end: pe });
+    return { totalAmount: result.totalAmount, periodStart: ps, periodEnd: pe };
   } catch (err) {
     logError('spendLimit.computeAccumulatedSpend', err);
     return null;

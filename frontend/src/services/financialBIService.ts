@@ -1,7 +1,7 @@
 /**
  * FinancialBIService — inteligência financeira da empresa (Slice 3, R13-R16).
  *
- * Implementa 4 queries derivadas de BI sobre escrow_transactions + jobs + applications.
+ * Implementa 4 queries derivadas de BI sobre escrow_transactions + shift_payments + jobs + applications.
  * Nenhuma view criada (decisão do architect: views não propagam RLS com segurança — spec Slice 3).
  *
  * BI-2: Gasto e horas por freela (real: checkout-checkin; fallback: jobs.estimated_hours).
@@ -9,11 +9,18 @@
  * BI-4: Custo de no-show — heurística v1, ROTULADO COMO ESTIMATIVA.
  * BI-5: Flag de concentração de horas/dias por freela (risco de vínculo trabalhista).
  *
- * Contratos de dados (spec Slice 3):
- *  - Gasto = escrow_transactions WHERE status IN ('released','captured').
- *  - Carimbo: COALESCE(captured_at, released_at, created_at) — filtrar o mês por este.
- *  - Empresa da linha: company_wallet_id → wallets.user_id = companyId.
- *  - Freela: worker_wallet_id → wallets.user_id | application_id → applications.worker_id.
+ * Contratos de dados (spec Slice 3 + ADR-20260630-pagamento-opcional-piloto "Impacto no BI"):
+ *  - Gasto = UNIÃO de duas fontes:
+ *      1. Trilho Worki (modos B/C): escrow_transactions WHERE status IN ('released','captured').
+ *         Carimbo: COALESCE(captured_at, released_at, created_at).
+ *      2. Pagamento externo (modo A): shift_payments WHERE status = 'recorded'.
+ *         Carimbo: paid_at.
+ *  - Dedupe por `job_id`: um turno é pago por EXATAMENTE uma fonte. Se o mesmo job_id aparecer
+ *    nas duas (anomalia), o ESCROW TEM PRECEDÊNCIA e a linha externa é descartada da soma —
+ *    ver `fetchUnifiedSpendRows` e ADR-20260630 seção "Impacto no BI".
+ *  - Empresa da linha: escrow via company_wallet_id → wallets.user_id = companyId;
+ *    shift_payments via company_id = companyId diretamente (mesmo UUID — companies.id = owner_id).
+ *  - Freela: escrow via application_id → applications.worker_id; shift_payments já traz worker_id.
  *
  * Padrões do projeto:
  *  - supabase.from direto (Art. 5 — sem React Query).
@@ -109,6 +116,28 @@ interface WorkerProfileRow {
   photo_url: string | null;
 }
 
+/** Linha crua de shift_payments (modo A — pagamento externo). */
+interface ShiftPaymentSpendRow {
+  amount: number;
+  paid_at: string;
+  job_id: string;
+  application_id: string | null;
+  worker_id: string;
+}
+
+/**
+ * Linha de gasto já unificada (uma fonte, pós-dedupe) — ver `fetchUnifiedSpendRows`.
+ * `workerId` só vem preenchido diretamente para 'external' (shift_payments.worker_id);
+ * para 'escrow' é resolvido via applications (application_id → worker_id) por quem consome.
+ */
+interface UnifiedSpendRow {
+  source: 'escrow' | 'external';
+  amount: number;
+  jobId: string | null;
+  applicationId: string | null;
+  workerId: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Helper: buscar wallet_id da empresa
 // ---------------------------------------------------------------------------
@@ -138,6 +167,93 @@ function isInPeriod(row: EscrowRow, startDate: Date, endDate: Date): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: gasto unificado do período (escrow ∪ marcador externo, dedupe por job_id)
+// Contrato: ADR-20260630-pagamento-opcional-piloto.md, seção "Impacto no BI".
+// ---------------------------------------------------------------------------
+
+/**
+ * Busca e unifica as duas fontes de gasto da empresa no período:
+ *  1. escrow_transactions (status IN released/captured) — trilho Worki (modos B/C).
+ *  2. shift_payments (status = 'recorded') — pagamento externo declarado (modo A).
+ *
+ * Dedupe por `job_id`: um turno é pago por EXATAMENTE uma fonte. Se o mesmo `job_id`
+ * aparecer nas duas (anomalia), a linha do escrow é mantida e a linha externa
+ * correspondente é DESCARTADA da soma (escrow tem precedência — ADR-20260630).
+ *
+ * Reutilizado por getAccumulatedSpend (BI-1), getSpendByWorker (BI-2) e, indiretamente,
+ * por getCostRatio (BI-3, via totalCost) e por SpendLimitService.evaluateSpendAlert (R12).
+ */
+async function fetchUnifiedSpendRows(
+  companyId: string,
+  period: BIPeriod,
+): Promise<UnifiedSpendRow[]> {
+  const startDate = new Date(period.start);
+  const endDate = new Date(period.end);
+  const walletId = await getCompanyWalletId(companyId);
+
+  const [escrowResult, shiftResult] = await Promise.all([
+    walletId
+      ? supabase
+          .from('escrow_transactions')
+          .select('amount, captured_at, released_at, created_at, application_id, job_id')
+          .eq('company_wallet_id', walletId)
+          .in('status', ['released', 'captured'])
+      : Promise.resolve({ data: [] as EscrowRow[], error: null }),
+    supabase
+      .from('shift_payments')
+      .select('amount, paid_at, job_id, application_id, worker_id')
+      .eq('company_id', companyId)
+      .eq('status', 'recorded'),
+  ]);
+
+  if (escrowResult.error) {
+    logError('financialBI.fetchUnifiedSpendRows.escrow', escrowResult.error);
+  }
+  if (shiftResult.error) {
+    logError('financialBI.fetchUnifiedSpendRows.shift', shiftResult.error);
+  }
+
+  const escrowInPeriod = ((escrowResult.data ?? []) as EscrowRow[]).filter((r) =>
+    isInPeriod(r, startDate, endDate),
+  );
+
+  // job_ids já cobertos pelo trilho Worki no período — o marcador externo cede a eles.
+  const escrowJobIds = new Set(
+    escrowInPeriod.map((r) => r.job_id).filter((j): j is string => Boolean(j)),
+  );
+
+  const shiftInPeriod = ((shiftResult.data ?? []) as ShiftPaymentSpendRow[]).filter((r) => {
+    const stamp = new Date(r.paid_at);
+    return stamp >= startDate && stamp < endDate;
+  });
+
+  const rows: UnifiedSpendRow[] = [
+    ...escrowInPeriod.map(
+      (r): UnifiedSpendRow => ({
+        source: 'escrow',
+        amount: Number(r.amount ?? 0),
+        jobId: r.job_id,
+        applicationId: r.application_id,
+        workerId: null,
+      }),
+    ),
+    ...shiftInPeriod
+      .filter((r) => !escrowJobIds.has(r.job_id)) // dedupe: escrow tem precedência
+      .map(
+        (r): UnifiedSpendRow => ({
+          source: 'external',
+          amount: Number(r.amount ?? 0),
+          jobId: r.job_id,
+          applicationId: r.application_id,
+          workerId: r.worker_id,
+        }),
+      ),
+  ];
+
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // FinancialBIService (exportado)
 // ---------------------------------------------------------------------------
 
@@ -148,8 +264,9 @@ export const FinancialBIService = {
 
   /**
    * Computa o gasto acumulado da empresa no período (BI-1).
-   * Fonte: escrow_transactions WHERE status IN ('released','captured'),
-   * filtrado pelo carimbo COALESCE(captured_at, released_at, created_at).
+   * Fonte: UNIÃO de escrow_transactions (released/captured) e shift_payments (recorded),
+   * dedupe por job_id com precedência do escrow — ver `fetchUnifiedSpendRows` e
+   * ADR-20260630-pagamento-opcional-piloto.md "Impacto no BI".
    */
   async getAccumulatedSpend(companyId: string, period: BIPeriod): Promise<AccumulatedSpend> {
     const empty: AccumulatedSpend = {
@@ -159,30 +276,8 @@ export const FinancialBIService = {
     };
 
     try {
-      const walletId = await getCompanyWalletId(companyId);
-      if (!walletId) return empty;
-
-      const { data: rows, error } = await supabase
-        .from('escrow_transactions')
-        .select('amount, captured_at, released_at, created_at')
-        .eq('company_wallet_id', walletId)
-        .in('status', ['released', 'captured']);
-
-      if (error) {
-        logError('financialBI.getAccumulatedSpend', error);
-        return empty;
-      }
-
-      const startDate = new Date(period.start);
-      const endDate = new Date(period.end);
-      let totalAmount = 0;
-
-      for (const row of (rows ?? []) as EscrowRow[]) {
-        if (isInPeriod(row, startDate, endDate)) {
-          totalAmount += Number(row.amount ?? 0);
-        }
-      }
-
+      const rows = await fetchUnifiedSpendRows(companyId, period);
+      const totalAmount = rows.reduce((acc, r) => acc + r.amount, 0);
       return { totalAmount, periodStart: period.start, periodEnd: period.end };
     } catch (err) {
       logError('financialBI.getAccumulatedSpend', err);
@@ -198,48 +293,36 @@ export const FinancialBIService = {
    * Gasto e horas por freela no período (BI-2).
    *
    * Horas reais quando houver worker_checkout_at e worker_checkin_at em applications.
-   * Fallback: jobs.estimated_hours do turno concluído.
+   * Fallback: jobs.estimated_hours do turno concluído. O marcador externo (modo A) NÃO
+   * carrega horas — entra só no GASTO; as horas continuam vindo de jobs/applications
+   * via application_id (quando presente), igual ao trilho escrow.
    * hoursSource = 'real' | 'estimated' | 'mixed' (por freela no período).
    *
-   * Agrupa por worker_id (via application_id → applications.worker_id).
+   * Agrupa por worker_id: para linhas 'escrow', resolvido via application_id →
+   * applications.worker_id; para linhas 'external' (shift_payments), já vem direto na linha.
    */
   async getSpendByWorker(companyId: string, period: BIPeriod): Promise<SpendByWorker[]> {
     try {
-      const walletId = await getCompanyWalletId(companyId);
-      if (!walletId) return [];
+      // 1. Gasto unificado do período (escrow ∪ marcador externo, dedupe por job_id)
+      const unified = await fetchUnifiedSpendRows(companyId, period);
+      if (unified.length === 0) return [];
 
-      // 1. Linhas de escrow no período (com application_id para join)
-      const { data: escrowRows, error: escrowErr } = await supabase
-        .from('escrow_transactions')
-        .select('amount, captured_at, released_at, created_at, application_id, job_id')
-        .eq('company_wallet_id', walletId)
-        .in('status', ['released', 'captured'])
-        .not('application_id', 'is', null);
-
-      if (escrowErr) {
-        logError('financialBI.getSpendByWorker.escrow', escrowErr);
-        return [];
-      }
-
-      const startDate = new Date(period.start);
-      const endDate = new Date(period.end);
-
-      // Filtrar pelo período
-      const inPeriod = ((escrowRows ?? []) as EscrowRow[]).filter((r) =>
-        isInPeriod(r, startDate, endDate),
-      );
-
-      if (inPeriod.length === 0) return [];
-
-      // 2. Buscar applications (check-in/out + worker_id) para os application_ids do período
-      const appIds = [...new Set(inPeriod.map((r) => r.application_id as string))];
-      const jobIds = [...new Set(inPeriod.map((r) => r.job_id).filter(Boolean) as string[])];
+      // 2. Buscar applications (check-in/out + worker_id) e jobs (fallback de horas)
+      //    para todos os application_ids/job_ids presentes nas duas fontes.
+      const appIds = [...new Set(
+        unified.map((r) => r.applicationId).filter((a): a is string => Boolean(a)),
+      )];
+      const jobIds = [...new Set(
+        unified.map((r) => r.jobId).filter((j): j is string => Boolean(j)),
+      )];
 
       const [appResult, jobResult] = await Promise.all([
-        supabase
-          .from('applications')
-          .select('id, worker_id, job_id, worker_checkin_at, worker_checkout_at, status')
-          .in('id', appIds),
+        appIds.length > 0
+          ? supabase
+              .from('applications')
+              .select('id, worker_id, job_id, worker_checkin_at, worker_checkout_at, status')
+              .in('id', appIds)
+          : Promise.resolve({ data: [], error: null }),
         jobIds.length > 0
           ? supabase
               .from('jobs')
@@ -263,16 +346,28 @@ export const FinancialBIService = {
         ((jobResult.data ?? []) as JobRow[]).map((j) => [j.id, j]),
       );
 
+      // 3. Resolver worker_id de cada linha unificada. 'escrow' → via appMap (como antes);
+      //    'external' → já vem direto na linha (shift_payments.worker_id). Linhas sem
+      //    worker resolvível (escrow órfão de application) são descartadas, como antes.
+      interface ResolvedRow {
+        workerId: string;
+        amount: number;
+        applicationId: string | null;
+        jobId: string | null;
+      }
+      const resolved: ResolvedRow[] = [];
+      for (const row of unified) {
+        const workerId = row.workerId ?? (row.applicationId ? appMap.get(row.applicationId)?.worker_id : undefined);
+        if (!workerId) continue;
+        resolved.push({ workerId, amount: row.amount, applicationId: row.applicationId, jobId: row.jobId });
+      }
+
+      if (resolved.length === 0) return [];
+
       // Coletar worker_ids únicos
-      const workerIds = [...new Set(
-        appIds
-          .map((aid) => appMap.get(aid)?.worker_id)
-          .filter(Boolean) as string[],
-      )];
+      const workerIds = [...new Set(resolved.map((r) => r.workerId))];
 
-      if (workerIds.length === 0) return [];
-
-      // 3. Buscar perfis dos workers
+      // 4. Buscar perfis dos workers
       const { data: workers, error: workerErr } = await supabase
         .from('workers')
         .select('id, full_name, avatar_url, photo_url')
@@ -286,7 +381,7 @@ export const FinancialBIService = {
         ((workers ?? []) as WorkerProfileRow[]).map((w) => [w.id, w]),
       );
 
-      // 4. Agregar por worker
+      // 5. Agregar por worker
       interface WorkerAgg {
         totalAmount: number;
         totalHours: number;
@@ -297,13 +392,9 @@ export const FinancialBIService = {
 
       const agg = new Map<string, WorkerAgg>();
 
-      for (const row of inPeriod) {
-        const app = appMap.get(row.application_id as string);
-        if (!app) continue;
-
-        const workerId = app.worker_id;
-        if (!agg.has(workerId)) {
-          agg.set(workerId, {
+      for (const row of resolved) {
+        if (!agg.has(row.workerId)) {
+          agg.set(row.workerId, {
             totalAmount: 0,
             totalHours: 0,
             realHoursCount: 0,
@@ -311,12 +402,14 @@ export const FinancialBIService = {
             shiftsCount: 0,
           });
         }
-        const entry = agg.get(workerId)!;
-        entry.totalAmount += Number(row.amount ?? 0);
+        const entry = agg.get(row.workerId)!;
+        entry.totalAmount += row.amount;
         entry.shiftsCount += 1;
 
-        // Horas: real se houver check-in/out; fallback estimated_hours
-        if (app.worker_checkin_at && app.worker_checkout_at) {
+        // Horas: real se houver check-in/out; fallback estimated_hours. Independente da
+        // fonte de gasto (escrow ou externo) — vem sempre de applications/jobs.
+        const app = row.applicationId ? appMap.get(row.applicationId) : undefined;
+        if (app?.worker_checkin_at && app?.worker_checkout_at) {
           const hours =
             (new Date(app.worker_checkout_at).getTime() -
               new Date(app.worker_checkin_at).getTime()) /
@@ -324,7 +417,7 @@ export const FinancialBIService = {
           entry.totalHours += hours;
           entry.realHoursCount += 1;
         } else {
-          const job = row.job_id ? jobMap.get(row.job_id) : undefined;
+          const job = row.jobId ? jobMap.get(row.jobId) : undefined;
           const estimated = job?.estimated_hours ?? 0;
           entry.totalHours += estimated;
           entry.estimatedHoursCount += 1;
