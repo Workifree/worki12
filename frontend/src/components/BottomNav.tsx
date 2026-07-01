@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, MessageSquare, Wallet, PlusCircle, Users, Contact } from 'lucide-react';
+import { Home, User, MessageSquare, Wallet, PlusCircle, Users, Contact, Inbox } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 interface BottomNavProps {
@@ -6,10 +6,11 @@ interface BottomNavProps {
 }
 
 export default function BottomNav({ type = 'worker' }: BottomNavProps) {
+    // Nav push-first (pivô empresa-primeiro, jun/2026): "Vagas" (busca pública)
+    // sai do bottom nav — Fase 2, ver ADR-20260630-pagamento-opcional-piloto.
     const workerNavItems = [
         { icon: Home, label: 'Início', path: '/dashboard' },
-        { icon: Briefcase, label: 'Vagas', path: '/jobs' },
-        { icon: Wallet, label: 'Carteira', path: '/wallet' },
+        { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Clientes', path: '/carteira' },
         { icon: MessageSquare, label: 'Msgs', path: '/messages' }, // Shortened label
         { icon: User, label: 'Perfil', path: '/profile' },

@@ -21,10 +21,11 @@ const CompanyOnboarding = lazy(() => import('./pages/company/CompanyOnboarding')
 const WorkerOnboarding = lazy(() => import('./pages/worker/WorkerOnboarding'));
 const WorkerDashboard = lazy(() => import('./pages/worker/WorkerDashboard'));
 const CompanyDashboard = lazy(() => import('./pages/company/CompanyDashboard'));
-const Jobs = lazy(() => import('./pages/Jobs'));
+// Fase 2 — feed publico / analytics de marketplace, fora do piloto (rotas comentadas abaixo)
+// const Jobs = lazy(() => import('./pages/Jobs'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Profile = lazy(() => import('./pages/Profile'));
-const Analytics = lazy(() => import('./pages/Analytics'));
+// const Analytics = lazy(() => import('./pages/Analytics'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
@@ -33,7 +34,7 @@ const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
 const CompanyJobs = lazy(() => import('./pages/company/CompanyJobs'));
 const CompanyProfile = lazy(() => import('./pages/company/CompanyProfile'));
-const CompanyAnalytics = lazy(() => import('./pages/company/CompanyAnalytics'));
+// const CompanyAnalytics = lazy(() => import('./pages/company/CompanyAnalytics'));
 const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails'));
 const CompanyJobCandidates = lazy(() => import('./pages/company/CompanyJobCandidates'));
 const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
@@ -133,6 +134,16 @@ function App() {
                   <Route path="/ajuda" element={<Help />} />
                   <Route path="/sobre" element={<LandingPage />} />
 
+                  {/*
+                    Convite de equipe via link — rota PÚBLICA (fora do ProtectedRoute).
+                    Motivo (bug crítico do GTM, item 11): quando a empresa manda o link, o freela
+                    normalmente AINDA NÃO tem conta. Se a rota ficasse sob ProtectedRoute, o guard
+                    redirecionava para /login antes de o InviteAccept montar e o token se perdia.
+                    Agora InviteAccept lida com sessão ausente internamente: guarda o token e manda
+                    para /login?redirect=/convite/<token>; o Login volta pra cá após autenticar.
+                  */}
+                  <Route path="/convite/:token" element={<InviteAccept />} />
+
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
 
@@ -143,18 +154,16 @@ function App() {
                     <Route path="/company/onboarding" element={<CompanyOnboarding />} />
                     <Route path="/worker/onboarding" element={<WorkerOnboarding />} />
 
-                    {/* Convite de equipe via link (worker-facing, fora do MainLayout para tela dedicada) */}
-                    <Route path="/convite/:token" element={<InviteAccept />} />
-
                     {/* Recibo de pagamento (modo A) — cross-papel (empresa e freela), fora dos layouts para impressão limpa */}
                     <Route path="/recibo/:jobId" element={<ReceiptView />} />
 
                     {/* Worker Layout Routes */}
                     <Route path="/" element={<MainLayout />}>
                       <Route path="dashboard" element={<Dashboard />} />
-                      <Route path="jobs" element={<Jobs />} />
+                      {/* Fase 2 — feed publico / analytics de marketplace, fora do piloto */}
+                      {/* <Route path="jobs" element={<Jobs />} /> */}
                       <Route path="my-jobs" element={<MyJobs />} />
-                      <Route path="analytics" element={<Analytics />} />
+                      {/* <Route path="analytics" element={<Analytics />} /> */}
                       <Route path="wallet" element={<Wallet />} />
                       <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="profile" element={<Profile />} />
@@ -175,7 +184,8 @@ function App() {
                       <Route path="profile" element={<CompanyProfile />} />
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="wallet" element={<CompanyWallet />} />
-                      <Route path="analytics" element={<CompanyAnalytics />} />
+                      {/* Fase 2 — feed publico / analytics de marketplace, fora do piloto */}
+                      {/* <Route path="analytics" element={<CompanyAnalytics />} /> */}
                       <Route path="team" element={<CompanyTeam />} />
                       <Route path="financeiro" element={<CompanyFinancial />} />
                       <Route path="notifications" element={<Notifications />} />

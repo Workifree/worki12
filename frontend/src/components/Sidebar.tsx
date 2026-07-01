@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, BarChart2, Wallet, FileText, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact } from 'lucide-react';
+import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import NotificationBell from './NotificationBell';
@@ -53,14 +53,15 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         fetchData();
     }, [type]);
 
+    // Nav push-first (pivô empresa-primeiro, jun/2026): worker não busca vagas —
+    // recebe Convites e cuida da Carteira de Clientes. "Buscar Vagas"/"Analytics"
+    // saem do menu (Fase 2, ver ADR-20260630-pagamento-opcional-piloto), sem remover a rota.
     const workerNavItems = [
         { icon: Home, label: 'Início', path: '/dashboard' },
-        { icon: Briefcase, label: 'Buscar Vagas', path: '/jobs' },
-        { icon: FileText, label: 'Meus Jobs', path: '/my-jobs' },
-        { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
-        { icon: BarChart2, label: 'Analytics', path: '/analytics' },
-        { icon: Wallet, label: 'Carteira', path: '/wallet' },
+        { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
+        { icon: Wallet, label: 'Carteira', path: '/wallet' },
+        { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];
 
@@ -71,7 +72,6 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Briefcase, label: 'Minhas Vagas', path: '/company/jobs' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
-        { icon: BarChart2, label: 'Analytics', path: '/company/analytics' },
         { icon: TrendingDown, label: 'Financeiro', path: '/company/financeiro' },
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];

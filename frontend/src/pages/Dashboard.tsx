@@ -331,8 +331,8 @@ export default function Dashboard() {
                             <Briefcase size={20} /> Vagas para Você
                         </h2>
                         <div className="flex gap-2">
-                            <button onClick={() => navigate('/jobs')} className="p-2 hover:bg-gray-100 rounded-lg"><Search size={20} /></button>
-                            <button onClick={() => navigate('/jobs')} className="p-2 hover:bg-gray-100 rounded-lg"><Filter size={20} /></button>
+                            <button onClick={() => navigate('/my-jobs')} className="p-2 hover:bg-gray-100 rounded-lg"><Search size={20} /></button>
+                            <button onClick={() => navigate('/my-jobs')} className="p-2 hover:bg-gray-100 rounded-lg"><Filter size={20} /></button>
                         </div>
                     </div>
 
@@ -375,7 +375,7 @@ export default function Dashboard() {
                                     <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
                                     <p className="text-sm text-gray-400">{nextJob.job.start_time || 'Horário indefinido'}</p>
                                 </div>
-                                <button onClick={() => navigate('/jobs')} className="w-full bg-white text-black font-black uppercase py-3 rounded-xl hover:bg-primary hover:text-white transition-colors">
+                                <button onClick={() => navigate('/my-jobs')} className="w-full bg-white text-black font-black uppercase py-3 rounded-xl hover:bg-primary hover:text-white transition-colors">
                                     Ver Detalhes
                                 </button>
                             </>
@@ -406,7 +406,7 @@ export default function Dashboard() {
                                 <p className="text-sm text-gray-400 text-center py-4">Sem histórico recente.</p>
                             )}
                         </div>
-                        <button onClick={() => navigate('/jobs')} className="w-full mt-4 text-xs font-black uppercase text-gray-500 hover:text-black flex items-center justify-center gap-1">
+                        <button onClick={() => navigate('/my-jobs')} className="w-full mt-4 text-xs font-black uppercase text-gray-500 hover:text-black flex items-center justify-center gap-1">
                             Ver tudo <ChevronRight size={12} />
                         </button>
                     </div>
