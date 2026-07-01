@@ -50,6 +50,7 @@ const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
@@ -143,6 +144,9 @@ function App() {
 
                     {/* Convite de equipe via link (worker-facing, fora do MainLayout para tela dedicada) */}
                     <Route path="/convite/:token" element={<InviteAccept />} />
+
+                    {/* Recibo de pagamento (modo A) — cross-papel (empresa e freela), fora dos layouts para impressão limpa */}
+                    <Route path="/recibo/:jobId" element={<ReceiptView />} />
 
                     {/* Worker Layout Routes */}
                     <Route path="/" element={<MainLayout />}>

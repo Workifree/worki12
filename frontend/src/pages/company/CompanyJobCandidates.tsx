@@ -2,14 +2,21 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
+import { PaymentRecordService } from '../../services/paymentRecordService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2 } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
 import EscrowStatusBadge from '../../components/EscrowStatusBadge';
-import type { Application } from '../../types';
+import type { Application, PaymentSource, ShiftPayment } from '../../types';
+
+const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
+    external_pix: 'PIX',
+    cash: 'Dinheiro',
+    other: 'Outro',
+};
 
 export default function CompanyJobCandidates() {
     const { id } = useParams();
@@ -28,6 +35,22 @@ export default function CompanyJobCandidates() {
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
     const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
+    // Modo A (pagamento externo declaratório) — ramifica por escrow.kind por application.
+    // Sem entrada no map = turno sem escrow (modo A); 'prepaid'/'postpaid' = caminho de escrow existente.
+    const [escrowKindMap, setEscrowKindMap] = useState<Record<string, 'prepaid' | 'postpaid'>>({});
+    const [jobBudget, setJobBudget] = useState(0);
+    // Registro de pagamento externo (modo A) já feito para ESTE job (UNIQUE por job_id no schema).
+    const [shiftPayment, setShiftPayment] = useState<ShiftPayment | null>(null);
+
+    // Modal "Registrar pagamento" (modo A)
+    const [paymentModalApp, setPaymentModalApp] = useState<Application | null>(null);
+    const [paymentSource, setPaymentSource] = useState<PaymentSource>('external_pix');
+    const [paymentAmount, setPaymentAmount] = useState(0);
+    const [paymentPaidAt, setPaymentPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+    const [paymentNote, setPaymentNote] = useState('');
+    const [recordingPayment, setRecordingPayment] = useState(false);
+    const [paymentRecorded, setPaymentRecorded] = useState(false);
+
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -41,9 +64,10 @@ export default function CompanyJobCandidates() {
             if (!user) { navigate('/login'); return; }
 
             // Fetch Job Title (only if owned by this company)
-            const { data: job, error: jobError } = await supabase.from('jobs').select('title').eq('id', id).eq('company_id', user.id).single();
+            const { data: job, error: jobError } = await supabase.from('jobs').select('title, budget').eq('id', id).eq('company_id', user.id).single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);
+            setJobBudget(job.budget ?? 0);
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
             const { data, error } = await supabase
@@ -62,22 +86,31 @@ export default function CompanyJobCandidates() {
             if (error) throw error;
             setCandidates(data || []);
 
-            // Fetch escrow status per application for this job
+            // Fetch escrow status + kind per application for this job
             const { data: escrowRows } = await supabase
                 .from('escrow_transactions')
-                .select('application_id, status')
+                .select('application_id, status, kind')
                 .eq('job_id', id);
             const statusMap: Record<string, 'reserved' | 'released'> = {};
+            const kindMap: Record<string, 'prepaid' | 'postpaid'> = {};
             (escrowRows || []).forEach((row) => {
                 if (row.application_id && (row.status === 'reserved' || row.status === 'released')) {
                     statusMap[row.application_id] = row.status;
                 }
+                if (row.application_id && (row.kind === 'prepaid' || row.kind === 'postpaid')) {
+                    kindMap[row.application_id] = row.kind;
+                }
             });
             setEscrowStatusMap(statusMap);
+            setEscrowKindMap(kindMap);
 
             // Fetch company balance to guard the "Contratar" button (AC-7)
             const wallet = await WalletService.getOrCreateWallet(user.id, 'company');
             setCompanyBalance(wallet ? wallet.balance : null);
+
+            // Modo A: existe registro de pagamento externo já feito para este turno?
+            const payment = await PaymentRecordService.getPaymentByJob(id as string);
+            setShiftPayment(payment);
         } catch (error) {
             logError('CompanyJobCandidates', error);
         } finally {
@@ -121,6 +154,77 @@ export default function CompanyJobCandidates() {
         setReleasing(false);
         addToast('Entrega confirmada! Pagamento liberado ao profissional.', 'success');
         fetchCandidates();
+    };
+
+    // Modo A (pagamento externo) — abre o modal "Registrar pagamento" pré-preenchido com o valor do turno.
+    const openPaymentModal = (app: Application) => {
+        setPaymentModalApp(app);
+        setPaymentSource('external_pix');
+        setPaymentAmount(jobBudget);
+        setPaymentPaidAt(new Date().toISOString().slice(0, 10));
+        setPaymentNote('');
+        setPaymentRecorded(false);
+    };
+
+    const closePaymentModal = () => {
+        setPaymentModalApp(null);
+        setPaymentRecorded(false);
+    };
+
+    // O service valida o SINAL REAL de conclusão (chegada + saída confirmadas), não o
+    // status='completed' — por isso registramos o pagamento PRIMEIRO e só marcamos o
+    // turno como concluído DEPOIS que o INSERT tem sucesso. Se o registro falhar (rede/
+    // RLS/timeout), a application permanece como estava e o botão "Registrar Pagamento"
+    // continua disponível — nunca fica em dead-end (status='completed' sem recibo).
+    const handleRecordPayment = async () => {
+        if (!paymentModalApp) return;
+        if (!(paymentAmount > 0)) {
+            addToast('Informe um valor pago maior que zero.', 'error');
+            return;
+        }
+        setRecordingPayment(true);
+        try {
+            const result = await PaymentRecordService.recordExternalPayment({
+                jobId: paymentModalApp.job_id,
+                workerId: paymentModalApp.worker_id,
+                applicationId: paymentModalApp.id,
+                source: paymentSource,
+                amount: paymentAmount,
+                paidAt: paymentPaidAt,
+                note: paymentNote.trim() || undefined,
+            });
+
+            if (!result.success) {
+                if (result.alreadyRecorded) {
+                    addToast('Este turno já tem um pagamento registrado. Veja o recibo.', 'info');
+                    closePaymentModal();
+                    fetchCandidates();
+                    return;
+                }
+                addToast(result.error || 'Não foi possível registrar o pagamento.', 'error');
+                return;
+            }
+
+            // Registro OK — agora sim marcamos o turno como concluído. Falha aqui não
+            // desfaz o registro (já é a fonte de verdade do pagamento); só avisamos.
+            const { error: updateError } = await supabase
+                .from('applications')
+                .update({ status: 'completed' })
+                .eq('id', paymentModalApp.id);
+            if (updateError) {
+                logError('CompanyJobCandidates: handleRecordPayment.updateStatus', updateError);
+                addToast('Pagamento registrado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
+            } else {
+                addToast('Pagamento registrado com sucesso!', 'success');
+            }
+            setPaymentRecorded(true);
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleRecordPayment', error);
+            addToast('Erro ao registrar pagamento.', 'error');
+        } finally {
+            setRecordingPayment(false);
+        }
     };
 
     const handleSubmitReview = async () => {
@@ -267,6 +371,40 @@ export default function CompanyJobCandidates() {
                 status: app.status === 'completed' ? 'complete' as const : 'pending' as const
             }
         ];
+    };
+
+    // Ramificação modo A (pagamento externo) vs C (postpago/cartão) vs prepago legado.
+    // Sem entrada em escrowKindMap = nenhum escrow reservado para este turno → modo A (default do piloto).
+    const renderCompletionAction = (app: Application) => {
+        const kind = escrowKindMap[app.id];
+        if (kind === 'prepaid' || kind === 'postpaid') {
+            return (
+                <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDeliveryApp(app); }}
+                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                >
+                    Confirmar Entrega
+                </button>
+            );
+        }
+        if (shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id) {
+            return (
+                <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                    className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                >
+                    <Receipt size={14} /> Ver Recibo
+                </button>
+            );
+        }
+        return (
+            <button
+                onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
+                className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+            >
+                Registrar Pagamento
+            </button>
+        );
     };
 
     return (
@@ -440,16 +578,31 @@ export default function CompanyJobCandidates() {
                                                                 </span>
                                                             )}
 
-                                                            {/* Confirmar Entrega button — replaces old "Finalizar Job" */}
-                                                            {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); setConfirmDeliveryApp(app); }}
-                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                                                                >
-                                                                    Confirmar Entrega
-                                                                </button>
-                                                            )}
+                                                            {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
+                                                            {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
                                                         </>
+                                                    )}
+
+                                                    {/* Ver Recibo — turno finalizado via modo A (pagamento externo) */}
+                                                    {app.status === 'completed' && shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                                                            className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <Receipt size={14} /> Ver Recibo
+                                                        </button>
+                                                    )}
+
+                                                    {/* Rede de segurança (defense-in-depth): turno concluído em modo A (sem escrow)
+                                                        mas sem registro de pagamento — caminho de recuperação caso o registro tenha
+                                                        falhado depois da conclusão em algum fluxo legado/edge case. */}
+                                                    {app.status === 'completed' && !escrowKindMap[app.id] && !(shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id) && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
+                                                            className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                                                        >
+                                                            Registrar Pagamento
+                                                        </button>
                                                     )}
 
                                                     {/* Botão Avaliar — apenas para candidatos já finalizados */}
@@ -525,6 +678,132 @@ export default function CompanyJobCandidates() {
                                 {releasing ? <><Loader2 size={16} className="animate-spin" /> Processando...</> : 'Confirmar'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
+            {paymentModalApp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        {!paymentRecorded ? (
+                            <>
+                                <h2 className="text-xl font-black uppercase tracking-tight mb-1">Registrar Pagamento</h2>
+                                <p className="text-xs font-bold text-gray-500 uppercase mb-5">
+                                    Pagamento feito por fora do Worki — registro declaratório
+                                </p>
+
+                                <div className="mb-4">
+                                    <span className="block text-sm font-bold uppercase mb-2">Forma de pagamento</span>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(Object.keys(PAYMENT_SOURCE_LABELS) as PaymentSource[]).map((src) => (
+                                            <button
+                                                key={src}
+                                                type="button"
+                                                onClick={() => setPaymentSource(src)}
+                                                aria-pressed={paymentSource === src}
+                                                className={`py-3 min-h-[44px] rounded-xl border-2 border-black font-black text-xs uppercase transition-colors ${paymentSource === src ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {PAYMENT_SOURCE_LABELS[src]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label htmlFor="payment-amount" className="block text-sm font-bold uppercase mb-2">
+                                        Valor pago (R$)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                                        <input
+                                            id="payment-amount"
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={paymentAmount}
+                                            onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                                            className="w-full border-2 border-black rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold tabular-nums"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label htmlFor="payment-paid-at" className="block text-sm font-bold uppercase mb-2">
+                                        Data do pagamento
+                                    </label>
+                                    <input
+                                        id="payment-paid-at"
+                                        type="date"
+                                        value={paymentPaidAt}
+                                        onChange={(e) => setPaymentPaidAt(e.target.value)}
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                                    />
+                                </div>
+
+                                <div className="mb-6">
+                                    <label htmlFor="payment-note" className="block text-sm font-bold uppercase mb-2">
+                                        Nota (opcional)
+                                    </label>
+                                    <textarea
+                                        id="payment-note"
+                                        value={paymentNote}
+                                        onChange={(e) => setPaymentNote(e.target.value)}
+                                        placeholder="Ex.: pago em 2x, referência do PIX..."
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-medium h-20 resize-none"
+                                    />
+                                </div>
+
+                                <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                                    <p className="text-xs font-bold text-yellow-800">
+                                        O dinheiro não passa pelo Worki. Este registro é declaratório, não é
+                                        documento fiscal, e ao confirmar o turno será marcado como concluído.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={closePaymentModal}
+                                        disabled={recordingPayment}
+                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleRecordPayment}
+                                        disabled={recordingPayment || !(paymentAmount > 0)}
+                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {recordingPayment ? <><Loader2 size={16} className="animate-spin" /> Registrando...</> : 'Confirmar Registro'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center text-center py-4">
+                                <div className="w-16 h-16 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
+                                    <CheckCircle size={32} className="text-primary" />
+                                </div>
+                                <h2 className="text-xl font-black uppercase tracking-tight mb-2">Pagamento registrado!</h2>
+                                <p className="text-gray-600 font-medium mb-6">
+                                    O recibo já está disponível para você e para o profissional.
+                                </p>
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={closePaymentModal}
+                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                                    >
+                                        Fechar
+                                    </button>
+                                    <button
+                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}`)}
+                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Receipt size={16} /> Ver Recibo
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

@@ -463,3 +463,56 @@ export interface FinancialBIData {
   noShowCost: NoShowCost;
   concentrationFlags: ConcentrationFlag[];
 }
+
+// =============================================
+// PAGAMENTO EXTERNO — modo A (ADR-20260630-pagamento-opcional-piloto)
+// migration: supabase/migrations/20260630000000_shift_payments.sql
+// =============================================
+
+/**
+ * Método declarado do pagamento (NÃO é prova bancária — é uma declaração).
+ */
+export type PaymentSource = 'external_pix' | 'cash' | 'other';
+
+/**
+ * Estado do registro. 'voided' é totalmente imutável (correção = novo registro).
+ */
+export type ShiftPaymentStatus = 'recorded' | 'voided';
+
+/**
+ * Espelha a tabela `shift_payments` (marcador de pagamento externo por turno).
+ * Registro/auditoria declaratório — NÃO move saldo, NÃO toca wallets/escrow_transactions,
+ * sem RPC (Article 8 intacto). Gerado à mão conforme migration
+ * `20260630000000_shift_payments.sql`.
+ *
+ * Imutabilidade (trigger `enforce_shift_payment_immutability`):
+ *  - Colunas materiais (job_id, company_id, worker_id, application_id, source, amount,
+ *    paid_at, recorded_by, note, created_at) são imutáveis após o INSERT.
+ *  - `worker_confirmed_at` é one-way (NULL → timestamp).
+ *  - Correção = estorno lógico (status='voided' + voided_at + void_reason).
+ */
+export interface ShiftPayment {
+  id: string;
+  job_id: string;
+  company_id: string;
+  worker_id: string;
+  /** Link opcional ao ciclo específico; ON DELETE SET NULL preserva o recibo. */
+  application_id: string | null;
+  /** Método DECLARADO (não prova bancária). */
+  source: PaymentSource;
+  /** Valor declarado pago (BRL). Sempre > 0. */
+  amount: number;
+  /** Quando o pagamento aconteceu (declarado). */
+  paid_at: string;
+  /** auth.uid() de quem registrou (empresa no v1). */
+  recorded_by: string;
+  /** Confirmação de recebimento pelo freela (bilateral ativo). One-way NULL→ts. Não bloqueia ciclo. */
+  worker_confirmed_at: string | null;
+  /** Observação livre (ex.: "pago em 2x", referência PIX). Imutável. */
+  note: string | null;
+  /** recorded (ativo) | voided (estornado, imutável). */
+  status: ShiftPaymentStatus;
+  voided_at: string | null;
+  void_reason: string | null;
+  created_at: string;
+}
