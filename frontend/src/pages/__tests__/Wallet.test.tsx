@@ -199,7 +199,7 @@ describe('Wallet - Calculo de taxa 5%', () => {
 
     // Fee = 200 * 0.05 = 10.00, Fixed = 3.00, Net = 200 - 10 - 3 = 187.00
     await waitFor(() => {
-      expect(screen.getByText('Taxa de servico (5%)')).toBeInTheDocument()
+      expect(screen.getByText('Taxa de servico Worki (5%)')).toBeInTheDocument()
       expect(screen.getByText('- R$ 10.00')).toBeInTheDocument()
       expect(screen.getByText('R$ 187.00')).toBeInTheDocument()
     })

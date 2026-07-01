@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import DepositModal from '../DepositModal'
 
 const mockAddToast = vi.fn()
@@ -11,6 +11,15 @@ vi.mock('../../contexts/ToastContext', () => ({
 vi.mock('../../services/walletService', () => ({
   WalletService: {
     createDeposit: vi.fn(),
+  },
+}))
+
+vi.mock('../../lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+    },
+    from: vi.fn(),
   },
 }))
 
@@ -28,56 +37,44 @@ describe('DepositModal', () => {
   it('renderiza formulario de deposito quando aberto', () => {
     render(<DepositModal {...defaultProps} />)
 
-    expect(screen.getByText('Adicionar Créditos')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('0.00')).toBeInTheDocument()
-    expect(screen.getByText('Gerar Fatura (PIX, Boleto ou Cartão)')).toBeInTheDocument()
+    expect(screen.getByText('Adicionar creditos')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('50,00')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Pagar R\$/ })).toBeInTheDocument()
   })
 
   it('nao renderiza quando isOpen=false', () => {
     render(<DepositModal {...defaultProps} isOpen={false} />)
 
-    expect(screen.queryByText('Adicionar Créditos')).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('0.00')).not.toBeInTheDocument()
+    expect(screen.queryByText('Adicionar creditos')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('50,00')).not.toBeInTheDocument()
   })
 
-  it('valida valor minimo de deposito (deve ser maior que 0)', async () => {
+  it('exibe aviso e mantem botao desabilitado para valor abaixo do minimo (R$ 50)', () => {
     render(<DepositModal {...defaultProps} />)
 
-    const input = screen.getByPlaceholderText('0.00')
+    const input = screen.getByPlaceholderText('50,00')
     fireEvent.change(input, { target: { value: '2' } })
 
-    const button = screen.getByText('Gerar Fatura (PIX, Boleto ou Cartão)')
-    fireEvent.click(button)
+    expect(screen.getByText('Minimo R$ 50,00')).toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith(
-        'O valor mínimo para depósito é R$ 5,00',
-        'error'
-      )
-    })
+    const button = screen.getByRole('button', { name: /Pagar R\$/ })
+    expect(button).toBeDisabled()
   })
 
-  it('valida valor maximo de deposito', async () => {
+  it('mantem botao desabilitado para valor acima do maximo (R$ 50.000)', () => {
     render(<DepositModal {...defaultProps} />)
 
-    const input = screen.getByPlaceholderText('0.00')
+    const input = screen.getByPlaceholderText('50,00')
     fireEvent.change(input, { target: { value: '60000' } })
 
-    const button = screen.getByText('Gerar Fatura (PIX, Boleto ou Cartão)')
-    fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith(
-        'O valor máximo para depósito é R$ 50.000,00',
-        'error'
-      )
-    })
+    const button = screen.getByRole('button', { name: /Pagar R\$/ })
+    expect(button).toBeDisabled()
   })
 
   it('botao desabilitado quando campo valor esta vazio', () => {
     render(<DepositModal {...defaultProps} />)
 
-    const button = screen.getByText('Gerar Fatura (PIX, Boleto ou Cartão)')
+    const button = screen.getByRole('button', { name: /Pagar R\$/ })
     expect(button).toBeDisabled()
   })
 })
