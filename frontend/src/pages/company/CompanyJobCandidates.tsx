@@ -50,7 +50,6 @@ export default function CompanyJobCandidates() {
     const [comment, setComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [confirmingCheckin, setConfirmingCheckin] = useState<string | null>(null);
-    const [companyBalance, setCompanyBalance] = useState<number | null>(null);
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
     const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
@@ -131,10 +130,6 @@ export default function CompanyJobCandidates() {
             setEscrowStatusMap(statusMap);
             setEscrowKindMap(kindMap);
 
-            // Fetch company balance to guard the "Contratar" button (AC-7)
-            const wallet = await WalletService.getOrCreateWallet(user.id, 'company');
-            setCompanyBalance(wallet ? wallet.balance : null);
-
             // Modo A: existe registro de pagamento externo já feito para este turno?
             const payment = await PaymentRecordService.getPaymentByJob(id as string);
             setShiftPayment(payment);
@@ -150,7 +145,11 @@ export default function CompanyJobCandidates() {
 
         if (error) {
             logError('CompanyJobCandidates: handleUpdateStatus', error);
-            addToast('Erro ao atualizar status do candidato.', 'error');
+            // Fluxo pull legado: "hired" dispara o trigger auto_reserve_escrow_on_hire, que
+            // reserva escrow atômico (RAISE EXCEPTION em Postgres se saldo insuficiente). A
+            // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
+            // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
+            addToast(error.message || 'Erro ao atualizar status do candidato.', 'error');
             return;
         }
 
@@ -612,25 +611,12 @@ export default function CompanyJobCandidates() {
                                                             >
                                                                 <MessageSquare size={14} /> Chat
                                                             </button>
-                                                            <div className="flex flex-col items-end">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (companyBalance !== null && companyBalance <= 0) {
-                                                                            addToast('Saldo insuficiente. Deposite fundos na sua carteira para contratar.', 'error');
-                                                                            return;
-                                                                        }
-                                                                        handleUpdateStatus(app.id, 'hired');
-                                                                    }}
-                                                                    className={`p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors ${companyBalance !== null && companyBalance <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                    title={companyBalance !== null && companyBalance <= 0 ? 'Saldo insuficiente para contratar' : undefined}
-                                                                >
-                                                                    Contratar
-                                                                </button>
-                                                                {companyBalance !== null && companyBalance <= 0 && (
-                                                                    <p className="text-xs text-red-500 mt-1">Saldo insuficiente para contratar</p>
-                                                                )}
-                                                            </div>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
+                                                                className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors"
+                                                            >
+                                                                Contratar
+                                                            </button>
                                                         </>
                                                     )}
 
