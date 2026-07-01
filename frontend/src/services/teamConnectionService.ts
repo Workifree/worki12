@@ -482,9 +482,7 @@ export const TeamConnectionService = {
           worker:workers (
             id,
             full_name,
-            avatar_url,
-            photo_url,
-            primary_role,
+            avatar_url,            primary_role,
             roles,
             rating_average,
             reviews_count,
@@ -540,9 +538,7 @@ export const TeamConnectionService = {
           worker:workers (
             id,
             full_name,
-            avatar_url,
-            photo_url,
-            primary_role,
+            avatar_url,            primary_role,
             rating_average,
             city
           )

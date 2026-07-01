@@ -152,7 +152,8 @@ export default function CompanyCreateJob() {
                 location: formData.location,
                 budget: budgetAmount,
                 budget_type: formData.budget_type,
-                start_date: formData.start_date ? new Date(formData.start_date).toISOString() : null,
+                // meio-dia local evita o off-by-one de fuso (meia-noite UTC virava o dia anterior em BRT)
+                start_date: formData.start_date ? new Date(formData.start_date + 'T12:00:00').toISOString() : null,
                 scope: formData.scope,
                 work_start_time: formData.work_start_time,
                 work_end_time: formData.work_end_time,

@@ -258,7 +258,7 @@ export const PaymentRecordService = {
           *,
           job:jobs ( id, title, location, start_date, work_start_time, work_end_time ),
           company:companies ( id, name, logo_url ),
-          worker:workers ( id, full_name, avatar_url, photo_url )
+          worker:workers ( id, full_name, avatar_url )
         `,
         )
         .eq('job_id', jobId)
