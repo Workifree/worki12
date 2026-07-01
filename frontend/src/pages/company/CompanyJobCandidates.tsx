@@ -4,14 +4,32 @@ import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
 import { SpendLimitService } from '../../services/spendLimitService';
+import { TeamConnectionService } from '../../services/teamConnectionService';
+import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
 import EscrowStatusBadge from '../../components/EscrowStatusBadge';
-import type { Application, PaymentSource, ShiftPayment } from '../../types';
+import type { Application, PaymentSource, ShiftPayment, TeamMember } from '../../types';
+
+/**
+ * Convite expirado sem resposta do freela (R8 — expiração deriva na leitura, sem escrever no
+ * banco). Não depende de migration. Cobre os DOIS estados de forma consistente:
+ *  - antes do cron: ainda `status='invited'` com `invitation_expires_at` no passado;
+ *  - depois do cron `expire-invites`: `status='declined'` com `invitation_response` NULL
+ *    (expiração automática ≠ recusa ativa do worker, que tem `invitation_response='declined'`).
+ */
+function isInviteExpired(app: Application): boolean {
+  const pastDeadline =
+    !!app.invitation_expires_at && new Date(app.invitation_expires_at) < new Date();
+  return (
+    (app.status === 'invited' && pastDeadline) ||
+    (app.status === 'declined' && !app.invitation_response && pastDeadline)
+  );
+}
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -52,7 +70,15 @@ export default function CompanyJobCandidates() {
     const [recordingPayment, setRecordingPayment] = useState(false);
     const [paymentRecorded, setPaymentRecorded] = useState(false);
 
+    // "Convidar outro" — convite expirado sem resposta; o slot está livre para outro freela (R8).
+    const [reopenApp, setReopenApp] = useState<Application | null>(null);
+    const [reopenTeamMembers, setReopenTeamMembers] = useState<TeamMember[]>([]);
+    const [reopenLoading, setReopenLoading] = useState(false);
+
     const { addToast } = useToast();
+    // Reaproveita o hook do fluxo de convite (mesmo usado em CompanyCreateJob) para disparar
+    // um novo convite a partir desta tela quando o anterior expirou sem resposta.
+    const { invite: sendReopenInvite, invitingWorkerId: reopenInvitingWorkerId } = useCompanyInvites(id ?? '');
 
     useEffect(() => {
         if (id) fetchCandidates();
@@ -170,6 +196,37 @@ export default function CompanyJobCandidates() {
     const closePaymentModal = () => {
         setPaymentModalApp(null);
         setPaymentRecorded(false);
+    };
+
+    // Abre o picker "Convidar outro" para um convite expirado (status='invited' + prazo vencido).
+    // O slot está livre: qualquer outro membro da equipe (que ainda não tenha application para
+    // este job) pode ser convidado. Não escreve nada no convite antigo — é só leitura + novo convite.
+    const openReopenModal = async (app: Application) => {
+        setReopenApp(app);
+        setReopenLoading(true);
+        try {
+            const members = await TeamConnectionService.listTeamMembers();
+            const alreadyOnJob = new Set(candidates.map((c) => c.worker_id));
+            setReopenTeamMembers(members.filter((m) => !alreadyOnJob.has(m.worker.id)));
+        } catch (error) {
+            logError('CompanyJobCandidates: openReopenModal', error);
+            addToast('Erro ao carregar sua equipe.', 'error');
+        } finally {
+            setReopenLoading(false);
+        }
+    };
+
+    const closeReopenModal = () => {
+        setReopenApp(null);
+        setReopenTeamMembers([]);
+    };
+
+    const handlePickReopenWorker = async (workerId: string) => {
+        const ok = await sendReopenInvite(workerId);
+        if (ok) {
+            closeReopenModal();
+            fetchCandidates();
+        }
     };
 
     // O service valida o SINAL REAL de conclusão (chegada + saída confirmadas), não o
@@ -520,14 +577,32 @@ export default function CompanyJobCandidates() {
                                             )}
                                             {app.status !== 'pending' && (
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className={`text-xs font-black uppercase px-3 py-1 rounded-lg border-2 ${app.status === 'hired' ? 'bg-green-100 border-green-200 text-green-700' :
-                                                        app.status === 'in_progress' ? 'bg-orange-100 border-orange-200 text-orange-700' :
-                                                        app.status === 'completed' ? 'bg-blue-100 border-blue-200 text-blue-700' :
-                                                            app.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-500' :
-                                                                'bg-blue-50 border-blue-100 text-blue-600'
-                                                        }`}>
-                                                        {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : 'Descartado'}
-                                                    </span>
+                                                    {isInviteExpired(app) ? (
+                                                            <>
+                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-500">
+                                                                    Não respondeu (expirado)
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
+                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <Send size={14} /> Convidar outro
+                                                                </button>
+                                                            </>
+                                                    ) : app.status === 'invited' ? (
+                                                            <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
+                                                                Aguardando resposta
+                                                            </span>
+                                                    ) : (
+                                                        <span className={`text-xs font-black uppercase px-3 py-1 rounded-lg border-2 ${app.status === 'hired' ? 'bg-green-100 border-green-200 text-green-700' :
+                                                            app.status === 'in_progress' ? 'bg-orange-100 border-orange-200 text-orange-700' :
+                                                            app.status === 'completed' ? 'bg-blue-100 border-blue-200 text-blue-700' :
+                                                                app.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-500' :
+                                                                    'bg-blue-50 border-blue-100 text-blue-600'
+                                                            }`}>
+                                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : 'Descartado'}
+                                                        </span>
+                                                    )}
 
                                                     {app.status === 'interview' && (
                                                         <>
@@ -670,6 +745,84 @@ export default function CompanyJobCandidates() {
                     ))
                 )}
             </div>
+
+            {/* Modal "Convidar outro" — convite anterior expirou sem resposta (R8); slot livre */}
+            {reopenApp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-black uppercase tracking-tight">Convidar Outro Freela</h2>
+                            <button
+                                onClick={closeReopenModal}
+                                aria-label="Fechar"
+                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <p className="text-sm font-bold text-gray-600 mb-5">
+                            O convite anterior expirou sem resposta. O slot deste turno está livre — escolha outro freela da sua equipe.
+                        </p>
+
+                        {reopenLoading && (
+                            <div className="space-y-3 animate-pulse">
+                                {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
+                            </div>
+                        )}
+
+                        {!reopenLoading && reopenTeamMembers.length === 0 && (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+                                <Users size={32} className="mx-auto mb-2 opacity-30" />
+                                <p className="font-bold text-sm">Nenhum freela disponível para convidar.</p>
+                                <p className="text-xs mt-1">Todos da equipe já têm candidatura neste turno, ou seu elenco está vazio.</p>
+                            </div>
+                        )}
+
+                        {!reopenLoading && reopenTeamMembers.length > 0 && (
+                            <div className="space-y-3 max-h-72 overflow-y-auto">
+                                {reopenTeamMembers.map((member) => {
+                                    const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
+                                    const isInviting = reopenInvitingWorkerId === member.worker.id;
+                                    return (
+                                        <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
+                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                {avatarUrl ? (
+                                                    <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
+                                                        {member.worker.full_name[0]?.toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
+                                                {member.worker.primary_role && (
+                                                    <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => void handlePickReopenWorker(member.worker.id)}
+                                                disabled={isInviting}
+                                                className="bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                            >
+                                                {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                                                {isInviting ? '...' : 'Convidar'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={closeReopenModal}
+                            className="w-full mt-5 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
+                        >
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Confirmação de Entrega */}
             {confirmDeliveryApp && (
