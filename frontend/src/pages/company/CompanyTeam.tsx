@@ -1,8 +1,15 @@
-import { useState } from 'react';
-import { Users, Link2, Phone, QrCode, Copy, Check, Clock, Star, Briefcase, X, Loader2, UserPlus } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Users, Link2, Phone, QrCode, Copy, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
+import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import { logError } from '../../lib/logger';
 import type { TeamMember, TeamConnection } from '../../types';
+
+// UUID "solto" — mesmo formato usado como Worki ID (auth.uid()). O QR de
+// identidade (Profile.tsx) codifica o workerId cru, sem prefixo/URL.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de membro da equipe
@@ -15,6 +22,22 @@ interface MemberCardProps {
 function MemberCard({ member }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
+  const { addToast } = useToast();
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Link transitivo: já tenho esse freela no elenco → posso repassar o link
+  // dele pra outra empresa se conectar, sem pedir de novo ao freela.
+  const handleShareLink = async () => {
+    const { url } = TeamConnectionService.generateWorkerInviteToken(worker.id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      addToast('Link do freela copiado! Repasse para outra empresa.', 'success');
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      addToast('Não foi possível copiar o link.', 'error');
+    }
+  };
 
   return (
     <div className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
@@ -54,10 +77,20 @@ function MemberCard({ member }: MemberCardProps) {
         </div>
       </div>
 
-      {/* Status badge */}
-      <span className="flex-shrink-0 bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
-        Elenco
-      </span>
+      {/* Status badge + repassar link */}
+      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+        <span className="bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
+          Elenco
+        </span>
+        <button
+          onClick={handleShareLink}
+          aria-label={`Repassar link do freela ${worker.full_name}`}
+          title="Repassar link deste freela para outra empresa"
+          className="p-1.5 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
+        >
+          {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
+        </button>
+      </div>
     </div>
   );
 }
@@ -93,10 +126,96 @@ function PendingCard({ connection }: PendingCardProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Subcomponent: scanner de câmera QR (lê o QR de identidade do worker)
+// ---------------------------------------------------------------------------
+
+const QR_READER_ELEMENT_ID = 'add-worker-qr-reader';
+
+interface QrScannerPaneProps {
+  /** Chamado com o texto decodificado do QR (deve ser um Worki ID / UUID). */
+  onDecoded: (decodedText: string) => void;
+  /** true enquanto a última leitura está sendo processada (pausa a câmera). */
+  processing: boolean;
+}
+
+function QrScannerPane({ onDecoded, processing }: QrScannerPaneProps) {
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const onDecodedRef = useRef(onDecoded);
+
+  useEffect(() => {
+    onDecodedRef.current = onDecoded;
+  }, [onDecoded]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scanner = new Html5Qrcode(QR_READER_ELEMENT_ID, {
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      verbose: false,
+    });
+    scannerRef.current = scanner;
+
+    scanner
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          if (cancelled) return;
+          onDecodedRef.current(decodedText);
+        },
+        () => {
+          // Frame sem QR detectado — esperado a cada tick, não é erro real.
+        },
+      )
+      .catch((err) => {
+        if (cancelled) return;
+        logError('CompanyTeam.qrScanner.start', err);
+        setCameraError('Não foi possível acessar a câmera. Verifique a permissão do navegador para este site.');
+      });
+
+    return () => {
+      cancelled = true;
+      const instance = scannerRef.current;
+      if (instance) {
+        instance
+          .stop()
+          .then(() => instance.clear())
+          .catch(() => {
+            // câmera pode já ter sido interrompida (unmount rápido) — seguro ignorar
+          });
+      }
+    };
+  }, []);
+
+  if (cameraError) {
+    return (
+      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center flex flex-col items-center gap-2">
+        <CameraOff className="text-red-500" size={28} />
+        <p className="text-sm font-bold text-red-600">{cameraError}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div
+        id={QR_READER_ELEMENT_ID}
+        className="rounded-xl overflow-hidden border-2 border-black bg-black [&_video]:w-full [&_video]:rounded-xl"
+      />
+      {processing && (
+        <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center">
+          <Loader2 className="animate-spin text-white" size={32} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Subcomponent: modal "Adicionar freela"
 // ---------------------------------------------------------------------------
 
-type AddMethod = 'link' | 'phone';
+type AddMethod = 'link' | 'phone' | 'qr';
 
 interface AddWorkerModalProps {
   companyId: string;
@@ -111,6 +230,9 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
   const [workerId, setWorkerId] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qrProcessing, setQrProcessing] = useState(false);
+  const qrLockRef = useRef(false);
+  const { addToast } = useToast();
 
   const { url: inviteUrl } = TeamConnectionService.generateInviteToken(companyId);
 
@@ -135,6 +257,33 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
     }
   };
 
+  // A câmera manda frames continuamente; trava para não disparar 2x a mesma leitura.
+  const handleQrDecoded = useCallback(
+    async (decodedText: string) => {
+      if (qrLockRef.current) return;
+      const candidate = decodedText.trim();
+
+      if (!UUID_RE.test(candidate)) {
+        addToast('QR inválido. Peça ao freela para abrir "Meu QR de Identidade" no perfil dele.', 'error');
+        return;
+      }
+
+      qrLockRef.current = true;
+      setQrProcessing(true);
+      const ok = await addWorker(candidate, 'qr');
+      setQrProcessing(false);
+
+      if (ok) {
+        onAdded();
+        onClose();
+        return;
+      }
+      // erro já foi mostrado via toast pelo addWorker — libera pra tentar de novo
+      qrLockRef.current = false;
+    },
+    [addWorker, addToast, onAdded, onClose],
+  );
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -153,6 +302,7 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
         <div className="flex gap-2 mb-6 border-b-2 border-gray-200 pb-1">
           {([
             { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
+            { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
             { id: 'phone' as AddMethod, icon: Phone, label: 'Telefone' },
           ] as const).map((tab) => (
             <button
@@ -167,14 +317,6 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
               <tab.icon size={16} /> {tab.label}
             </button>
           ))}
-          {/* QR: destaque como "em breve" */}
-          <button
-            disabled
-            className="flex items-center gap-2 px-4 py-2 rounded-t-xl font-black uppercase text-sm text-gray-300 cursor-not-allowed"
-            title="Scanner QR disponível na v1.1"
-          >
-            <QrCode size={16} /> QR (v1.1)
-          </button>
         </div>
 
         {/* Conteúdo por método */}
@@ -193,6 +335,19 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
               {copied ? <Check size={18} /> : <Copy size={18} />}
               {copied ? 'Copiado!' : 'Copiar Link'}
             </button>
+            <p className="text-xs text-gray-400 text-center">
+              O freela aparecerá em "Aguardando" até aceitar o convite.
+            </p>
+          </div>
+        )}
+
+        {method === 'qr' && (
+          <div className="space-y-4">
+            <p className="text-sm font-bold text-gray-600">
+              Aponte a câmera para o <span className="font-black">QR de Identidade</span> do freela
+              (ele encontra em Perfil → "Meu QR de Identidade").
+            </p>
+            <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
             <p className="text-xs text-gray-400 text-center">
               O freela aparecerá em "Aguardando" até aceitar o convite.
             </p>
@@ -313,7 +468,7 @@ export default function CompanyTeam() {
           <Users size={48} className="mx-auto mb-4 text-gray-300" />
           <h3 className="text-xl font-black uppercase mb-2">Elenco vazio</h3>
           <p className="text-gray-500 font-bold mb-6 max-w-sm mx-auto">
-            Adicione freelas via link de convite, Worki ID ou QR (em breve). Eles aparecerão aqui após aceitarem.
+            Adicione freelas via link de convite, QR de identidade ou Worki ID. Eles aparecerão aqui após aceitarem.
           </p>
           <button
             onClick={() => setShowAddModal(true)}

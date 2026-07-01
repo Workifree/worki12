@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut } from 'lucide-react';
+import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useWorkerStores } from '../hooks/useTeamConnections';
+import { useToast } from '../contexts/ToastContext';
+import { TeamConnectionService } from '../services/teamConnectionService';
 import type { MyStore, TeamConnection } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -17,6 +19,24 @@ interface StoreCardProps {
 function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
   const { company, connection } = store;
   const name = company.name ?? 'Empresa';
+  const { addToast } = useToast();
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Link transitivo: já sou conectado a essa empresa → posso repassar o link
+  // dela pra outro freela se conectar, sem precisar pedir à empresa.
+  const handleShareLink = async () => {
+    // `connection.company_id` é a FK garantida (não-nula); `company.id` no
+    // embed é opcional no tipo (CompanyProfile.id?), então preferimos a FK.
+    const { url } = TeamConnectionService.generateInviteToken(connection.company_id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      addToast('Link da empresa copiado! Repasse para outro freela.', 'success');
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      addToast('Não foi possível copiar o link.', 'error');
+    }
+  };
 
   return (
     <div className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all">
@@ -52,16 +72,26 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
         </div>
       </div>
 
-      {/* Ação: sair/bloquear */}
-      <button
-        onClick={() => onLeave(connection.id)}
-        disabled={leaving}
-        aria-label={`Sair do cliente ${name}`}
-        title="Sair / bloquear cliente"
-        className="flex-shrink-0 p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
-      </button>
+      {/* Ações: repassar link / sair-bloquear */}
+      <div className="flex flex-col gap-1 flex-shrink-0">
+        <button
+          onClick={handleShareLink}
+          aria-label={`Repassar link da empresa ${name}`}
+          title="Repassar link desta empresa para outro freela"
+          className="p-2 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-light transition-colors"
+        >
+          {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
+        </button>
+        <button
+          onClick={() => onLeave(connection.id)}
+          disabled={leaving}
+          aria-label={`Sair do cliente ${name}`}
+          title="Sair / bloquear cliente"
+          className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,12 +1,13 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
 import { QRCodeSVG } from 'qrcode.react';
+import { TeamConnectionService } from '../services/teamConnectionService';
 
 interface WorkerProfile {
     id: string;
@@ -113,9 +114,23 @@ export default function Profile() {
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
 
-    // QR de identidade
+    // QR de identidade + "meu link" (link transitivo)
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [workerId, setWorkerId] = useState<string | null>(null);
+    const [linkCopied, setLinkCopied] = useState(false);
+
+    const handleCopyMyLink = useCallback(async () => {
+        if (!workerId) return;
+        const { url } = TeamConnectionService.generateWorkerInviteToken(workerId);
+        try {
+            await navigator.clipboard.writeText(url);
+            setLinkCopied(true);
+            addToast('Link copiado! Envie para uma empresa te adicionar ao elenco.', 'success');
+            setTimeout(() => setLinkCopied(false), 2500);
+        } catch {
+            addToast('Não foi possível copiar o link.', 'error');
+        }
+    }, [workerId, addToast]);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -694,9 +709,15 @@ export default function Profile() {
                         <p className="text-xs font-bold uppercase text-gray-400 mb-1">Worki ID</p>
                         <p className="font-mono text-xs font-bold text-gray-700 break-all">{workerId}</p>
                     </div>
-                    {/* TODO v1.1: scanner de câmera para empresa ler o QR diretamente no app */}
+                    <button
+                        onClick={handleCopyMyLink}
+                        className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
+                    >
+                        {linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                        {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
+                    </button>
                     <p className="text-xs text-gray-400 text-center mt-3 font-bold">
-                        Scanner por câmera (empresa lê aqui) disponível na v1.1.
+                        Envie este link direto (WhatsApp, etc.) para uma empresa te adicionar ao elenco sem precisar do QR.
                     </p>
                 </div>
             </div>
