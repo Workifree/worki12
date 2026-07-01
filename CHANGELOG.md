@@ -10,6 +10,24 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Modo A — Pagamento Externo (Piloto 2026-07-01)
+
+**Empresa e Freelancer:**
+- **Registrar pagamento feito por fora:** ao concluir um turno, a empresa registra que pagou o freelancer por PIX/dinheiro (fora do Worki)
+- **Recibo in-app:** geração automática de recibo declaratório acessível por empresa e freelancer
+- **Confirmação de recebimento (bilateral):** o freelancer pode confirmar que recebeu o pagamento
+- **Inteligência financeira unificada:** o painel financeiro e alertas de teto agora contam tanto pagamentos via Worki quanto registrados por fora
+
+**Empresa:**
+- Botão "Registrar pagamento" na tela de conclusão de turno (campo "Pagamento feito por fora do Worki")
+- Seleção de fonte de pagamento: PIX, dinheiro em espécie ou outro método
+- Confirmação e emissão automática de recibo
+- Rastreamento do pagamento no histórico de turnos
+
+**Freelancer:**
+- Visualização de recibos de pagamentos registrados
+- Confirmação de recebimento (gera valor comprovado no recibo bilateral)
+
 #### Slice 1 — Loop Relacional (MVP)
 
 **Empresa:**
