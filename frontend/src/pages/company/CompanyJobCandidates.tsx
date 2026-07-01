@@ -37,6 +37,11 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
+// Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
+// é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
+// contradiz o pagamento opcional (modo A, ADR-20260630). Religar na Fase 2 = flip para true.
+const PULL_HIRE_ENABLED = false;
+
 export default function CompanyJobCandidates() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -50,7 +55,6 @@ export default function CompanyJobCandidates() {
     const [comment, setComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [confirmingCheckin, setConfirmingCheckin] = useState<string | null>(null);
-    const [companyBalance, setCompanyBalance] = useState<number | null>(null);
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
     const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
@@ -131,10 +135,6 @@ export default function CompanyJobCandidates() {
             setEscrowStatusMap(statusMap);
             setEscrowKindMap(kindMap);
 
-            // Fetch company balance to guard the "Contratar" button (AC-7)
-            const wallet = await WalletService.getOrCreateWallet(user.id, 'company');
-            setCompanyBalance(wallet ? wallet.balance : null);
-
             // Modo A: existe registro de pagamento externo já feito para este turno?
             const payment = await PaymentRecordService.getPaymentByJob(id as string);
             setShiftPayment(payment);
@@ -150,7 +150,11 @@ export default function CompanyJobCandidates() {
 
         if (error) {
             logError('CompanyJobCandidates: handleUpdateStatus', error);
-            addToast('Erro ao atualizar status do candidato.', 'error');
+            // Fluxo pull legado: "hired" dispara o trigger auto_reserve_escrow_on_hire, que
+            // reserva escrow atômico (RAISE EXCEPTION em Postgres se saldo insuficiente). A
+            // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
+            // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
+            addToast(error.message || 'Erro ao atualizar status do candidato.', 'error');
             return;
         }
 
@@ -555,7 +559,7 @@ export default function CompanyJobCandidates() {
                                             >
                                                 <MessageSquare size={24} />
                                             </button>
-                                            {app.status === 'pending' && (
+                                            {PULL_HIRE_ENABLED && app.status === 'pending' && (
                                                 <>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
@@ -612,25 +616,14 @@ export default function CompanyJobCandidates() {
                                                             >
                                                                 <MessageSquare size={14} /> Chat
                                                             </button>
-                                                            <div className="flex flex-col items-end">
+                                                            {PULL_HIRE_ENABLED && (
                                                                 <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (companyBalance !== null && companyBalance <= 0) {
-                                                                            addToast('Saldo insuficiente. Deposite fundos na sua carteira para contratar.', 'error');
-                                                                            return;
-                                                                        }
-                                                                        handleUpdateStatus(app.id, 'hired');
-                                                                    }}
-                                                                    className={`p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors ${companyBalance !== null && companyBalance <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                    title={companyBalance !== null && companyBalance <= 0 ? 'Saldo insuficiente para contratar' : undefined}
+                                                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
+                                                                    className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors"
                                                                 >
                                                                     Contratar
                                                                 </button>
-                                                                {companyBalance !== null && companyBalance <= 0 && (
-                                                                    <p className="text-xs text-red-500 mt-1">Saldo insuficiente para contratar</p>
-                                                                )}
-                                                            </div>
+                                                            )}
                                                         </>
                                                     )}
 

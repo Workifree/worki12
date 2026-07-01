@@ -4,11 +4,31 @@ import { ArrowLeft, Lock, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getPasswordStrength } from '../lib/validation';
 import PageMeta from '../components/PageMeta';
+import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
+
+/**
+ * Rede de segurança do item 11 (GTM): se o freela chegou ao login sem o ?redirect=
+ * (ex.: confirmou email em outra aba e voltou pro /login "seco"), ainda tentamos
+ * recuperar o convite pendente guardado pelo InviteAccept em sessionStorage.
+ */
+function resolvePendingInviteRedirect(explicitRedirect: string | null): string | null {
+    if (explicitRedirect && explicitRedirect.startsWith('/')) return explicitRedirect;
+    try {
+        const pendingToken = sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
+        if (pendingToken) return `/convite/${pendingToken}`;
+    } catch {
+        // sessionStorage indisponível — sem rede de segurança, segue fluxo padrão
+    }
+    return null;
+}
 
 export default function Login() {
     const [searchParams] = useSearchParams();
     const type = searchParams.get('type') || 'work'; // 'work' or 'hire'
     const reason = searchParams.get('reason');
+    // Preserva o destino pretendido (ex.: /convite/<token>) quando o usuário chega ao
+    // login vindo de um link que exigia sessão — ver InviteAccept.tsx (item 11 do GTM).
+    const redirectTo = searchParams.get('redirect');
     const navigate = useNavigate();
 
     const [isSignUp, setIsSignUp] = useState(false);
@@ -48,11 +68,16 @@ export default function Login() {
 
                 if (data.user && data.session) {
                     // Auto-confirmed: redirect immediately
-                    const userType = data.user.user_metadata?.user_type;
-                    if (userType === 'hire') {
-                        navigate('/company/dashboard');
+                    const pendingRedirect = resolvePendingInviteRedirect(redirectTo);
+                    if (pendingRedirect) {
+                        navigate(pendingRedirect);
                     } else {
-                        navigate('/dashboard');
+                        const userType = data.user.user_metadata?.user_type;
+                        if (userType === 'hire') {
+                            navigate('/company/dashboard');
+                        } else {
+                            navigate('/dashboard');
+                        }
                     }
                 } else if (data.user) {
                     // Email confirmation required
@@ -68,13 +93,18 @@ export default function Login() {
                 if (signInError) throw signInError;
 
                 if (data.user) {
-                    // Check user metadata for correct redirection
-                    const userType = data.user.user_metadata?.user_type;
-
-                    if (userType === 'hire') {
-                        navigate('/company/dashboard');
+                    const pendingRedirect = resolvePendingInviteRedirect(redirectTo);
+                    if (pendingRedirect) {
+                        navigate(pendingRedirect);
                     } else {
-                        navigate('/dashboard');
+                        // Check user metadata for correct redirection
+                        const userType = data.user.user_metadata?.user_type;
+
+                        if (userType === 'hire') {
+                            navigate('/company/dashboard');
+                        } else {
+                            navigate('/dashboard');
+                        }
                     }
                 }
             }

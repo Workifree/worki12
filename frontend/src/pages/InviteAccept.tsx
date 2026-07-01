@@ -2,7 +2,7 @@
  * InviteAccept — página de aceite de convite de equipe via link (Slice 1, R1-b)
  * + link transitivo de contato (R-transitivo).
  *
- * Rota: /convite/:token  (sob ProtectedRoute, aberta para worker OU empresa)
+ * Rota: /convite/:token  (PÚBLICA — fora do ProtectedRoute, ver App.tsx)
  *
  * Duas direções, distinguidas pelo prefixo do token (ver teamConnectionService):
  *   - Token de EMPRESA (sem prefixo): quem abre precisa estar logado como WORKER.
@@ -12,16 +12,22 @@
  *     Esse é o link "transitivo": uma empresa que já tem o worker no elenco pode
  *     repassar o MESMO link a outra empresa, sem precisar pedir ao worker de novo.
  *
- * TODO (v1.1): implementar redirect pós-login para retornar a esta URL quando o
- * usuário ainda não está autenticado (ProtectedRoute redireciona para / que redireciona
- * para /login; o token é perdido). Sugestão: passar ?redirect=/convite/<token> ao login.
+ * Item 11 (bug crítico do GTM) — fluxo sem conta:
+ * A rota é PÚBLICA para não perder o token: se ela ficasse sob ProtectedRoute, o guard
+ * mandava o freela sem sessão para "/" antes deste componente montar, e o token do link
+ * desaparecia da URL. Agora, ao montar, checamos a sessão diretamente aqui: sem sessão,
+ * guardamos o token em sessionStorage (`pending_invite_token`, rede de segurança) e
+ * navegamos para `/login?redirect=/convite/<token>`. O Login (Login.tsx) lê `redirect` e
+ * volta para cá após cadastro/login — a conexão é então processada normalmente.
  */
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, User, ArrowRight } from 'lucide-react';
 import { TeamConnectionService } from '../services/teamConnectionService';
+import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
 
 type PageState = 'loading' | 'success' | 'already_exists' | 'error';
@@ -53,6 +59,20 @@ export default function InviteAccept() {
         return;
       }
 
+      // Sem sessão: preserva o token e manda pro login em vez de deixar o
+      // service falhar com "sessão expirada" — ver nota do item 11 no topo do arquivo.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        if (!active) return;
+        try {
+          sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, token);
+        } catch {
+          // sessionStorage indisponível (ex.: modo privado restrito) — segue só com o query param
+        }
+        navigate(`/login?redirect=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
+        return;
+      }
+
       try {
         const result = TeamConnectionService.isWorkerInviteToken(token)
           ? await TeamConnectionService.addWorkerToTeamByToken(token)
@@ -63,6 +83,12 @@ export default function InviteAccept() {
         if (result.error) {
           setPage({ state: 'error', errorMsg: result.error });
           return;
+        }
+
+        try {
+          sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+        } catch {
+          // ignora — best-effort
         }
 
         if (result.alreadyExists) {
@@ -81,7 +107,7 @@ export default function InviteAccept() {
 
     void processInvite();
     return () => { active = false; };
-  }, [token]);
+  }, [token, navigate]);
 
   const successTitle = direction === 'worker' ? 'Freela Adicionado!' : 'Convite Aceito!';
   const successBody = direction === 'worker'

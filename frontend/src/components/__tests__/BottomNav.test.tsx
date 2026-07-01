@@ -16,8 +16,7 @@ describe('BottomNav', () => {
     renderBottomNav('worker')
 
     expect(screen.getByLabelText('Início')).toBeInTheDocument()
-    expect(screen.getByLabelText('Vagas')).toBeInTheDocument()
-    expect(screen.getByLabelText('Carteira')).toBeInTheDocument()
+    expect(screen.getByLabelText('Convites')).toBeInTheDocument()
     expect(screen.getByLabelText('Clientes')).toBeInTheDocument()
     expect(screen.getByLabelText('Msgs')).toBeInTheDocument()
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
@@ -33,12 +32,12 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
 
-  it('worker tem 6 itens de navegacao', () => {
+  it('worker tem 5 itens de navegacao (push-first: sem busca de vagas)', () => {
     renderBottomNav('worker')
 
     const nav = screen.getByLabelText('Menu de navegacao')
     const links = nav.querySelectorAll('a')
-    expect(links).toHaveLength(6)
+    expect(links).toHaveLength(5)
   })
 
   it('company tem 5 itens de navegacao', () => {
@@ -53,8 +52,7 @@ describe('BottomNav', () => {
     renderBottomNav('worker')
 
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/dashboard')
-    expect(screen.getByLabelText('Vagas')).toHaveAttribute('href', '/jobs')
-    expect(screen.getByLabelText('Carteira')).toHaveAttribute('href', '/wallet')
+    expect(screen.getByLabelText('Convites')).toHaveAttribute('href', '/my-jobs')
     expect(screen.getByLabelText('Clientes')).toHaveAttribute('href', '/carteira')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/profile')
   })
@@ -76,9 +74,9 @@ describe('BottomNav', () => {
   })
 
   it('destaca rota ativa para worker', () => {
-    renderBottomNav('worker', '/jobs')
+    renderBottomNav('worker', '/my-jobs')
 
-    const activeLink = screen.getByLabelText('Vagas')
+    const activeLink = screen.getByLabelText('Convites')
     expect(activeLink.className).toContain('text-primary')
 
     const inactiveLink = screen.getByLabelText('Início')

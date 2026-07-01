@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Zap, Calendar, Clock, Globe, Send, Users, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Globe, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
@@ -36,11 +36,9 @@ export default function CompanyCreateJob() {
         has_lunch: false
     });
 
-    const [predictedCandidates, setPredictedCandidates] = useState(12);
-
     // Hooks de equipe e convites — carregados após criação do job
     const { teamMembers, loading: teamLoading } = useCompanyTeam();
-    const { invite, invitingWorkerId } = useCompanyInvites(createdJobId ?? '');
+    const { invite, invitingWorkerId, invites: sentInvites } = useCompanyInvites(createdJobId ?? '');
 
     useEffect(() => {
         // Fetch Categories
@@ -124,10 +122,6 @@ export default function CompanyCreateJob() {
         };
     };
 
-    const updatePrediction = () => {
-        setPredictedCandidates(prev => prev + Math.floor(Math.random() * 3));
-    };
-
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
 
@@ -169,7 +163,7 @@ export default function CompanyCreateJob() {
             if (isEditing) {
                 const { error } = await supabase.from('jobs').update(payload).eq('id', id);
                 if (error) throw error;
-                addToast('Vaga atualizada com sucesso!', 'success');
+                addToast('Turno atualizado com sucesso!', 'success');
                 navigate('/company/dashboard');
             } else {
                 // Criar turno — SEM reservar escrow (postpago, Slice 2)
@@ -182,7 +176,7 @@ export default function CompanyCreateJob() {
             }
         } catch (error: unknown) {
             logError('Error saving job:', error);
-            addToast(error instanceof Error ? error.message : 'Erro ao salvar vaga. Verifique os dados.', 'error');
+            addToast(error instanceof Error ? error.message : 'Erro ao salvar turno. Verifique os dados.', 'error');
         } finally {
             setLoading(false);
         }
@@ -196,7 +190,7 @@ export default function CompanyCreateJob() {
                     <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
                         <ArrowLeft size={16} strokeWidth={3} /> Voltar
                     </button>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">{isEditing ? 'Editar Vaga' : 'Criar Nova Vaga'}</h1>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter">{isEditing ? 'Editar Turno' : 'Criar Novo Turno'}</h1>
                 </div>
                 {/* Progress Indicator */}
                 <div className="flex items-center gap-2">
@@ -206,9 +200,7 @@ export default function CompanyCreateJob() {
                 </div>
             </div>
 
-            <div className="flex gap-8">
-                {/* Form Area */}
-                <div className="flex-1 bg-white border-2 border-black rounded-2xl p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]">
+            <div className="bg-white border-2 border-black rounded-2xl p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]">
 
                     {/* Step 1: Basic Info */}
                     {step === 1 && (
@@ -218,10 +210,10 @@ export default function CompanyCreateJob() {
                             </h2>
 
                             <div className="space-y-2">
-                                <label className="text-xs font-bold uppercase tracking-wide">Título da Vaga</label>
+                                <label className="text-xs font-bold uppercase tracking-wide">Título do Turno</label>
                                 <input
                                     type="text"
-                                    aria-label="Título da Vaga"
+                                    aria-label="Título do Turno"
                                     className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold text-lg placeholder:text-gray-300 transition-all"
                                     placeholder="Ex: Designer UI Senior"
                                     value={formData.title}
@@ -310,10 +302,7 @@ export default function CompanyCreateJob() {
                                     className="w-full h-24 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
                                     placeholder="- React Native&#10;- TypeScript&#10;- Figma"
                                     value={formData.requirements}
-                                    onChange={(e) => {
-                                        setFormData({ ...formData, requirements: e.target.value });
-                                        if (e.target.value.length % 10 === 0) updatePrediction();
-                                    }}
+                                    onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
                                 />
                             </div>
 
@@ -485,32 +474,12 @@ export default function CompanyCreateJob() {
                             disabled={loading}
                             className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50"
                         >
-                            {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Publicar Vaga') : 'Próximo'}
+                            {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Criar Turno') : 'Próximo'}
                             {!loading && step < 3 && <ChevronRight size={20} />}
                             {!loading && step === 3 && <Check size={20} />}
                         </button>
                     </div>
 
-                </div>
-
-                {/* Side Panel: Prediction */}
-                <div className="hidden lg:block w-72 space-y-4">
-                    <div className="bg-blue-600 text-white p-6 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] sticky top-8">
-                        <div className="flex items-start justify-between mb-4">
-                            <Zap className="fill-yellow-400 text-yellow-400" size={32} />
-                            <span className="bg-black/20 text-xs font-bold px-2 py-1 rounded">PREVISÃO</span>
-                        </div>
-                        <h3 className="text-4xl font-black mb-1 leading-none">{predictedCandidates + (formData.title.length > 5 ? 5 : 0)}</h3>
-                        <p className="text-blue-100 font-bold uppercase text-sm leading-tight mb-4">Candidatos Potenciais</p>
-                        <p className="text-xs opacity-80 border-t border-white/20 pt-4">
-                            Com base na sua descrição atual, prevemos um alto interesse.
-                        </p>
-                    </div>
-
-                    <div className="text-xs text-gray-400 text-center px-4">
-                        Dica: Detalhar os requisitos aumenta a qualidade dos candidatos em <span className="font-bold text-black">40%</span>.
-                    </div>
-                </div>
             </div>
 
             {/* Painel de convite pós-criação */}
@@ -519,17 +488,20 @@ export default function CompanyCreateJob() {
                     <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-2xl font-black uppercase tracking-tight">Convidar Freela</h2>
-                            <button
-                                onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
-                                aria-label="Fechar e ir para dashboard"
-                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
+                            {!teamLoading && teamMembers.length === 0 && (
+                                <button
+                                    onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                                    aria-label="Fechar e ir para dashboard"
+                                    className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            )}
                         </div>
 
                         <p className="text-sm font-bold text-gray-600 mb-5">
-                            Turno criado! Convide um freela do seu elenco para este turno.
+                            Turno criado! Para confirmar, convide pelo menos um freela do seu elenco — sem convite,
+                            o turno fica parado esperando.
                         </p>
 
                         {teamLoading && (
@@ -542,7 +514,13 @@ export default function CompanyCreateJob() {
                             <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Seu elenco está vazio.</p>
-                                <p className="text-xs mt-1">Adicione freelas em <strong>Meu Elenco</strong> primeiro.</p>
+                                <p className="text-xs mt-1">Adicione freelas em <strong>Meu Elenco</strong> antes de criar turnos.</p>
+                                <button
+                                    onClick={() => navigate('/company/team')}
+                                    className="mt-4 bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors"
+                                >
+                                    Ir para Meu Elenco
+                                </button>
                             </div>
                         )}
 
@@ -582,12 +560,20 @@ export default function CompanyCreateJob() {
                             </div>
                         )}
 
-                        <button
-                            onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
-                            className="w-full mt-5 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
-                        >
-                            Convidar depois
-                        </button>
+                        {!teamLoading && teamMembers.length > 0 && (
+                            sentInvites.length > 0 ? (
+                                <button
+                                    onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                                    className="w-full mt-5 bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
+                                >
+                                    Concluir — {sentInvites.length} convite{sentInvites.length > 1 ? 's' : ''} enviado{sentInvites.length > 1 ? 's' : ''}
+                                </button>
+                            ) : (
+                                <p className="text-center text-xs font-bold text-gray-400 mt-5">
+                                    Convide pelo menos 1 freela para concluir a criação do turno.
+                                </p>
+                            )
+                        )}
                     </div>
                 </div>
             )}
