@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "QA evaluator + lint/test/build",
+  "description": "Evaluator independente valida acceptance da spec; npm run lint + npm test + npm run build verdes.",
+  "activeForm": "Rodando QA e gates locais",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

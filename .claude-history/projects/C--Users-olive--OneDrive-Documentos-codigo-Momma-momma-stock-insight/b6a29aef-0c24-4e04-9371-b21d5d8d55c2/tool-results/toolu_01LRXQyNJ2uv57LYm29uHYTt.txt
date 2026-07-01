@@ -1,0 +1,125 @@
+src\App.tsx:62:import FreelancersPage from "./features/funcionarios/ui/Freelancers.page";
+src\App.tsx:653:                      path="/freelancers"
+src\App.tsx:657:                            <FreelancersPage />
+src\integrations\supabase\types.ts:6364:      freelancer_avulso_work_days: {
+src\integrations\supabase\types.ts:6406:            foreignKeyName: "fk_freelancer_avulso_work_days_loja_id"
+src\integrations\supabase\types.ts:6414:      freelancer_work_days: {
+src\integrations\supabase\types.ts:6419:          freelancer_id: string | null
+src\integrations\supabase\types.ts:6432:          freelancer_id?: string | null
+src\integrations\supabase\types.ts:6445:          freelancer_id?: string | null
+src\integrations\supabase\types.ts:6456:            foreignKeyName: "fk_freelancer_work_days_loja_id"
+src\integrations\supabase\types.ts:6463:            foreignKeyName: "freelancer_work_days_freelancer_id_fkey"
+src\integrations\supabase\types.ts:6464:            columns: ["freelancer_id"]
+src\integrations\supabase\types.ts:6466:            referencedRelation: "freelancers"
+src\integrations\supabase\types.ts:6471:      freelancers: {
+src\integrations\supabase\types.ts:6510:            foreignKeyName: "fk_freelancers_loja_id"
+src\integrations\supabase\types.ts:14385:      freelancer_stats: {
+src\integrations\supabase\types.ts:14390:          freelancer_id: string
+src\hooks\__tests__\auth-permissions-logic.test.ts:691:      'view_freelancers',
+src\features\dashboard\ui\menuItems.ts:71:  { title: 'Freelancers', url: '/freelancers', icon: UserCog },
+src\features\dashboard\ui\DashboardLayout.tsx:53:    location.pathname === '/freelancers' ||
+src\features\funcionarios\ui\WorkReportsModal.tsx:51:          .from('freelancer_work_days')
+src\features\funcionarios\ui\WorkReportsModal.tsx:52:          .select('id, freelancer_id, work_date, valor_diaria, loja_id, local_tipo, evento_nome, setor, observacao');
+src\features\funcionarios\ui\WorkReportsModal.tsx:56:        const freelancerIds = Array.from(new Set(fw.map((r: any) => r.freelancer_id).filter(Boolean)));
+src\features\funcionarios\ui\WorkReportsModal.tsx:58:        if (freelancerIds.length > 0) {
+src\features\funcionarios\ui\WorkReportsModal.tsx:60:            .from('freelancers')
+src\features\funcionarios\ui\WorkReportsModal.tsx:62:            .in('id', freelancerIds);
+src\features\funcionarios\ui\WorkReportsModal.tsx:70:          nome: nameMap[r.freelancer_id] || '—',
+src\features\funcionarios\ui\WorkReportsModal.tsx:81:          .from('freelancer_avulso_work_days')
+src\features\funcionarios\ui\Freelancers.page.tsx:30:interface Freelancer {
+src\features\funcionarios\ui\Freelancers.page.tsx:79:export default function FreelancersPage() {
+src\features\funcionarios\ui\Freelancers.page.tsx:83:  const [freelancers, setFreelancers] = useState<Freelancer[]>([]);
+src\features\funcionarios\ui\Freelancers.page.tsx:105:  const [editFreelancer,    setEditFreelancer]    = useState<Freelancer | null>(null);
+src\features\funcionarios\ui\Freelancers.page.tsx:106:  const [viewFreelancer,    setViewFreelancer]    = useState<Freelancer | null>(null);
+src\features\funcionarios\ui\Freelancers.page.tsx:107:  const [addWorkFreelancer, setAddWorkFreelancer] = useState<Freelancer | null>(null);
+src\features\funcionarios\ui\Freelancers.page.tsx:110:  const [novoFreelancer, setNovoFreelancer] = useState({ nome:'', cpf:'', valorDiaria:'', diasTrabalhados:[] as Date[], chavePix:'', lojaId:'' });
+src\features\funcionarios\ui\Freelancers.page.tsx:127:  const [selectedFreelancerIds, setSelectedFreelancerIds] = useState<string[]>([]);
+src\features\funcionarios\ui\Freelancers.page.tsx:166:  useEffect(()=>{ fetchFreelancers(); },[lojaFilter]); // eslint-disable-line
+src\features\funcionarios\ui\Freelancers.page.tsx:169:  const fetchFreelancers = async () => {
+src\features\funcionarios\ui\Freelancers.page.tsx:171:      const { data: rows, error } = await supabase.from('freelancers').select('*').order('nome');
+src\features\funcionarios\ui\Freelancers.page.tsx:176:        const {data:wr} = await supabase.from('freelancer_work_days').select('freelancer_id, work_date, valor_diaria, loja_id').in('freelancer_id', ids);
+src\features\funcionarios\ui\Freelancers.page.tsx:180:      for(const wr of workRows){ if(!byId[wr.freelancer_id]) byId[wr.freelancer_id]=[]; byId[wr.freelancer_id].push(wr); }
+src\features\funcionarios\ui\Freelancers.page.tsx:181:      setFreelancers((rows||[]).map((fr:any)=>{
+src\features\funcionarios\ui\Freelancers.page.tsx:188:    } catch(err){ console.error('[Freelancers]',err); }
+src\features\funcionarios\ui\Freelancers.page.tsx:193:      let q = supabase.from('freelancer_avulso_work_days').select('*');
+src\features\funcionarios\ui\Freelancers.page.tsx:201:    } catch(err){ console.error('[Freelancers]',err); }
+src\features\funcionarios\ui\Freelancers.page.tsx:205:  const handleAdicionarFreelancer = async () => {
+src\features\funcionarios\ui\Freelancers.page.tsx:206:    if (!novoFreelancer.nome||!novoFreelancer.cpf||!novoFreelancer.chavePix){ alert('Preencha nome, CPF e chave PIX'); return; }
+src\features\funcionarios\ui\Freelancers.page.tsx:210:      const {error} = await supabase.from('freelancers').insert({ nome:novoFreelancer.nome, cpf:novoFreelancer.cpf, valor_diaria:parseFloat(novoFreelancer.valorDiaria||'0'), chave_pix:novoFreelancer.chavePix, status:'ativo', loja_id:novoFreelancer.lojaId?Number(novoFreelancer.lojaId):null, created_by:user.id });
+src\features\funcionarios\ui\Freelancers.page.tsx:212:      setNovoFreelancer({nome:'',cpf:'',valorDiaria:'',diasTrabalhados:[],chavePix:'',lojaId:''});
+src\features\funcionarios\ui\Freelancers.page.tsx:214:      await fetchFreelancers();
+src\features\funcionarios\ui\Freelancers.page.tsx:218:  const handleUpdateFreelancer = async () => {
+src\features\funcionarios\ui\Freelancers.page.tsx:219:    if (!editFreelancer) return;
+src\features\funcionarios\ui\Freelancers.page.tsx:221:      const {error} = await supabase.from('freelancers').update({ nome:editFreelancer.nome, cpf:editFreelancer.cpf, valor_diaria:editFreelancer.valorDiaria, chave_pix:editFreelancer.chavePix, status:editFreelancer.status }).eq('id',editFreelancer.id);
+src\features\funcionarios\ui\Freelancers.page.tsx:223:      setEditFreelancer(null); await fetchFreelancers();
+src\features\funcionarios\ui\Freelancers.page.tsx:227:  const handleDeleteFreelancer = async (id:string) => {
+src\features\funcionarios\ui\Freelancers.page.tsx:229:      await supabase.from('freelancer_work_days').delete().eq('freelancer_id',id);
+src\features\funcionarios\ui\Freelancers.page.tsx:230:      const {error} = await supabase.from('freelancers').delete().eq('id',id);
+src\features\funcionarios\ui\Freelancers.page.tsx:232:      await fetchFreelancers();
+src\features\funcionarios\ui\Freelancers.page.tsx:237:    if (!addWorkFreelancer) return;
+src\features\funcionarios\ui\Freelancers.page.tsx:246:      const {error} = await supabase.from('freelancer_work_days').insert(workDias.map(d=>({ freelancer_id:addWorkFreelancer.id, work_date:format(d,'yyyy-MM-dd'), valor_diaria:valorNum, loja_id:workLocalTipo==='loja'?Number(workLojaId):null, local_tipo:workLocalTipo, evento_nome:workLocalTipo==='evento'?workEventoNome.trim():null, setor:workSetor, observacao:workObservacao?.trim()||null, created_by:user?.id })));
+src\features\funcionarios\ui\Freelancers.page.tsx:248:      resetWorkDialog(); await fetchFreelancers();
+src\features\funcionarios\ui\Freelancers.page.tsx:252:  const resetWorkDialog = () => { setAddWorkFreelancer(null); setWorkDias([]); setWorkValorDiaria(''); setWorkLojaId(''); setWorkLocalTipo('loja'); setWorkEventoNome(''); setWorkSetor(''); setWorkObservacao(''); };
+src\features\funcionarios\ui\Freelancers.page.tsx:256:    const sel   = selectedFreelancerIds.length ? freelancers.filter(f=>selectedFreelancerIds.includes(f.id)) : freelancersFiltrados;
+src\features\funcionarios\ui\Freelancers.page.tsx:269:    XLSX.writeFile(wb,`freelancers_${lbl}.xlsx`);
+src\features\funcionarios\ui\Freelancers.page.tsx:274:  const freelancersFiltrados = freelancers.filter(f =>
+src\features\funcionarios\ui\Freelancers.page.tsx:281:  const totalFreelancers  = freelancers.length;
+src\features\funcionarios\ui\Freelancers.page.tsx:282:  const freelancersAtivos = freelancers.filter(f=>f.status==='ativo').length;
+src\features\funcionarios\ui\Freelancers.page.tsx:283:  const totalPago   = freelancers.reduce((acc,f)=>acc+(f.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).reduce((s,d)=>s+d.valor,0),0);
+src\features\funcionarios\ui\Freelancers.page.tsx:284:  const mediaDias   = totalFreelancers ? freelancers.reduce((a,f)=>a+(f.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).length,0)/totalFreelancers : 0;
+src\features\funcionarios\ui\Freelancers.page.tsx:285:  const maisTrabalhou = freelancers.reduce((p,c)=>((p.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).length>=(c.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).length?p:c), freelancers[0]);
+src\features\funcionarios\ui\Freelancers.page.tsx:286:  const maisRecebeu   = freelancers.reduce((p,c)=>((p.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).reduce((s,d)=>s+d.valor,0)>=(c.diasDetalhados||[]).filter(d=>isWithinRange(d.data,rangeFrom,rangeTo)).reduce((s,d)=>s+d.valor,0)?p:c), freelancers[0]);
+src\features\funcionarios\ui\Freelancers.page.tsx:289:  const totalRecebidoMesAtual = (f:Freelancer) => { const n=new Date(); return (f.diasDetalhados||[]).filter(d=>d.data.getMonth()===n.getMonth()&&d.data.getFullYear()===n.getFullYear()).reduce((s,d)=>s+d.valor,0); };
+src\features\funcionarios\ui\Freelancers.page.tsx:299:    <PermissionBlur hasPermission={isAdmin()} moduleName="Freelancers">
+src\features\funcionarios\ui\Freelancers.page.tsx:332:                  Freelancers
+src\features\funcionarios\ui\Freelancers.page.tsx:351:                      <Plus className="h-4 w-4 mr-2" />Novo freelancer
+src\features\funcionarios\ui\Freelancers.page.tsx:356:                      <DialogTitle>Adicionar Freelancer</DialogTitle>
+src\features\funcionarios\ui\Freelancers.page.tsx:363:                          <Input className={INPUT_CLS} placeholder={ph} value={novoFreelancer[field]} onChange={e=>setNovoFreelancer({...novoFreelancer,[field]:e.target.value})} />
+src\features\funcionarios\ui\Freelancers.page.tsx:368:                        <Select value={novoFreelancer.lojaId} onValueChange={v=>setNovoFreelancer({...novoFreelancer,lojaId:v})}>
+src\features\funcionarios\ui\Freelancers.page.tsx:374:                    <DialogFooter><Button className={BTN_PRIMARY} onClick={handleAdicionarFreelancer}>Adicionar</Button></DialogFooter>
+src\features\funcionarios\ui\Freelancers.page.tsx:419:                    <p className="font-semibold text-[#2D362E] dark:text-[#E6DCCF]">Lista de Freelancers</p>
+src\features\funcionarios\ui\Freelancers.page.tsx:420:                    <p className="text-xs text-[#8C7B6D] dark:text-[#9BA59C] mt-0.5">{freelancersFiltrados.length} resultado(s)</p>
+src\features\funcionarios\ui\Freelancers.page.tsx:433:                      {freelancersFiltrados.length===0 ? (
+src\features\funcionarios\ui\Freelancers.page.tsx:437:                            <p className="font-medium">Nenhum freelancer encontrado</p>
+src\features\funcionarios\ui\Freelancers.page.tsx:441:                      ) : freelancersFiltrados.map(f=>(
+src\features\funcionarios\ui\Freelancers.page.tsx:454:                              <Button variant="ghost" size="icon" title="Registrar dias" onClick={()=>{ setAddWorkFreelancer(f); setWorkDias([]); setWorkValorDiaria(''); setWorkLojaId(''); }} className="h-8 w-8 rounded-xl hover:bg-[#57715B]/10 text-[#57715B]">
+src\features\funcionarios\ui\Freelancers.page.tsx:457:                              <Button variant="outline" size="sm" onClick={()=>setViewFreelancer(f)}  className={cn(BTN_OUTLINE,"h-8 text-xs px-3")}>Ver</Button>
+src\features\funcionarios\ui\Freelancers.page.tsx:458:                              <Button variant="outline" size="sm" onClick={()=>setEditFreelancer({...f})} className={cn(BTN_OUTLINE,"h-8 text-xs px-3")}>Editar</Button>
+src\features\funcionarios\ui\Freelancers.page.tsx:459:                              <Button variant="ghost"   size="sm" onClick={()=>handleDeleteFreelancer(f.id)} className="h-8 text-xs px-3 rounded-xl text-red-500 hover:bg-red-500/10">Excluir</Button>
+src\features\funcionarios\ui\Freelancers.page.tsx:555:                <KpiCard label="Total freelancers" value={totalFreelancers}             color="#57715B" sub={`${freelancersAtivos} ativos`} />
+src\features\funcionarios\ui\Freelancers.page.tsx:557:                <KpiCard label="Média de dias"      value={mediaDias.toFixed(1)}          color="#B49364" sub="por freelancer" />
+src\features\funcionarios\ui\Freelancers.page.tsx:558:                <KpiCard label="Ativos"             value={freelancersAtivos}             color="#57715B" sub={totalFreelancers?`${((freelancersAtivos/totalFreelancers)*100).toFixed(0)}% do total`:'—'} />
+src\features\funcionarios\ui\Freelancers.page.tsx:583:          <Dialog open={!!editFreelancer} onOpenChange={open=>!open&&setEditFreelancer(null)}>
+src\features\funcionarios\ui\Freelancers.page.tsx:585:              <DialogHeader><DialogTitle>Editar Freelancer</DialogTitle><DialogDescription>Atualize os dados cadastrais.</DialogDescription></DialogHeader>
+src\features\funcionarios\ui\Freelancers.page.tsx:586:              {editFreelancer && (
+src\features\funcionarios\ui\Freelancers.page.tsx:589:                    <div key={id} className="grid gap-2"><Label>{label}</Label><Input id={id} className={INPUT_CLS} value={editFreelancer[field]} onChange={e=>setEditFreelancer({...editFreelancer,[field]:e.target.value})} /></div>
+src\features\funcionarios\ui\Freelancers.page.tsx:591:                  <div className="grid gap-2"><Label>Valor Diária (R$)</Label><Input type="number" className={INPUT_CLS} value={editFreelancer.valorDiaria} onChange={e=>setEditFreelancer({...editFreelancer,valorDiaria:Number(e.target.value)})} /></div>
+src\features\funcionarios\ui\Freelancers.page.tsx:594:                    <Select value={editFreelancer.status} onValueChange={v=>setEditFreelancer({...editFreelancer,status:v as 'ativo'|'inativo'})}>
+src\features\funcionarios\ui\Freelancers.page.tsx:601:              <DialogFooter><Button variant="ghost" onClick={()=>setEditFreelancer(null)}>Cancelar</Button><Button className={BTN_PRIMARY} onClick={handleUpdateFreelancer}>Salvar</Button></DialogFooter>
+src\features\funcionarios\ui\Freelancers.page.tsx:606:          <Dialog open={!!viewFreelancer} onOpenChange={open=>!open&&setViewFreelancer(null)}>
+src\features\funcionarios\ui\Freelancers.page.tsx:608:              <DialogHeader><DialogTitle>Detalhes do Freelancer</DialogTitle><DialogDescription>Histórico completo de dias trabalhados.</DialogDescription></DialogHeader>
+src\features\funcionarios\ui\Freelancers.page.tsx:609:              {viewFreelancer && (
+src\features\funcionarios\ui\Freelancers.page.tsx:612:                    {[['Nome',viewFreelancer.nome],['CPF',viewFreelancer.cpf],['Diária',`R$ ${viewFreelancer.valorDiaria.toFixed(2)}`],['PIX',viewFreelancer.chavePix]].map(([l,v])=>(
+src\features\funcionarios\ui\Freelancers.page.tsx:618:                    <div className="bg-[#57715B]/5 rounded-2xl p-3"><p className="text-xs text-[#8C7B6D] uppercase tracking-wider mb-1">Recebido mês atual</p><p className="text-sm font-bold text-[#57715B]">R$ {totalRecebidoMesAtual(viewFreelancer).toFixed(2)}</p></div>
+src\features\funcionarios\ui\Freelancers.page.tsx:619:                    <div className="bg-[#57715B]/5 rounded-2xl p-3"><p className="text-xs text-[#8C7B6D] uppercase tracking-wider mb-1">Total histórico</p><p className="text-sm font-bold text-[#57715B]">R$ {(viewFreelancer.diasDetalhados||[]).reduce((s,d)=>s+d.valor,0).toFixed(2)}</p></div>
+src\features\funcionarios\ui\Freelancers.page.tsx:625:                        {(viewFreelancer.diasDetalhados||[]).sort((a,b)=>b.data.getTime()-a.data.getTime()).map((d,i)=>(
+src\features\funcionarios\ui\Freelancers.page.tsx:638:                <Button variant="ghost" onClick={()=>setViewFreelancer(null)}>Fechar</Button>
+src\features\funcionarios\ui\Freelancers.page.tsx:639:                {viewFreelancer && (
+src\features\funcionarios\ui\Freelancers.page.tsx:642:                    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{Nome:viewFreelancer.nome,CPF:viewFreelancer.cpf,Dias:(viewFreelancer.diasDetalhados||[]).length,'Total (R$)':+(viewFreelancer.diasDetalhados||[]).reduce((s,d)=>s+d.valor,0).toFixed(2),PIX:viewFreelancer.chavePix}]),'Resumo');
+src\features\funcionarios\ui\Freelancers.page.tsx:643:                    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet((viewFreelancer.diasDetalhados||[]).map(d=>({Data:format(d.data,'yyyy-MM-dd'),Loja:d.lojaId!=null?(storesMap[d.lojaId]||''):'','Valor (R$)':+d.valor.toFixed(2)}))),'Detalhado');
+src\features\funcionarios\ui\Freelancers.page.tsx:644:                    XLSX.writeFile(wb,`freelancer_${viewFreelancer.nome.replace(/\s+/g,'_')}.xlsx`);
+src\features\funcionarios\ui\Freelancers.page.tsx:654:          <Dialog open={!!addWorkFreelancer} onOpenChange={open=>{if(!open)resetWorkDialog();}}>
+src\features\funcionarios\ui\Freelancers.page.tsx:656:              <DialogHeader><DialogTitle>Registrar Trabalho</DialogTitle><DialogDescription>{addWorkFreelancer?`Dias e diária para ${addWorkFreelancer.nome}`:''}</DialogDescription></DialogHeader>
+src\features\funcionarios\ui\Freelancers.page.tsx:658:                {addWorkFreelancer && (
+src\features\funcionarios\ui\Freelancers.page.tsx:660:                    <span className="font-medium">CPF:</span> {addWorkFreelancer.cpf} · <span className="font-medium">Diária sugerida:</span> R$ {addWorkFreelancer.valorDiaria.toFixed(2)}
+src\features\funcionarios\ui\Freelancers.page.tsx:688:                <div className="grid gap-2"><Label>Valor da Diária (R$)</Label><Input type="number" className={INPUT_CLS} value={workValorDiaria} onChange={e=>setWorkValorDiaria(e.target.value)} placeholder={addWorkFreelancer?.valorDiaria.toFixed(2)??' 150.00'} /></div>
+src\features\funcionarios\ui\Freelancers.page.tsx:752:                    const {error}=await supabase.from('freelancer_avulso_work_days').insert({ nome:novoAvulso.nome.trim(), valor_diaria:val, work_date:novoAvulso.workDate, loja_id:novoAvulso.lojaId?Number(novoAvulso.lojaId):null, local_tipo:novoAvulso.localTipo, evento_nome:novoAvulso.eventoNome||null, setor:novoAvulso.setor||null, observacao:novoAvulso.observacao||null, created_by:user?.id||null });
+src\features\funcionarios\ui\Freelancers.page.tsx:766:              <DialogHeader><DialogTitle>Exportar para Excel</DialogTitle><DialogDescription>Selecione freelancers, período e colunas.</DialogDescription></DialogHeader>
+src\features\funcionarios\ui\Freelancers.page.tsx:769:                  <Label>Freelancers</Label>
+src\features\funcionarios\ui\Freelancers.page.tsx:771:                    <Checkbox id="selAll" checked={selectedFreelancerIds.length===freelancersFiltrados.length&&freelancersFiltrados.length>0} onCheckedChange={(c:boolean)=>setSelectedFreelancerIds(c?freelancersFiltrados.map(f=>f.id):[])} />
+src\features\funcionarios\ui\Freelancers.page.tsx:772:                    <Label htmlFor="selAll" className="text-sm cursor-pointer">Selecionar todos ({freelancersFiltrados.length})</Label>
+src\features\funcionarios\ui\Freelancers.page.tsx:775:                    {freelancersFiltrados.map(f=>(
+src\features\funcionarios\ui\Freelancers.page.tsx:777:                        <Checkbox checked={selectedFreelancerIds.includes(f.id)} onCheckedChange={()=>setSelectedFreelancerIds(p=>p.includes(f.id)?p.filter(x=>x!==f.id):[...p,f.id])} />
+src\features\mia\lib\router.ts:28:  { pattern: '/freelancers', domain: 'FINANCE', description: 'Freelancers' },
+src\features\mia\lib\__tests__\router.test.ts:58:  it('deve retornar FINANCE para /freelancers', () => {
+src\features\mia\lib\__tests__\router.test.ts:59:    expect(getDomainForRoute('/freelancers')).toBe('FINANCE');

@@ -1,0 +1,1292 @@
+Error executing tool run_shell_command: Tool "run_shell_command" not found. Did you mean one of: "grep_search", "invoke_agent", "read_file"?
+Error executing tool run_shell_command: Tool "run_shell_command" not found. Did you mean one of: "grep_search", "invoke_agent", "read_file"?
+Vou reescrever os arquivos do configurador de CMV para aplicar as regras de design atualizadas, desacoplar os componentes seguindo o padrão de fichas técnicas e remover as lógicas legado de insumos.
+
+// FILE: src/features/financeiro/ui/cmv/CmvNodePalette.tsx
+```tsx
+import { useState, useMemo } from 'react';
+import { Package, DollarSign } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/shared/ui/command';
+import { ScrollArea } from '@/shared/ui/scroll-area';
+import { Input } from '@/shared/ui/input';
+import { Button } from '@/shared/ui/button';
+import { cn } from '@/shared/lib/utils';
+
+interface CmvNodePaletteProps {
+  embalagens: Array<{ id: number; nome: string; preco_custo: number | null; unidade_medida: string | null }>;
+  onAddEmbalagem: (embalagemId: number) => Promise<void>;
+  onAddAvulso: (nome: string, valor: number) => Promise<void>;
+}
+
+interface PaletteButtonProps {
+  icon: React.ReactNode;
+  label: string;
+  color: "blue" | "orange";
+  onClick?: () => void;
+  active?: boolean;
+}
+
+function PaletteButton({ icon, label, color, onClick, active }: PaletteButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1 w-[60px] h-[60px] rounded-xl transition-all duration-200 group relative",
+        "bg-white/60 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border",
+        active ? "border-[#57715B]/30 shadow-sm" : "border-transparent",
+        color === "blue" ? "text-blue-500 hover:text-blue-600" : "text-orange-500 hover:text-orange-600"
+      )}
+    >
+      <div className="absolute inset-0 rounded-xl bg-current opacity-0 group-hover:opacity-5 transition-opacity" />
+      {icon}
+      <span className="text-[9px] font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+const fmt = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return 'R$ 0,00';
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+export function CmvNodePalette({ embalagens, onAddEmbalagem, onAddAvulso }: CmvNodePaletteProps) {
+  const [embOpen, setEmbOpen] = useState(false);
+  const [embSearch, setEmbSearch] = useState('');
+  
+  const [avulsoOpen, setAvulsoOpen] = useState(false);
+  const [avulsoNome, setAvulsoNome] = useState('');
+  const [avulsoValor, setAvulsoValor] = useState('');
+
+  const filteredEmbalagens = useMemo(() => {
+    if (!embSearch) return embalagens;
+    const q = embSearch.toLowerCase();
+    return embalagens.filter(e => e.nome.toLowerCase().includes(q));
+  }, [embalagens, embSearch]);
+
+  const handleAddEmbalagem = async (id: number) => {
+    setEmbOpen(false);
+    setEmbSearch('');
+    await onAddEmbalagem(id);
+  };
+
+  const handleConfirmAvulso = async () => {
+    if (!avulsoNome.trim()) return;
+    const valor = parseFloat(avulsoValor) || 0;
+    setAvulsoOpen(false);
+    setAvulsoNome('');
+    setAvulsoValor('');
+    await onAddAvulso(avulsoNome, valor);
+  };
+
+  return (
+    <div className="absolute top-20 left-3 z-20 flex flex-col gap-1.5 p-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl rounded-2xl animate-in slide-in-from-left-4 duration-300">
+      <div className="text-[8px] font-bold uppercase tracking-wider text-[#57715B] text-center pb-1 border-b border-[#57715B]/10 mb-1.5">
+        Adicionar
+      </div>
+
+      <Popover open={embOpen} onOpenChange={setEmbOpen}>
+        <PopoverTrigger asChild>
+          <div>
+            <PaletteButton
+              icon={<Package size={20} />}
+              label="Embalagem"
+              color="blue"
+              active={embOpen}
+            />
+          </div>
+        </PopoverTrigger>
+        <PopoverContent side="right" align="start" className="w-[min(300px,calc(100vw-2rem))] p-0 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-white/40 dark:border-white/10 rounded-xl ml-2 shadow-2xl">
+          <Command className="bg-transparent">
+            <CommandInput 
+              placeholder="Buscar embalagem..." 
+              value={embSearch} 
+              onValueChange={setEmbSearch} 
+              className="border-none focus:ring-0"
+            />
+            <CommandList>
+              <CommandEmpty>Nenhuma embalagem encontrada.</CommandEmpty>
+              <CommandGroup>
+                <ScrollArea className="h-52">
+                  {filteredEmbalagens.map((emb) => (
+                    <CommandItem
+                      key={emb.id}
+                      value={String(emb.id)}
+                      onSelect={() => handleAddEmbalagem(emb.id)}
+                      className="cursor-pointer"
+                    >
+                      <div className="flex flex-col min-w-0 py-1">
+                        <span className="text-sm font-medium truncate">{emb.nome}</span>
+                        {emb.preco_custo !== null && (
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {fmt(emb.preco_custo)}/{emb.unidade_medida ?? 'un'}
+                          </span>
+                        )}
+                      </div>
+                    </CommandItem>
+                  ))}
+                </ScrollArea>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      <Popover open={avulsoOpen} onOpenChange={setAvulsoOpen}>
+        <PopoverTrigger asChild>
+          <div>
+            <PaletteButton
+              icon={<DollarSign size={20} />}
+              label="Avulso"
+              color="orange"
+              active={avulsoOpen}
+            />
+          </div>
+        </PopoverTrigger>
+        <PopoverContent side="right" align="start" className="w-[min(280px,calc(100vw-2rem))] p-3 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-white/40 dark:border-white/10 rounded-xl ml-2 shadow-2xl flex flex-col gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Nome do custo</label>
+            <Input 
+              placeholder="Ex: Frete, Energia..." 
+              value={avulsoNome}
+              onChange={e => setAvulsoNome(e.target.value)}
+              className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl h-9"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Valor unitário (R$)</label>
+            <Input 
+              type="number"
+              step="0.01"
+              placeholder="0,00" 
+              value={avulsoValor}
+              onChange={e => setAvulsoValor(e.target.value)}
+              className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl h-9"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirmAvulso();
+              }}
+            />
+          </div>
+          <Button 
+            className="w-full bg-[#57715B] hover:bg-[#465b49] text-white rounded-xl mt-1 h-9" 
+            onClick={handleConfirmAvulso}
+            disabled={!avulsoNome.trim()}
+          >
+            Adicionar
+          </Button>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+```
+
+// FILE: src/features/financeiro/ui/cmv/CmvAtrelarNFDialog.tsx
+```tsx
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent } from '@/shared/ui/dialog';
+import { Input } from '@/shared/ui/input';
+import { Button } from '@/shared/ui/button';
+import { Search, Receipt, ChevronRight, Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '@/shared/lib/utils';
+
+interface CmvAtrelarNFDialogProps {
+  open: boolean;
+  cmvItemId: number | null;
+  embalagemNome: string | null;
+  currentNfItemId: number | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+interface NfData {
+  id: number;
+  fornecedor: string | null;
+  numero_nota: string | null;
+  valor_total: number | null;
+  data_nota: string | null;
+}
+
+interface NfItemData {
+  id: number;
+  nota_id: number;
+  nome_produto: string | null;
+  quantidade: number | null;
+  valor_unitario: number | null;
+  subtotal: number | null;
+  insumo_id: number | null;
+}
+
+const fmt = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return 'R$ 0,00';
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+const fmtDate = (d: string | null | undefined): string => {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+    });
+  } catch {
+    return d;
+  }
+};
+
+export function CmvAtrelarNFDialog({ open, cmvItemId, embalagemNome, currentNfItemId, onClose, onSaved }: CmvAtrelarNFDialogProps) {
+  const [step, setStep] = useState<'pickNF' | 'pickItem'>('pickNF');
+  const [nfs, setNfs] = useState<NfData[]>([]);
+  const [items, setItems] = useState<NfItemData[]>([]);
+  const [pickedNF, setPickedNF] = useState<NfData | null>(null);
+  const [busca, setBusca] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setStep('pickNF');
+      setPickedNF(null);
+      setBusca('');
+      loadNFs();
+    }
+  }, [open]);
+
+  const loadNFs = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('notas_fiscais')
+      .select('id, fornecedor, numero_nota, valor_total, data_nota')
+      .order('data_nota', { ascending: false })
+      .limit(80);
+      
+    if (!error && data) {
+      setNfs(data);
+    }
+    setLoading(false);
+  };
+
+  const loadItems = async (notaId: number) => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('itens_nota_fiscal')
+      .select('id, nota_id, nome_produto, quantidade, valor_unitario, subtotal, insumo_id')
+      .eq('nota_id', notaId)
+      .order('nome_produto');
+
+    if (!error && data) {
+      setItems(data);
+    }
+    setLoading(false);
+  };
+
+  const handlePickNF = (nf: NfData) => {
+    setPickedNF(nf);
+    setBusca('');
+    setStep('pickItem');
+    loadItems(nf.id);
+  };
+
+  const handlePickItem = async (item: NfItemData) => {
+    if (!cmvItemId) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from('cmv_itens')
+      .update({ 
+        nf_item_id: item.id,
+        preco_unitario_esboco: null
+      })
+      .eq('id', cmvItemId);
+
+    setSaving(false);
+    if (error) {
+      toast.error(`Erro ao atrelar: ${error.message}`);
+    } else {
+      toast.success('Nota atrelada com sucesso!');
+      onSaved();
+      onClose();
+    }
+  };
+
+  const filteredNFs = useMemo(() => {
+    if (!busca) return nfs;
+    const q = busca.toLowerCase();
+    return nfs.filter(n => 
+      n.fornecedor?.toLowerCase().includes(q) || 
+      n.numero_nota?.toLowerCase().includes(q)
+    );
+  }, [nfs, busca]);
+
+  const filteredItems = useMemo(() => {
+    if (!busca) return items;
+    const q = busca.toLowerCase();
+    return items.filter(i => i.nome_produto?.toLowerCase().includes(q));
+  }, [items, busca]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[82vh] flex flex-col bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border-white/40 dark:border-white/10 rounded-2xl p-0 gap-0 overflow-hidden">
+        
+        <div className="p-4 border-b border-[#57715B]/10 flex flex-col gap-2 shrink-0">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {step === 'pickItem' && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 px-2 text-xs" 
+                  onClick={() => { setStep('pickNF'); setBusca(''); }}
+                >
+                  Outra NF
+                </Button>
+                <ChevronRight size={14} />
+              </>
+            )}
+            <span className="font-medium text-[#2D362E] dark:text-[#E6DCCF] truncate">
+              Atrelar NF para {embalagemNome || 'Embalagem'}
+            </span>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+            <Input 
+              autoFocus
+              className="pl-9 bg-white/60 dark:bg-black/20 border-[#57715B]/15 rounded-xl h-10"
+              placeholder={step === 'pickNF' ? "Buscar por fornecedor ou número..." : "Buscar item na nota..."}
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 bg-slate-50/50 dark:bg-black/10">
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-6 w-6 animate-spin text-[#57715B]" />
+            </div>
+          ) : step === 'pickNF' ? (
+            <div className="flex flex-col divide-y divide-[#57715B]/10">
+              {filteredNFs.map(nf => (
+                <button
+                  key={nf.id}
+                  onClick={() => handlePickNF(nf)}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-[#57715B]/5 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-[#57715B]/10 flex items-center justify-center text-[#57715B]">
+                      <Receipt size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#2D362E] dark:text-[#E6DCCF]">{nf.fornecedor || 'Fornecedor'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Nota: {nf.numero_nota} • {fmtDate(nf.data_nota)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold tabular-nums text-[#57715B]">{fmt(nf.valor_total)}</p>
+                  </div>
+                </button>
+              ))}
+              {filteredNFs.length === 0 && (
+                <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma nota encontrada.</div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {filteredItems.map(item => {
+                const isAtrelado = item.insumo_id !== null;
+                const isCurrent = item.id === currentNfItemId;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handlePickItem(item)}
+                    disabled={saving}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl transition-all text-left border",
+                      isCurrent ? "border-[#57715B] bg-[#57715B]/10" :
+                      isAtrelado ? "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20" : 
+                      "border-transparent hover:bg-[#57715B]/5"
+                    )}
+                  >
+                    <div className="flex-1 min-w-0 pr-4">
+                      <p className="text-sm font-medium truncate mb-1">
+                        {item.nome_produto}
+                      </p>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="bg-white/60 dark:bg-black/20 px-2 py-0.5 rounded-md border border-[#57715B]/10">
+                          Qtd: {item.quantidade}
+                        </span>
+                        <span>Unit: {fmt(item.valor_unitario)}</span>
+                        {isAtrelado && !isCurrent && (
+                          <span className="text-emerald-600 font-medium">Já atrelado no sistema</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-[#57715B] tabular-nums">{fmt(item.subtotal)}</p>
+                    </div>
+                  </button>
+                )
+              })}
+              {filteredItems.length === 0 && (
+                <div className="p-8 text-center text-sm text-muted-foreground">Nenhum item nesta nota.</div>
+              )}
+            </div>
+          )}
+        </div>
+
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+// FILE: src/features/financeiro/ui/cmv/CmvDetailPanel.tsx
+```tsx
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { X, Package, DollarSign, ChefHat, Calculator, Receipt, Loader2, Save, Trash2, Link2 } from 'lucide-react';
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
+import { Label } from '@/shared/ui/label';
+import { CmvAtrelarNFDialog } from './CmvAtrelarNFDialog';
+import type { RawCmvItem } from '@/features/financeiro/model/useCmvGraph';
+
+interface CmvDetailPanelProps {
+  selectedNodeId: string | null;
+  cmv: { id: number; nome: string; status: string; custo_calculado: number | null } | null;
+  fichaData: { id: number; nome: string; custo_calculado: number | null; rendimento_quantidade: number; rendimento_unidade: string; status: string } | null;
+  items: RawCmvItem[];
+  custoFichaUnitario: number;
+  custoEmbalagens: number;
+  custoAvulsos: number;
+  custoTotal: number;
+  nfEmbalagemItems: Array<{ id: number; nota_id: number; nome_produto: string | null; valor_unitario: number | null; unidade: string | null; fornecedor: string | null; numero_nota: string | null; data_nota: string | null }>;
+  onClose: () => void;
+  onRefetch: () => Promise<void>;
+}
+
+const fmt = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return 'R$ 0,00';
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+const fmtDate = (d: string | null | undefined): string => {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+    });
+  } catch {
+    return d;
+  }
+};
+
+export function CmvDetailPanel({ 
+  selectedNodeId, cmv, fichaData, items, custoFichaUnitario, custoEmbalagens, custoAvulsos, custoTotal, nfEmbalagemItems, onClose, onRefetch 
+}: CmvDetailPanelProps) {
+  const [atrelarNFOpen, setAtrelarNFOpen] = useState(false);
+  const [editQty, setEditQty] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editPreco, setEditPreco] = useState('');
+  const [editObs, setEditObs] = useState('');
+  const [editUnidadesPorEmbalagem, setEditUnidadesPorEmbalagem] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const parsed = selectedNodeId ? selectedNodeId.split('_') : null;
+  const kind = parsed ? parsed[0] : null;
+  const id = parsed ? Number(parsed[1]) : null;
+
+  const selectedItemData = kind === 'item' ? items.find(i => i.id === id) : null;
+
+  useEffect(() => {
+    if (selectedItemData) {
+      setEditQty(String(selectedItemData.quantidade));
+      setEditUnit(selectedItemData.unidade);
+      setEditObs(selectedItemData.observacao ?? '');
+      setEditPreco(selectedItemData.preco_unitario_esboco !== null ? String(selectedItemData.preco_unitario_esboco) : '');
+      setEditUnidadesPorEmbalagem(selectedItemData.unidades_por_embalagem ? String(selectedItemData.unidades_por_embalagem) : '');
+    }
+  }, [selectedItemData]);
+
+  if (!selectedNodeId) return null;
+
+  const handleSaveItem = async () => {
+    if (!selectedItemData) return;
+    setIsSaving(true);
+    
+    const updatePayload: Record<string, unknown> = {
+      quantidade: parseFloat(editQty) || selectedItemData.quantidade,
+      unidade: editUnit,
+    };
+
+    if (selectedItemData.tipo === 'embalagem') {
+      updatePayload.unidades_por_embalagem = editUnidadesPorEmbalagem ? parseFloat(editUnidadesPorEmbalagem) : null;
+      if (!selectedItemData.nf_item_id) {
+        updatePayload.preco_unitario_esboco = editPreco ? parseFloat(editPreco) : null;
+      }
+    } else {
+      updatePayload.preco_unitario_esboco = editPreco ? parseFloat(editPreco) : null;
+      updatePayload.observacao = editObs.trim() || null;
+    }
+
+    const { error } = await supabase.from('cmv_itens').update(updatePayload).eq('id', selectedItemData.id);
+
+    if (error) {
+      toast.error(`Erro ao salvar: ${error.message}`);
+    } else {
+      toast.success('Salvo!');
+      await onRefetch();
+    }
+    setIsSaving(false);
+  };
+
+  const handleDeleteItem = async () => {
+    if (!selectedItemData) return;
+    if (!window.confirm("Deseja realmente excluir este item?")) return;
+    
+    setIsDeleting(true);
+    const { error } = await supabase.from('cmv_itens').delete().eq('id', selectedItemData.id);
+    
+    if (error) {
+      toast.error(`Erro ao excluir: ${error.message}`);
+    } else {
+      toast.success('Excluído!');
+      await onRefetch();
+      onClose();
+    }
+    setIsDeleting(false);
+  };
+
+  const handleUsarFixo = async () => {
+    if (!selectedItemData) return;
+    setIsSaving(true);
+    const { error } = await supabase.from('cmv_itens').update({ nf_item_id: null, preco_unitario_esboco: 0 }).eq('id', selectedItemData.id);
+    if (!error) {
+      toast.success('Modo alterado para Valor Fixo');
+      await onRefetch();
+    }
+    setIsSaving(false);
+  };
+
+  return (
+    <>
+      <aside className="absolute top-14 right-0 bottom-0 w-full sm:w-[420px] z-20 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-l border-[#57715B]/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <header className="sticky top-0 bg-transparent border-b border-[#57715B]/10 p-4 flex items-center justify-between z-10">
+          <h2 className="text-sm font-bold text-[#2D362E] dark:text-[#E6DCCF] flex items-center gap-2">
+            {kind === 'cmv' && <><Calculator size={16} className="text-[#57715B]"/> CMV Central</>}
+            {kind === 'ficha' && <><ChefHat size={16} className="text-amber-500"/> Ficha Base</>}
+            {kind === 'nf' && <><Receipt size={16} className="text-cyan-500"/> Nota Fiscal</>}
+            {kind === 'item' && selectedItemData?.tipo === 'embalagem' && <><Package size={16} className="text-blue-500"/> Detalhe da Embalagem</>}
+            {kind === 'item' && selectedItemData?.tipo === 'outro' && <><DollarSign size={16} className="text-orange-500"/> Custo Avulso</>}
+          </h2>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-[#57715B]/10" onClick={onClose}>
+            <X size={16} />
+          </Button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          
+          {kind === 'cmv' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-3 border border-[#57715B]/10">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Ficha Unitária</p>
+                <p className="text-lg font-bold tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoFichaUnitario)}</p>
+              </div>
+              <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-3 border border-[#57715B]/10">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Embalagens</p>
+                <p className="text-lg font-bold tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoEmbalagens)}</p>
+              </div>
+              <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-3 border border-[#57715B]/10">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Avulsos</p>
+                <p className="text-lg font-bold tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoAvulsos)}</p>
+              </div>
+              <div className="bg-[#57715B]/10 rounded-2xl p-3 border border-[#57715B]/20">
+                <p className="text-[10px] uppercase tracking-wider text-[#57715B] font-bold mb-1">Total CMV</p>
+                <p className="text-xl font-bold tabular-nums text-[#57715B]">{fmt(custoTotal)}</p>
+              </div>
+            </div>
+          )}
+
+          {kind === 'ficha' && fichaData && (
+            <div className="space-y-4">
+              <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-4 border border-[#57715B]/10 flex flex-col items-center text-center">
+                <p className="text-sm font-semibold mb-2">{fichaData.nome}</p>
+                <span className="text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-0.5 rounded-full text-xs font-medium mb-4">
+                  Rendimento: {fichaData.rendimento_quantidade} {fichaData.rendimento_unidade}
+                </span>
+                <p className="text-xs text-muted-foreground">Custo total da receita</p>
+                <p className="text-2xl font-bold text-[#2D362E] dark:text-[#E6DCCF] tabular-nums">{fmt(fichaData.custo_calculado)}</p>
+                <div className="w-full border-t border-[#57715B]/10 my-3" />
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Custo por unidade</p>
+                <p className="text-emerald-600 font-bold text-xl tabular-nums mt-1">
+                  {fmt((fichaData.custo_calculado ?? 0) / (fichaData.rendimento_quantidade || 1))} <span className="text-sm font-normal">/ {fichaData.rendimento_unidade}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {kind === 'nf' && (
+            <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-4 border border-cyan-500/20">
+              <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 mb-2">
+                <Receipt size={18} />
+                <span className="font-bold text-sm">Dados da Nota</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Nota agrupadora para exibição no gráfico.</p>
+            </div>
+          )}
+
+          {kind === 'item' && selectedItemData && (
+            <div className="space-y-5">
+              
+              {selectedItemData.tipo === 'embalagem' ? (
+                <>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Produto Vinculado</Label>
+                    <p className="text-sm font-bold text-[#2D362E] dark:text-[#E6DCCF] mt-1 bg-white/60 dark:bg-black/20 p-2.5 rounded-xl border border-[#57715B]/10">
+                      {selectedItemData.produtoMaster?.nome ?? selectedItemData.insumo?.nome ?? 'Embalagem'}
+                    </p>
+                  </div>
+
+                  <div className="bg-white/60 dark:bg-[#1A1A1A]/60 rounded-2xl p-3 border border-[#57715B]/15">
+                    <Label className="text-xs text-muted-foreground block mb-2">Origem do Preço</Label>
+                    {selectedItemData.nf_item_id && selectedItemData.nfItem ? (
+                      <div className="space-y-3">
+                        <div className="bg-[#57715B]/5 border border-[#57715B]/20 p-3 rounded-xl">
+                          <p className="text-xs font-medium text-[#2D362E] dark:text-[#E6DCCF] truncate">{selectedItemData.nfItem.nome_produto}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {selectedItemData.nfItem.fornecedor} • NF {selectedItemData.nfItem.numero_nota} • {fmtDate(selectedItemData.nfItem.data_nota)}
+                          </p>
+                          <p className="text-sm font-bold text-[#57715B] tabular-nums mt-1">{fmt(selectedItemData.nfItem.valor_unitario)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-xl bg-white/60 text-[#57715B] border-[#57715B]/20 hover:bg-[#57715B]/10" onClick={() => setAtrelarNFOpen(true)}>
+                            Trocar NF
+                          </Button>
+                          <Button variant="ghost" size="sm" className="flex-1 h-8 text-xs rounded-xl text-orange-600 hover:bg-orange-50 hover:text-orange-700" onClick={handleUsarFixo}>
+                            Usar valor fixo
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-md font-bold uppercase">Valor Fixo</span>
+                        </div>
+                        <div>
+                          <Input type="number" step="0.01" className="bg-white/80 dark:bg-black/40 rounded-xl" value={editPreco} onChange={e => setEditPreco(e.target.value)} placeholder="0,00" />
+                        </div>
+                        <Button variant="outline" size="sm" className="w-full h-8 text-xs rounded-xl border-[#57715B]/20 hover:bg-[#57715B]/10 text-[#57715B]" onClick={() => setAtrelarNFOpen(true)}>
+                          <Link2 size={14} className="mr-1.5" /> Atrelar NF
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">Unidades por embalagem (fechada)</Label>
+                    <Input type="number" className="bg-white/60 dark:bg-black/20 rounded-xl border-[#57715B]/15" value={editUnidadesPorEmbalagem} onChange={e => setEditUnidadesPorEmbalagem(e.target.value)} placeholder="Ex: 100" />
+                    <p className="text-[10px] text-muted-foreground mt-1 px-1">Quantidade de itens que vêm no pacote comprado.</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">Nome do custo</Label>
+                    <Input className="bg-white/60 dark:bg-black/20 rounded-xl border-[#57715B]/15" value={editObs} onChange={e => setEditObs(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">Valor Unitário Fixo</Label>
+                    <Input type="number" step="0.01" className="bg-white/60 dark:bg-black/20 rounded-xl border-[#57715B]/15" value={editPreco} onChange={e => setEditPreco(e.target.value)} placeholder="0,00" />
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground block mb-1">Quantidade a usar</Label>
+                  <Input type="number" className="bg-white/60 dark:bg-black/20 rounded-xl border-[#57715B]/15" value={editQty} onChange={e => setEditQty(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground block mb-1">Unidade</Label>
+                  <Input className="bg-white/60 dark:bg-black/20 rounded-xl border-[#57715B]/15" value={editUnit} onChange={e => setEditUnit(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[#57715B]/10 flex items-center justify-between">
+                <span className="text-sm font-semibold text-muted-foreground">Custo no CMV</span>
+                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-xl">
+                  {fmt(selectedItemData.custo_calculado)}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-6">
+                <Button variant="ghost" className="flex-1 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700" onClick={handleDeleteItem} disabled={isDeleting || isSaving}>
+                  {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} className="mr-2" />} Excluir
+                </Button>
+                <Button className="flex-1 rounded-xl bg-[#57715B] hover:bg-[#465b49] text-white" onClick={handleSaveItem} disabled={isSaving || isDeleting}>
+                  {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} className="mr-2" />} Salvar
+                </Button>
+              </div>
+
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {selectedItemData && selectedItemData.tipo === 'embalagem' && (
+        <CmvAtrelarNFDialog
+          open={atrelarNFOpen}
+          cmvItemId={selectedItemData.id}
+          embalagemNome={selectedItemData.produtoMaster?.nome ?? selectedItemData.insumo?.nome ?? 'Embalagem'}
+          currentNfItemId={selectedItemData.nf_item_id}
+          onClose={() => setAtrelarNFOpen(false)}
+          onSaved={onRefetch}
+        />
+      )}
+    </>
+  );
+}
+```
+
+// FILE: src/features/financeiro/ui/cmv/CmvBottomToolbar.tsx
+```tsx
+import { useState } from 'react';
+import { useReactFlow } from '@xyflow/react';
+import { ZoomIn, ZoomOut, Maximize2, Crosshair, LayoutGrid, Lock, Unlock, RotateCcw } from 'lucide-react';
+import { layoutGraph } from '@/components/producao/configurador/layout';
+import { cn } from '@/shared/lib/utils';
+
+interface CmvBottomToolbarProps {
+  onSavePosition?: (nodeId: string, x: number, y: number) => Promise<void>;
+}
+
+export function CmvBottomToolbar({ onSavePosition }: CmvBottomToolbarProps) {
+  const { zoomIn, zoomOut, fitView, setCenter, getNodes, getEdges, setNodes } = useReactFlow();
+  const [isLocked, setIsLocked] = useState(false);
+  const [isOrganizing, setIsOrganizing] = useState(false);
+
+  const handleLayout = () => {
+    setIsOrganizing(true);
+    const nodes = getNodes();
+    const edges = getEdges();
+    const laid = layoutGraph(nodes, edges, 'LR');
+    
+    setNodes(laid);
+    
+    if (onSavePosition) {
+      laid.forEach(n => {
+        onSavePosition(n.id, n.position.x, n.position.y);
+      });
+    }
+
+    setTimeout(() => {
+      fitView({ padding: 0.12, duration: 600 });
+      setIsOrganizing(false);
+    }, 100);
+  };
+
+  const toggleLock = () => {
+    const newState = !isLocked;
+    setIsLocked(newState);
+    setNodes(nds => nds.map(n => ({ ...n, draggable: !newState })));
+  };
+
+  const ToolbarBtn = ({ icon, title, onClick, active }: { icon: React.ReactNode, title: string, onClick: () => void, active?: boolean }) => (
+    <button
+      title={title}
+      onClick={onClick}
+      className={cn(
+        "h-9 w-9 rounded-lg flex items-center justify-center transition-all",
+        active 
+          ? "bg-[#57715B] text-white shadow-md hover:bg-[#465b49]" 
+          : "text-slate-600 dark:text-slate-300 hover:bg-[#57715B]/10 hover:text-[#57715B]"
+      )}
+    >
+      {icon}
+    </button>
+  );
+
+  const Divider = () => <div className="w-px h-6 bg-[#57715B]/10 mx-0.5" />;
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-2xl px-2 py-1.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <ToolbarBtn icon={<ZoomIn size={16} />} title="Zoom +" onClick={() => zoomIn({ duration: 300 })} />
+      <ToolbarBtn icon={<ZoomOut size={16} />} title="Zoom -" onClick={() => zoomOut({ duration: 300 })} />
+      
+      <Divider />
+      
+      <ToolbarBtn icon={<Maximize2 size={16} />} title="Ajustar à tela" onClick={() => fitView({ duration: 600 })} />
+      <ToolbarBtn icon={<Crosshair size={16} />} title="Centralizar" onClick={() => setCenter(0, 0, { zoom: 1, duration: 600 })} />
+      <ToolbarBtn 
+        icon={<LayoutGrid size={16} className={isOrganizing ? "animate-pulse" : ""} />} 
+        title="Organizar nodes" 
+        onClick={handleLayout} 
+        active={isOrganizing} 
+      />
+      
+      <Divider />
+      
+      <ToolbarBtn 
+        icon={isLocked ? <Lock size={16} /> : <Unlock size={16} />} 
+        title={isLocked ? "Desbloquear nodes" : "Travar nodes"} 
+        onClick={toggleLock} 
+        active={isLocked} 
+      />
+      <ToolbarBtn icon={<RotateCcw size={16} />} title="Reset view" onClick={() => fitView()} />
+    </div>
+  );
+}
+```
+
+// FILE: src/features/financeiro/ui/CmvConfigurator.page.tsx
+```tsx
+import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import {
+  ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, Panel,
+  useNodesState, useEdgesState, useReactFlow,
+  Handle, Position,
+  type Node, type Edge, type NodeTypes, type NodeDragHandler, type NodeProps, type NodeMouseHandler,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  useCmvGraph, cmvNodeId, fichaNodeId, nfNodeId,
+  type RawCmvItem,
+} from '@/features/financeiro/model/useCmvGraph';
+import { layoutGraph } from '@/components/producao/configurador/layout';
+import { toast } from 'sonner';
+import { ArrowLeft, Calculator, ChefHat, Package, DollarSign, Receipt, Loader2 } from 'lucide-react';
+import { Button } from '@/shared/ui/button';
+import { CmvNodePalette } from './cmv/CmvNodePalette';
+import { CmvDetailPanel } from './cmv/CmvDetailPanel';
+import { CmvBottomToolbar } from './cmv/CmvBottomToolbar';
+
+const fmt = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return 'R$ 0,00';
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  rascunho: 'bg-zinc-200/80 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300',
+  aprovada: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-800/60 dark:text-emerald-300',
+  obsoleta: 'bg-zinc-200/80 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500',
+};
+
+type TipoItem = 'embalagem' | 'outro';
+
+interface CmvRootNodeData extends Record<string, unknown> {
+  nome: string;
+  custo: number | null;
+  status: string;
+  kind: 'cmv';
+}
+
+interface FichaBaseNodeData extends Record<string, unknown> {
+  nome: string;
+  custoTotal: number;
+  rendQty: number;
+  rendimento_unidade: string;
+  kind: 'ficha';
+}
+
+interface CmvItemNodeData extends Record<string, unknown> {
+  tipo: TipoItem;
+  quantidade: number;
+  unidade: string;
+  custo: number | null;
+  label: string;
+  kind: 'cmvItem';
+  _rawItemId: number;
+}
+
+interface NFNodeData extends Record<string, unknown> {
+  fornecedor: string;
+  numero: string | null;
+  valor: number | null;
+  kind: 'nf';
+}
+
+const CmvRootNode = memo(function CmvRootNode({ data }: NodeProps<CmvRootNodeData>) {
+  const d = data as CmvRootNodeData;
+  return (
+    <div className="relative px-5 py-4 rounded-2xl border border-white/20 bg-white/40 dark:bg-black/20 backdrop-blur-md text-[#2D362E] dark:text-[#E6DCCF] min-w-[260px] shadow-sm">
+      <div className="flex items-start justify-between mb-2 gap-2">
+        <div className="flex items-center gap-1.5 text-[#57715B]">
+          <Calculator size={14} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">CMV Central</span>
+        </div>
+      </div>
+      <h3 className="text-base font-bold truncate leading-tight mb-2">{d.nome}</h3>
+      <p className="text-2xl font-black tabular-nums text-[#57715B]">{fmt(d.custo)}</p>
+      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-[#57715B] !border-2 !border-white" />
+    </div>
+  );
+});
+
+const FichaBaseNode = memo(function FichaBaseNode({ data }: NodeProps<FichaBaseNodeData>) {
+  const d = data as FichaBaseNodeData;
+  const custoUnit = d.rendQty > 0 ? d.custoTotal / d.rendQty : 0;
+  return (
+    <div className="relative px-5 py-4 rounded-2xl border border-white/20 bg-white/40 dark:bg-black/20 backdrop-blur-md text-[#2D362E] dark:text-[#E6DCCF] min-w-[240px] shadow-sm">
+      <div className="flex items-center gap-1.5 text-amber-600 mb-2">
+        <ChefHat size={14} />
+        <span className="text-[10px] font-bold uppercase tracking-wider">Ficha Técnica Base</span>
+      </div>
+      <h3 className="text-base font-semibold truncate mb-1">{d.nome}</h3>
+      <div className="flex items-end justify-between mt-2">
+        <div>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Custo unitário</p>
+          <p className="text-xl font-bold tabular-nums">
+            {fmt(custoUnit)} <span className="text-[10px] font-normal">/ {d.rendimento_unidade}</span>
+          </p>
+        </div>
+        <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 rounded-full font-medium border border-amber-500/10">
+          Rend: {d.rendQty}
+        </span>
+      </div>
+      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-amber-500 !border-2 !border-white" />
+    </div>
+  );
+});
+
+const CmvItemNode = memo(function CmvItemNode({ data, selected }: NodeProps<CmvItemNodeData>) {
+  const d = data as CmvItemNodeData;
+  const isEmb = d.tipo === 'embalagem';
+  const icon = isEmb ? <Package size={14} className="text-blue-500" /> : <DollarSign size={14} className="text-orange-500" />;
+  const label = isEmb ? 'Embalagem' : 'Custo avulso';
+
+  return (
+    <div className={`relative px-4 py-3 rounded-2xl border backdrop-blur-md min-w-[200px] shadow-sm transition-all duration-150
+      bg-white/40 dark:bg-black/20 text-[#2D362E] dark:text-[#E6DCCF]
+      ${selected ? 'border-[#57715B]/50 ring-2 ring-[#57715B]/20 scale-[1.02]' : 'border-white/20 dark:border-white/10 hover:shadow-md hover:-translate-y-0.5'}
+    `}>
+      <div className="flex items-center gap-1.5 mb-2">
+        {icon}
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+      </div>
+      <h4 className="text-sm font-semibold truncate mb-1.5">{d.label}</h4>
+      <div className="flex items-end justify-between">
+        <span className="text-[11px] text-muted-foreground font-medium">{d.quantidade} {d.unidade}</span>
+        <span className="text-base font-bold tabular-nums text-[#57715B]">{fmt(d.custo)}</span>
+      </div>
+      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-slate-300 !border-2 !border-white" />
+      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[#57715B] !border-2 !border-white" />
+    </div>
+  );
+});
+
+const NFNode = memo(function NFNode({ data }: NodeProps<NFNodeData>) {
+  const d = data as NFNodeData;
+  return (
+    <div className="px-3 py-2 rounded-xl border border-cyan-500/20 bg-cyan-50/80 dark:bg-cyan-900/10 backdrop-blur-md min-w-[160px] shadow-sm">
+      <div className="flex items-center gap-1 mb-1 text-cyan-600 dark:text-cyan-400">
+        <Receipt size={12} />
+        <span className="text-[9px] font-bold uppercase tracking-wider">Nota Fiscal</span>
+      </div>
+      <h4 className="text-[11px] font-semibold truncate text-[#2D362E] dark:text-[#E6DCCF]">{d.fornecedor || 'Fornecedor'}</h4>
+      {d.numero && <p className="text-[10px] text-muted-foreground">#{d.numero}</p>}
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-cyan-500 !border-2 !border-white" />
+    </div>
+  );
+});
+
+const nodeTypes: NodeTypes = {
+  cmv: CmvRootNode,
+  ficha: FichaBaseNode,
+  cmvItem: CmvItemNode,
+  nf: NFNode,
+};
+
+function CmvConfiguratorInner() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const cmvIdParam = searchParams.get('focus');
+  const cmvId = cmvIdParam !== null && cmvIdParam !== '' ? parseInt(cmvIdParam, 10) : null;
+
+  const { loading, cmv, fichaData, items, embalagens, nfEmbalagemItems, positions, savePosition, refetch } = useCmvGraph(cmvId);
+  const { fitView, setNodes, setEdges } = useReactFlow();
+  const [nodes, , onNodesChange] = useNodesState([]);
+  const [edges, , onEdgesChange] = useEdgesState([]);
+
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const { custoFichaUnitario, custoEmbalagens, custoAvulsos, custoTotal } = useMemo(() => {
+    const fichaUnitario = fichaData ? (fichaData.custo_calculado ?? 0) / Math.max(1, fichaData.rendimento_quantidade) : 0;
+    const embalagensTotal = items.filter(i => i.tipo === 'embalagem').reduce((s, i) => s + (i.custo_calculado ?? 0), 0);
+    const avulsosTotal = items.filter(i => i.tipo === 'outro').reduce((s, i) => s + (i.custo_calculado ?? 0), 0);
+    const total = cmv?.custo_calculado ?? 0;
+    return { custoFichaUnitario: fichaUnitario, custoEmbalagens: embalagensTotal, custoAvulsos: avulsosTotal, custoTotal: total };
+  }, [items, cmv, fichaData]);
+
+  const buildGraph = useCallback(() => {
+    if (!cmv) return;
+
+    const newNodes: Node[] = [];
+    const newEdges: Edge[] = [];
+    const rootId = cmvNodeId(cmv.id);
+
+    newNodes.push({
+      id: rootId,
+      type: 'cmv',
+      data: { nome: cmv.nome, custo: cmv.custo_calculado, status: cmv.status, kind: 'cmv' } as Record<string, unknown>,
+      position: positions.get(rootId) ?? { x: 800, y: 300 },
+    });
+
+    if (fichaData) {
+      const fId = fichaNodeId(fichaData.id);
+      newNodes.push({
+        id: fId,
+        type: 'ficha',
+        data: {
+          nome: fichaData.nome,
+          custoTotal: fichaData.custo_calculado ?? 0,
+          rendQty: fichaData.rendimento_quantidade,
+          rendimento_unidade: fichaData.rendimento_unidade,
+          kind: 'ficha',
+        } as Record<string, unknown>,
+        position: positions.get(fId) ?? { x: 400, y: 300 },
+      });
+
+      newEdges.push({
+        id: `e-${fId}-${rootId}`,
+        source: fId,
+        target: rootId,
+        animated: true,
+        style: { stroke: '#F59E0B', strokeWidth: 2 },
+      });
+    }
+
+    const addedNfNodeIds = new Set<number>();
+
+    items.forEach((item, idx) => {
+      const itemId = `item_${item.id}`;
+      const label = item.produtoMaster?.nome ?? item.insumo?.nome ?? item.observacao ?? 'Embalagem';
+
+      newNodes.push({
+        id: itemId,
+        type: 'cmvItem',
+        data: {
+          tipo: item.tipo as TipoItem,
+          quantidade: item.quantidade,
+          unidade: item.unidade,
+          custo: item.custo_calculado,
+          label,
+          kind: 'cmvItem',
+          _rawItemId: item.id,
+        } as Record<string, unknown>,
+        position: positions.get(itemId) ?? { x: 400, y: 100 + idx * 160 },
+      });
+
+      newEdges.push({
+        id: `e-${itemId}-${rootId}`,
+        source: itemId,
+        target: rootId,
+        style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+      });
+
+      if (item.nf_item_id && item.nfItem && item.nfItem.nota_id) {
+        const notaId = item.nfItem.nota_id;
+        const nfNodeKey = `nf_nota_${notaId}`;
+        
+        if (!addedNfNodeIds.has(notaId)) {
+          addedNfNodeIds.add(notaId);
+          newNodes.push({
+            id: nfNodeKey,
+            type: 'nf',
+            data: {
+              fornecedor: item.nfItem.fornecedor ?? 'Fornecedor',
+              numero: item.nfItem.numero_nota,
+              valor: null,
+              kind: 'nf',
+            } as Record<string, unknown>,
+            position: positions.get(nfNodeKey) ?? { x: 50, y: 50 + idx * 160 },
+          });
+        }
+
+        newEdges.push({
+          id: `e-${nfNodeKey}-${itemId}`,
+          source: nfNodeKey,
+          target: itemId,
+          style: { stroke: '#06b6d4', strokeWidth: 1.5, strokeDasharray: '4 2' },
+        });
+      }
+    });
+
+    const hasAllPositions = newNodes.every((n) => positions.has(n.id));
+    if (!hasAllPositions && newNodes.length > 0) {
+      const laid = layoutGraph(newNodes, newEdges, 'LR');
+      setNodes(laid);
+    } else {
+      setNodes(newNodes);
+    }
+    setEdges(newEdges);
+
+    setTimeout(() => fitView({ padding: 0.12, duration: 400 }), 80);
+  }, [cmv, fichaData, items, positions, fitView, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!loading) buildGraph();
+  }, [loading, buildGraph]);
+
+  const handleNodeDragStop: NodeDragHandler = useCallback((_evt, node) => {
+    savePosition(node.id, node.position.x, node.position.y);
+  }, [savePosition]);
+
+  const handleNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
+    setSelectedNodeId(node.id);
+  }, []);
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleAddEmbalagem = useCallback(async (embId: number) => {
+    if (!cmvId) return;
+    const { error } = await supabase.from('cmv_itens').insert({
+      cmv_id: cmvId, tipo: 'embalagem', produto_master_id: embId,
+      quantidade: 1, unidade: 'un', ordem: items.length
+    } as Record<string, unknown>);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Embalagem adicionada');
+    await refetch();
+  }, [cmvId, items.length, refetch]);
+
+  const handleAddAvulso = useCallback(async (nome: string, valor: number) => {
+    if (!cmvId) return;
+    const { error } = await supabase.from('cmv_itens').insert({
+      cmv_id: cmvId, tipo: 'outro', observacao: nome,
+      preco_unitario_esboco: valor, quantidade: 1, unidade: 'un', ordem: items.length
+    } as Record<string, unknown>);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Custo avulso adicionado');
+    await refetch();
+  }, [cmvId, items.length, refetch]);
+
+  if (!cmvId || (!cmv && !loading)) {
+    return (
+      <div className="h-[100dvh] bg-white dark:bg-[#0A0A0A] flex flex-col items-center justify-center text-muted-foreground">
+        <Calculator className="h-12 w-12 mb-4 text-[#57715B]" />
+        <p className="text-sm mb-4">Nenhum CMV selecionado</p>
+        <Button variant="outline" className="rounded-xl border-[#57715B]/20 bg-white/60 hover:bg-[#57715B]/10 text-[#57715B]" onClick={() => navigate('/financeiro/cmv')}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao CMV
+        </Button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <div className="h-[100dvh] bg-white dark:bg-[#0A0A0A] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#57715B]" /></div>;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-white dark:bg-[#0A0A0A] overflow-hidden">
+      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#57715B]/5 blur-[80px] rounded-full pointer-events-none" />
+      <div className="fixed top-[20%] right-[-5%] w-[400px] h-[400px] bg-[#C5A065]/5 blur-[80px] rounded-full pointer-events-none" />
+
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        nodeTypes={nodeTypes}
+        onNodeDragStop={handleNodeDragStop}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
+        fitView
+        proOptions={{ hideAttribution: true }}
+        minZoom={0.2}
+        maxZoom={2}
+      >
+        <Background variant={BackgroundVariant.Dots} color="#57715B" gap={24} className="opacity-20" />
+        <MiniMap className="!bg-white/90 !backdrop-blur !rounded-xl !shadow-md !border !border-[#57715B]/10" nodeColor={() => '#57715B'} maskColor="rgba(0,0,0,0.4)" />
+
+        <Panel position="top-left">
+          <div className="flex items-center gap-2 bg-white/90 dark:bg-[#1A1A1A]/90 border border-[#57715B]/10 backdrop-blur-xl rounded-xl px-3 py-2 shadow-xl">
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:bg-[#57715B]/10 hover:text-[#57715B]" onClick={() => navigate('/financeiro/cmv')}>
+              <ArrowLeft size={16} />
+            </Button>
+            <div className="w-px h-5 bg-[#57715B]/15" />
+            <div className="flex items-center gap-2 px-1">
+              <Calculator size={14} className="text-[#57715B]" />
+              <span className="text-sm font-semibold text-[#2D362E] dark:text-[#E6DCCF] truncate max-w-[180px]">{cmv?.nome}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${STATUS_COLORS[cmv?.status || 'rascunho'] ?? STATUS_COLORS.rascunho}`}>
+                {cmv?.status}
+              </span>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel position="top-right">
+          <div className="flex flex-col gap-1.5 bg-white/90 dark:bg-[#1A1A1A]/90 border border-[#57715B]/10 backdrop-blur-xl rounded-xl p-3 shadow-lg text-[10px] text-muted-foreground">
+            <p className="text-[9px] font-bold uppercase tracking-widest mb-1 text-[#57715B]">Legenda</p>
+            <div className="flex items-center gap-1.5"><Calculator size={10} className="text-[#57715B]" /><span>CMV Central</span></div>
+            <div className="flex items-center gap-1.5"><ChefHat size={10} className="text-amber-500" /><span>Ficha Técnica</span></div>
+            <div className="flex items-center gap-1.5"><Package size={10} className="text-blue-500" /><span>Embalagem</span></div>
+            <div className="flex items-center gap-1.5"><DollarSign size={10} className="text-orange-500" /><span>Custo avulso</span></div>
+            <div className="flex items-center gap-1.5"><Receipt size={10} className="text-cyan-500" /><span>Nota Fiscal</span></div>
+          </div>
+        </Panel>
+
+        <Panel position="bottom-left">
+          <div className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border border-[#57715B]/10 rounded-2xl p-4 shadow-xl min-w-[200px] max-w-[calc(100vw-1rem)]">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Breakdown de Custo</p>
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Ficha base (unitária)</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoFichaUnitario)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Embalagens</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoEmbalagens)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Custos avulsos</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{fmt(custoAvulsos)}</span>
+              </div>
+              <div className="border-t border-[#57715B]/10 my-2" />
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm font-bold text-muted-foreground">= Custo total</span>
+                <span className="text-sm font-bold text-[#57715B] tabular-nums">{fmt(custoTotal)}</span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </ReactFlow>
+
+      <CmvNodePalette embalagens={embalagens} onAddEmbalagem={handleAddEmbalagem} onAddAvulso={handleAddAvulso} />
+
+      <CmvDetailPanel
+        selectedNodeId={selectedNodeId}
+        cmv={cmv}
+        fichaData={fichaData}
+        items={items}
+        custoFichaUnitario={custoFichaUnitario}
+        custoEmbalagens={custoEmbalagens}
+        custoAvulsos={custoAvulsos}
+        custoTotal={custoTotal}
+        nfEmbalagemItems={nfEmbalagemItems}
+        onClose={() => setSelectedNodeId(null)}
+        onRefetch={refetch}
+      />
+
+      <CmvBottomToolbar onSavePosition={savePosition} />
+    </div>
+  );
+}
+
+export default function CmvConfiguratorPage() {
+  return (
+    <ReactFlowProvider>
+      <CmvConfiguratorInner />
+    </ReactFlowProvider>
+  );
+}
+```

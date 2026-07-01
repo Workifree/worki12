@@ -1,0 +1,5 @@
+- [User Profile](user_profile.md) — Pedro, dev, building Poly-Intel trading system for prediction markets
+- [Project Poly-Intel](project_poly_intel.md) — PRD v4: Smart Copy + Insider Scanner + Wallet Finder/Backtester
+- [Copyability Score](project_copyability_score.md) — Internal 0-100 score replacing closed GodEye
+- [Workflow Framework](feedback_workflow.md) — User's 8-step dev workflow: Research > PRD > TechSpec > Exec > QualityGate > Tracking > Review > Sec
+- [LLM Provider](feedback_openrouter.md) — Use OpenRouter (not Ollama); removed from PRD v4 (not used anymore in poly-intel)

@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "QA evaluator + lint/test/build verdes",
+  "description": "QA independente focado nos landmines (skip_lote_reconcile, idempotência do bip, semântica de alertas). npm run lint + npm test + npm run build verdes.",
+  "activeForm": "Rodando QA e gates locais",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

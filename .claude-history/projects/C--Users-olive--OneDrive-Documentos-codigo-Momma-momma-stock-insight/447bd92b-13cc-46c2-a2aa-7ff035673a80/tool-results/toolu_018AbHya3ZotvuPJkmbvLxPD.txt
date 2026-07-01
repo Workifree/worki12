@@ -1,0 +1,175 @@
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-1-/**
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-2- * @module features/tv-dashboard/model/useTvDashboardData
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-3- *
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-4- * Hook principal da Torre de Controle da Operação (painel TV `/tv`).
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-5- *
+src\features\tv-dashboard\model\useTvDashboardData.ts-6- * Paraleliza as fontes de dados via React Query:
+src\features\tv-dashboard\model\useTvDashboardData.ts:7: * - vendas live (edge `degust-pos-financial`/flash-vendas) — polling 60s;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-8- * - vendas defasadas Linx (`historico_vendas`, último dia disponível);
+src\features\tv-dashboard\model\useTvDashboardData.ts-9- * - comparativos: vs DIA ANTERIOR (principal, v3 — base pró-rateada p/ canal
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-10- *   live) e vs MESMO DIA da semana passada (secundário);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-11- * - metas por loja × dia da semana (`metas_vendas`) com pró-rata da janela;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-12- * - alertas de estoque NOMEADOS (`estoque` × `produtos_master.ativo = true`,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-13- *   restritos ao setor de produtos vendáveis — `TV_ALERT_SETOR`);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-61-  pctOfProRataTarget,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-62-  periodRange,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-63-  previousPeriodRange,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-64-  proRataDayBase,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-65-  rangeToLocalDayBounds,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-66-  relativeDelta,
+src\features\tv-dashboard\model\useTvDashboardData.ts:67:  remapFlashLojaIds,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-68-  sortAndLimitExceptions,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-69-  sortCriticalItems,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-70-  toIsoDateLocal,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-71-  weekOverWeekDelta,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-72-  type ComprasByLoja,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-73-  type FlashRow,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-193-    .map((l) => l.id);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-194-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-195-  return { lojas, degustLojaIds, degustCodeToLoja, linxLojaIds, factoryLojaId };
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-196-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-197-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-198-// ─────────────────────────────────────────────────────────────────────────────
+src\features\tv-dashboard\model\useTvDashboardData.ts:199:// Vendas live (edge degust-pos-financial / flash-vendas)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-200-// ─────────────────────────────────────────────────────────────────────────────
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-201-
+src\features\tv-dashboard\model\useTvDashboardData.ts:202:/** Contrato da edge `degust-pos-financial` (campos usados pelo painel). */
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-203-interface DegustPosFinancialResponse {
+src\features\tv-dashboard\model\useTvDashboardData.ts-204-  flash?: Array<{
+src\features\tv-dashboard\model\useTvDashboardData.ts-205-    loja_id: number;
+src\features\tv-dashboard\model\useTvDashboardData.ts-206-    nome_loja: string;
+src\features\tv-dashboard\model\useTvDashboardData.ts-207-    total_vendas: number;
+src\features\tv-dashboard\model\useTvDashboardData.ts-208-    total_cupons: number;
+--
+src\features\tv-dashboard\model\useTvDashboardData.ts-212-    ultima_atualizacao: string | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-213-  }>;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-214-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-215-
+src\features\tv-dashboard\model\useTvDashboardData.ts-216-async function fetchLiveSales(ctx: TvContext): Promise<FlashRow[]> {
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-217-  const today = toIsoDateLocal(new Date());
+src\features\tv-dashboard\model\useTvDashboardData.ts:218:  const { data, error } = await supabase.functions.invoke<DegustPosFinancialResponse>(
+src\features\tv-dashboard\model\useTvDashboardData.ts:219:    'degust-pos-financial',
+src\features\tv-dashboard\model\useTvDashboardData.ts-220-    { body: { startDate: today, endDate: today } },
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-221-  );
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-222-  if (error) throw error;
+src\features\tv-dashboard\model\useTvDashboardData.ts-223-  const flash: FlashRow[] = (data?.flash ?? []).map((f) => ({
+src\features\tv-dashboard\model\useTvDashboardData.ts-224-    loja_id: f.loja_id,
+src\features\tv-dashboard\model\useTvDashboardData.ts-225-    nome_loja: f.nome_loja,
+src\features\tv-dashboard\model\useTvDashboardData.ts-226-    total_vendas: f.total_vendas,
+src\features\tv-dashboard\model\useTvDashboardData.ts-227-    total_cupons: f.total_cupons,
+src\features\tv-dashboard\model\useTvDashboardData.ts-228-    ticket_medio: f.ticket_medio,
+src\features\tv-dashboard\model\useTvDashboardData.ts-229-    caixa_aberto: f.caixa_aberto,
+src\features\tv-dashboard\model\useTvDashboardData.ts-230-    ultima_atualizacao: f.ultima_atualizacao,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-231-  }));
+src\features\tv-dashboard\model\useTvDashboardData.ts:232:  return remapFlashLojaIds(flash, ctx.degustCodeToLoja, ctx.degustLojaIds);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-233-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-234-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-235-// ─────────────────────────────────────────────────────────────────────────────
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-236-// Vendas defasadas (Linx via historico_vendas — último dia disponível)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-237-// ─────────────────────────────────────────────────────────────────────────────
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\useTvDashboardData.ts-238-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-780-      });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-781-    }
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-782-  }
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-783-  return out;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-784-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-785-
+src\features\tv-dashboard\model\tvMath.ts:786:/** Linha de venda live normalizada (resposta da edge `degust-pos-financial`). */
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-787-export interface FlashRow {
+src\features\tv-dashboard\model\tvMath.ts-788-  loja_id: number;
+src\features\tv-dashboard\model\tvMath.ts-789-  nome_loja: string;
+src\features\tv-dashboard\model\tvMath.ts-790-  total_vendas: number;
+src\features\tv-dashboard\model\tvMath.ts-791-  total_cupons: number;
+src\features\tv-dashboard\model\tvMath.ts-792-  ticket_medio: number;
+--
+src\features\tv-dashboard\model\tvMath.ts-794-  ultima_atualizacao: string | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-795-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-796-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-797-/**
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-798- * Corrige o `loja_id` das linhas de flash-vendas.
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-799- *
+src\features\tv-dashboard\model\tvMath.ts:800: * LANDMINE conhecida: a edge function `degust-pos-financial` (deployada)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-801- * só mapeia os códigos Degust 1→4 e 2→5; códigos não mapeados passam CRUS
+src\features\tv-dashboard\model\tvMath.ts-802- * (ex.: BSB Shopping = código Degust 3 chega como `loja_id: 3`, colidindo
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-803- * com Asa Norte). Aqui remapeamos usando a tabela `degust_stores`
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-804- * (degust_loja_codigo → loja_id), que é a fonte de verdade em runtime.
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-805- *
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-806- * - Linha cujo loja_id já é uma loja Degust conhecida → mantém.
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-807- * - Linha cujo loja_id corresponde a um código Degust → remapeia.
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-808- * - Caso contrário → descarta (não corromper outra loja).
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-809- */
+src\features\tv-dashboard\model\tvMath.ts:810:export function remapFlashLojaIds(
+src\features\tv-dashboard\model\tvMath.ts-811-  rows: FlashRow[],
+src\features\tv-dashboard\model\tvMath.ts-812-  degustCodeToLoja: ReadonlyMap<number, number>,
+src\features\tv-dashboard\model\tvMath.ts-813-  knownDegustLojaIds: ReadonlySet<number>,
+src\features\tv-dashboard\model\tvMath.ts-814-): FlashRow[] {
+src\features\tv-dashboard\model\tvMath.ts-815-  const out: FlashRow[] = [];
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.ts-816-  for (const row of rows) {
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-30-  previousPeriodRange,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-31-  previousRangeSameDuration,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-32-  proRataDayBase,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-33-  proRataLastWeekBase,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-34-  rangeToLocalDayBounds,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-35-  relativeDelta,
+src\features\tv-dashboard\model\tvMath.test.ts:36:  remapFlashLojaIds,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-37-  sortAndLimitExceptions,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-38-  sortCriticalItems,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-39-  timeHHMMFromIso,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-40-  toIsoDateLocal,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-41-  weekOverWeekDelta,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-42-  type FlashRow,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-647-    const cookie = exceptions.find((e) => e.produtoNome === 'COOKIE');
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-648-    expect(cookie?.severity).toBe('amber');
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-649-    expect(cookie?.message).toBe('COOKIE abaixo do mínimo (2/5) — Asa Sul');
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-650-  });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-651-});
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-652-
+src\features\tv-dashboard\model\tvMath.test.ts:653:describe('remapFlashLojaIds', () => {
+src\features\tv-dashboard\model\tvMath.test.ts-654-  const flash = (lojaId: number): FlashRow => ({
+src\features\tv-dashboard\model\tvMath.test.ts-655-    loja_id: lojaId,
+src\features\tv-dashboard\model\tvMath.test.ts-656-    nome_loja: `Loja ${lojaId}`,
+src\features\tv-dashboard\model\tvMath.test.ts-657-    total_vendas: 100,
+src\features\tv-dashboard\model\tvMath.test.ts-658-    total_cupons: 10,
+src\features\tv-dashboard\model\tvMath.test.ts-659-    ticket_medio: 10,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-668-    [2, 5],
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-669-    [3, 6],
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-670-  ]);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-671-  const degustLojas = new Set([4, 5, 6]);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-672-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-673-  it('mantém lojas já mapeadas e remapeia código cru', () => {
+src\features\tv-dashboard\model\tvMath.test.ts:674:    const result = remapFlashLojaIds(
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-675-      [flash(4), flash(5), flash(3)],
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-676-      codeToLoja,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-677-      degustLojas,
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-678-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-679-    expect(result.map((r) => r.loja_id).sort()).toEqual([4, 5, 6]);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-680-  });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-681-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-682-  it('descarta linha não mapeável (não corrompe outra loja)', () => {
+src\features\tv-dashboard\model\tvMath.test.ts:683:    const result = remapFlashLojaIds([flash(99)], codeToLoja, degustLojas);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-684-    expect(result).toEqual([]);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-685-  });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-686-});
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-687-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-688-// ─────────────────────────────────────────────────────────────────────────────
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\tvMath.test.ts-689-// v3 — filtro global de período, deltas genéricos, crítico nomeado, feed
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-311-  /** Intervalo esperado de atualização (ms) usado na classificação. */
+src\features\tv-dashboard\model\types.ts-312-  expectedIntervalMs: number;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-313-}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-314-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-315-/** Freshness consolidado dos dados exibidos na TV. */
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-316-export interface TvFreshness {
+src\features\tv-dashboard\model\types.ts:317:  /** Vendas live (polling 60s na edge `degust-pos-financial`). */
+src\features\tv-dashboard\model\types.ts-318-  vendasLive: TvSourceFreshness;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-319-  /** Estoque/alertas (polling 5min + Realtime). */
+src\features\tv-dashboard\model\types.ts-320-  estoque: TvSourceFreshness;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-321-  /** Momento em que o snapshot foi montado (ISO). */
+src\features\tv-dashboard\model\types.ts-322-  geradoEm: string;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\tv-dashboard\model\types.ts-323-}

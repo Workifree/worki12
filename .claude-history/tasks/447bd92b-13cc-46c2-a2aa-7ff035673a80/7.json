@@ -1,0 +1,9 @@
+{
+  "id": "7",
+  "subject": "Commit stg + sync docs + push",
+  "description": "git add seletivo (só arquivos da feature), commit pt-BR sem co-author, sync docs de usuário via agent Gemini (mkdocs build), push origin stg.",
+  "activeForm": "Commitando e sincronizando docs",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Migration metas_vendas + RLS",
+  "description": "Tabela metas_vendas (loja_id int FK lojas, dia_semana 0-6, valor_meta numeric, UNIQUE) + RLS leitura authenticated / escrita admin (padrão profiles×user_roles). Aplicar no Supabase + arquivo local em supabase/migrations/.",
+  "activeForm": "Aplicando migration metas_vendas",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

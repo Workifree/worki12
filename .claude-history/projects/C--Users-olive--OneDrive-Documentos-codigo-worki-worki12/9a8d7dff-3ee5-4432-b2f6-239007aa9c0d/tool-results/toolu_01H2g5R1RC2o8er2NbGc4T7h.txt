@@ -1,0 +1,122 @@
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:12:    UNIQUE(user_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:21:    company_wallet_id UUID NOT NULL REFERENCES wallets(id),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:22:    worker_wallet_id UUID REFERENCES wallets(id),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:28:-- 3. Create wallet_transactions table
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:29:CREATE TABLE IF NOT EXISTS wallet_transactions (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:35:    reference_id UUID,
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:43:CREATE INDEX IF NOT EXISTS idx_wallet_tx_wallet_id ON wallet_transactions(wallet_id);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:48:ALTER TABLE wallet_transactions ENABLE ROW LEVEL SECURITY;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:60:        company_wallet_id IN (SELECT id FROM wallets WHERE user_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:65:        worker_wallet_id IN (SELECT id FROM wallets WHERE user_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:68:-- 8. RLS Policies for wallet_transactions
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:69:CREATE POLICY "Users can view their transactions" ON wallet_transactions
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:85:INSERT INTO wallet_transactions (wallet_id, amount, type, description)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\001_create_wallet_escrow_tables.sql:90:    SELECT 1 FROM wallet_transactions wt 
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql:2:-- Tables already covered: wallets, escrow_transactions, wallet_transactions, notifications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309100000_atomic_reserve_escrow.sql:40:    INSERT INTO escrow_transactions(job_id, amount, company_wallet_id, status)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309100000_atomic_reserve_escrow.sql:45:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:8:CREATE UNIQUE INDEX IF NOT EXISTS idx_escrow_one_reserved_per_job
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:11:-- 3. Unique constraint on wallet_transactions to prevent duplicate payment processing
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:12:-- (wallet_id + reference_id must be unique when reference_id is not null)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:13:CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_unique_reference
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:14:ON wallet_transactions(wallet_id, reference_id) WHERE reference_id IS NOT NULL;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:45:    p_worker_wallet_id UUID
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:59:        worker_wallet_id = p_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:72:    WHERE id = p_worker_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:75:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:76:    VALUES (p_worker_wallet_id, v_amount, 'escrow_release', 'Pagamento recebido pela vaga', p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:94:    v_company_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:101:    RETURNING id, amount, company_wallet_id INTO v_escrow_id, v_amount, v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:111:    WHERE id = v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:114:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:115:    VALUES (v_company_wallet_id, v_amount, 'credit', p_reason, 'refund-' || p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:142:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260307000000_atomic_balance_and_security.sql:144:    ON CONFLICT (wallet_id, reference_id) WHERE reference_id IS NOT NULL
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310100000_reset_test_balances.sql:7:    SELECT 1 FROM wallet_transactions wt
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310100000_reset_test_balances.sql:13:DELETE FROM wallet_transactions WHERE type = 'initial_balance';
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:2:-- 1. Change reference_id from UUID to TEXT (Asaas IDs are text, not UUIDs)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:3:-- 2. Add missing INSERT/UPDATE RLS policies for wallets, escrow_transactions, wallet_transactions
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:6:-- 1. FIX reference_id column type (UUID → TEXT)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:12:ALTER TABLE wallet_transactions ALTER COLUMN reference_id TYPE TEXT USING reference_id::TEXT;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:15:CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_unique_reference
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:16:ON wallet_transactions(wallet_id, reference_id) WHERE reference_id IS NOT NULL;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:29:        company_wallet_id IN (SELECT id FROM wallets WHERE user_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:33:CREATE POLICY "Users can insert their transactions" ON wallet_transactions
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:39:-- 3. RECREATE RPCs with correct reference_id type
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:42:-- Recreate release_escrow (reference_id is now TEXT, no cast needed)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:45:    p_worker_wallet_id UUID
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:59:        worker_wallet_id = p_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:72:    WHERE id = p_worker_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:74:    -- Log the transaction (reference_id is now TEXT)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:75:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:76:    VALUES (p_worker_wallet_id, v_amount, 'escrow_release', 'Pagamento recebido pela vaga', p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:82:-- Recreate refund_escrow (reference_id is now TEXT)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:94:    v_company_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:101:    RETURNING id, amount, company_wallet_id INTO v_escrow_id, v_amount, v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:111:    WHERE id = v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:113:    -- Log the refund (reference_id is now TEXT, prefix is fine)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:114:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:115:    VALUES (v_company_wallet_id, v_amount, 'credit', p_reason, 'refund-' || p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:121:-- Recreate credit_deposit (reference_id is now TEXT, Asaas payment IDs work)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:142:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260308000000_fix_reference_id_type_and_rls.sql:144:    ON CONFLICT (wallet_id, reference_id) WHERE reference_id IS NOT NULL
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310300000_full_reset_clean_slate.sql:5:DELETE FROM wallet_transactions;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:1:-- Migration: Fix unique constraint on wallet_transactions.reference_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:2:-- The old constraint unique_reference_id is on reference_id ALONE,
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:4:-- as reference_id for different wallets.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:5:-- The correct constraint is idx_wallet_tx_unique_reference on (wallet_id, reference_id).
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:8:ALTER TABLE wallet_transactions DROP CONSTRAINT IF EXISTS unique_reference_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:10:-- Also drop any unique index on reference_id alone
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:11:DROP INDEX IF EXISTS unique_reference_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:14:CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_unique_reference
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310500000_fix_unique_reference_constraint.sql:15:ON wallet_transactions(wallet_id, reference_id) WHERE reference_id IS NOT NULL;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310200000_clean_test_data_production_ready.sql:5:DELETE FROM wallet_transactions WHERE type = 'initial_balance';
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310200000_clean_test_data_production_ready.sql:19:    ) FROM wallet_transactions wt WHERE wt.wallet_id = wallets.id),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:16:CREATE UNIQUE INDEX IF NOT EXISTS idx_escrow_one_reserved_per_job
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:20:CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_unique_reference
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:21:ON wallet_transactions(wallet_id, reference_id) WHERE reference_id IS NOT NULL;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:71:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:73:    ON CONFLICT (wallet_id, reference_id) WHERE reference_id IS NOT NULL
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:118:    INSERT INTO escrow_transactions(job_id, amount, company_wallet_id, status)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:122:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:132:    p_worker_wallet_id UUID
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:143:    SET status = 'released', released_at = NOW(), worker_wallet_id = p_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:153:    WHERE id = p_worker_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:155:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:156:    VALUES (p_worker_wallet_id, v_amount, 'escrow_release', 'Pagamento recebido pela vaga', p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:174:    v_company_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:179:    RETURNING id, amount, company_wallet_id INTO v_escrow_id, v_amount, v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:187:    WHERE id = v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:189:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260310400000_grant_execute_rpcs.sql:190:    VALUES (v_company_wallet_id, v_amount, 'credit', p_reason, 'refund-' || p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311000000_auto_release_escrow_on_completion.sql:11:    v_worker_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311000000_auto_release_escrow_on_completion.sql:33:        SELECT id INTO v_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311000000_auto_release_escrow_on_completion.sql:37:        IF v_worker_wallet_id IS NULL THEN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311000000_auto_release_escrow_on_completion.sql:44:        PERFORM release_escrow(NEW.job_id, v_worker_wallet_id);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311000000_auto_release_escrow_on_completion.sql:47:            NEW.job_id, v_worker_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:133:DROP POLICY IF EXISTS "Users can insert their transactions" ON wallet_transactions;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:145:    p_worker_wallet_id UUID
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:155:    v_company_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:159:    SELECT et.id, et.amount, et.company_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:160:    INTO v_escrow_id, v_amount, v_company_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:175:        IF v_caller_wallet_id IS NULL OR v_caller_wallet_id != v_company_wallet_id THEN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:181:    SET status = 'released', released_at = NOW(), worker_wallet_id = p_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:186:    WHERE id = p_worker_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:188:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:189:    VALUES (p_worker_wallet_id, v_amount, 'escrow_release', 'Pagamento recebido pela vaga', p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:238:    INSERT INTO escrow_transactions(job_id, amount, company_wallet_id, status)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:242:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:262:    v_company_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:265:    SELECT et.id, et.amount, et.company_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:266:    INTO v_escrow_id, v_amount, v_company_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:279:        IF v_caller_wallet_id IS NULL OR v_caller_wallet_id != v_company_wallet_id THEN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:290:    WHERE id = v_company_wallet_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:292:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:293:    VALUES (v_company_wallet_id, v_amount, 'credit', p_reason, 'refund-' || p_job_id::TEXT);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:319:    INSERT INTO wallet_transactions(wallet_id, amount, type, description, reference_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:321:    ON CONFLICT (wallet_id, reference_id) WHERE reference_id IS NOT NULL
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:370:    v_worker_wallet_id UUID;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:390:        SELECT id INTO v_worker_wallet_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:394:        IF v_worker_wallet_id IS NULL THEN
+
+[Showing results with pagination = limit: 120]

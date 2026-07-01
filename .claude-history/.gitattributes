@@ -1,0 +1,2 @@
+# Backup de histórico: preservar bytes exatos, sem conversão de EOL nem diff.
+* -text -diff

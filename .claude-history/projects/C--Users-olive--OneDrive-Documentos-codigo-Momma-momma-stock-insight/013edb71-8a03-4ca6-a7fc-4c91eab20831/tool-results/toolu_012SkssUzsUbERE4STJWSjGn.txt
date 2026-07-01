@@ -1,0 +1,252 @@
+src\features\logistica\ui\SeparacaoBipModal.tsx-28-  requested_quantity: number;
+src\features\logistica\ui\SeparacaoBipModal.tsx-29-  is_separated: boolean;
+src\features\logistica\ui\SeparacaoBipModal.tsx:30:  produto_master_id?: number | null;
+src\features\logistica\ui\SeparacaoBipModal.tsx-31-  qr_uid_bipado?: string | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-32-  /** Unidade do item (cx, kg, g, l, ml…). Default 'cx' se vazio. */
+--
+src\features\logistica\ui\SeparacaoBipModal.tsx-86-        itemId: item.id,
+src\features\logistica\ui\SeparacaoBipModal.tsx-87-        itemName: item.item_name,
+src\features\logistica\ui\SeparacaoBipModal.tsx:88:        produtoMasterId: item.produto_master_id ?? null,
+src\features\logistica\ui\SeparacaoBipModal.tsx-89-        slotIndex: 1,
+src\features\logistica\ui\SeparacaoBipModal.tsx-90-        totalSlots: 1,
+--
+src\features\logistica\ui\SeparacaoBipModal.tsx-104-        itemId: item.id,
+src\features\logistica\ui\SeparacaoBipModal.tsx-105-        itemName: item.item_name,
+src\features\logistica\ui\SeparacaoBipModal.tsx:106:        produtoMasterId: item.produto_master_id ?? null,
+src\features\logistica\ui\SeparacaoBipModal.tsx-107-        slotIndex: i,
+src\features\logistica\ui\SeparacaoBipModal.tsx-108-        totalSlots: total,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-172-      return;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-173-    }
+src\features\logistica\ui\SeparacaoBipModal.tsx:174:    const result = rpc as { ok: boolean; erro?: string; etiqueta?: { produto_master_id: number; produto_nome_snapshot?: string; quantidade_interna?: number; embalagem_nome?: string | null; tipo_embalagem?: string | null; separada_at?: string | null }; alertas?: string[] };
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-175-    if (!result?.ok) {
+src\features\logistica\ui\SeparacaoBipModal.tsx-176-      \ Caso especial: ja separada → dialog pra transferir
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-197-    (result.alertas ?? []).forEach((a) => toast.warning(a));
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-198-
+src\features\logistica\ui\SeparacaoBipModal.tsx:199:    const scannedPid = result.etiqueta?.produto_master_id ?? Number(payload.pid);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-200-    const scannedName = result.etiqueta?.produto_nome_snapshot ?? "";
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-201-    const scannedQty = Number(result.etiqueta?.quantidade_interna ?? payload.qty ?? 1);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-340-        },
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-341-      });
+src\features\logistica\ui\SeparacaoBipModal.tsx:342:      const rpc = rpcRaw as { ok: boolean; erro?: string; etiqueta?: { produto_master_id: number; produto_nome_snapshot?: string; quantidade_interna?: number; embalagem_nome?: string | null; tipo_embalagem?: string | null } } | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-343-      if (rpcErr || !rpc?.ok || !rpc.etiqueta) {
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-344-        toast.error(rpc?.erro || rpcErr?.message || "Falha ao transferir separação");
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-348-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-349-      // Aplica visualmente — marca slots como confirmed igual ao fluxo normal
+src\features\logistica\ui\SeparacaoBipModal.tsx:350:      const scannedPid = rpc.etiqueta.produto_master_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-351-      const scannedQty = Number(rpc.etiqueta.quantidade_interna ?? payload.qty ?? 1);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipModal.tsx-352-      const scannedEmb = rpc.etiqueta.embalagem_nome ?? null;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\types\drp.ts-50-/** Linha calculada de um produto numa loja específica. */
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\types\drp.ts-51-export interface DrpRow {
+src\features\logistica\types\drp.ts:52:  produto_master_id: number;
+src\features\logistica\types\drp.ts-53-  nome: string;
+src\features\logistica\types\drp.ts-54-  setor: string;
+--
+src\features\logistica\types\drp.ts-95-  lojas: Record<number, {
+src\features\logistica\types\drp.ts-96-    status: DrpLojaStatus;
+src\features\logistica\types\drp.ts:97:    overrides: Record<number, number>; // produto_master_id → qty manual
+src\features\logistica\types\drp.ts:98:    selected: number[]; // produto_master_ids marcados pra ir na requisição
+src\features\logistica\types\drp.ts-99-    completed_at?: string; // ISO timestamp quando concluiu
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\types\drp.ts-100-  }>;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\types\drp.ts-104-/** Item de payload pra RPC drp_gerar_requisicoes. */
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\types\drp.ts-105-export interface DrpRpcItem {
+src\features\logistica\types\drp.ts:106:  produto_master_id: number;
+src\features\logistica\types\drp.ts-107-  nome_produto: string;
+src\features\logistica\types\drp.ts-108-  quantidade_solicitada: number;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-24-interface RecebidoItem {
+src\features\logistica\ui\EntradaBipModal.tsx-25-  uid: string;
+src\features\logistica\ui\EntradaBipModal.tsx:26:  produto_master_id: number;
+src\features\logistica\ui\EntradaBipModal.tsx-27-  produto_nome: string;
+src\features\logistica\ui\EntradaBipModal.tsx-28-  lote_codigo: string | null;
+--
+src\features\logistica\ui\EntradaBipModal.tsx-79-      erro?: string;
+src\features\logistica\ui\EntradaBipModal.tsx-80-      etiqueta?: {
+src\features\logistica\ui\EntradaBipModal.tsx:81:        produto_master_id: number;
+src\features\logistica\ui\EntradaBipModal.tsx-82-        produto_nome_snapshot: string | null;
+src\features\logistica\ui\EntradaBipModal.tsx-83-        lote_id: string | null;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-103-      .from("estoque")
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-104-      .select("quantidade_atual")
+src\features\logistica\ui\EntradaBipModal.tsx:105:      .eq("produto_master_id", et.produto_master_id)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-106-      .eq("loja_id", lojaDestinoId)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-107-      .maybeSingle();
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-112-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+src\features\logistica\ui\EntradaBipModal.tsx-113-    const { error: movErr } = await (supabase.from("movimentacoes") as any).insert({
+src\features\logistica\ui\EntradaBipModal.tsx:114:      produto_master_id: et.produto_master_id,
+src\features\logistica\ui\EntradaBipModal.tsx-115-      tipo_movimentacao: "entrada",
+src\features\logistica\ui\EntradaBipModal.tsx-116-      quantidade: qty,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-133-    playSuccessSound();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-134-    if (navigator.vibrate) navigator.vibrate(100);
+src\features\logistica\ui\EntradaBipModal.tsx:135:    toast.success(`Recebido: ${et.produto_nome_snapshot || `#${et.produto_master_id}`} (${qty} un)`);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-136-    (result.alertas ?? []).forEach((a) => {
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-137-      playWarningSound();
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-142-      {
+src\features\logistica\ui\EntradaBipModal.tsx-143-        uid: payload.uid,
+src\features\logistica\ui\EntradaBipModal.tsx:144:        produto_master_id: et.produto_master_id,
+src\features\logistica\ui\EntradaBipModal.tsx:145:        produto_nome: et.produto_nome_snapshot || `Produto #${et.produto_master_id}`,
+src\features\logistica\ui\EntradaBipModal.tsx-146-        lote_codigo: et.lote_codigo_snapshot,
+src\features\logistica\ui\EntradaBipModal.tsx-147-        lote_id: et.lote_id,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-171-    const totalCaixas = recebidos.length;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-172-    const totalUn = recebidos.reduce((acc, r) => acc + r.quantidade, 0);
+src\features\logistica\ui\EntradaBipModal.tsx:173:    const produtosUnicos = new Set(recebidos.map((r) => r.produto_master_id)).size;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-174-    return { totalCaixas, totalUn, produtosUnicos };
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-175-  }, [recebidos]);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-176-
+src\features\logistica\ui\EntradaBipModal.tsx:177:  // Agregação por produto: caixas + un totais por produto_master_id
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-178-  const porProduto = useMemo(() => {
+src\features\logistica\ui\EntradaBipModal.tsx-179-    const map = new Map<number, { nome: string; embalagem: string | null; caixas: number; un: number }>();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-180-    for (const r of recebidos) {
+src\features\logistica\ui\EntradaBipModal.tsx:181:      const cur = map.get(r.produto_master_id) ?? { nome: r.produto_nome, embalagem: r.embalagem, caixas: 0, un: 0 };
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-182-      cur.caixas += 1;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-183-      cur.un += r.quantidade;
+src\features\logistica\ui\EntradaBipModal.tsx:184:      map.set(r.produto_master_id, cur);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-185-    }
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\EntradaBipModal.tsx-186-    return Array.from(map.entries())
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-93-    const asaSul = plans.find((p) => p.loja_id === 2);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-94-    expect(asaSul).toBeDefined();
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:95:    const row = asaSul!.rows.find((r) => r.produto_master_id === 100);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-96-    expect(row).toBeDefined();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-97-    expect(row!.forecast_horizonte).toBeCloseTo(40, 0);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-112-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-113-    const plans = computePlans(data, PARAMS_4D_95, {}, new Set());
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:114:    const row = plans.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-115-    // forecast 40 - estoque 15 - trânsito 5 = 20 (SS=0 com σ=0)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-116-    expect(row.estoque_loja).toBe(15);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-131-    const asaSul = plans.find((p) => p.loja_id === 2)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-132-    // produto 100 sem histórico + sem override = filtrado
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:133:    expect(asaSul.rows.find((r) => r.produto_master_id === 100)).toBeUndefined();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-134-  });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-135-
+--
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-142-    const plans = computePlans(data, PARAMS_4D_95, { 2: { 100: 12 } }, new Set());
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-143-    const asaSul = plans.find((p) => p.loja_id === 2)!;
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:144:    const row = asaSul.rows.find((r) => r.produto_master_id === 100);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-145-    expect(row).toBeDefined();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-146-    expect(row!.tem_historico).toBe(false);
+--
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-163-    const plans99 = computePlans(data, { ...PARAMS_4D_95, service_level_z: 2.33 }, {}, new Set());
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-164-
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:165:    const row90 = plans90.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:166:    const row99 = plans99.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-167-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-168-    expect(row99.safety_stock).toBeGreaterThan(row90.safety_stock);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-184-    const plans = computePlans(data, PARAMS_4D_95, {}, new Set());
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-185-
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:186:    const lagoSul = plans.find((p) => p.loja_id === 4)!.rows.find((r) => r.produto_master_id === 100)!;
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:187:    const asaSul = plans.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-188-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-189-    expect(lagoSul.sugestao_calculada).toBeCloseTo(400, 0);
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-208-    // a sugestão deve ser zero (já tem o suficiente sem SS)
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-209-    const plans = computePlans(data, { ...PARAMS_4D_95, service_level_z: 1.28 }, {}, new Set());
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:210:    const row = plans.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-211-
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-212-    // forecast = 20+10+10+10 = 50
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-229-    // Sem override e sem sugestão complementar (SS pequeno), o DoC ficará curto
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-230-    const plans = computePlans(data, PARAMS_4D_95, { 2: { 100: 0 } }, new Set());
+src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts:231:    const row = plans.find((p) => p.loja_id === 2)!.rows.find((r) => r.produto_master_id === 100)!;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-232-    expect(row.dia_stockout).not.toBeNull();
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\hooks\__tests__\useDistributionPlan.test.ts-233-  });
+--
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-602-                ok: boolean;
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-603-                erro?: string;
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:604:                etiqueta?: { produto_master_id: number; produto_nome_snapshot?: string | null; embalagem_nome?: string | null; tipo_embalagem?: string | null; quantidade_interna?: number; conferida_at?: string | null; separada_at?: string | null };
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-605-                alertas?: string[];
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-606-                backfilled?: boolean;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-631-            (rpc.alertas ?? []).forEach((a) => { playWarningSound(); toast.warning(a); });
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-632-            if (rpc.etiqueta) {
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:633:                scannedPid = rpc.etiqueta.produto_master_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-634-                productName = rpc.etiqueta.produto_nome_snapshot || "";
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-635-                // Warning cruzado removido — com a nova regra (container = +1 sempre),
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-706-                },
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-707-            });
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:708:            const rpc = rpcRaw as { ok: boolean; erro?: string; etiqueta?: { produto_master_id: number; produto_nome_snapshot?: string | null; tipo_embalagem?: string | null; quantidade_interna?: number } } | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-709-            if (rpcErr || !rpc?.ok) {
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-710-                toast.error(rpc?.erro || rpcErr?.message || "Falha ao transferir conferência");
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-713-            }
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-714-            // Aplica visualmente o bip — copia logica do handleScan apos sucesso da RPC
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:715:            const scannedPid = rpc.etiqueta?.produto_master_id ?? parseInt(data.pid);
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-716-            const productName = rpc.etiqueta?.produto_nome_snapshot || reconferirDialog.produto;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-717-            const tipoEtq = rpc.etiqueta?.tipo_embalagem ?? data.tipo ?? null;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-791-                    .from("estoque")
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-792-                    .select("quantidade_atual")
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:793:                    .eq("produto_master_id", pid)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-794-                    .eq("loja_id", lojaPreparadoraId)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-795-                    .maybeSingle();
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-841-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-842-                const { error: movError } = await (supabase.from("movimentacoes") as any).insert({
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:843:                    produto_master_id: pid,
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-844-                    tipo_movimentacao: "saida",
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-845-                    quantidade: movQty,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\RequisicaoConferenciaModal.tsx-875-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-876-                const { error: movError } = await (supabase.from("movimentacoes") as any).insert({
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx:877:                    produto_master_id: pid,
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-878-                    tipo_movimentacao: "saida",
+src\features\logistica\ui\RequisicaoConferenciaModal.tsx-879-                    quantidade: qty,
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-26-interface ContainerAberto {
+src\features\logistica\ui\ContainersAbertos.page.tsx-27-  uid: string;
+src\features\logistica\ui\ContainersAbertos.page.tsx:28:  produto_master_id: number;
+src\features\logistica\ui\ContainersAbertos.page.tsx-29-  produto_nome_snapshot: string | null;
+src\features\logistica\ui\ContainersAbertos.page.tsx-30-  tipo_embalagem: string | null;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-51-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-52-    (supabase.from("view_etiqueta_timeline" as any) as any)
+src\features\logistica\ui\ContainersAbertos.page.tsx:53:      .select("uid, produto_master_id, produto_nome_snapshot, tipo_embalagem, embalagem_nome, quantidade_interna, quantidade_disponivel, lote_codigo_snapshot, lote_validade_snapshot, loja_atual_id, loja_atual_nome, updated_at")
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-54-      .eq("status", "aberta")
+src\features\logistica\ui\ContainersAbertos.page.tsx-55-      .order("updated_at", { ascending: false })
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-174-            </p>
+src\features\logistica\ui\ContainersAbertos.page.tsx-175-            <h3 className="text-sm font-bold text-[#57715B] dark:text-[#E6DCCF] truncate mt-1">
+src\features\logistica\ui\ContainersAbertos.page.tsx:176:              {c.produto_nome_snapshot || `#${c.produto_master_id}`}
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-177-            </h3>
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\ContainersAbertos.page.tsx-178-          </div>
+--
+src\features\logistica\ui\SeparacaoBipPage.tsx-26-  is_separated: boolean;
+src\features\logistica\ui\SeparacaoBipPage.tsx-27-  qr_uid_bipado?: string | null;
+src\features\logistica\ui\SeparacaoBipPage.tsx:28:  produto_master_id?: number | null;
+src\features\logistica\ui\SeparacaoBipPage.tsx-29-  unidade_medida?: string | null;
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipPage.tsx-30-}
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipPage.tsx-49-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipPage.tsx-50-      (supabase.from("active_session_items") as any)
+src\features\logistica\ui\SeparacaoBipPage.tsx:51:        .select("id, item_name, requested_quantity, is_separated, qr_uid_bipado, produto_master_id, unidade_medida")
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipPage.tsx-52-        .eq("session_id", sessionId)
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\SeparacaoBipPage.tsx-53-        .order("order_index"),
+--
+src\features\logistica\ui\SeparacaoBipPage.tsx-109-        requested_quantity: i.requested_quantity,
+src\features\logistica\ui\SeparacaoBipPage.tsx-110-        is_separated: i.is_separated,
+src\features\logistica\ui\SeparacaoBipPage.tsx:111:        produto_master_id: i.produto_master_id ?? null,
+src\features\logistica\ui\SeparacaoBipPage.tsx-112-        qr_uid_bipado: i.qr_uid_bipado ?? null,
+src\features\logistica\ui\SeparacaoBipPage.tsx-113-        unidade_medida: i.unidade_medida ?? 'cx',
+--
+src\features\logistica\ui\StoreExpeditionTracker.tsx-410-        erro?: string;
+src\features\logistica\ui\StoreExpeditionTracker.tsx-411-        etiqueta?: {
+src\features\logistica\ui\StoreExpeditionTracker.tsx:412:          produto_master_id: number;
+src\features\logistica\ui\StoreExpeditionTracker.tsx-413-          produto_nome_snapshot?: string | null;
+src\features\logistica\ui\StoreExpeditionTracker.tsx-414-          lote_id?: string | null;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\src\features\logistica\ui\StoreExpeditionTracker.tsx-430-        .from('estoque')
+
+[Showing results with pagination = limit: 250]

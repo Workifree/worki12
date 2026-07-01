@@ -1,0 +1,392 @@
+##################################################
+### DANFE-NFe53260144584634000457550020000000021713610620-19.01.2026.092627.pdf
+##################################################
+RECEBEMOS DE MOMMA DOCES SAUDAVEIS LTDA OS PRODUTOS CONSTANTES DA NOTA FISCAL INDICADA AO                                                             NF-e
+LADO
+                                                                                                                                             N°. 000.002
+DATA DE RECEBIMENTO      IDENTIFICACAO E ASSINATURA DO RECEBEDOR                                                             VALOR
+                         PLASTMAK EMBALAGENS LTDA                                                                     11.285,80
+                                                                                                                                             SÉRIE 2          PÁG 1/1
+                                                                                        DANFE
+                     MOMMA DOCES SAUDAVEIS                                              DOCUMENTO
+                                                                                        AUXILIAR DA
+                     LTDA                                                               NOTA FISCAL
+                                                                                        ELETRÔNICA
+                     Q SOFN QUADRA 2 CONJUNTO C LOTE, 20 - GALP
+                                                                                        0 - ENTRADA        CHAV5E32D6E01A4C4E5S8S4O634000457550020000000021713610620
+                     AO20 PARTE C
+                     ZONA INDUSTRIAL                                                    1 - SAÍDA 1 5326 0144 5846 3400 0457 5500 2000 0000 0217 1361 0620
+                     BRASILIA - DF                                                      N°.000.002                Consulta de autenticidade no portal nacional da NF-e
+                     CEP: 70634-230                                                                        www.nfe.fazenda.gov.br/portal ou no site da Sefaz Autorizadora
+                     FONE: (61) 9559-8631                                               SÉRIE 2
+                                                                                        PÁG 1/1
+NATUREZA DA OPERAÇÃO                                                                                       PROTOCOLO DE AUTORIZAÇÃO DE USO
+                                                                                                                       253260003932987 16/01/2026 15:37:12
+DEVOLUCAO DE COMPRA PARA COMERCIALIZACAO                                                                                  CNPJ/CPF
+INSCRIÇÃO ESTADUAL                                       INSC. ESTADUAL DO SUBST. TRIBUT.
+                                          0810255300342                                              CNPJ / CPF                                       44.584.634/0004-57
+DESTINATÁRIO / REMETENTE                                                                                                                                  DATA DA EMISSÃO
+NOME / RAZÃO SOCIAL
+PLASTMAK EMBALAGENS LTDA                                                                                                       27.943.645/0001-14 16/01/2026
+ENDEREÇO
+SETOR QNH 3, SN                                                                         BAIRRO / DISTRITO                           CEP                DATA DE ENT / SAI
+MUNICÍPIO                                                                               TAGUATINGA NORTE (TAGUATINGA)                        72130-530 16/01/2026
+                                                                                                                                                                  HORA DE SAÍDA
+                                                         FONE / FAX                        UF        INSCRIÇÃO ESTADUAL
+BRASILIA                                                             (61) 8427-8499 DF 0781435900103                                                          15:37
+FATURA / DUPLICATA
+CÁLCULO DO IMPOSTO
+BC DO ICMS           VALOR DO ICMS                       BASE DE CÁLCULO ICMS ST VALOR DO ICMS ST.                    VALOR DO IPI           VALOR TOTAL DOS PRODUTOS
+            0,00                               0,00                              0,00                0,00                           0,00                      11.285,80
+VALOR DO FRETE       VALOR DO SEGURO                     DESCONTO                       OUTRAS DESPESAS ACES. VALOR APROX. TRIB.             VALOR TOTAL DA NOTA
+                      0,00                     0,00                                0,00                  0,00                       3.832,65                  11.285,80
+TRANSPORTADOR / VOLUMES                                                          FRETE POR CONTA     CÓDIGO ANTT PLACA                  UF CNPJ / CPF
+RAZÃO SOCIAL
+ENDEREÇO                                                              9 - Sem Frete                                                 UF INSCRIÇÃO ESTADUAL
+                                                                     MUNICÍPIO
+QUANTIDADE      ESPÉCIE                        MARCA                 NUMERO                          PESO BRUTO                                 PESO LIQUIDO
+                                                                                                                                    0,000
+                     39 ML                                                                                                                                           0,000
+DADOS DO PRODUTO / SERVIÇOS
+CÓD. PROD.  DESCRIÇÃO DOS PRODUTOS / SERVIÇOS             NCM / SH CST CFOP UN.  QTDE.  V. UNITÁRIO  V. TOTAL         BC ICMS       V. ICMS  V. IPI     ALÍQUOTAS    V. TRIBUTOS
+                                                         39232910 090 5202 ML                              5.545,80                                    ICMS IPI         1.883,35
+                                                         39232910 090 5202 ML                              5.290,00
+1000200     MOMMA DOCES,SACOLAS PEAD                     39232910 090 5202 UN    14,22  390,0000              450,00
+1000201     30X43,011 B/P
+1000202     MOMMA DOCES,SACOLAS PEAD                                             23,00  230,0000                                                                     1.796,48
+            20X33X0,010 B/P
+            CLICHE                                                               1,00   450,0000                                                                     152,82
+DADOS ADICIONAIS                                                                                                      RESERVADO AO FISCO
+INFORMAÇÕES COMPLEMENTARES
+PROCON-DF: Venâncio Shopping - Setor Comercial Sul, Quadra 08, Bloco B-60, Sala 240 - Brasilia - DF -
+CEP: 70.333-900 - Telefone: 151 -PEDIDO: PDE-1
+REFERENTE AO(S) DOCUMENTO(S):
+  - NF: Emissão: Chave: 53260127943645000114550020000003851425108424
+  - Trib aprox R$: 1801,21 Federal, R$: 2031,44 Estadual FONTE IBPT
+
+##################################################
+### NF AG.pdf
+##################################################
+RECEBEMOS DE MOMMA DOCES SAUDAVEIS LTDA OS PRODUTOS E/OU SERVIÇOS CONSTANTES DA NOTA FISCAL ELETRÔNICA INDICADA                                         NF-e
+ABAIXO. EMISSÃO: 06/03/2026 VALOR TOTAL: R$ 445,50 DESTINATÁRIO: MOMMA DOCES SAUDAVEIS LTDA AGUAS CLARAS - Rua 34, S/N Norte
+(Águas Claras) Brasília-DF                                                                                                                           Nº. 000.000.927
+                                                                                                                                                        Série 001
+DATA DE RECEBIMENTO      IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR
+                     IDENTIFICAÇÃO DO EMITENTE                                DANFE
+                                                                        Documento Auxiliar da Nota
+                                                                              Fiscal Eletrônica
+    MOMMA DOCES SAUDAVEIS LTDA                                          0 - ENTRADA              1  CHAVE DE ACESSO
+                                                                        1 - SAÍDA
+SETOR SHC/NORTE COMERCIO LOCAL NORTE QUADRA 308 BLOCO B L, 13 - TERREO                                        5326 0344 5846 3400 0104 5500 1000 0009 2710 0050 3152
+                                           ASA NORTE - 70747-520        Nº. 000.000.927                           Consulta de autenticidade no portal nacional da NF-e
+                                                                           Série 001
+                                  BRASILIA - DF Fone/Fax: 61981882218
+                                                                              Folha 1/1                      www.nfe.fazenda.gov.br/portal ou no site da Sefaz Autorizadora
+NATUREZA DA OPERAÇÃO                                                                                PROTOCOLO DE AUTORIZAÇÃO DE USO
+TRANSFERENCIA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCEI                                                  253260016504155 - 06/03/2026 10:41:31
+INSCRIÇÃO ESTADUAL                                      INSCRIÇÃO ESTADUAL DO SUBST. TRIBUT.                          CNPJ / CPF
+                  0810255300180                                                                                                         44.584.634/0001-04
+DESTINATÁRIO / REMETENTE                                                                                   CNPJ / CPF                                DATA DA EMISSÃO
+NOME / RAZÃO SOCIAL
+MOMMA DOCES SAUDAVEIS LTDA AGUAS CLARAS                                       BAIRRO / DISTRITO                44.584.634/0005-38                          06/03/2026
+ENDEREÇO                                                                                                              CEP                            DATA DA SAÍDA/ENTRADA
+Rua 34, S/N                                                                              Norte (Águas Claras)                 71918-720                    06/03/2026
+MUNICÍPIO                                                                     UF FONE / FAX                            INSCRIÇÃO ESTADUAL            HORA DA SAÍDA/ENTRADA
+Brasília                                                                      DF                                       0810255300504                             00:00:00
+CÁLCULO DO IMPOSTO                   BASE DE CÁLC. ICMS S.T. VALOR DO ICMS SUBST. V. IMP. IMPORTAÇÃO V. ICMS UF REMET. V. FCP UF DEST.       VALOR DO PIS        V. TOTAL PRODUTOS
+BASE DE CÁLC. DO ICMS VALOR DO ICMS
+            0,00          0,00                   0,00                   0,00               0,00              0, 00                    0, 00                0,00       445,50
+VALOR DO FRETE VALOR DO SEGURO DESCONTO                 OUTRAS DESPESAS VALOR TOTAL IPI V. ICMS UF DEST.               V. TOT. TRIB.         VALOR DA COFINS V. TOTAL DA NOTA
+            0,00          0,00                   0,00                   0,00               0,00              0, 00                    0, 00                0,00       445,50
+TRANSPORTADOR / VOLUMES TRANSPORTADOS
+NOME / RAZÃO SOCIAL                              FRETE                        CÓDIGO ANTT           PLACA DO VEÍCULO                  UF CNPJ / CPF
+                                                 9-Sem Transporte
+ENDEREÇO                                                                      MUNICÍPIO                                               UF INSCRIÇÃO ESTADUAL
+QUANTIDADE      ESPÉCIE                          MARCA                        NUMERAÇÃO                    PESO BRUTO                          PESO LÍQUIDO
+DADOS DOS PRODUTOS / SERVIÇOS
+CÓDIGO PRODUTO        DESCRIÇÃO DO PRODUTO / SERVIÇO     NCM/SH O/CST         CFOP UN               QUANT    VALOR     VALOR          B.CÁLC   VALOR VALOR ALÍQ.      ALÍQ. IPI
+                                                        18069000 041          5152 UNID                       UNIT     TOTAL           ICMS
+                                                                                                                                               ICMS        IPI ICMS
+9638624 CENOURA COM MINI OVINHOS                                                                    15,0000  29,70 445,50               0, 00  0, 00 0,00 0, 00
+DADOS ADICIONAIS                                                                                               RESERVADO AO FISCO
+INFORMAÇÕES COMPLEMENTARES                                                                                                Desenvolvido por Sempre Tecnologia © www.sempretecnologia.com.br
+Inf. Contribuinte: DOC: 50315-Fantasia: 30- - -
+
+##################################################
+### Nota do Pedido - Momma.pdf
+##################################################
+17/11/2025, 04:44                             Nota do Pedido - Momma
+Momma · Nota do Pedido                                                          Retirada
+Fixar na encomenda. Documento interno.
+             Pedido           61d4d1db-8763-4478-93ce-143476353d8a  Cliente     joao
+             Loja             Momma Asa Norte                       Telefone    123123123123
+             Entrega          17/11/2025                            Lançado em  17/11/2025, 17:19:31
+             Lançado por      dfer                                  Status      aberto
+             Descrição do pedido
+               casquinha de gelato meu nobre
+             Observações
+               muita gordura
+                                                                                  Pedido
+                                                                                61d4d1db
+about:blank                                                                                           1/1
+
+##################################################
+### itens cmv.pdf
+##################################################
+Momma -- Base de Produtos para Curva ABC
+Fonte: Momma ERP · vendas PDV Degust Período: últimos 30 dias (até 26/06/2026) · todas as lojas consolidadas Total: 95 produtos com custo (CMV) conhecido
+Definição das colunas
+          CMV (custo) = custo por unidade vendida , derivado das fichas técnicas. Conversões aplicadas: un/fatia = custo ÷ rendimento · gelato em litro  bolinha
+          de 100 g ( ÷ 10 ) · kg  pote de 200 g ( × 0,2 ).
+          Preço venda = preço de cardápio (loja/encomendas). PDV = preço real do PDV quando não há cardápio. a definir = falta o preço de venda.
+          Volume = unidades vendidas no período (PDV Degust).
+          Faturamento = preço × volume · Margem = (preço - custo) ÷ preço.
+1) Produtos com venda no período (base direta da ABC)
+Gelato: não existe produto "Gelato Copinho" -- é a forma de servir (bolinha de 100 g num copinho). Os produtos são as cubas (seção 2). No período o PDV
+registrou 5.345 bolinhas de gelato (todos os sabores somados), mas não separa por sabor -- por isso o gelato não entra aqui como linha única; ver as cubas
+com CMV por bolinha na seção 2.
+Produto                   Setor      CMV         Venda      Volume  Faturam.  Margem
+                                     (R$)        (R$)               (R$)
+Bombom de Morango         PRODUTOS         2,68         18 2.664    47.952    85%
+Mini Brownie Doce de Leite PRODUTOS        1,99         14 1.485    20.790    86%
+Mini Prestígio            PRODUTOS         1,93         14 1.303    18.242    86%
+Brownie Lowcarb           PRODUTOS         2,16         15 1.234    18.510    86%
+Mini Ninho c/ Avelã       PRODUTOS         2,40         14 1.169    16.366    83%
+Mini Franui               PRODUTOS         2,42         14 1.085    15.190    83%
+Bombom de Uva             PRODUTOS         1,88         18 1.055    18.990    90%
+Mini Caramelo Salgado     PRODUTOS         2,46         14 1.052    14.728    82%
+Mini Pistache             PRODUTOS         3,36         14 1.036    14.504    76%
+Mini Brigadeiro           PRODUTOS         2,02         14  970     13.580    86%
+Bolo Pote Brownie c/ DdL  PRODUTOS         9,23         27  820     22.140    66%
+Mini Pão de Mel           PRODUTOS         1,50         14  724     10.136    89%
+Mini Brigadeiro Vegano    PRODUTOS         3,11         14  658     9.212     78%
+Mini Maracujá             PRODUTOS         2,13         14  620     8.680     85%
+Mini Torta de Limão       PRODUTOS         1,98         14  612     8.568     86%
+Mini Café                 PRODUTOS         1,72         14  611     8.554     88%
+Docinho Brigadeiro        PRODUTOS   0,08               9   459     4.131     99%
+Mini Pistache Vegano      PRODUTOS         3,81         14  436     6.104     73%
+Bolo Pote Banoffe         PRODUTOS         6,33         27  426     11.502    77%
+Tartelete Smore           PRODUTOS         6,73         29  413     11.977    77%
+Canjica                   PRODUTOS         5,35         39  394     15.366    86%
+Bolo Pote Cenoura         PRODUTOS         6,19         27  389     10.503    77%
+Mini de Paçoca            PRODUTOS         2,20         14  378     5.292     84%
+PBrooloduPtoote Chocolate   SPeRtOoDr UTOS  CMV 6,27                 Venda 27       Volu3m19e  Faturam8. .613   Marg7e7m%
+Fatia Chocomelo             PRODUTOS        (R$)                     (R$)                317   (R$)                  81%
+Fatia Limão c/ FV           PRODUTOS
+Tartelete de Limão          PRODUTOS               6,89                         36                      11.412
+Fatia Nozes                 PRODUTOS
+Bolo Pote Pistache          PRODUTOS                         6,90    36             270        9.720            81%
+Mini Caseirinho Banana      PRODUTOS
+Doce no Pote Doce de Leite  PRODUTOS                         4,84    29             247        7.163            83%
+Mini Caseirinho Chocolate   PRODUTOS
+Mini Caseirinho Milho       PRODUTOS                         6,54    36             246        8.856            82%
+Fatia Maracujá              PRODUTOS
+Doce no Pote Casadinho      PRODUTOS                         10,52   29             234        6.786            64%
+Docinho Pistache            PRODUTOS
+Fatia Pistache              PRODUTOS                         2,70    25             229        5.725            89%
+Tartelete Chocomelo         PRODUTOS
+Curau                       PRODUTOS                         6,10    39             222        8.658            84%
+Doce no Pote Brigadeiro     PRODUTOS
+Granola Tradicional         MERCEARIA                        2,36    25             202        5.050            91%
+Docinho Brigadeiro Branco   PRODUTOS
+Vulcão Chocolate c/                                          2,01    25             191        4.775            92%
+Pistache                    PRODUTOS
+Naked P Casadinho                                            6,65    36             187        6.732            82%
+                            PRODUTOS
+Mini Box Uva                CÂMARA                           6,10    39             178        6.942            84%
+                            FRIA
+Naked P Pistache            PRODUTOS                         0,10    9              178        1.602            99%
+Torta Smore                 PRODUTOS
+Dressed Pistache P          PRODUTOS                         10,38   38             173        6.574            73%
+                            CÂMARA
+Mini Box Morango            FRIA                             7,34    29             168        4.872            75%
+                            PRODUTOS
+Mini Naked Casadinho        PRODUTOS                         5,74    39             165        6.435            85%
+Naked M Casadinho           PRODUTOS
+Naked G Chocolate                                            6,10    39             118        4.602            84%
+                                                             9,13    49             77         3.773            81%
+                                                             0,08    9              42         378              99%
+                                                             58,48   PDV            27         --               --
+                                                             43,42   239            10         2.390            82%
+                                                             11,93   79             7          553              85%
+                                                              63,58  239            5          1.195            73%
+                                                              62,12
+                                                             100,39  269            3          807              77%
+                                                                     299            2          598              66%
+                                                             13,89   79             2          158              82%
+                                                             21,26   159            2          318              87%
+                                                             61,90
+                                                             73,50   299            2          598              79%
+                                                                     359            1          359              80%
+Faturamento total (itens com venda): R$ 464.252 em 30 dias.
+2) Produzidos com CMV conhecido, sem venda individual no período
+    Os produtos de gelato são as cubas abaixo, vendidas em bolinhas de 100 g num copinho. O PDV registra a venda como bolinha genérica (5.345 un/30 d, todos
+    os sabores), então a venda não é separada por sabor -- cada cuba tem o CMV por bolinha. Os demais itens (bolos/tortas/fatias) não giraram sob esse SKU no
+    período.
+Gelatos -- produtos reais (cuba), vendidos em bolinha de 100 g
+Produto                  CMV/bolinha          Preço
+                         (R$)                 venda
+Cuba Açaí
+Cuba Avelã                            1,85    a definir
+Cuba Chocolate
+Cuba Coco                             2,85    a definir
+Cuba Cookie
+Cuba de Cocada                        2,13    a definir
+Cuba de Paçoca
+Cuba de Pipoca                        2,13    a definir
+Cuba de Romeu e Julieta
+Cuba Doce de Leite                    2,40    a definir
+Cuba Ferrero
+Cuba Flocos                           2,04    a definir
+Cuba Frutas Vermelhas
+Cuba Gelato Brigadeiro                6,77    a definir
+Cuba Gelato Cupuaçu
+Cuba Gelato de Iogurte                3,56    a definir
+Cuba Gelato Galak
+Cuba Limão                            4,87    a definir
+Cuba Manga c/ Maracujá
+Cuba Mousse de                        1,81    a definir
+Maracujá
+Cuba Pistache                         3,17    a definir
+Cuba Tapioca
+                                      2,36    a definir
+                                      2,15    a definir
+                                      1,97    a definir
+                                      2,52    a definir
+                                      2,14    a definir
+                                      2,83    a definir
+                                      1,87    a definir
+                                      1,48    a definir
+                                      2,16    a definir
+                                      4,42    a definir
+                                      2,08    a definir
+Bolos / Tortas / Boxes (sem giro no período)
+Produto                  CMV/un       Preço
+                         (R$)         venda
+Box Pavê
+Torta de Morango         52,09                       --
+Naked M Pistache
+Naked M Brownie c/ DdL   74,35                       --
+Naked P Brownie c/ DdL
+                         88,89                369
+                         75,38                299
+                         51,66                239
+PNraokdeudtoP Chocolate   CMV/un39,04      Preço 239
+Mini Naked Brownie c/     (R$)             venda
+DdL
+                                    26,16             159
+Vulcão Cenoura
+                          37,10                   --
+Vulcão Chocolate c/ DdL
+                          36,66                   --
+Vulcão Churros
+                          34,98                   --
+Vulcão Limão
+                          35,22                   --
+Mini Box Coco c/ Abacaxi
+                          15,06                   79
+Fatias (sabores sem giro no período)
+Produto                   CMV/un           Preço
+                          (R$)             venda
+Fatia de Cenoura
+Fatia de Churros                  6,18            36
+Fatia de Cookies and
+Cream                             5,81            36
+Fatia de Pina Colada
+Fatia de Tiramissu                6,62            36
+                                  6,16            36
+                                  6,79            36
+Notas para o consultor
+     1. Gelato: não há produto "Gelato Copinho" -- é só a forma de servir (bolinha de 100 g no copinho). Os produtos são as 22 cubas (cada uma com CMV por
+          bolinha). O PDV registra a venda do gelato como bolinha genérica (5.345 un/30 d), sem separar por sabor -- para uma ABC de gelato por sabor é preciso criar
+          SKU por sabor no PDV. O preço da bolinha/copo ainda precisa ser definido (no PDV o copo sai ~R$26 e leva 2­3 bolinhas).
+     2. Docinhos (CMV R$0,08): a ficha tem rendimento de 354 unidades -- provavelmente ~10× alto. Custo real estimado ~R$0,50­0,80/un. Recomenda-se validar.
+     3. Itens com volume 0 = produzidos, com custo conhecido, mas sem giro sob esse SKU no período.
+     4. Sem CMV (pendente de receita, fora desta lista): Casquinha, Brownie Bites, Gelatobox, Box Brownie, Mini Box Pavê, Mini Box Brownie, sorbets (Amora /
+          Goiaba / Morango).
+     5. Não-doces fora do escopo (sem ficha de confeitaria): comidas (salmão, frango, arroz, quiche...), bebidas (café, água, smoothie, chá) e mercearia revendida.
+
+##################################################
+### Lista de Contagem - Embalagens.pdf
+##################################################
+27/11/2025, 11:53                                                       Lista de Contagem - Embalagens
+SETOR:             MOMMA DOCES SAUDÁVEIS
+                                                 Embalagens
+                                                              PRODUTOS                                  QUANTIDADE
+EMBALAGEM
+ACETATO FATIA                                                                                             12 unidade
+ACETATO ROLO                                                                                                  2 rolo
+ARAME DOURADO                                                                                               3 metro
+BETTER GO
+BOBINA 30X40                                                                                              40 unidade
+BOBINA 40X60                                                                                                  2 rolo
+BOBINAS PARA IMPRESSORAS TÉRMICA
+CAIXA 24 DOCES                                                                                             2 unidade
+CAIXA 4 DOCES                                                                                                6 caixa
+CAIXA 6 DOCES
+CAIXA DE ACRÍLICO RETANGULAR 19X11                                                                         1 unidade
+CAIXA DE GRAMPO                                                                                           16 unidade
+CAIXA GRANOLA BAUNILHA                                                                                     0 unidade
+CAIXA GRANOLA CHOCOLATE                                                                                    1 unidade
+CAIXA MINI NAKED FARDO                                                                                     8 unidade
+CAIXA PARA BOLO                                                                                            1 unidade
+CAIXA PEQUENA QUADRADA                                                                                     1 unidade
+CAIXA PEQUENA RETANGULAR
+CAIXAS DE ACRÍLICO 8X8                                                                                      16 caixa
+CAKE BOARD 15CM                                                                                              3 fardo
+CAKE BOARD 28CM                                                                                            6 unidade
+CANETA MARCADORA PERMANENTE                                                                                5 unidade
+CARTÃO FIDELIDADE GELATO                                                                                   3 unidade
+CARTÃO FIDELIDADE VERDE                                                                                    0 unidade
+COLHER DE DEGUSTAÇÃO                                                                                       2 unidade
+COLHER DE SORVETE                                                                                          2 unidade
+COLHER PARA BOLO NO POTE                                                                                   0 unidade
+CONE PARA CASQUINHA                                                                                        0 unidade
+COPO ÁGUA                                                                                                  6 unidade
+COPO CAFÉ                                                                                                  3 unidade
+DUREX GRANDE                                                                                               1 unidade
+EMBALAGEM BOMBOM DE MORANGO                                                                               16 unidade
+EMBALAGEM BOMBOM DE UVA                                                                                    5 unidade
+ETIQUETA DE VALIDADE COZINHA                                                                               4 unidade
+ETIQUETA DE VALIDADE IMPRESSORA                                                                              17 rolo
+FORMINHA/PÉTALAS PARA DOCINHOS                                                                            10 unidade
+GELATOBOX 1300ML                                                                                           5 unidade
+GELATOBOX 700ML                                                                                            9 unidade
+GOMINHAS JUBBE                                                                                             5 unidade
+GUARDANAPO ABERTO                                                                                          5 unidade
+                                                                                                           3 unidade
+                                                                                                           4 unidade
+                                                                                                          25 unidade
+                                                                                                            6 pacote
+about:blank                                                                                                           1/2
+27/11/2025, 11:53                                   Lista de Contagem - Embalagens
+         GUARDANAPO FECHADO                                                          2 pacote
+         LUVA G                                                                      10 caixa
+         LUVA M                                                                     12 unidade
+         LUVA P                                                                     3 unidade
+         PAPEL FILME
+         PAPEL MANTEIGA                                                                1 rolo
+         PORTA DOCINHO INDIVIDUAL                                                      3 rolo
+         POTE BANOFFE                                                               1 unidade
+         POTE BROWNIE COM DOCE DE LEITE FARDO                                       1 unidade
+         POTE CENOURA COM BRIGADEIRO                                                3 unidade
+         POTE G                                                                     3 unidade
+         POTE M                                                                     4 unidade
+         POTE MORANGO                                                               8 unidade
+         POTE P                                                                     1 unidade
+         POTE PISTACHE                                                              7 unidade
+         POTE PRESTÍGIO                                                             3 unidade
+         POTE RESERVA VERDE FARDO                                                   20 unidade
+         RIBBON                                                                     1 unidade
+         SACO DE CONFEITEIRO                                                        8 unidade
+         SACOLA DE PRESENTE G                                                       10 unidade
+         SACOLA DE PRESENTE P                                                        30 caixa
+         SACOLA TRANSPARENTE G FARDO                                                 30 caixa
+         SACOLA TRANSPARENTE P                                                      5 unidade
+         SAQUINHO 12X12 PARA BISCOITOS E VEGABOLLS                                    2 fardo
+         SAQUINHO 15X22 PARA GRANOLA                                                1 unidade
+         TAPETINHO PARA DOCINHOS                                                    18 unidade
+         TOUCA DESCARTÁVEL                                                            4 fardo
+                                                                                    14 unidade
+about:blank                                                                                     2/2
+

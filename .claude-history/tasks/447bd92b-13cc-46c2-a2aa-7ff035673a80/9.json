@@ -1,0 +1,9 @@
+{
+  "id": "9",
+  "subject": "v3 UI: hero+filtro, colunas verticais, drill-down /tv/loja/:id",
+  "description": "Hero com filtro global, 6 colunas verticais clicáveis (vendas/perdas/estoque nomeado/feed), página de drill-down por loja com filtro de data, rota admin. Glassmorphism + responsivo. Testes.",
+  "activeForm": "Construindo UI v3",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

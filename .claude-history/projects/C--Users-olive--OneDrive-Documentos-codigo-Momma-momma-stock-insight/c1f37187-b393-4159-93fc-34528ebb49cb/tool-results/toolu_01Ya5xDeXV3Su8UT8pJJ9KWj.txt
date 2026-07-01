@@ -1,0 +1,252 @@
+docs\arquitetura\seguranca-permissoes.md:3:Sistema de autenticação, autorização e controle de acesso do Gidape.
+docs\degust-integration.md:82:VALUES (3489, <codigo_loja_degust>, 'MOMMA DOCES SAUDAVEIS (BRASILIA SHOPPING)', 6);
+docs\fsd-migration-plan.md:3:## Gidape Frontend — Programa Integrado de Qualidade de Engenharia
+docs\fsd-migration-plan.md:15:│                  PROGRAMA DE QUALIDADE — GIDAPE FRONTEND                    │
+docs\fsd-migration-plan.md:1274:Browser (Gidape SPA)
+docs\fsd-migration-plan.md:1338:  [SEMRESATTRS_SERVICE_NAME]: 'gidape-frontend',
+docs\fsd-migration-plan.md:1391:export const tracer = tracerProvider.getTracer('gidape-frontend');
+docs\fsd-migration-plan.md:1392:export const meter = meterProvider.getMeter('gidape-frontend');
+docs\fsd-migration-plan.md:1975:  "service": "gidape-frontend",
+docs\fsd-migration-plan.md:2022: * Logger de Wide Events estruturados para o Gidape frontend.
+docs\fsd-migration-plan.md:2068:const SERVICE_NAME = import.meta.env.VITE_APP_SERVICE_NAME ?? 'gidape-frontend';
+docs\fsd-migration-plan.md:2347:  rate({service="gidape-frontend"} | json | outcome="error" [1h])
+docs\fsd-migration-plan.md:2352:  {service="gidape-frontend"} | json
+docs\fsd-migration-plan.md:2358:{service="gidape-frontend"} | json
+docs\fsd-migration-plan.md:2365:  {service="gidape-frontend"} | json | unwrap duration_ms [1h]
+docs\fsd-migration-plan.md:2369:{service="gidape-frontend"} | json | outcome="error"
+docs\fsd-migration-plan.md:2474:{ resource.service.name="gidape-frontend" && span.name="requisicao.criar" }
+docs\fsd-migration-plan.md:2478:{ resource.service.name="gidape-frontend" && span.name="financeiro.dre.fetch" }
+docs\fsd-migration-plan.md:2482:{ resource.service.name="gidape-frontend" && span.name="encomenda.picking.finalizar" }
+docs\fsd-migration-plan.md:2486:{ resource.service.name="gidape-frontend" && status=error }
+docs\fsd-migration-plan.md:2490:{ resource.service.name="gidape-frontend" && duration > 2s }
+docs\fsd-migration-plan.md:2517:#### As 4 regras do Tail Sampling para o Gidape
+docs\fsd-migration-plan.md:2680: * Hierarquia de erros tipados do Gidape.
+docs\fsd-migration-plan.md:3406:    {service="gidape-frontend"} | json | error_category="business_rule" [1h]
+docs\fsd-migration-plan.md:3411:{service="gidape-frontend"} | json
+docs\fsd-migration-plan.md:3417:  {service="gidape-frontend"} | json | error_category="validation" [1h]
+docs\fsd-migration-plan.md:3421:{service="gidape-frontend"} | json
+docs\visao-geral-funcionalidades.md:1:# Gidape — Mapa de Funcionalidades
+docs\visao-geral-funcionalidades.md:24:GIDAPE (ERP/SaaS interno da Momma · multi-loja · 6 unidades)
+docs\SUMMARY.md:61:* [IA no Momma Sistema](inteligencia-artificial/README.md)
+docs\desenvolvimento\variaveis-ambiente.md:3:Todas as variáveis de ambiente utilizadas pelo Gidape.
+docs\desenvolvimento\variaveis-ambiente.md:33:| `VITE_OTEL_SERVICE_NAME`   | `'gidape-frontend'`        | Nome do serviço nos traces                   |
+docs\desenvolvimento\variaveis-ambiente.md:90:VITE_OTEL_SERVICE_NAME=gidape-frontend
+docs\observabilidade\traces.md:163:O tracer usa o nome `'gidape-app'` versão `1.0.0`, obtendo o `TracerProvider` da inicialização em `telemetry.ts`.
+docs\desenvolvimento\setup-local.md:3:Como configurar o ambiente de desenvolvimento do Gidape.
+docs\desenvolvimento\setup-local.md:24:cd Gidape
+docs\desenvolvimento\setup-local.md:61:Gidape/
+docs\observabilidade\rum.md:44:O meter usa o nome `'gidape-rum'` versão `1.0.0`.
+docs\desenvolvimento\error-handling.md:9:O Gidape usa uma hierarquia de erros tipados com handler centralizado que integra com OpenTelemetry e wide events.
+docs\desenvolvimento\deploy.md:3:Processo de deploy do Gidape na Vercel e Edge Functions no Supabase.
+docs\observabilidade\metricas.md:133:O meter usa o nome `'gidape-app'` versão `1.0.0`. O intervalo de exportação é 60 segundos (configurado no `telemetry.ts`).
+docs\observabilidade\metricas.md:268:O painel de SLO Burn Rate está disponível no dashboard **Gidape — Hard Metrics** (seção "SLO Burn Rate"). Mostra burn rates de 1h e 6h para cada SLO com thresholds de alerta.
+docs\desenvolvimento\convencoes.md:3:Padrões de código, commits e configuração TypeScript do projeto Gidape.
+docs\specs\FEAT-015-mia-context-engineering.md:230:- `setor` TEXT ENUM: ex: 'Confeitaria', 'Gelatos', 'Panificação', 'Bebidas', 'Frios'.
+docs\specs\FEAT-015-mia-context-engineering.md:503:Pergunta: "me mostra os produtos do setor confeitaria"
+docs\specs\FEAT-015-mia-context-engineering.md:505:Ferramenta 1: get_distinct_sectors() → confirmar 'Confeitaria' (com maiúscula)
+docs\specs\FEAT-015-mia-context-engineering.md:506:Ferramenta 2: get_page_produtos(setor='Confeitaria')
+docs\observabilidade\grafana.md:3:Configuração do Grafana para visualização de traces, métricas e logs do Gidape.
+docs\observabilidade\grafana.md:9:O Gidape exporta telemetria via OTLP HTTP para um collector OpenTelemetry, que pode ser configurado para enviar dados ao Grafana Cloud ou a uma instância local do Grafana + Tempo + Prometheus + Loki.
+docs\observabilidade\grafana.md:211:Variáveis de ambiente do Gidape:
+docs\linx-integration.md:106:| `MOMMA DOCES SAUDAVEIS (ASA NORTE)` | 3 |
+docs\linx-integration.md:107:| `MOMMA DOCES SAUDAVEIS (ASA SUL)` | 2 |
+docs\avaliacao-desacoplamento-frontend-edge-functions.md:4:**Projeto:** Momma Sistema Interno
+docs\legado\melhorias\plano-padronizacao.md:3:Este documento descreve as etapas aprovadas para implementar a padronização de código, _linting_ automático e documentação orientada ao IntelliSense na base de código do Momma Sistema Interno.
+docs\legado\fsd-migration-plan.md:3:## Gidape Frontend — Programa Integrado de Qualidade de Engenharia
+docs\legado\fsd-migration-plan.md:15:│                  PROGRAMA DE QUALIDADE — GIDAPE FRONTEND                    │
+docs\legado\fsd-migration-plan.md:1274:Browser (Gidape SPA)
+docs\legado\fsd-migration-plan.md:1338:  [SEMRESATTRS_SERVICE_NAME]: 'gidape-frontend',
+docs\legado\fsd-migration-plan.md:1391:export const tracer = tracerProvider.getTracer('gidape-frontend');
+docs\legado\fsd-migration-plan.md:1392:export const meter = meterProvider.getMeter('gidape-frontend');
+docs\legado\fsd-migration-plan.md:1975:  "service": "gidape-frontend",
+docs\legado\fsd-migration-plan.md:2022: * Logger de Wide Events estruturados para o Gidape frontend.
+docs\legado\fsd-migration-plan.md:2068:const SERVICE_NAME = import.meta.env.VITE_APP_SERVICE_NAME ?? 'gidape-frontend';
+docs\legado\fsd-migration-plan.md:2347:  rate({service="gidape-frontend"} | json | outcome="error" [1h])
+docs\legado\fsd-migration-plan.md:2352:  {service="gidape-frontend"} | json
+docs\legado\fsd-migration-plan.md:2358:{service="gidape-frontend"} | json
+docs\legado\fsd-migration-plan.md:2365:  {service="gidape-frontend"} | json | unwrap duration_ms [1h]
+docs\legado\fsd-migration-plan.md:2369:{service="gidape-frontend"} | json | outcome="error"
+docs\legado\fsd-migration-plan.md:2474:{ resource.service.name="gidape-frontend" && span.name="requisicao.criar" }
+docs\legado\fsd-migration-plan.md:2478:{ resource.service.name="gidape-frontend" && span.name="financeiro.dre.fetch" }
+docs\legado\fsd-migration-plan.md:2482:{ resource.service.name="gidape-frontend" && span.name="encomenda.picking.finalizar" }
+docs\legado\fsd-migration-plan.md:2486:{ resource.service.name="gidape-frontend" && status=error }
+docs\legado\fsd-migration-plan.md:2490:{ resource.service.name="gidape-frontend" && duration > 2s }
+docs\legado\fsd-migration-plan.md:2517:#### As 4 regras do Tail Sampling para o Gidape
+docs\legado\fsd-migration-plan.md:2680: * Hierarquia de erros tipados do Gidape.
+docs\legado\fsd-migration-plan.md:3406:    {service="gidape-frontend"} | json | error_category="business_rule" [1h]
+docs\legado\fsd-migration-plan.md:3411:{service="gidape-frontend"} | json
+docs\legado\fsd-migration-plan.md:3417:  {service="gidape-frontend"} | json | error_category="validation" [1h]
+docs\legado\fsd-migration-plan.md:3421:{service="gidape-frontend"} | json
+docs\dominios\financeiro.md:3:Módulo responsável pela gestão completa das operações financeiras do Gidape.
+docs\regras-de-negocio\README.md:1:# Regras de Negócio — Gidape
+docs\assets\css\momma.css:2:   Momma Sistema — Identidade Visual
+docs\melhorias\plano-padronizacao.md:3:Este documento descreve as etapas aprovadas para implementar a padronização de código, _linting_ automático e documentação orientada ao IntelliSense na base de código do Momma Sistema Interno.
+docs\noaa\analise-flows-clientes\scripts\03_synthesize.py:205:EXTRACT_SYSTEM = """Você é um pesquisador sênior em conversational AI destilando padrões científicos do HISTÓRICO de atendimento humano da Momma Doces Saudáveis no WhatsApp para alimentar context engineering e prompt engineering (Anthropic-aligned) de uma futura IA chamada Noa.
+docs\noaa\analise-flows-clientes\scripts\03_synthesize.py:498:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\scripts\02_analyze_corpus.py:240:CLASSIFY_SYSTEM = """Você é um pesquisador sênior em conversational AI analisando o HISTÓRICO de atendimento humano da Momma Doces Saudáveis no WhatsApp. O atendente é uma PESSOA HUMANA — esses dados são ouro pra alimentar context engineering e prompt engineering de uma futura agente de IA chamada Noa, que vai REPLICAR o que funciona neste histórico.
+docs\mia\ARCHITECTURE.md:831:Momma é uma empresa de doces saudáveis (NÃO é padaria). Shelf-life crítico (3-5 dias). Validade é constraint duro em todo planejamento (DRP, forecast, produção).
+docs\mia\HANDOFF.md:43:| Empresa | Momma — doces saudáveis (NÃO é padaria). Shelf-life 3-5 dias. 6 lojas em Brasília. |
+docs\mia\HANDOFF.md:44:| Repo | `Ochozn/Gidape` (GitHub) |
+docs\noaa\analise-flows-clientes\README.md:7:[Omitted long matching line]
+docs\mia\mia.md:25:A **Momma** é uma rede de doces saudáveis em Brasília (Distrito Federal). NÃO é uma padaria. Foco em produtos com shelf-life curto (3 a 5 dias), o que torna validade um constraint crítico em todo planejamento (DRP, forecast, produção).
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:1:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:2:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:4:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:7:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:8:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:10:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:44:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:45:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:70:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:71:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:116:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:121:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:124:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:127:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:128:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:132:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:135:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:136:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:139:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:140:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:143:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:11:> Como cliente de doces saudáveis, quando quero retirar um pedido na loja, eu quero confirmar disponibilidade, sabor, tamanho, horário e local de retirada porque preciso garantir que o produto estará pronto no momento certo e no lugar certo.
+docs\noaa\analise-flows-clientes\flows\indefinido.md:11:> Como cliente ou contato externo, quando envio mensagem para WhatsApp Momma Doces Saudáveis, eu quero que o atendente identifique rapidamente se minha intenção é comercial ou pessoal/spam porque preciso de clareza sobre se estou no canal correto.
+docs\noaa\analise-flows-clientes\flows\indefinido.md:23:| 1 | atendente | Atendente recebe mensagem e valida contexto em <5 segundos | _Noa deve perguntar: 'Oi! Como posso ajudar você com a Momma Doces Saudáveis?' an_ |
+docs\noaa\analise-flows-clientes\flows\indefinido.md:32:- ✅ Confirmação de que cliente está no canal correto (Momma Doces Saudáveis)
+docs\noaa\analise-flows-clientes\flows\indefinido.md:54:**Resposta recomendada para Noa:** Reconhecer imediatamente que a mensagem está fora do escopo comercial. Responder com: 'Oi! Parece que essa mensagem é pessoal/não relacionada aos nossos doces. Como posso ajudar você com a Momma Doces Saudáveis?' — mantendo tom amigável mas redirecionando para escopo.
+docs\noaa\analise-flows-clientes\flows\indefinido.md:80:- _Como posso ajudar você com a Momma Doces Saudáveis?_
+docs\noaa\analise-flows-clientes\flows\indefinido.md:104:→ **Resposta:** Reconhecer padrão em turn 1-2 e redirecionar: 'Oi! Parece que essa conversa é pessoal. Você precisa de algo sobre nossos doces saudáveis? Se sim, fico feliz em ajudar!' — tom amigável, sem julgamento, mas claro sobre escopo.
+docs\noaa\analise-flows-clientes\flows\indefinido.md:131:> _Deveria ter sido: 'Oi! Como posso ajudar você com a Momma Doces Saudáveis?' — simples, direto, aguarda resposta antes de enviar informação_
+docs\operacoes\observabilidade.md:67:| `VITE_OTEL_SERVICE_NAME` | Nome do serviço nos spans | `gidape-frontend` |
+docs\operacoes\grafana.md:73:   { resource.service.name = "gidape-frontend" }
+docs\noaa\analise-flows-clientes\flows\encomenda-festa-aniversario.md:225:**Por que funciona:** Humaniza a conversa, reduz fricção, cria ambiente acolhedor alinhado com valores da marca (Momma Doces Saudáveis).
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:11:> Como cliente interessado em produtos Momma Doces Saudáveis, quando tenho dúvidas sobre disponibilidade, especificações ou opções do cardápio, eu quero respostas claras e estruturadas porque preciso tomar decisão de compra informada e rápida.
+docs\noaa\analise-flows-clientes\flows\duvida-preco.md:11:> Como cliente interessado em produtos Momma Doces Saudáveis, quando tenho dúvida sobre o preço de um produto específico, eu quero uma resposta clara e direta com o valor porque preciso decidir se vou comprar ou não.
+docs\noaa\analise-flows-clientes\flows\duvida-entrega.md:54:**Resposta recomendada para Noa:** Sim, você pode retirar em qualquer loja Momma Doces Saudáveis. Mas importante: o pedido deve ser feito NA LOJA DE RETIRADA desejada. Então se quer retirar no Brasília Shopping, faça o pedido lá (presencialmente, app ou WhatsApp da unidade). A promoção é válida em todas as unidades.
+docs\noaa\analise-flows-clientes\raw\corpus.json:84:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:126:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:188:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:250:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:272:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:294:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:316:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:338:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:380:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:422:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:444:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:466:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:488:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:621:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:643:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:705:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:894:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:916:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:958:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:980:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1002:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1064:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1086:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1231:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1253:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1275:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1317:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1339:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1361:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1423:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1445:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1487:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1604:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1626:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1668:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1690:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1732:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1774:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1796:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1818:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1840:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1902:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1924:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:1946:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2008:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2070:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2092:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2213:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2255:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2277:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2299:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2341:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2363:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2405:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2427:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2449:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2471:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2533:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2555:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2577:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2599:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2661:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2683:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2705:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2747:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2789:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2851:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2929:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2951:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2973:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:2995:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3039:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3061:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3105:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3127:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3149:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3171:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3237:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3259:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3281:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3303:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3369:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3391:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3413:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3457:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3501:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3567:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3708:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3730:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3792:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3814:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3836:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3898:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3920:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3942:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:3964:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4006:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4028:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4070:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4112:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4134:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4156:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4198:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4318:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4340:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4406:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4428:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4450:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4516:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4538:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4560:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4582:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4626:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4648:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4670:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4714:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4758:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4780:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4802:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:4846:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:5085:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:5167:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:5189:            "wa_pushname": "Momma Doces Saudáveis",
+docs\noaa\analise-flows-clientes\raw\corpus.json:5211:            "wa_pushname": "Momma Doces Saudáveis",
+
+[Showing results with pagination = limit: 250]

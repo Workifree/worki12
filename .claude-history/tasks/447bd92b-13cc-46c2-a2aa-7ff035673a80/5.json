@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Metas admin /tv/metas + sidebar",
+  "description": "TvMetas.page.tsx grade loja × dia-da-semana (admin), botão discreto no /tv ao mover mouse, item \"Painel TV\" na sidebar admin-only.",
+  "activeForm": "Implementando metas admin",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

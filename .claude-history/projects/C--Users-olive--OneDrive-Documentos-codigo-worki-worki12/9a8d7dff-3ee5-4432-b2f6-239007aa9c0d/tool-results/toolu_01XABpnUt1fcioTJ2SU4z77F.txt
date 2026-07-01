@@ -1,0 +1,185 @@
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-106-ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-107-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-108--- All authenticated users can view reviews (public feedback)
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:109:CREATE POLICY "Authenticated users can view reviews" ON reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-110-    FOR SELECT TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-111-    USING (true);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-112-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-113--- Authenticated users can create reviews (validated by application status in app logic)
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:114:CREATE POLICY "Authenticated users can create reviews" ON reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-115-    FOR INSERT TO authenticated
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:116:    WITH CHECK (reviewer_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-117-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-118--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-119--- 6. JOB_CATEGORIES TABLE (read-only reference data)
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-8--- 2. Inicializar reviews_count para workers existentes baseado na tabela reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-9-UPDATE workers w
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-10-SET reviews_count = (
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:11:    SELECT COUNT(*) FROM reviews r WHERE r.reviewed_id = w.id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-12-);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-13-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-14--- 3. Inicializar rating_average para workers existentes baseado na tabela reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-15-UPDATE workers w
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-16-SET rating_average = (
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:17:    SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.reviewed_id = w.id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-18-)
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:19:WHERE EXISTS (SELECT 1 FROM reviews r WHERE r.reviewed_id = w.id);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-20-
+supabase\migrations\20260312200000_auto_update_worker_rating.sql-21--- 4. Constraint de unicidade: uma empresa não pode avaliar o mesmo worker no mesmo job
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-22-ALTER TABLE reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-23-    ADD CONSTRAINT reviews_unique_per_job
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:24:    UNIQUE (job_id, reviewer_id, reviewed_id);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-25-
+supabase\migrations\20260312200000_auto_update_worker_rating.sql-26--- 5. Constraint: reviewer e reviewed não podem ser a mesma pessoa
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-27-ALTER TABLE reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-28-    ADD CONSTRAINT reviews_no_self_review
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:29:    CHECK (reviewer_id <> reviewed_id);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-30-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-31--- 6. Função trigger para atualizar rating do worker
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-32-CREATE OR REPLACE FUNCTION update_worker_rating_on_review()
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-41-        rating_average = (
+supabase\migrations\20260312200000_auto_update_worker_rating.sql-42-            SELECT ROUND(AVG(rating)::numeric, 1)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-43-            FROM reviews
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:44:            WHERE reviewed_id = NEW.reviewed_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-45-        ),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-46-        reviews_count = (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-47-            SELECT COUNT(*)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-48-            FROM reviews
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:49:            WHERE reviewed_id = NEW.reviewed_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-50-        )
+supabase\migrations\20260312200000_auto_update_worker_rating.sql:51:    WHERE id = NEW.reviewed_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-52-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-53-    RETURN NEW;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312200000_auto_update_worker_rating.sql-54-END;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-32-        rating_average = (
+supabase\migrations\20260314000007_fix_reviews_trigger.sql-33-            SELECT ROUND(AVG(rating)::numeric, 1)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-34-            FROM reviews
+supabase\migrations\20260314000007_fix_reviews_trigger.sql:35:            WHERE reviewed_id = NEW.reviewed_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-36-        ),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-37-        reviews_count = (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-38-            SELECT COUNT(*)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-39-            FROM reviews
+supabase\migrations\20260314000007_fix_reviews_trigger.sql:40:            WHERE reviewed_id = NEW.reviewed_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-41-        )
+supabase\migrations\20260314000007_fix_reviews_trigger.sql:42:    WHERE id = NEW.reviewed_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-43-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-44-    RETURN NEW;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000007_fix_reviews_trigger.sql-45-EXCEPTION WHEN OTHERS THEN
+--
+supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql:1:-- Fix reviews RLS policy - reviewer_id is likely TEXT type, auth.uid() is UUID
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql-2--- Need explicit type cast for comparison
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql-3-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql-4-DROP POLICY IF EXISTS "Authenticated users can create reviews" ON reviews;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql-5-
+supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql:6:CREATE POLICY "Authenticated users can create reviews" ON reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql-7-    FOR INSERT TO authenticated
+supabase\migrations\20260314000008_fix_reviews_rls_type_cast.sql:8:    WITH CHECK (reviewer_id::text = auth.uid()::text);
+--
+supabase\migrations\20260622000200_company_rating_trigger.sql-3--- ADR: .harness/spec/v1-operacao-freelancer/adr-001-conexoes-convite.md
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-4---
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-5--- Hoje existe `update_worker_rating_on_review` (AFTER INSERT em reviews) que atualiza
+supabase\migrations\20260622000200_company_rating_trigger.sql:6:-- workers.rating_average/reviews_count para CADA review (UPDATE workers WHERE id = reviewed_id).
+supabase\migrations\20260622000200_company_rating_trigger.sql:7:-- Quando o reviewed_id é uma EMPRESA, esse UPDATE não encontra worker e não faz nada —
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-8--- "seguro por acidente" (um auth.uid é worker XOR company), mas a empresa NUNCA tem rating
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-9--- atualizado. Falta o espelho para companies.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-10---
+supabase\migrations\20260622000200_company_rating_trigger.sql-11--- DECISÃO DE DIREÇÃO (sem ambiguidade): adicionamos a coluna `reviews.direction`
+supabase\migrations\20260622000200_company_rating_trigger.sql-12--- ('worker' | 'company') indicando QUEM é o avaliado:
+supabase\migrations\20260622000200_company_rating_trigger.sql:13:--   - direction='worker'  → company→worker (reviewed_id é um worker)  → atualiza workers
+supabase\migrations\20260622000200_company_rating_trigger.sql:14:--   - direction='company' → worker→company (reviewed_id é uma company)→ atualiza companies
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-15--- Isso torna a direção explícita e consultável, em vez de depender da coincidência de
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-16--- "o id só existe numa das tabelas". Backfill resolve os reviews legados por presença em
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-17--- workers/companies.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-18---
+supabase\migrations\20260622000200_company_rating_trigger.sql:19:-- Tipos: reviews.reviewer_id/reviewed_id são TEXT (migration 20260314000008 usa
+supabase\migrations\20260622000200_company_rating_trigger.sql:20:-- reviewer_id::text). companies.id/workers.id são UUID. As comparações usam cast explícito.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-21---
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-22--- NÃO toca saldo/escrow. Sem RPC de saldo.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-23---
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-43-
+supabase\migrations\20260622000200_company_rating_trigger.sql-44-COMMENT ON COLUMN public.reviews.direction IS 'Quem é o avaliado: worker (company→worker) ou company (worker→company). Define qual tabela o trigger de rating atualiza.';
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-45-
+supabase\migrations\20260622000200_company_rating_trigger.sql:46:-- Backfill: inferir direção dos reviews existentes pela presença do reviewed_id em cada tabela.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-47-UPDATE public.reviews r
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-48-SET direction = 'worker'
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-49-WHERE r.direction IS NULL
+supabase\migrations\20260622000200_company_rating_trigger.sql:50:  AND EXISTS (SELECT 1 FROM public.workers w WHERE w.id::text = r.reviewed_id::text);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-51-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-52-UPDATE public.reviews r
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-53-SET direction = 'company'
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-54-WHERE r.direction IS NULL
+supabase\migrations\20260622000200_company_rating_trigger.sql:55:  AND EXISTS (SELECT 1 FROM public.companies c WHERE c.id::text = r.reviewed_id::text);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-56-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-57--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-58--- 2b. Auto-preencher `direction` no INSERT (self-healing)
+supabase\migrations\20260622000200_company_rating_trigger.sql:59:--     Se o client não enviar direction, inferimos pela presença do reviewed_id em
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-60---     companies/workers. Assim o rating bidirecional funciona mesmo que o service/UI
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-61---     ainda não passe direction explicitamente — sem footgun para o builder.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-62---     BEFORE INSERT para gravar o valor na própria linha.
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-69-AS $$
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-70-BEGIN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-71-    IF NEW.direction IS NULL THEN
+supabase\migrations\20260622000200_company_rating_trigger.sql:72:        IF EXISTS (SELECT 1 FROM companies c WHERE c.id::text = NEW.reviewed_id::text) THEN
+supabase\migrations\20260622000200_company_rating_trigger.sql-73-            NEW.direction := 'company';
+supabase\migrations\20260622000200_company_rating_trigger.sql:74:        ELSIF EXISTS (SELECT 1 FROM workers w WHERE w.id::text = NEW.reviewed_id::text) THEN
+supabase\migrations\20260622000200_company_rating_trigger.sql-75-            NEW.direction := 'worker';
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-76-        END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-77-    END IF;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-98-BEGIN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-99-    -- Só atualiza worker quando a review é direcionada a um worker.
+supabase\migrations\20260622000200_company_rating_trigger.sql-100-    -- direction NULL (review legada) cai aqui também: o UPDATE filtra por id, então é no-op
+supabase\migrations\20260622000200_company_rating_trigger.sql:101:    -- se reviewed_id não for um worker — preservando o comportamento "seguro por acidente".
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-102-    IF NEW.direction IS DISTINCT FROM 'company' THEN
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-103-        UPDATE workers
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-104-        SET
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-105-            rating_average = (
+supabase\migrations\20260622000200_company_rating_trigger.sql-106-                SELECT ROUND(AVG(rating)::numeric, 1)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-107-                FROM reviews
+supabase\migrations\20260622000200_company_rating_trigger.sql:108:                WHERE reviewed_id::text = NEW.reviewed_id::text
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-109-                  AND (direction IS NULL OR direction = 'worker')
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-110-            ),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-111-            reviews_count = (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-112-                SELECT COUNT(*)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-113-                FROM reviews
+supabase\migrations\20260622000200_company_rating_trigger.sql:114:                WHERE reviewed_id::text = NEW.reviewed_id::text
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-115-                  AND (direction IS NULL OR direction = 'worker')
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-116-            )
+supabase\migrations\20260622000200_company_rating_trigger.sql:117:        WHERE id::text = NEW.reviewed_id::text;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-118-    END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-119-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-120-    RETURN NEW;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-141-            rating_average = (
+supabase\migrations\20260622000200_company_rating_trigger.sql-142-                SELECT ROUND(AVG(rating)::numeric, 1)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-143-                FROM reviews
+supabase\migrations\20260622000200_company_rating_trigger.sql:144:                WHERE reviewed_id::text = NEW.reviewed_id::text
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-145-                  AND direction = 'company'
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-146-            ),
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-147-            reviews_count = (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-148-                SELECT COUNT(*)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-149-                FROM reviews
+supabase\migrations\20260622000200_company_rating_trigger.sql:150:                WHERE reviewed_id::text = NEW.reviewed_id::text
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-151-                  AND direction = 'company'
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-152-            )
+supabase\migrations\20260622000200_company_rating_trigger.sql:153:        WHERE id::text = NEW.reviewed_id::text;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-154-    END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-155-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-156-    RETURN NEW;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-175-    rating_average = sub.avg_rating,
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-176-    reviews_count  = sub.cnt
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-177-FROM (
+supabase\migrations\20260622000200_company_rating_trigger.sql:178:    SELECT reviewed_id,
+supabase\migrations\20260622000200_company_rating_trigger.sql-179-           ROUND(AVG(rating)::numeric, 1) AS avg_rating,
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-180-           COUNT(*)                        AS cnt
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-181-    FROM public.reviews
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-182-    WHERE direction = 'company'
+supabase\migrations\20260622000200_company_rating_trigger.sql:183:    GROUP BY reviewed_id
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000200_company_rating_trigger.sql-184-) sub
+supabase\migrations\20260622000200_company_rating_trigger.sql:185:WHERE c.id::text = sub.reviewed_id::text;

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wmic cpu *)",
+      "Bash(wmic path *)",
+      "Bash(wmic ComputerSystem get TotalPhysicalMemory /value)",
+      "WebFetch(domain:www.switchbladegaming.com)",
+      "PowerShell(Get-Date *)",
+      "PowerShell(powercfg *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-MpPreference *)",
+      "WebFetch(domain:steamcommunity.com)",
+      "WebFetch(domain:community.skin.club)",
+      "PowerShell(Get-Item *)",
+      "WebFetch(domain:csdb.gg)",
+      "Bash(C:/Users/olive_/OneDrive/Desktop/scrcpy-win64-v2.5/adb.exe devices *)"
+    ]
+  }
+}

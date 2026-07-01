@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Data layer useTvData + useTvRealtime",
+  "description": "Hooks em src/features/tv-dashboard/model/: agregações de vendas (flash-vendas 60s lojas 4/5/6 + historico_vendas 2/3), estoque vs mínimo, movimentações hoje, daily_production, metas, pró-rata. Realtime em movimentacoes/estoque. Testes co-located.",
+  "activeForm": "Implementando data layer da TV",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

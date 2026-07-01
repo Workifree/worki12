@@ -1,0 +1,221 @@
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-35-    FOR SELECT TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-36-    USING (true);
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-37-
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:38:-- Companies can update their own profile
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:39:CREATE POLICY "Companies can update their own profile" ON companies
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-40-    FOR UPDATE TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-41-    USING (id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-42-    WITH CHECK (id = auth.uid());
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-48-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-49--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-50--- 3. JOBS TABLE
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:51:-- Pattern: jobs.company_id = auth.uid() for ownership
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-52--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-53-ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-54-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-60--- Companies can create their own jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-61-CREATE POLICY "Companies can create their own jobs" ON jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-62-    FOR INSERT TO authenticated
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:63:    WITH CHECK (company_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-64-
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:65:-- Companies can update their own jobs
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:66:CREATE POLICY "Companies can update their own jobs" ON jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-67-    FOR UPDATE TO authenticated
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:68:    USING (company_id = auth.uid())
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:69:    WITH CHECK (company_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-70-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-71--- Companies can delete their own jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-72-CREATE POLICY "Companies can delete their own jobs" ON jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-73-    FOR DELETE TO authenticated
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:74:    USING (company_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-75-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-76--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-77--- 4. APPLICATIONS TABLE
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-84-    FOR SELECT TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-85-    USING (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-86-        worker_id = auth.uid()
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:87:        OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-88-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-89-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-90--- Workers can create applications
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-97-    FOR UPDATE TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-98-    USING (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-99-        worker_id = auth.uid()
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:100:        OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-101-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-102-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-103--- =============================================
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-138-        application_uuid IN (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-139-            SELECT id FROM applications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-140-            WHERE worker_id = auth.uid()
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:141:               OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-142-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-143-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-144-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-149-        application_uuid IN (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-150-            SELECT id FROM applications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-151-            WHERE worker_id = auth.uid()
+supabase\migrations\20260309000000_enable_rls_all_tables.sql:152:               OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-153-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-154-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260309000000_enable_rls_all_tables.sql-155-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-18-    WITH CHECK (worker_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-19-
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-20--- Company RLS: can only see/update rows for their jobs
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:21:CREATE POLICY "Companies can update their job application fields" ON applications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-22-    FOR UPDATE TO authenticated
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:23:    USING (job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid()))
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:24:    WITH CHECK (job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid()));
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-25-
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-26--- Column-level validation trigger (best practice: direct OLD/NEW access, no self-referencing subqueries)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-27--- SET search_path prevents schema poisoning attacks on SECURITY DEFINER functions
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-42-    END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-43-
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-44-    v_is_worker := (NEW.worker_id = auth.uid());
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:45:    v_is_company := EXISTS(SELECT 1 FROM jobs WHERE id = NEW.job_id AND company_id = auth.uid());
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-46-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-47-    -- === IMMUTABLE FIELDS (neither role can change) ===
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-48-    IF NEW.worker_id IS DISTINCT FROM OLD.worker_id THEN
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-215-
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-216-    -- SECURITY: Validate caller actually owns the job
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-217-    IF auth.uid() IS NOT NULL THEN
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql:218:        IF NOT EXISTS(SELECT 1 FROM jobs WHERE id = p_job_id AND company_id = auth.uid()) THEN
+supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-219-            RAISE EXCEPTION 'Nao autorizado: voce nao e dono do job %', p_job_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-220-        END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260311100000_security_hardening_checkout_escrow.sql-221-    END IF;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312100000_add_tos_acceptance.sql-14-    ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMPTZ DEFAULT NULL;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312100000_add_tos_acceptance.sql-15-
+supabase\migrations\20260312100000_add_tos_acceptance.sql-16--- RLS: as políticas existentes de workers e companies já permitem UPDATE pelo próprio usuário
+supabase\migrations\20260312100000_add_tos_acceptance.sql:17:-- ("Workers can update their own profile" e "Companies can update their own profile")
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260312100000_add_tos_acceptance.sql-18--- Nenhuma nova política de RLS necessária.
+--
+supabase\migrations\20260314000001_fix_message_rls_policies.sql-19-            WHERE c.id::text = conversationid
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-20-            AND (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-21-                a.worker_id = auth.uid()
+supabase\migrations\20260314000001_fix_message_rls_policies.sql:22:                OR a.job_id IN (SELECT j.id FROM jobs j WHERE j.company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-23-            )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-24-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-25-    );
+--
+supabase\migrations\20260314000001_fix_message_rls_policies.sql-35-            WHERE c.id::text = conversationid
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-36-            AND (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-37-                a.worker_id = auth.uid()
+supabase\migrations\20260314000001_fix_message_rls_policies.sql:38:                OR a.job_id IN (SELECT j.id FROM jobs j WHERE j.company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-39-            )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-40-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260314000001_fix_message_rls_policies.sql-41-    );
+--
+supabase\migrations\20260317012423_message_rls.sql-25-            WHERE c.id::text = conversationid
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-26-            AND (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-27-                a.worker_id = auth.uid()
+supabase\migrations\20260317012423_message_rls.sql:28:                OR a.job_id IN (SELECT j.id FROM jobs j WHERE j.company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-29-            )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-30-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-31-    );
+--
+supabase\migrations\20260317012423_message_rls.sql-41-            WHERE c.id::text = conversationid
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-42-            AND (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-43-                a.worker_id = auth.uid()
+supabase\migrations\20260317012423_message_rls.sql:44:                OR a.job_id IN (SELECT j.id FROM jobs j WHERE j.company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-45-            )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-46-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012423_message_rls.sql-47-    );
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-12-        application_uuid IN (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-13-            SELECT id FROM applications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-14-            WHERE worker_id = auth.uid()
+supabase\migrations\20260317012800_conversation_update_policy.sql:15:               OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-16-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-17-    )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-18-    WITH CHECK (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-19-        application_uuid IN (
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-20-            SELECT id FROM applications
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-21-            WHERE worker_id = auth.uid()
+supabase\migrations\20260317012800_conversation_update_policy.sql:22:               OR job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-23-        )
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317012800_conversation_update_policy.sql-24-    );
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-52--- Company owner can INSERT/UPDATE/DELETE their jobs
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-53-CREATE POLICY "Company owner can manage jobs"
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-54-ON jobs FOR ALL TO authenticated
+supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql:55:USING (company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid()))
+supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql:56:WITH CHECK (company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid()));
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-57-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-58--- =============================================
+supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-59--- APPLICATIONS: Worker sees own, company sees for their jobs
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-71-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-72-CREATE POLICY "Companies can view applications for their jobs"
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-73-ON applications FOR SELECT TO authenticated
+supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql:74:USING (job_id IN (SELECT id FROM jobs WHERE company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid())));
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-75-
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-76-CREATE POLICY "Workers can insert applications"
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260317160000_fix_companies_rls_owner_select.sql-77-ON applications FOR INSERT TO authenticated
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-2---
+supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-3--- Bug: The auth trigger that creates a company row on signup does NOT set owner_id.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-4--- This causes the RLS UPDATE policy (owner_id = auth.uid()) to fail during onboarding.
+supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql:5:-- The "Companies can update own profile by id" fallback policy (id = auth.uid()) was added
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-6--- but the upsert operation first checks the original USING(owner_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-7--- which fails because owner_id is NULL.
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318100000_fix_company_trigger_owner_id.sql-8---
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-30---    This handles records where owner_id is NULL (created by trigger)
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-31--- =============================================
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-32-DO $$ BEGIN
+supabase\migrations\20260318000000_fix_force_rls_service_role.sql:33:  DROP POLICY IF EXISTS "Companies can update own profile by id" ON companies;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-34-END $$;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-35-
+supabase\migrations\20260318000000_fix_force_rls_service_role.sql:36:CREATE POLICY "Companies can update own profile by id"
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-37-ON companies FOR UPDATE TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-38-USING (id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318000000_fix_force_rls_service_role.sql-39-WITH CHECK (id = auth.uid());
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318210000_move_fees_to_deposit.sql-28-
+supabase\migrations\20260318210000_move_fees_to_deposit.sql-29-    -- SECURITY: Validate caller actually owns the job
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318210000_move_fees_to_deposit.sql-30-    IF auth.uid() IS NOT NULL THEN
+supabase\migrations\20260318210000_move_fees_to_deposit.sql:31:        IF NOT EXISTS(SELECT 1 FROM jobs WHERE id = p_job_id AND company_id = auth.uid()) THEN
+supabase\migrations\20260318210000_move_fees_to_deposit.sql-32-            RAISE EXCEPTION 'Nao autorizado: voce nao e dono do job %', p_job_id;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318210000_move_fees_to_deposit.sql-33-        END IF;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260318210000_move_fees_to_deposit.sql-34-    END IF;
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-84-CREATE POLICY "tc_select_participants" ON public.team_connections
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-85-    FOR SELECT TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-86-    USING (
+supabase\migrations\20260622000000_team_connections.sql:87:        company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-88-        OR worker_id = auth.uid()
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-89-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-90-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-96-CREATE POLICY "tc_insert_company" ON public.team_connections
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-97-    FOR INSERT TO authenticated
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-98-    WITH CHECK (
+supabase\migrations\20260622000000_team_connections.sql:99:        company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-100-        AND status = 'pending'
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-101-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-102-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-106-DROP POLICY IF EXISTS "tc_update_company" ON public.team_connections;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-107-CREATE POLICY "tc_update_company" ON public.team_connections
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-108-    FOR UPDATE TO authenticated
+supabase\migrations\20260622000000_team_connections.sql:109:    USING (company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid()))
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-110-    WITH CHECK (
+supabase\migrations\20260622000000_team_connections.sql:111:        company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid())
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-112-        AND status IN ('pending', 'blocked')
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-113-    );
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-114-
+--
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-127-DROP POLICY IF EXISTS "tc_delete_company" ON public.team_connections;
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-128-CREATE POLICY "tc_delete_company" ON public.team_connections
+C:\Users\olive_\OneDrive\Documentos\codigo\worki\worki12\supabase\migrations\20260622000000_team_connections.sql-129-    FOR DELETE TO authenticated
+supabase\migrations\20260622000000_team_connections.sql:130:    USING (company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid()));

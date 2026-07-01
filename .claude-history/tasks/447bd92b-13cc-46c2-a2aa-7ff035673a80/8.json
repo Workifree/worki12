@@ -1,0 +1,9 @@
+{
+  "id": "8",
+  "subject": "v3 data layer: perdas, compras, feed, % vs ontem, período",
+  "description": "Estender model/ com fetchers de perdas, notas_fiscais (compras), feed de movimentações nomeado, estoque crítico nomeado por loja, % vs dia anterior pró-rata, filtro de período Hoje/Semana/Mês, realtime em perdas. Testes.",
+  "activeForm": "Estendendo data layer v3",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

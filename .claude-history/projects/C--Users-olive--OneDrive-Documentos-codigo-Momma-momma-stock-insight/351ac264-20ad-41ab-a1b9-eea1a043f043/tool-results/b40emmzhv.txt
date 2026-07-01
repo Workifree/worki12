@@ -1,0 +1,790 @@
+```tsx
+// FILE: src/features/financeiro/ui/CmvConfigurator.page.tsx
+import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
+  MiniMap, Panel, useNodesState, useEdgesState, useReactFlow,
+  Handle, Position, type Node, type Edge, type NodeTypes,
+  type NodeDragHandler, type NodeProps,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  useCmvGraph, cmvNodeId, fichaNodeId, insumoNodeId, nfNodeId, parseNodeId,
+  type RawCmvItem, type RawCmvEmbalagem, type NfEmbalagemItem
+} from '@/features/financeiro/model/useCmvGraph';
+import { layoutGraph } from '@/components/producao/configurador/layout';
+import { toast } from 'sonner';
+import {
+  ArrowLeft, LayoutTemplate, Plus, Save, Trash2, Package, DollarSign,
+  Loader2, Calculator, ChefHat, Wheat, Receipt, Check, ChevronsUpDown,
+} from 'lucide-react';
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
+import { Label } from '@/shared/ui/label';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/shared/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/shared/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover';
+import { ScrollArea } from '@/shared/ui/scroll-area';
+import { cn } from '@/shared/lib/utils';
+
+type NodeData = {
+  label: string;
+  subLabel?: string;
+  custo?: number | null;
+  kind: 'cmv' | 'ficha' | 'insumo' | 'item' | 'nf';
+  fornecedor?: string | null;
+  numero?: string | null;
+  valor?: number | null;
+};
+
+const formatBRL = (value: number | null | undefined) => {
+  if (value === null || typeof value === 'undefined') return '';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+};
+
+const CmvRootNode = memo(({ data }: NodeProps<NodeData>) => (
+  <div className="bg-[#57715B]/90 dark:bg-[#57715B] text-white shadow-xl rounded-2xl border-white/20 border w-[280px]">
+    <div className="p-4">
+      <div className="text-xs uppercase tracking-wider font-semibold opacity-80">CMV</div>
+      <div className="text-lg font-bold truncate">{data.label}</div>
+      <div className="text-2xl font-light mt-1">{formatBRL(data.custo)}</div>
+    </div>
+    <Handle type="source" position={Position.Bottom} className="!bg-[#57715B]" />
+  </div>
+));
+
+const FichaBaseNode = memo(({ data }: NodeProps<NodeData>) => (
+  <div className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border border-white/40 dark:border-white/10 rounded-2xl shadow-lg w-[260px] p-4 text-center">
+    <div className="flex items-center justify-center gap-2">
+      <ChefHat className="w-5 h-5 text-[#57715B]" />
+      <div className="text-sm font-bold text-gray-800 dark:text-gray-200">{data.label}</div>
+    </div>
+    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{data.subLabel}</div>
+    <div className="text-xl font-semibold text-[#57715B] mt-2">{formatBRL(data.custo)}</div>
+    <Handle type="target" position={Position.Top} className="!bg-gray-400" />
+    <Handle type="source" position={Position.Bottom} className="!bg-gray-400" />
+  </div>
+));
+
+const CmvItemNode = memo(({ data }: NodeProps<NodeData>) => (
+  <div className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border border-white/40 dark:border-white/10 rounded-2xl shadow-md w-[220px] p-3">
+    <div className="flex items-center gap-2">
+      {data.label.toLowerCase().includes('embalagem') ? <Package className="w-4 h-4 text-amber-600" /> : <Wheat className="w-4 h-4 text-amber-800" />}
+      <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate flex-1">{data.label}</p>
+    </div>
+    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{data.subLabel}</p>
+    <p className="text-lg font-medium text-right text-[#57715B] mt-1">{formatBRL(data.custo)}</p>
+    <Handle type="target" position={Position.Top} className="!bg-gray-400" />
+    <Handle type="source" position={Position.Bottom} className="!bg-gray-400" />
+  </div>
+));
+
+const InsumoNode = memo(({ data }: NodeProps<NodeData>) => (
+  <div className="bg-purple-100/80 dark:bg-purple-950/80 backdrop-blur-md border border-purple-300/40 dark:border-purple-500/20 rounded-xl shadow-sm w-[200px] p-2.5">
+    <div className="flex items-center gap-2">
+      <Wheat className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+      <p className="text-xs font-medium text-purple-800 dark:text-purple-200 truncate">{data.label}</p>
+    </div>
+    <p className="text-xs text-purple-500 dark:text-purple-400 mt-0.5">{data.subLabel}</p>
+    <p className="text-sm font-semibold text-right text-purple-700 dark:text-purple-300 mt-1">{formatBRL(data.custo)}</p>
+    <Handle type="target" position={Position.Top} className="!bg-purple-400" />
+  </div>
+));
+
+const NFNode = memo(({ data }: NodeProps<NodeData>) => (
+  <div className="bg-cyan-50/80 dark:bg-cyan-950/80 backdrop-blur-md border border-cyan-300/40 dark:border-cyan-500/20 rounded-xl shadow-sm w-[240px] p-2.5">
+    <div className="flex items-center gap-2">
+      <Receipt className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+      <p className="text-xs font-medium text-cyan-800 dark:text-cyan-200 truncate">{data.fornecedor}</p>
+    </div>
+    <p className="text-xs text-cyan-600 dark:text-cyan-400 mt-0.5">NF #{data.numero}</p>
+    <p className="text-sm font-semibold text-right text-cyan-700 dark:text-cyan-300 mt-1">{formatBRL(data.valor)}</p>
+    <Handle type="source" position={Position.Bottom} className="!bg-cyan-400" />
+  </div>
+));
+
+const nodeTypes: NodeTypes = {
+  cmv: CmvRootNode,
+  ficha: FichaBaseNode,
+  item: CmvItemNode,
+  insumo: InsumoNode,
+  nf: NFNode,
+};
+
+function CmvConfigurator() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const cmvId = Number(searchParams.get('id'));
+  const queryClient = useQueryClient();
+  const {
+    loading, cmv, fichaData, items, insumos, embalagens, nfEmbalagemItems, positions, savePosition, refetch
+  } = useCmvGraph(cmvId);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { setViewport, getViewport } = useReactFlow();
+
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isAddSaving, setIsAddSaving] = useState(false);
+  const [newTipo, setNewTipo] = useState<'embalagem' | 'outro'>('embalagem');
+  const [newEmbalagemId, setNewEmbalagemId] = useState('');
+  const [newEmbalagemOpen, setNewEmbalagemOpen] = useState(false);
+  const [newEmbalagemSearch, setNewEmbalagemSearch] = useState('');
+  const [newFonteCusto, setNewFonteCusto] = useState<'nf' | 'fixo'>('nf');
+  const [newNfItemId, setNewNfItemId] = useState('');
+  const [newNfOpen, setNewNfOpen] = useState(false);
+  const [newNfSearch, setNewNfSearch] = useState('');
+  const [newUnidadesPorEmbalagem, setNewUnidadesPorEmbalagem] = useState('');
+  const [newPrecoFixo, setNewPrecoFixo] = useState('');
+  const [newQty, setNewQty] = useState('1');
+  const [newUnit, setNewUnit] = useState('');
+  const [newObs, setNewObs] = useState('');
+  const [newPrecoOutro, setNewPrecoOutro] = useState('');
+
+  const [selectedItemData, setSelectedItemData] = useState<RawCmvItem | null>(null);
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [editQty, setEditQty] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editObs, setEditObs] = useState('');
+  const [editPreco, setEditPreco] = useState('');
+  const [editFonteCusto, setEditFonteCusto] = useState<'nf' | 'fixo'>('fixo');
+  const [editNfItemId, setEditNfItemId] = useState('');
+  const [editNfOpen, setEditNfOpen] = useState(false);
+  const [editNfSearch, setEditNfSearch] = useState('');
+  const [editUnidadesPorEmbalagem, setEditUnidadesPorEmbalagem] = useState('');
+
+
+  const buildGraph = useCallback(() => {
+    if (!cmv) return;
+
+    const newNodes: Node[] = [];
+    const newEdges: Edge[] = [];
+    const rootId = cmvNodeId(cmv.id);
+
+    newNodes.push({
+      id: rootId, type: 'cmv',
+      data: { label: cmv.nome, custo: cmv.custo_calculado, kind: 'cmv' },
+      position: positions.get(rootId) ?? { x: 400, y: 50 },
+    });
+
+    if (fichaData) {
+      const fichaId = fichaNodeId(fichaData.id);
+      const custoUnitario = (fichaData.custo_calculado ?? 0) / Math.max(1, fichaData.rendimento_quantidade);
+      newNodes.push({
+        id: fichaId, type: 'ficha',
+        data: {
+          label: fichaData.nome,
+          subLabel: `${fichaData.rendimento_quantidade} ${fichaData.rendimento_unidade}`,
+          custo: custoUnitario,
+          kind: 'ficha',
+        },
+        position: positions.get(fichaId) ?? { x: 400, y: 250 },
+      });
+      newEdges.push({ id: `e-${rootId}-${fichaId}`, source: rootId, target: fichaId, style: { stroke: '#a1a1aa' } });
+    }
+
+    items.forEach((item, idx) => {
+      const itemNodeId = `item_${item.id}`;
+      const label = item.produtoMaster?.nome ?? item.insumo?.nome ?? item.observacao ?? `Item ${idx + 1}`;
+      const subLabel = `${item.quantidade} ${item.unidade}`;
+      newNodes.push({
+        id: itemNodeId, type: 'item',
+        data: { label, subLabel, custo: item.custo_calculado, kind: 'item' },
+        position: positions.get(itemNodeId) ?? { x: 200 + idx * 250, y: 450 },
+      });
+      newEdges.push({ id: `e-${rootId}-${itemNodeId}`, source: rootId, target: itemNodeId, style: { stroke: '#a1a1aa' } });
+
+      if (item.insumo_id && item.insumo) {
+        const insumoId = insumoNodeId(item.insumo_id);
+        newNodes.push({
+          id: insumoId, type: 'insumo',
+          data: {
+            label: item.insumo.nome,
+            subLabel: `${item.insumo.unidade_compra} @ ${formatBRL(item.insumo.preco_custo)}`,
+            custo: item.insumo.preco_custo,
+            kind: 'insumo',
+          },
+          position: positions.get(insumoId) ?? { x: 200 + idx * 250, y: 650 },
+        });
+        newEdges.push({ id: `e-${itemNodeId}-${insumoId}`, source: itemNodeId, target: insumoId, style: { stroke: '#fca5a5' } });
+      }
+    });
+
+    const addedNfNodeIds = new Set<number>();
+    items.forEach((item) => {
+      if (item.nf_item_id && item.nfItem && !addedNfNodeIds.has(item.nf_item_id)) {
+        addedNfNodeIds.add(item.nf_item_id);
+        const nfId = nfNodeId(item.nf_item_id);
+        newNodes.push({
+          id: nfId, type: 'nf',
+          data: {
+            fornecedor: item.nfItem.fornecedor ?? 'Fornecedor',
+            numero: item.nfItem.numero_nota,
+            valor: item.nfItem.valor_unitario,
+            kind: 'nf'
+          } as Record<string, unknown>,
+          position: positions.get(nfId) ?? { x: 50, y: 50 },
+        });
+      }
+    });
+    items.forEach((item) => {
+      if (item.nf_item_id && item.nfItem) {
+        const nfId = nfNodeId(item.nf_item_id);
+        const itemNodeId = `item_${item.id}`;
+        newEdges.push({ id: `e-${nfId}-${itemNodeId}`, source: nfId, target: itemNodeId, style: { stroke: '#22d3ee', strokeWidth: 1.5, strokeDasharray: '4 2' } });
+      }
+    });
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [cmv, fichaData, items, insumos, positions, setNodes, setEdges]);
+
+  useEffect(() => {
+    buildGraph();
+  }, [buildGraph]);
+
+  const handleNodeDragStop: NodeDragHandler = useCallback((_, node) => {
+    savePosition(node.id, node.position);
+  }, [savePosition]);
+
+  const handleAutoLayout = useCallback(async () => {
+    const { nodes: layoutedNodes, edges: layoutedEdges } = await layoutGraph(nodes, edges);
+    layoutedNodes.forEach(node => savePosition(node.id, node.position));
+    setNodes(layoutedNodes);
+    setEdges(layoutedEdges);
+    // Fit view after a short delay to allow for render
+    setTimeout(() => {
+        const { x, y, zoom } = getViewport();
+        setViewport({ x: x+1, y, zoom }, { duration: 800 });
+    }, 100);
+  }, [nodes, edges, savePosition, setNodes, setEdges, getViewport, setViewport]);
+
+  const resetAddDialog = () => {
+    setNewTipo('embalagem');
+    setNewEmbalagemId('');
+    setNewEmbalagemSearch('');
+    setNewFonteCusto('nf');
+    setNewNfItemId('');
+    setNewNfSearch('');
+    setNewUnidadesPorEmbalagem('');
+    setNewPrecoFixo('');
+    setNewQty('1');
+    setNewUnit('');
+    setNewObs('');
+    setNewPrecoOutro('');
+  }
+
+  const handleAddItem = async () => {
+    if (!cmvId) return;
+    setIsAddSaving(true);
+    
+    let insertPayload: Partial<RawCmvItem> | null = null;
+    
+    if (newTipo === 'embalagem') {
+      if (!newEmbalagemId || !newQty || !newUnit) {
+        toast.error("Embalagem, quantidade e unidade são obrigatórios.");
+        setIsAddSaving(false);
+        return;
+      }
+      insertPayload = {
+        cmv_id: cmvId,
+        tipo: 'embalagem',
+        produto_master_id: parseInt(newEmbalagemId, 10),
+        nf_item_id: newFonteCusto === 'nf' && newNfItemId ? parseInt(newNfItemId, 10) : null,
+        unidades_por_embalagem: newFonteCusto === 'nf' && newUnidadesPorEmbalagem ? parseFloat(newUnidadesPorEmbalagem) : null,
+        preco_unitario_esboco: newFonteCusto === 'fixo' && newPrecoFixo ? parseFloat(newPrecoFixo) : null,
+        quantidade: parseFloat(newQty) || 1,
+        unidade: newUnit,
+        ordem: items.length,
+      };
+    } else { // tipo 'outro'
+      if (!newObs.trim() || !newQty || !newUnit || !newPrecoOutro) {
+        toast.error("Observação, preço, quantidade e unidade são obrigatórios.");
+        setIsAddSaving(false);
+        return;
+      }
+      insertPayload = {
+        cmv_id: cmvId,
+        tipo: 'outro',
+        observacao: newObs.trim(),
+        preco_unitario_esboco: newPrecoOutro ? parseFloat(newPrecoOutro) : null,
+        quantidade: parseFloat(newQty) || 1,
+        unidade: newUnit,
+        ordem: items.length,
+      };
+    }
+
+    if (insertPayload) {
+      const { error } = await supabase.from('cmv_item').insert(insertPayload as any);
+      if (error) {
+        toast.error("Erro ao adicionar item.", { description: error.message });
+      } else {
+        toast.success("Item adicionado com sucesso!");
+        await refetch();
+        setIsAddOpen(false);
+        resetAddDialog();
+      }
+    }
+    setIsAddSaving(false);
+  };
+
+  const handleNodeClick = (_: React.MouseEvent, node: Node) => {
+    const parsed = parseNodeId(node.id);
+    if (parsed?.type === 'item') {
+      const foundItem = items.find(i => i.id === parsed.id);
+      if (foundItem) {
+        setSelectedItemData(foundItem);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (selectedItemData) {
+      const found = items.find(i => i.id === selectedItemData.id);
+      if (!found) {
+        setSelectedItemData(null);
+        return;
+      }
+      setEditQty(String(found.quantidade));
+      setEditUnit(found.unidade);
+      setEditObs(found.observacao ?? '');
+      setEditPreco(found.preco_unitario_esboco !== null ? String(found.preco_unitario_esboco) : '');
+      setEditFonteCusto(found.nf_item_id ? 'nf' : 'fixo');
+      setEditNfItemId(found.nf_item_id ? String(found.nf_item_id) : '');
+      setEditUnidadesPorEmbalagem(found.unidades_por_embalagem ? String(found.unidades_por_embalagem) : '');
+    }
+  }, [selectedItemData, items]);
+  
+
+  const handleSaveItem = async () => {
+    if (!selectedItemData) return;
+    setIsEditSaving(true);
+    let updatePayload: Partial<RawCmvItem> | null = null;
+    
+    if (selectedItemData.tipo === 'embalagem') {
+      updatePayload = {
+        quantidade: parseFloat(editQty) || 1,
+        unidade: editUnit,
+        nf_item_id: editFonteCusto === 'nf' && editNfItemId ? parseInt(editNfItemId, 10) : null,
+        unidades_por_embalagem: editFonteCusto === 'nf' && editUnidadesPorEmbalagem ? parseFloat(editUnidadesPorEmbalagem) : null,
+        preco_unitario_esboco: editFonteCusto === 'fixo' && editPreco ? parseFloat(editPreco) : null,
+      };
+    } else { // tipo 'outro'
+      updatePayload = {
+        quantidade: parseFloat(editQty) || 1,
+        unidade: editUnit,
+        observacao: editObs.trim(),
+        preco_unitario_esboco: editPreco ? parseFloat(editPreco) : null,
+      };
+    }
+
+    const { error } = await supabase.from('cmv_item').update(updatePayload as any).eq('id', selectedItemData.id);
+    if (error) {
+      toast.error("Erro ao salvar alterações.", { description: error.message });
+    } else {
+      toast.success("Item atualizado com sucesso!");
+      await refetch();
+      setSelectedItemData(null);
+    }
+    setIsEditSaving(false);
+  };
+  
+  const handleDeleteItem = async () => {
+    if (!selectedItemData) return;
+    setIsEditSaving(true);
+    const { error } = await supabase.from('cmv_item').delete().eq('id', selectedItemData.id);
+    if (error) {
+      toast.error("Erro ao excluir item.", { description: error.message });
+    } else {
+      toast.success("Item excluído com sucesso!");
+      await refetch();
+      setSelectedItemData(null);
+    }
+    setIsEditSaving(false);
+  };
+
+  const selectedEmbalagem = useMemo(() => {
+    if (!newEmbalagemId) return null;
+    return embalagens.find(e => String(e.id) === newEmbalagemId);
+  }, [newEmbalagemId, embalagens]);
+
+  const nfCustoHint = useMemo(() => {
+    if (newFonteCusto !== 'nf' || !newNfItemId || !newUnidadesPorEmbalagem) return null;
+    const item = nfEmbalagemItems.find(i => String(i.id) === newNfItemId);
+    const units = parseFloat(newUnidadesPorEmbalagem);
+    if (!item || !item.valor_unitario || !units || units <= 0) return null;
+    return item.valor_unitario / units;
+  }, [newFonteCusto, newNfItemId, newUnidadesPorEmbalagem, nfEmbalagemItems]);
+
+  const editNfCustoHint = useMemo(() => {
+    if (editFonteCusto !== 'nf' || !editNfItemId || !editUnidadesPorEmbalagem) return null;
+    const item = nfEmbalagemItems.find(i => String(i.id) === editNfItemId);
+    const units = parseFloat(editUnidadesPorEmbalagem);
+    if (!item || !item.valor_unitario || !units || units <= 0) return null;
+    return item.valor_unitario / units;
+  }, [editFonteCusto, editNfItemId, editUnidadesPorEmbalagem, nfEmbalagemItems]);
+
+  const intelligentNfFilter = useMemo(() => {
+    if (!selectedEmbalagem) return nfEmbalagemItems;
+    const searchWords = selectedEmbalagem.nome.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    return nfEmbalagemItems.filter(item => {
+        if (!item.nome_produto) return false;
+        const productName = item.nome_produto.toLowerCase();
+        return searchWords.some(word => productName.includes(word));
+    });
+  }, [selectedEmbalagem, nfEmbalagemItems]);
+
+  const filteredNfItems = useMemo(() => {
+    const sourceList = newNfOpen ? intelligentNfFilter : nfEmbalagemItems;
+    if (!newNfSearch) return sourceList;
+    return sourceList.filter(item =>
+        item.nome_produto?.toLowerCase().includes(newNfSearch.toLowerCase()) ||
+        item.fornecedor?.toLowerCase().includes(newNfSearch.toLowerCase()) ||
+        item.numero_nota?.toLowerCase().includes(newNfSearch.toLowerCase())
+    );
+  }, [newNfSearch, nfEmbalagemItems, newNfOpen, intelligentNfFilter]);
+
+  const filteredEditNfItems = useMemo(() => {
+    if (!editNfSearch) return nfEmbalagemItems;
+    return nfEmbalagemItems.filter(item =>
+        item.nome_produto?.toLowerCase().includes(editNfSearch.toLowerCase()) ||
+        item.fornecedor?.toLowerCase().includes(editNfSearch.toLowerCase()) ||
+        item.numero_nota?.toLowerCase().includes(editNfSearch.toLowerCase())
+    );
+  }, [editNfSearch, nfEmbalagemItems]);
+  
+  // Cost breakdown calculations
+  const { custoFichaUnitario, custoEmbalagens, custoAvulsos, custoTotal } = useMemo(() => {
+    const fichaUnitario = fichaData ? (fichaData.custo_calculado ?? 0) / Math.max(1, fichaData.rendimento_quantidade) : 0;
+    const embalagensTotal = items.filter(i => i.tipo === 'embalagem').reduce((s,i) => s + (i.custo_calculado ?? 0), 0);
+    const avulsosTotal = items.filter(i => i.tipo === 'outro').reduce((s,i) => s + (i.custo_calculado ?? 0), 0);
+    const total = cmv?.custo_calculado ?? 0;
+    return { custoFichaUnitario: fichaUnitario, custoEmbalagens: embalagensTotal, custoAvulsos: avulsosTotal, custoTotal: total };
+  }, [items, cmv, fichaData]);
+
+  if (loading) return <div className="h-screen w-full flex items-center justify-center bg-white dark:bg-[#0A0A0A]"><Loader2 className="h-8 w-8 animate-spin text-[#57715B]" /></div>;
+  if (!cmvId || !cmv) return (
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] text-center">
+      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">CMV não encontrado</h2>
+      <p className="text-gray-500 dark:text-gray-400 mt-2">O Custo de Mercadoria Vendida que você está tentando acessar não existe ou foi removido.</p>
+      <Button onClick={() => navigate('/financeiro/cmv')} className="mt-6 bg-[#57715B] hover:bg-[#465b49] text-white rounded-xl">Voltar para a lista</Button>
+    </div>
+  );
+
+  return (
+    <div className="w-full h-[calc(100vh_-_theme(spacing.14))] relative">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeDragStop={handleNodeDragStop}
+        onNodeClick={handleNodeClick}
+        nodeTypes={nodeTypes}
+        fitView
+        className="bg-white dark:bg-[#0A0A0A]"
+      >
+        <div className="absolute inset-0 z-0 h-full w-full bg-white dark:bg-[#0A0A0A] bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff20_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div className="absolute inset-0 z-0 h-full w-full bg-transparent bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]"></div>
+        <MiniMap nodeStrokeWidth={3} zoomable pannable className="bg-white/60 dark:bg-black/20 backdrop-blur-md rounded-lg shadow-lg border border-[#57715B]/10" />
+        <Panel position="top-left" className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => navigate('/financeiro/cmv')} className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 hover:bg-[#57715B]/10 rounded-xl">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => setIsAddOpen(true)} className="bg-[#57715B] hover:bg-[#465b49] text-white rounded-xl flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Adicionar Custo
+          </Button>
+          <Button variant="outline" onClick={handleAutoLayout} className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 hover:bg-[#57715B]/10 rounded-xl flex items-center gap-2">
+            <LayoutTemplate className="h-4 w-4" /> Auto-Layout
+          </Button>
+        </Panel>
+        
+        <Panel position="top-right" className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border border-[#57715B]/10 rounded-2xl p-3 shadow-xl">
+          <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">Legenda</h3>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#57715B]"></div><span>CMV</span></div>
+            <div className="flex items-center gap-2"><ChefHat className="h-4 w-4 text-[#57715B]" /><span>Ficha Base</span></div>
+            <div className="flex items-center gap-2"><Package className="h-4 w-4 text-amber-600" /><span>Item de Custo</span></div>
+            <div className="flex items-center gap-2"><Wheat className="h-4 w-4 text-purple-600" /><span>Insumo Legado</span></div>
+            <div className="flex items-center gap-2"><Receipt className="h-4 w-4 text-cyan-400" /><span>Nota Fiscal</span></div>
+          </div>
+        </Panel>
+
+        <Panel position="bottom-left" className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border border-[#57715B]/10 rounded-2xl p-4 shadow-xl min-w-[240px]">
+          <h3 className="text-[9px] uppercase tracking-widest text-muted-foreground mb-3">BREAKDOWN DE CUSTO</h3>
+          <div className="space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Ficha base (unitária)</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{formatBRL(custoFichaUnitario)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Embalagens</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{formatBRL(custoEmbalagens)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Custos avulsos</span>
+                <span className="text-sm tabular-nums text-[#2D362E] dark:text-[#E6DCCF]">{formatBRL(custoAvulsos)}</span>
+              </div>
+              <div className="border-t border-[#57715B]/10 my-2"></div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm font-bold text-muted-foreground">Total</span>
+                <span className="text-sm font-bold text-[#57715B] tabular-nums">{formatBRL(custoTotal)}</span>
+              </div>
+          </div>
+        </Panel>
+
+      </ReactFlow>
+
+      {/* Add Item Dialog */}
+      <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if(!open) resetAddDialog(); }}>
+        <DialogContent className="sm:max-w-[550px] bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border-white/40 dark:border-white/10 rounded-2xl">
+          <DialogHeader><DialogTitle>Adicionar Item de Custo</DialogTitle></DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tipo" className="text-right">Tipo</Label>
+              <Select value={newTipo} onValueChange={(v) => setNewTipo(v as 'embalagem' | 'outro')}>
+                <SelectTrigger className="col-span-3 bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-[#57715B]/10 rounded-xl">
+                  <SelectItem value="embalagem">Embalagem</SelectItem>
+                  <SelectItem value="outro">Outro Custo Avulso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {newTipo === 'embalagem' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="embalagem" className="text-right">Embalagem</Label>
+                  <Popover open={newEmbalagemOpen} onOpenChange={setNewEmbalagemOpen}>
+                    <PopoverTrigger asChild className="col-span-3">
+                      <Button variant="outline" role="combobox" aria-expanded={newEmbalagemOpen} className="w-full justify-between bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 hover:bg-transparent rounded-xl">
+                        {selectedEmbalagem?.nome ?? "Selecione a embalagem..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[450px] p-0 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-[#57715B]/10 rounded-xl">
+                      <Command>
+                        <CommandInput placeholder="Buscar embalagem..." onValueChange={setNewEmbalagemSearch} />
+                        <CommandList>
+                          <CommandEmpty>Nenhuma embalagem encontrada.</CommandEmpty>
+                          <CommandGroup>
+                            <ScrollArea className="h-48">
+                              {embalagens.filter(e => e.nome.toLowerCase().includes(newEmbalagemSearch.toLowerCase())).map((item) => (
+                                <CommandItem key={item.id} value={String(item.id)} onSelect={(currentValue) => { setNewEmbalagemId(currentValue); setNewEmbalagemOpen(false); }}>
+                                  <Check className={cn("mr-2 h-4 w-4", newEmbalagemId === String(item.id) ? "opacity-100" : "opacity-0")} />
+                                  <span className="flex-1">{item.nome}</span>
+                                  {item.preco_custo && <span className="text-xs text-muted-foreground">{formatBRL(item.preco_custo)}</span>}
+                                </CommandItem>
+                              ))}
+                            </ScrollArea>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Fonte de Custo</Label>
+                  <div className="col-span-3 flex gap-2">
+                      <Button onClick={() => setNewFonteCusto('nf')} className={cn("text-sm flex-1", newFonteCusto === 'nf' ? "bg-[#57715B] text-white hover:bg-[#465b49]" : "border border-[#57715B]/20 bg-white/60 text-[#57715B] hover:bg-white/80")} size="sm"><Receipt className="w-4 h-4 mr-2"/>Por Nota Fiscal</Button>
+                      <Button onClick={() => setNewFonteCusto('fixo')} className={cn("text-sm flex-1", newFonteCusto === 'fixo' ? "bg-[#57715B] text-white hover:bg-[#465b49]" : "border border-[#57715B]/20 bg-white/60 text-[#57715B] hover:bg-white/80")} size="sm"><DollarSign className="w-4 h-4 mr-2"/>Valor Fixo</Button>
+                  </div>
+                </div>
+                {newFonteCusto === 'nf' ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-4 items-start gap-4">
+                      <Label className="text-right pt-2">Item da NF</Label>
+                      <div className="col-span-3 space-y-2">
+                        <Popover open={newNfOpen} onOpenChange={setNewNfOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" aria-expanded={newNfOpen} className="w-full justify-between bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 hover:bg-transparent rounded-xl">
+                              {newNfItemId ? (filteredNfItems.find(i => String(i.id) === newNfItemId)?.nome_produto ?? "Selecione o item...") : "Selecione o item..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[450px] p-0 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-[#57715B]/10 rounded-xl">
+                            <Command>
+                              <CommandInput placeholder="Buscar item na nota..." onValueChange={setNewNfSearch} />
+                              <CommandList>
+                                <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                <ScrollArea className="h-48">
+                                    {filteredNfItems.map((item) => (
+                                    <CommandItem key={item.id} value={String(item.id)} onSelect={(currentValue) => { setNewNfItemId(currentValue); setNewNfOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", newNfItemId === String(item.id) ? "opacity-100" : "opacity-0")} />
+                                        <div className="text-xs">
+                                        <div className="font-medium">{item.nome_produto}</div>
+                                        <div className="text-muted-foreground">{formatBRL(item.valor_unitario)} | {item.fornecedor} | #{item.numero_nota} | {item.data_nota ? new Date(item.data_nota).toLocaleDateString('pt-BR') : ''}</div>
+                                        </div>
+                                    </CommandItem>
+                                    ))}
+                                </ScrollArea>
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {selectedEmbalagem?.preco_custo && newFonteCusto === 'nf' && !newNfItemId && (
+                            <p className="text-xs text-amber-600 px-1">Aviso: Esta embalagem tem um custo pré-definido. Escolha uma NF para sobrepor ou mude para "Valor Fixo".</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="unidades" className="text-right">Unidades por Embalagem (NF)</Label>
+                      <Input id="unidades" value={newUnidadesPorEmbalagem} onChange={e => setNewUnidadesPorEmbalagem(e.target.value)} type="number" placeholder="Ex: 12" className="col-span-3 bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                    </div>
+                    {nfCustoHint !== null && <p className="text-sm text-center text-muted-foreground col-span-4">Custo unitário &asymp; {formatBRL(nfCustoHint)}</p>}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="preco-fixo" className="text-right">Valor Unitário (R$)</Label>
+                    <Input id="preco-fixo" value={newPrecoFixo} onChange={e => setNewPrecoFixo(e.target.value)} type="number" placeholder="Ex: 0.50" className="col-span-3 bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="obs-outro" className="text-right">Observação</Label>
+                  <Input id="obs-outro" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Ex: Gás, Energia, etc." className="col-span-3 bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="preco-outro" className="text-right">Preço Unitário (R$)</Label>
+                  <Input id="preco-outro" value={newPrecoOutro} onChange={e => setNewPrecoOutro(e.target.value)} type="number" placeholder="Ex: 50.00" className="col-span-3 bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="qty">Quantidade</Label>
+                <Input id="qty" value={newQty} onChange={e => setNewQty(e.target.value)} type="number" placeholder="1" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit">Unidade</Label>
+                <Input id="unit" value={newUnit} onChange={e => setNewUnit(e.target.value)} placeholder="un, kg, pct" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={handleAddItem} disabled={isAddSaving} className="bg-[#57715B] hover:bg-[#465b49] text-white rounded-xl">
+              {isAddSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Item Sheet */}
+      <Sheet open={!!selectedItemData} onOpenChange={(open) => !open && setSelectedItemData(null)}>
+        <SheetContent className="bg-white/90 dark:bg-[#1A1A1A]/90 backdrop-blur-xl border-l border-white/40 dark:border-white/10">
+          <SheetHeader><SheetTitle>Editar Item de Custo</SheetTitle></SheetHeader>
+          {selectedItemData && (
+            <div className="py-6 space-y-6">
+              {selectedItemData.tipo === 'embalagem' ? (
+                <div className="space-y-4">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Embalagem: </span>
+                    <span className="font-semibold text-[#57715B]">{selectedItemData.produtoMaster?.nome ?? selectedItemData.insumo?.nome}</span>
+                    {selectedItemData.insumo_id && <span className="ml-2 text-xs text-white bg-purple-500 rounded-full px-2 py-0.5">legado</span>}
+                  </div>
+                   <div className="space-y-2">
+                     <Label>Fonte de Custo</Label>
+                     <div className="flex gap-2">
+                        <Button onClick={() => setEditFonteCusto('nf')} className={cn("text-sm flex-1", editFonteCusto === 'nf' ? "bg-[#57715B] text-white hover:bg-[#465b49]" : "border border-[#57715B]/20 bg-white/60 text-[#57715B] hover:bg-white/80")} size="sm"><Receipt className="w-4 h-4 mr-2"/>Por Nota Fiscal</Button>
+                        <Button onClick={() => setEditFonteCusto('fixo')} className={cn("text-sm flex-1", editFonteCusto === 'fixo' ? "bg-[#57715B] text-white hover:bg-[#465b49]" : "border border-[#57715B]/20 bg-white/60 text-[#57715B] hover:bg-white/80")} size="sm"><DollarSign className="w-4 h-4 mr-2"/>Valor Fixo</Button>
+                     </div>
+                   </div>
+                   {editFonteCusto === 'nf' ? (
+                     <div className="space-y-4 rounded-xl border border-[#57715B]/10 p-3">
+                        <Popover open={editNfOpen} onOpenChange={setEditNfOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" aria-expanded={editNfOpen} className="w-full justify-between bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 hover:bg-transparent rounded-xl">
+                              {editNfItemId ? (nfEmbalagemItems.find(i => String(i.id) === editNfItemId)?.nome_produto ?? "Selecione o item...") : "Selecione o item..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[350px] p-0 bg-white/95 dark:bg-[#1A1A1A]/95 backdrop-blur-xl border-[#57715B]/10 rounded-xl">
+                            <Command>
+                              <CommandInput placeholder="Buscar item..." onValueChange={setEditNfSearch}/>
+                              <CommandList><CommandEmpty>Nenhum item encontrado.</CommandEmpty><CommandGroup>
+                                <ScrollArea className="h-48">
+                                  {filteredEditNfItems.map((item) => (
+                                    <CommandItem key={item.id} value={String(item.id)} onSelect={(v) => { setEditNfItemId(v); setEditNfOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", editNfItemId === String(item.id) ? "opacity-100" : "opacity-0")} />
+                                        <div className="text-xs">
+                                          <div className="font-medium">{item.nome_produto}</div>
+                                          <div className="text-muted-foreground">{formatBRL(item.valor_unitario)} | {item.fornecedor}</div>
+                                        </div>
+                                    </CommandItem>
+                                  ))}
+                                </ScrollArea>
+                              </CommandGroup></CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        <div className="space-y-2">
+                           <Label htmlFor="edit-unidades">Unidades por Embalagem (NF)</Label>
+                           <Input id="edit-unidades" value={editUnidadesPorEmbalagem} onChange={e => setEditUnidadesPorEmbalagem(e.target.value)} type="number" placeholder="Ex: 12" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                        </div>
+                        {editNfCustoHint !== null && <p className="text-sm text-center text-muted-foreground">Custo unitário &asymp; {formatBRL(editNfCustoHint)}</p>}
+                     </div>
+                   ) : (
+                     <div className="space-y-2">
+                      <Label htmlFor="edit-preco">Valor Unitário (R$)</Label>
+                      <Input id="edit-preco" value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" placeholder="0.00" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                    </div>
+                   )}
+                </div>
+              ) : ( // tipo 'outro'
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-obs">Observação</Label>
+                    <Input id="edit-obs" value={editObs} onChange={(e) => setEditObs(e.target.value)} className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-preco-outro">Preço Unitário (R$)</Label>
+                    <Input id="edit-preco-outro" value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" placeholder="0.00" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-qty">Quantidade</Label>
+                  <Input id="edit-qty" value={editQty} onChange={e => setEditQty(e.target.value)} type="number" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-unit">Unidade</Label>
+                  <Input id="edit-unit" value={editUnit} onChange={e => setEditUnit(e.target.value)} className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl" />
+                </div>
+              </div>
+              <div className="space-y-2 rounded-xl border border-dashed border-[#57715B]/20 p-3 text-center">
+                  <Label>Custo Calculado</Label>
+                  <p className="text-2xl font-bold text-[#57715B]">{formatBRL(selectedItemData.custo_calculado)}</p>
+              </div>
+            </div>
+          )}
+          <SheetFooter className="flex-row !justify-between">
+            <Button variant="destructive" onClick={handleDeleteItem} disabled={isEditSaving}>
+              {isEditSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
+            <Button onClick={handleSaveItem} disabled={isEditSaving} className="bg-[#57715B] hover:bg-[#465b49] text-white rounded-xl">
+              {isEditSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar Alterações
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+export default function CmvConfiguratorPage() {
+  return (
+    <ReactFlowProvider>
+      <CmvConfigurator />
+    </ReactFlowProvider>
+  );
+}
+```

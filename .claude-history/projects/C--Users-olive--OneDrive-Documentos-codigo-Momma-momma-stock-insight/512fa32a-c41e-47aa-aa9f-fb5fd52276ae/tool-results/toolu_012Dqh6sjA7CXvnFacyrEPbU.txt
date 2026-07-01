@@ -1,0 +1,252 @@
+supabase\migrations\20250829155917_2e75200e-a998-466b-9a04-fb3a7f3321cc.sql:27:CREATE TRIGGER update_movimentacoes_financeiras_updated_at
+supabase\migrations\20250829155917_2e75200e-a998-466b-9a04-fb3a7f3321cc.sql:28:    BEFORE UPDATE ON public.movimentacoes_financeiras
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\supabase\migrations\20250829155917_2e75200e-a998-466b-9a04-fb3a7f3321cc.sql-29-    FOR EACH ROW
+C:\Users\olive_\OneDrive\Documentos\codigo\Momma\momma-stock-insight\supabase\migrations\20250829155917_2e75200e-a998-466b-9a04-fb3a7f3321cc.sql-30-    EXECUTE FUNCTION public.update_updated_at_column();
+--
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:182:CREATE TRIGGER trg_movimentacoes_expositora
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:183:AFTER INSERT ON public.movimentacoes
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:184:FOR EACH ROW EXECUTE FUNCTION public.tg_movimentacoes_expositora();
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:185:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:186:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:187:-- 5) RPC: mover manualmente do estoque pra expositora (página Pronta Entrega)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:188:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:189:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:190:CREATE OR REPLACE FUNCTION public.mover_para_expositora(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:191:  p_produto_master_id integer,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:192:  p_loja_id           integer,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:193:  p_quantidade        numeric,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:194:  p_observacoes       text DEFAULT NULL
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:195:) RETURNS jsonb
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:196:LANGUAGE plpgsql
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:197:SECURITY DEFINER
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:198:SET search_path TO 'public'
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:199:AS $$
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:200:DECLARE
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:201:  v_estoque_anterior numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:202:  v_estoque_novo     numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:203:  v_expositora       numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:204:  v_alertas          jsonb := '[]'::jsonb;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:205:BEGIN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:206:  IF p_quantidade IS NULL OR p_quantidade <= 0 THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:207:    RETURN jsonb_build_object('ok', false, 'erro', 'Quantidade deve ser maior que zero');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:208:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:209:  IF p_loja_id IS NULL OR p_loja_id = 1 THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:210:    RETURN jsonb_build_object('ok', false, 'erro', 'Expositora é por loja — fábrica não tem vitrine');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:211:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:212:  IF NOT EXISTS (SELECT 1 FROM public.produtos_master WHERE id = p_produto_master_id AND ativo = true) THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:213:    RETURN jsonb_build_object('ok', false, 'erro', 'Produto não encontrado ou inativo');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:214:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:215:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:216:  SELECT quantidade_atual INTO v_estoque_anterior
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:217:    FROM public.estoque
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:218:   WHERE produto_master_id = p_produto_master_id AND loja_id = p_loja_id
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:219:   FOR UPDATE;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:220:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:221:  v_estoque_anterior := COALESCE(v_estoque_anterior, 0);
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:222:  v_estoque_novo     := v_estoque_anterior - p_quantidade;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:223:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:224:  IF v_estoque_novo < 0 THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:225:    v_alertas := v_alertas || jsonb_build_array(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:226:      format('Estoque da câmara ficou negativo (%s) — confira a contagem', v_estoque_novo));
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:227:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:228:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:229:  -- débito do estoque (trigger atualizar_estoque_e_alertas) +
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:230:  -- crédito da expositora (trigger tg_movimentacoes_expositora) — atômico
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:231:  INSERT INTO public.movimentacoes (
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:232:    produto_master_id, tipo_movimentacao, quantidade,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:233:    quantidade_anterior, quantidade_nova, motivo, observacoes,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:234:    data_movimentacao, loja_id
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:235:  ) VALUES (
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:236:    p_produto_master_id, 'saida', p_quantidade,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:237:    v_estoque_anterior, v_estoque_novo, 'exposicao',
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:238:    COALESCE(p_observacoes, 'Movido para expositora'),
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:239:    now(), p_loja_id
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:240:  );
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:241:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:242:  SELECT quantidade INTO v_expositora
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:243:    FROM public.expositora_estoque
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:244:   WHERE produto_master_id = p_produto_master_id AND loja_id = p_loja_id;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:245:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:246:  RETURN jsonb_build_object(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:247:    'ok', true,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:248:    'estoque_anterior',  v_estoque_anterior,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:249:    'estoque_novo',      v_estoque_novo,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:250:    'expositora_saldo',  COALESCE(v_expositora, 0),
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:251:    'alertas',           v_alertas
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:252:  );
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:253:END;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:254:$$;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:255:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:256:REVOKE EXECUTE ON FUNCTION public.mover_para_expositora(integer,integer,numeric,text) FROM PUBLIC, anon;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:257:GRANT  EXECUTE ON FUNCTION public.mover_para_expositora(integer,integer,numeric,text) TO authenticated;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:258:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:259:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:260:-- 6) RPC: ajuste da expositora com motivo (perda, vencido, degustação,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:261:--    consumo interno, recontagem/contagem inicial). NÃO mexe no estoque.
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:262:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:263:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:264:CREATE OR REPLACE FUNCTION public.ajustar_expositora(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:265:  p_produto_master_id integer,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:266:  p_loja_id           integer,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:267:  p_quantidade        numeric,            -- delta (modo 'delta') ou saldo alvo (modo 'absoluto')
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:268:  p_modo              text DEFAULT 'delta',
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:269:  p_motivo            text DEFAULT 'outro',
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:270:  p_observacoes       text DEFAULT NULL
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:271:) RETURNS jsonb
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:272:LANGUAGE plpgsql
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:273:SECURITY DEFINER
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:274:SET search_path TO 'public'
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:275:AS $$
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:276:DECLARE
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:277:  v_user_id      uuid := auth.uid();
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:278:  v_user_nome    text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:279:  v_saldo_atual  numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:280:  v_delta        numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:281:  v_saldo_novo   numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:282:BEGIN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:283:  IF p_modo NOT IN ('delta','absoluto') THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:284:    RETURN jsonb_build_object('ok', false, 'erro', 'Modo inválido: ' || COALESCE(p_modo,'<null>'));
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:285:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:286:  IF p_motivo NOT IN ('perda','vencido','degustacao','consumo_interno','recontagem','contagem_inicial','outro') THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:287:    RETURN jsonb_build_object('ok', false, 'erro', 'Motivo inválido: ' || COALESCE(p_motivo,'<null>'));
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:288:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:289:  IF p_quantidade IS NULL THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:290:    RETURN jsonb_build_object('ok', false, 'erro', 'Quantidade obrigatória');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:291:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:292:  IF p_loja_id IS NULL OR p_loja_id = 1 THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:293:    RETURN jsonb_build_object('ok', false, 'erro', 'Expositora é por loja — fábrica não tem vitrine');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:294:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:295:  IF NOT EXISTS (SELECT 1 FROM public.produtos_master WHERE id = p_produto_master_id) THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:296:    RETURN jsonb_build_object('ok', false, 'erro', 'Produto não encontrado');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:297:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:298:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:299:  -- garante linha + trava antes de calcular delta (modo absoluto depende do saldo atual)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:300:  INSERT INTO public.expositora_estoque (produto_master_id, loja_id, quantidade)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:301:  VALUES (p_produto_master_id, p_loja_id, 0)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:302:  ON CONFLICT (produto_master_id, loja_id) DO NOTHING;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:303:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:304:  SELECT quantidade INTO v_saldo_atual
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:305:    FROM public.expositora_estoque
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:306:   WHERE produto_master_id = p_produto_master_id AND loja_id = p_loja_id
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:307:   FOR UPDATE;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:308:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:309:  v_delta := CASE WHEN p_modo = 'absoluto' THEN p_quantidade - v_saldo_atual ELSE p_quantidade END;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:310:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:311:  IF v_delta = 0 THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:312:    RETURN jsonb_build_object('ok', true, 'saldo', v_saldo_atual, 'delta', 0,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:313:                              'mensagem', 'Saldo já estava no valor informado');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:314:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:315:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:316:  SELECT COALESCE(raw_user_meta_data->>'nome', email) INTO v_user_nome
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:317:    FROM auth.users WHERE id = v_user_id;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:318:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:319:  v_saldo_novo := public.fn_expositora_aplicar(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:320:    p_produto_master_id, p_loja_id, v_delta,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:321:    'ajuste', p_motivo, NULL, NULL,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:322:    v_user_id, v_user_nome, p_observacoes
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:323:  );
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:324:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:325:  RETURN jsonb_build_object('ok', true, 'saldo_anterior', v_saldo_atual,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:326:                            'saldo', v_saldo_novo, 'delta', v_delta);
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:327:END;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:328:$$;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:329:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:330:REVOKE EXECUTE ON FUNCTION public.ajustar_expositora(integer,integer,numeric,text,text,text) FROM PUBLIC, anon;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:331:GRANT  EXECUTE ON FUNCTION public.ajustar_expositora(integer,integer,numeric,text,text,text) TO authenticated;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:332:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:333:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:334:-- 7) bipar_etiqueta: nova etapa 'exposicao' — container inteiro vai pra vitrine.
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:335:--    Etiqueta → 'consumida' (desembalada no salão); movimentação de saída do
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:336:--    estoque criada AQUI DENTRO (motivo 'saida_inteira_exposicao') pra garantir
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:337:--    atomicidade etiqueta + estoque + lotes + expositora.
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:338:--    Resto da função idêntico à versão em produção.
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:339:-- ─────────────────────────────────────────────────────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:340:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:341:CREATE OR REPLACE FUNCTION public.bipar_etiqueta(p_uid text, p_etapa text, p_contexto jsonb DEFAULT '{}'::jsonb)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:342: RETURNS jsonb
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:343: LANGUAGE plpgsql
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:344: SECURITY DEFINER
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:345: SET search_path TO 'public'
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:346:AS $function$
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:347:DECLARE
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:348:  v_etiqueta public.etiquetas_qr%ROWTYPE;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:349:  v_user_id uuid := auth.uid();
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:350:  v_user_nome text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:351:  v_status_anterior text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:352:  v_status_novo text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:353:  v_loja_id integer;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:354:  v_alertas jsonb := '[]'::jsonb;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:355:  v_referencia_tipo text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:356:  v_referencia_id text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:357:  v_payload jsonb;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:358:  v_pid_text text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:359:  v_pid_int integer;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:360:  v_lote_uuid uuid;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:361:  v_produto_nome text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:362:  v_lote_codigo text;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:363:  v_lote_validade date;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:364:  v_qty_interna numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:365:  -- exposição
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:366:  v_loja_eff integer;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:367:  v_qtd_expor numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:368:  v_est_ant numeric;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:369:BEGIN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:370:  IF p_etapa NOT IN ('separacao','conferencia','entrada','saida','consumo','descarte','exposicao') THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:371:    RETURN jsonb_build_object('ok', false, 'erro', 'Etapa invalida: ' || p_etapa);
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:372:  END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:373:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:374:  SELECT COALESCE(raw_user_meta_data->>'nome', email) INTO v_user_nome
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:375:    FROM auth.users WHERE id = v_user_id;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:376:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:377:  v_loja_id         := NULLIF(p_contexto->>'loja_id','')::integer;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:378:  v_referencia_tipo := p_contexto->>'referencia_tipo';
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:379:  v_referencia_id   := p_contexto->>'referencia_id';
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:380:  v_payload         := p_contexto->'payload';
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:381:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:382:  SELECT * INTO v_etiqueta FROM public.etiquetas_qr WHERE uid = p_uid;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:383:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:384:  -- ── BACKFILL: etiqueta nova (nunca registrada) ──────────────────────────────
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:385:  IF NOT FOUND THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:386:    IF v_payload IS NULL THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:387:      RETURN jsonb_build_object('ok', false, 'erro', 'Etiqueta nao cadastrada e sem payload para backfill');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:388:    END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:389:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:390:    -- exposição exige loja conhecida (não há etiqueta pra herdar loja_atual_id)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:391:    IF p_etapa = 'exposicao' AND v_loja_id IS NULL THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:392:      RETURN jsonb_build_object('ok', false, 'erro', 'Exposicao exige loja_id no contexto');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:393:    END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:394:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:395:    v_pid_text := COALESCE(v_payload->>'pid', v_payload->>'p');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:396:    IF v_pid_text IS NULL OR v_pid_text = '' THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:397:      RETURN jsonb_build_object('ok', false, 'erro', 'Etiqueta nao cadastrada e payload sem produto');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:398:    END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:399:    v_pid_int     := v_pid_text::integer;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:400:    v_lote_uuid   := NULLIF(COALESCE(v_payload->>'lid', v_payload->>'l'),'')::uuid;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:401:    v_qty_interna := COALESCE(NULLIF(COALESCE(v_payload->>'qty', v_payload->>'q'),'')::numeric, 1);
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:402:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:403:    SELECT nome INTO v_produto_nome FROM public.produtos_master WHERE id = v_pid_int;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:404:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:405:    -- Resolve lote_id de forma segura: se UUID do payload nao existe, cria/encontra
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:406:    -- por codigo+validade ou usa NULL. Nunca insere UUID morto (causa FK error).
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:407:    IF v_lote_uuid IS NOT NULL THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:408:      SELECT codigo, data_validade INTO v_lote_codigo, v_lote_validade
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:409:        FROM public.lotes WHERE id = v_lote_uuid;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:410:      IF NOT FOUND THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:411:        -- UUID morto: tenta resolver por snapshot no payload
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:412:        v_lote_codigo  := NULLIF(COALESCE(v_payload->>'lote', v_payload->>'lc'), '');
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:413:        v_lote_validade := NULLIF(COALESCE(v_payload->>'val',  v_payload->>'v'),  '')::date;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:414:        IF v_lote_codigo IS NOT NULL AND v_lote_validade IS NOT NULL THEN
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:415:          v_lote_uuid := public.find_or_create_lote(
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:416:            v_pid_int, v_lote_codigo, v_lote_validade, NULL, NULL
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:417:          );
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:418:        ELSE
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:419:          v_lote_uuid := NULL;  -- sem como resolver; grava sem lote (FK permite NULL)
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:420:        END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:421:      END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:422:    END IF;
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:423:
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:424:    INSERT INTO public.etiquetas_qr (
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:425:      uid, produto_master_id, lote_id, embalagem_nome, quantidade_interna,
+supabase\migrations\20260605210000_expositora_pronta_entrega.sql:426:      quantidade_disponivel, consumida_inteira,
+
+[Showing results with pagination = limit: 250]

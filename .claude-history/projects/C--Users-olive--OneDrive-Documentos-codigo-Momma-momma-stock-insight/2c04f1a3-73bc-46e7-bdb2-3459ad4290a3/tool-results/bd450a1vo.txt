@@ -1,0 +1,594 @@
+diff --git a/src/features/produtos/ui/Produtos.page.tsx b/src/features/produtos/ui/Produtos.page.tsx
+index 589eed2d..97be094a 100644
+--- a/src/features/produtos/ui/Produtos.page.tsx
++++ b/src/features/produtos/ui/Produtos.page.tsx
+@@ -34,7 +34,6 @@ import {
+   Layers,
+   Eye,
+   EyeOff,
+-  Settings,
+   Leaf,
+   History,
+   Archive,
+@@ -78,13 +77,6 @@ import { useIsMobile } from '@/shared/hooks/use-mobile';
+ import { useStore } from '@/shared/contexts/StoreContext';
+ import { StoreSelector } from '@/shared/ui/DashboardStoreSelector';
+ import { cn } from '@/shared/lib/utils';
+-import {
+-  DropdownMenu,
+-  DropdownMenuContent,
+-  DropdownMenuItem,
+-  DropdownMenuLabel,
+-  DropdownMenuTrigger,
+-} from '@/shared/ui/dropdown-menu';
+ import { Avatar, AvatarFallback } from '@/shared/ui/avatar';
+ import {
+   Dialog,
+@@ -98,6 +90,8 @@ import {
+ import { Loader2 } from 'lucide-react';
+ import { ProductVisibilityMatrix } from '@/features/produtos/ui/ProductVisibilityMatrix';
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs';
++import { SetorManager } from './SetorManager';
++import { useSetores } from '../model/useSetores';
+ import { ScannerContent } from '@/pages/Scanner';
+ import { LabelPrintingContent } from '@/pages/LabelPrinting';
+ import { useSearchTelemetry } from '@/shared/lib/telemetry/useSearchTelemetry';
+@@ -215,6 +209,7 @@ const Produtos = () => {
+   const { hasData, storeId } = useStoreFilter();
+   const { user, userProfile, signOut } = useAuth();
+   const { hasPermission, canViewEstoque, isAdmin } = usePermissions();
++  const { atualizarProdutoSetorUnidade, setores: setoresGestao } = useSetores();
+   const hasAccess =
+     hasPermission('view_produtos') || canViewEstoque() || isAdmin();
+   const { theme, setTheme } = useTheme();
+@@ -306,9 +301,6 @@ const Produtos = () => {
+     ativo: true,
+     setor: 'Câmara Fria',
+   });
+-  const [newSetorName, setNewSetorName] = useState<string>('');
+-  const [selectedSetorToDelete, setSelectedSetorToDelete] =
+-    useState<string>('');
+   const [showNewProduct, setShowNewProduct] = useState(false);
+   const [searchTerm, setSearchTerm] = useState('');
+   const [showHidden, setShowHidden] = useState(false);
+@@ -318,6 +310,7 @@ const Produtos = () => {
+   const [loadingHistory, setLoadingHistory] = useState(false);
+   const [uploadingImage, setUploadingImage] = useState<number | null>(null);
+   const [showPrintDialog, setShowPrintDialog] = useState(false);
++  const [showSetorManager, setShowSetorManager] = useState(false);
+   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+   const fileInputRef = useRef<HTMLInputElement>(null);
+   const searchInputRef = useRef<HTMLInputElement>(null);
+@@ -917,6 +910,31 @@ const Produtos = () => {
+     }
+   };
+ 
++  // Editor admin do item: persiste SOMENTE setor + unidade (sem tocar em estoque/preço/nome).
++  const salvarSetorUnidade = async (produto: ProdutoComCategoria) => {
++    if (produto.ativo === false) return; // regra: nunca alterar produto inativo
++    const res = await atualizarProdutoSetorUnidade(
++      produto.id,
++      produto.setor || '',
++      produto.unidade_medida || 'unidade',
++    );
++    if (!res.ok) {
++      toast({ title: res.error || 'Erro ao salvar', variant: 'destructive' });
++      return;
++    }
++    toast({ title: 'Produto atualizado!' });
++    setEditingProduct(null);
++    fetchProdutos();
++    fetchSetores();
++  };
++
++  // Opções de setor pro editor: setores ativos (sem 'Todos') + o atual se não estiver na lista.
++  const setoresParaEdicao = (atual?: string | null): string[] => {
++    const base = setoresGestao.map((s) => s.nome).filter((n) => n !== 'Todos');
++    if (atual && !base.includes(atual)) return [atual, ...base];
++    return base;
++  };
++
+   const saveProduct = async (produto: Partial<ProdutoComCategoria>) => {
+     if (!produto.nome) {
+       toast({ title: 'Nome do produto é obrigatório', variant: 'destructive' });
+@@ -1246,35 +1264,6 @@ const Produtos = () => {
+     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
+   })();
+ 
+-  const createSetor = async (nome: string) => {
+-    if (!nome) return;
+-    try {
+-      const { error } = await supabase
+-        .from('setores')
+-        .insert({ nome, ativo: true });
+-      if (error) throw error;
+-      toast({ title: 'Setor criado com sucesso' });
+-      fetchSetores();
+-    } catch (e) {
+-      toast({ title: 'Erro ao criar setor', variant: 'destructive' });
+-    }
+-  };
+-
+-  const deleteSetor = async (nome: string) => {
+-    if (!nome) return;
+-    try {
+-      const { error } = await supabase
+-        .from('setores')
+-        .delete()
+-        .eq('nome', nome);
+-      if (error) throw error;
+-      toast({ title: 'Setor deletado com sucesso' });
+-      fetchSetores();
+-      setSelectedSetorToDelete('');
+-    } catch (e) {
+-      toast({ title: 'Erro ao deletar setor', variant: 'destructive' });
+-    }
+-  };
+ 
+   const generateAndPrintHTML = (
+     title: string,
+@@ -1992,62 +1981,18 @@ const Produtos = () => {
+                           )}
+                         </Button>
+ 
+-                        {/* Settings Menu */}
+-                        <DropdownMenu>
+-                          <DropdownMenuTrigger asChild>
+-                            <Button
+-                              variant="outline"
+-                              size="icon"
+-                              className="h-10 w-10 rounded-xl border-[#57715B]/20 text-[#57715B] hover:bg-[#57715B]/10"
+-                            >
+-                              <Settings className="h-5 w-5" />
+-                            </Button>
+-                          </DropdownMenuTrigger>
+-                          <DropdownMenuContent
+-                            align="end"
+-                            className="w-56 rounded-xl border-[#57715B]/10 p-2"
+-                          >
+-                            <DropdownMenuLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mx-2">
+-                              Setores
+-                            </DropdownMenuLabel>
+-                            <DropdownMenuItem
+-                              onSelect={() => {
+-                                const nome = prompt('Nome do novo setor');
+-                                if (nome !== null) createSetor(nome);
+-                              }}
+-                              className="rounded-lg cursor-pointer focus:bg-[#57715B]/10 focus:text-[#57715B]"
+-                            >
+-                              <Layers className="mr-2 h-4 w-4" /> Novo Setor
+-                            </DropdownMenuItem>
+-                            <div className="px-2 py-1.5">
+-                              <Select
+-                                value={selectedSetorToDelete}
+-                                onValueChange={(val) => {
+-                                  if (
+-                                    val &&
+-                                    confirm(
+-                                      `Tem certeza que deseja excluir o setor ${val}?`,
+-                                    )
+-                                  ) {
+-                                    deleteSetor(val);
+-                                    setSelectedSetorToDelete('');
+-                                  }
+-                                }}
+-                              >
+-                                <SelectTrigger className="w-full h-8 text-xs bg-red-50 border-red-100 text-red-600 focus:ring-0">
+-                                  <SelectValue placeholder="Excluir Setor" />
+-                                </SelectTrigger>
+-                                <SelectContent>
+-                                  {setores.map((nome) => (
+-                                    <SelectItem key={nome} value={nome}>
+-                                      {nome}
+-                                    </SelectItem>
+-                                  ))}
+-                                </SelectContent>
+-                              </Select>
+-                            </div>
+-                          </DropdownMenuContent>
+-                        </DropdownMenu>
++                        {/* Gerenciar Setores (admin) */}
++                        <Button
++                          variant="outline"
++                          size="icon"
++                          data-mia-action="abrir_gerir_setores"
++                          aria-label="Gerenciar Setores"
++                          onClick={() => setShowSetorManager(true)}
++                          className="h-10 w-10 rounded-xl border-[#57715B]/20 text-[#57715B] hover:bg-[#57715B]/10"
++                          title="Gerenciar Setores"
++                        >
++                          <Layers className="h-5 w-5" />
++                        </Button>
+                       </div>
+                     )}
+                   </div>
+@@ -2508,44 +2453,64 @@ const Produtos = () => {
+                           >
+                             {editingProduct === produto.id ? (
+                               <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
++                                <div className="text-sm font-semibold text-[#2D362E] dark:text-[#E6DCCF] truncate">
++                                  {produto.nome}
++                                </div>
++                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                   <div className="space-y-1">
+                                     <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Nome
++                                      Setor
+                                     </label>
+-                                    <Input
+-                                      value={produto.nome}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
++                                    <Select
++                                      value={produto.setor || ''}
++                                      onValueChange={(value) => {
++                                        setProdutos(
++                                          produtos.map((p) =>
+                                             p.id === produto.id
+-                                              ? { ...p, nome: e.target.value }
++                                              ? { ...p, setor: value }
+                                               : p,
++                                          ),
+                                         );
+-                                        setProdutos(updatedProdutos);
+                                       }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10"
+-                                    />
++                                    >
++                                      <SelectTrigger data-mia-field="edit_setor" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl h-10">
++                                        <SelectValue placeholder="Selecione o setor" />
++                                      </SelectTrigger>
++                                      <SelectContent className="rounded-xl border-[#57715B]/10 dark:border-zinc-800">
++                                        {setoresParaEdicao(produto.setor).map(
++                                          (nome) => (
++                                            <SelectItem
++                                              key={nome}
++                                              value={nome}
++                                              className="focus:bg-[#57715B]/10 cursor-pointer"
++                                            >
++                                              <span className="mr-2">
++                                                {setorEmoji(nome)}
++                                              </span>
++                                              {nome}
++                                            </SelectItem>
++                                          ),
++                                        )}
++                                      </SelectContent>
++                                    </Select>
+                                   </div>
+                                   <div className="space-y-1">
+                                     <label className="text-xs font-medium text-muted-foreground ml-1">
+                                       Unidade
+                                     </label>
+                                     <Select
+-                                      value={
+-                                        produto.unidade_medida || 'unidade'
+-                                      }
++                                      value={produto.unidade_medida || 'unidade'}
+                                       onValueChange={(value) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
++                                        setProdutos(
++                                          produtos.map((p) =>
+                                             p.id === produto.id
+                                               ? { ...p, unidade_medida: value }
+                                               : p,
++                                          ),
+                                         );
+-                                        setProdutos(updatedProdutos);
+                                       }}
+                                     >
+-                                      <SelectTrigger className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10">
++                                      <SelectTrigger data-mia-field="edit_unidade" className="bg-white/60 dark:bg-black/20 backdrop-blur-md border-[#57715B]/15 focus-visible:ring-[#57715B]/30 rounded-xl h-10">
+                                         <SelectValue />
+                                       </SelectTrigger>
+                                       <SelectContent className="rounded-xl border-[#57715B]/10 dark:border-zinc-800">
+@@ -2574,245 +2539,7 @@ const Produtos = () => {
+                                     </Select>
+                                   </div>
+ 
+-                                  <div className="space-y-1">
+-                                    <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Preço de Custo
+-                                    </label>
+-                                    <Input
+-                                      type="number"
+-                                      min="0"
+-                                      step="0.01"
+-                                      placeholder="0.00"
+-                                      value={produto.preco_custo || 0}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
+-                                            p.id === produto.id
+-                                              ? {
+-                                                  ...p,
+-                                                  preco_custo:
+-                                                    parseFloat(
+-                                                      e.target.value,
+-                                                    ) || 0,
+-                                                }
+-                                              : p,
+-                                        );
+-                                        setProdutos(updatedProdutos);
+-                                      }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10"
+-                                    />
+-                                  </div>
+-                                  <div className="space-y-1">
+-                                    <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Código Interno
+-                                    </label>
+-                                    <Input
+-                                      type="number"
+-                                      placeholder="Código Interno"
+-                                      value={produto.codigo_interno || ''}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
+-                                            p.id === produto.id
+-                                              ? {
+-                                                  ...p,
+-                                                  codigo_interno:
+-                                                    parseInt(e.target.value) ||
+-                                                    undefined,
+-                                                }
+-                                              : p,
+-                                        );
+-                                        setProdutos(updatedProdutos);
+-                                      }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10 font-mono"
+-                                    />
+-                                  </div>
+-                                </div>
+-
+-                                {/* Campos de Quantidade */}
+-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+-                                  <div className="space-y-1">
+-                                    <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Quantidade Atual
+-                                    </label>
+-                                    <Input
+-                                      data-mia-field="quantidade_atual"
+-                                      type="number"
+-                                      min="0"
+-                                      step="0.001"
+-                                      value={produto.quantidade_atual || 0}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
+-                                            p.id === produto.id
+-                                              ? {
+-                                                  ...p,
+-                                                  quantidade_atual:
+-                                                    parseFloat(
+-                                                      e.target.value,
+-                                                    ) || 0,
+-                                                }
+-                                              : p,
+-                                        );
+-                                        setProdutos(updatedProdutos);
+-                                      }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10"
+-                                    />
+-                                  </div>
+-                                  <div className="space-y-1">
+-                                    <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Quantidade Mínima
+-                                    </label>
+-                                    <Input
+-                                      data-mia-field="quantidade_minima"
+-                                      type="number"
+-                                      min="0"
+-                                      step="0.001"
+-                                      value={produto.quantidade_minima ?? 0}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
+-                                            p.id === produto.id
+-                                              ? {
+-                                                  ...p,
+-                                                  quantidade_minima:
+-                                                    parseFloat(
+-                                                      e.target.value,
+-                                                    ) || 0,
+-                                                }
+-                                              : p,
+-                                        );
+-                                        setProdutos(updatedProdutos);
+-                                      }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10"
+-                                    />
+-                                  </div>
+-                                  <div className="space-y-1">
+-                                    <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                      Quantidade Máxima
+-                                    </label>
+-                                    <Input
+-                                      type="number"
+-                                      min="0"
+-                                      step="0.001"
+-                                      value={produto.quantidade_maxima || 100}
+-                                      onChange={(e) => {
+-                                        const updatedProdutos = produtos.map(
+-                                          (p) =>
+-                                            p.id === produto.id
+-                                              ? {
+-                                                  ...p,
+-                                                  quantidade_maxima:
+-                                                    parseFloat(
+-                                                      e.target.value,
+-                                                    ) || 100,
+-                                                }
+-                                              : p,
+-                                        );
+-                                        setProdutos(updatedProdutos);
+-                                      }}
+-                                      className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl h-10"
+-                                    />
+-                                  </div>
+-                                </div>
+-
+-                                <Textarea
+-                                  placeholder="Descrição"
+-                                  value={produto.descricao || ''}
+-                                  onChange={(e) => {
+-                                    const updatedProdutos = produtos.map((p) =>
+-                                      p.id === produto.id
+-                                        ? { ...p, descricao: e.target.value }
+-                                        : p,
+-                                    );
+-                                    setProdutos(updatedProdutos);
+-                                  }}
+-                                  className="bg-white dark:bg-black/40 border-[#57715B]/10 dark:border-white/5 rounded-xl min-h-[80px]"
+-                                />
+-
+-                                {/* Upload de imagem para produto existente */}
+-                                <div className="space-y-2">
+-                                  <label className="text-xs font-medium text-muted-foreground ml-1">
+-                                    Foto do Produto
+-                                  </label>
+-                                  <div className="flex items-center gap-4">
+-                                    {produto.foto_url ? (
+-                                      <div className="relative w-20 h-20 border-2 border-dashed border-[#57715B]/20 rounded-xl overflow-hidden bg-white/50">
+-                                        <img
+-                                          src={produto.foto_url}
+-                                          alt="Preview"
+-                                          className="w-full h-full object-cover"
+-                                        />
+-                                        <Button
+-                                          size="sm"
+-                                          variant="destructive"
+-                                          className="absolute top-1 right-1 h-6 w-6 p-0 rounded-full"
+-                                          onClick={() => {
+-                                            const updatedProdutos =
+-                                              produtos.map((p) =>
+-                                                p.id === produto.id
+-                                                  ? {
+-                                                      ...p,
+-                                                      foto_url: undefined,
+-                                                    }
+-                                                  : p,
+-                                              );
+-                                            setProdutos(updatedProdutos);
+-                                          }}
+-                                        >
+-                                          <X className="h-3 w-3" />
+-                                        </Button>
+-                                      </div>
+-                                    ) : (
+-                                      <div
+-                                        className="w-20 h-20 border-2 border-dashed border-[#57715B]/20 rounded-xl flex items-center justify-center cursor-pointer hover:border-[#57715B]/40 hover:bg-[#57715B]/5 transition-all bg-white/50"
+-                                        onClick={() => {
+-                                          const input =
+-                                            document.createElement('input');
+-                                          input.type = 'file';
+-                                          input.accept = 'image/*';
+-                                          input.onchange = (e) =>
+-                                            handleImageUpload(
+-                                              e as any,
+-                                              produto.id,
+-                                            );
+-                                          input.click();
+-                                        }}
+-                                      >
+-                                        {uploadingImage === produto.id ? (
+-                                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#57715B]"></div>
+-                                        ) : (
+-                                          <ImageIcon className="h-8 w-8 text-[#57715B]/40" />
+-                                        )}
+-                                      </div>
+-                                    )}
+-                                    <Button
+-                                      type="button"
+-                                      variant="outline"
+-                                      size="sm"
+-                                      onClick={() => {
+-                                        const input =
+-                                          document.createElement('input');
+-                                        input.type = 'file';
+-                                        input.accept = 'image/*';
+-                                        input.onchange = (e) =>
+-                                          handleImageUpload(
+-                                            e as any,
+-                                            produto.id,
+-                                          );
+-                                        input.click();
+-                                      }}
+-                                      disabled={uploadingImage === produto.id}
+-                                      className="gap-2 border-[#57715B]/20 text-[#57715B] dark:text-[#E6DCCF] hover:bg-[#57715B]/5 dark:border-white/10 dark:hover:bg-white/5 rounded-xl h-10"
+-                                    >
+-                                      <Upload className="h-4 w-4" />
+-                                      {uploadingImage === produto.id
+-                                        ? 'Enviando...'
+-                                        : 'Alterar Foto'}
+-                                    </Button>
+-                                  </div>
+                                 </div>
+-
+                                 <div className="flex gap-2 justify-end pt-2">
+                                   <Button
+                                     variant="ghost"
+@@ -2823,11 +2550,12 @@ const Produtos = () => {
+                                     Cancelar
+                                   </Button>
+                                   <Button
+-                                    onClick={() => saveProduct(produto)}
+-                                    className="gap-2 bg-[#57715B] text-white hover:bg-[#57715B]/90 rounded-xl h-10 shadow-lg shadow-[#57715B]/20"
++                                    data-mia-action="salvar_setor_unidade"
++                                    onClick={() => salvarSetorUnidade(produto)}
++                                    className="gap-2 bg-[#57715B] text-white hover:bg-[#465b49] rounded-xl h-10 shadow-lg shadow-[#57715B]/20"
+                                   >
+                                     <Save className="h-4 w-4" />
+-                                    Salvar Alterações
++                                    Salvar
+                                   </Button>
+                                 </div>
+                               </div>
+@@ -2910,16 +2638,18 @@ const Produtos = () => {
+ 
+                                   {!modoContagem && (
+                                     <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity self-start">
+-                                      <Button
+-                                        size="sm"
+-                                        variant="ghost"
+-                                        onClick={() =>
+-                                          setEditingProduct(produto.id)
+-                                        }
+-                                        className="h-8 w-8 p-0 rounded-full hover:bg-[#57715B]/10 text-[#57715B]/60 hover:text-[#57715B]"
+-                                      >
+-                                        <Edit2 className="h-4 w-4" />
+-                                      </Button>
++                                      {produto.ativo !== false && (
++                                        <Button
++                                          size="sm"
++                                          variant="ghost"
++                                          onClick={() =>
++                                            setEditingProduct(produto.id)
++                                          }
++                                          className="h-8 w-8 p-0 rounded-full hover:bg-[#57715B]/10 text-[#57715B]/60 hover:text-[#57715B]"
++                                        >
++                                          <Edit2 className="h-4 w-4" />
++                                        </Button>
++                                      )}
+                                       <Button
+                                         size="sm"
+                                         variant="ghost"
+@@ -3034,6 +2764,15 @@ const Produtos = () => {
+         </div>
+       </div>
+ 
++      <SetorManager
++        open={showSetorManager}
++        onOpenChange={setShowSetorManager}
++        onChanged={() => {
++          fetchSetores();
++          fetchProdutos();
++        }}
++      />
++
+       {/* History Modal */}
+       <Dialog
+         open={showHistoryModal !== null}

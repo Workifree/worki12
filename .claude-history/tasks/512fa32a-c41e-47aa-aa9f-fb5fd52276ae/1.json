@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Migration: expositora_estoque + ledger + RPCs + bipar etapa exposicao",
+  "description": "Criar migration aditiva: tabelas expositora_estoque e expositora_movimentacoes (ledger), RPCs mover_para_expositora e ajustar_expositora, etapa 'exposicao' em bipar_etiqueta, destino em bipar_retirada_avulsa, alertas por total em loja (estoque+expositora), RLS. Aplicar no Supabase e regenerar types.ts.",
+  "activeForm": "Criando migration da expositora",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "UI TV: página /tv + componentes",
+  "description": "TvDashboard.page.tsx fullscreen sem sidebar + TvHero + TvStoreCard + TvFabricaCard + TvExceptions, conforme design.md. Rota /tv ProtectedRoute admin.",
+  "activeForm": "Implementando UI do painel TV",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

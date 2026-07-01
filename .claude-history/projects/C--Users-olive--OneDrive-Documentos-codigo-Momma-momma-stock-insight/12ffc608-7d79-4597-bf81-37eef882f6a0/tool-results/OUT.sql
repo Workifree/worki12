@@ -1,0 +1,26 @@
+ALTER POLICY "fornecedores_modify_finance" ON public.fornecedores USING (is_finance_user((select auth.uid()))) WITH CHECK (is_finance_user((select auth.uid())));
+ALTER POLICY "gidape_events_insert_own" ON public.gidape_events WITH CHECK (((select auth.uid()) = user_id));
+ALTER POLICY "gidape_events_select_admin" ON public.gidape_events USING ((( SELECT lower(COALESCE(mia_get_user_role((select auth.uid())), ''::text)) AS lower) = ANY (ARRAY['admin'::text, 'master'::text, 'administrator'::text, 'administrador'::text])));
+ALTER POLICY "gidape_events_select_own" ON public.gidape_events USING (((select auth.uid()) = user_id));
+ALTER POLICY "conv_msg_own_insert" ON public.mia_conversation_messages WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "conv_msg_own_read" ON public.mia_conversation_messages USING ((user_id = (select auth.uid())));
+ALTER POLICY "mia_cf_own" ON public.mia_counterfactual_sessions USING (((select auth.uid()) = user_id));
+ALTER POLICY "mia_distilled_select" ON public.mia_distilled_patterns USING (((active = true) AND ((scope = 'global'::text) OR (scope ~~ 'role:%'::text) OR (scope = ('user:'::text || ((select auth.uid()))::text)))));
+ALTER POLICY "mia_gb_step_results_own_insert" ON public.mia_glass_box_step_results WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "mia_gb_step_results_own_read" ON public.mia_glass_box_step_results USING ((user_id = (select auth.uid())));
+ALTER POLICY "mia_pattern_reports_service_all" ON public.mia_pattern_reports USING (((select current_setting('role'::text, true)) = 'service_role'::text)) WITH CHECK (((select current_setting('role'::text, true)) = 'service_role'::text));
+ALTER POLICY "mia_proactive_own" ON public.mia_proactive_queue USING (((select auth.uid()) = user_id));
+ALTER POLICY "mia_runtime_config_read" ON public.mia_runtime_config USING (((select auth.role()) = 'authenticated'::text));
+ALTER POLICY "mia_skill_proposals_service_all" ON public.mia_skill_proposals USING (((select current_setting('role'::text, true)) = 'service_role'::text)) WITH CHECK (((select current_setting('role'::text, true)) = 'service_role'::text));
+ALTER POLICY "mia_skills_registry_service_write" ON public.mia_skills_registry USING (((select current_setting('role'::text, true)) = 'service_role'::text)) WITH CHECK (((select current_setting('role'::text, true)) = 'service_role'::text));
+ALTER POLICY "mia_sessions_own_insert" ON public.mia_telemetry_sessions WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "mia_sessions_own_read" ON public.mia_telemetry_sessions USING ((user_id = (select auth.uid())));
+ALTER POLICY "mia_sessions_own_update" ON public.mia_telemetry_sessions USING ((user_id = (select auth.uid()))) WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "mia_sessions_service_all" ON public.mia_telemetry_sessions USING (((select current_setting('role'::text, true)) = 'service_role'::text)) WITH CHECK (((select current_setting('role'::text, true)) = 'service_role'::text));
+ALTER POLICY "mia_telemetry_own_insert" ON public.mia_user_telemetry WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "mia_telemetry_own_read" ON public.mia_user_telemetry USING ((user_id = (select auth.uid())));
+ALTER POLICY "mia_telemetry_service_all" ON public.mia_user_telemetry USING (((select current_setting('role'::text, true)) = 'service_role'::text)) WITH CHECK (((select current_setting('role'::text, true)) = 'service_role'::text));
+ALTER POLICY "mia_user_workflows_own" ON public.mia_user_workflows USING ((user_id = (select auth.uid()))) WITH CHECK ((user_id = (select auth.uid())));
+ALTER POLICY "user_loops_own" ON public.user_loops USING (((select auth.uid()) = user_id));
+ALTER POLICY "nav_graph_own" ON public.user_nav_graph USING (((select auth.uid()) = user_id));
+-- COUNT: emitted=25 alter statements; skipped=221 policies already fully wrapped

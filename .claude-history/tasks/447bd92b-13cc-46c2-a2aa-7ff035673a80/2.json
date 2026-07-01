@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Design UI do painel TV (spec visual)",
+  "description": "Agente designer produz spec visual 1920×1080 dark (hero + grid 3×2 + exceções), tipografia 3-5m, tokens Momma, salva em .harness/spec/dashboard-tv-crise/design.md.",
+  "activeForm": "Gerando design do painel TV",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,714 @@
+### AUTH_RLS_INITPLAN
+Tables: 16 | Total policies: 29
+- fornecedores: fornecedores_modify_finance
+- gidape_events: gidape_events_select_admin, gidape_events_insert_own, gidape_events_select_own
+- mia_conversation_messages: conv_msg_own_read, conv_msg_own_insert
+- mia_counterfactual_sessions: mia_cf_own
+- mia_distilled_patterns: mia_distilled_select
+- mia_glass_box_step_results: mia_gb_step_results_own_insert, mia_gb_step_results_own_read
+- mia_pattern_reports: mia_pattern_reports_admin_read, mia_pattern_reports_service_all
+- mia_proactive_queue: mia_proactive_own
+- mia_runtime_config: mia_runtime_config_read
+- mia_skill_proposals: mia_skill_proposals_admin_read, mia_skill_proposals_admin_update, mia_skill_proposals_service_all
+- mia_skills_registry: mia_skills_registry_service_write
+- mia_telemetry_sessions: mia_sessions_own_read, mia_sessions_own_insert, mia_sessions_own_update, mia_sessions_service_all
+- mia_user_telemetry: mia_telemetry_own_read, mia_telemetry_own_insert, mia_telemetry_service_all
+- mia_user_workflows: mia_user_workflows_own, mia_user_workflows_shared_read
+- user_loops: user_loops_own
+- user_nav_graph: nav_graph_own
+
+### MULTIPLE_PERMISSIVE_POLICIES
+Total MPP entries: 614 | Distinct tables: 76
+Distinct roles: ['anon', 'authenticated', 'authenticator', 'cli_login_postgres', 'dashboard_user', 'supabase_privileged_role']
+Distinct actions: ['DELETE', 'INSERT', 'SELECT', 'UPDATE']
+
+TABLE: account_assets (6 entries)
+    role=anon action=SELECT policies={auth_read,auth_write}
+    role=authenticated action=SELECT policies={auth_read,auth_write}
+    role=authenticator action=SELECT policies={auth_read,auth_write}
+    role=cli_login_postgres action=SELECT policies={auth_read,auth_write}
+    role=dashboard_user action=SELECT policies={auth_read,auth_write}
+    role=supabase_privileged_role action=SELECT policies={auth_read,auth_write}
+TABLE: active_session_items (24 entries)
+    role=anon action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=anon action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=anon action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=anon action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+    role=authenticated action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=authenticated action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=authenticated action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=authenticated action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+    role=authenticator action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=authenticator action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=authenticator action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=authenticator action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+    role=cli_login_postgres action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=cli_login_postgres action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=cli_login_postgres action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=cli_login_postgres action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+    role=dashboard_user action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=dashboard_user action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=dashboard_user action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=dashboard_user action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+    role=supabase_privileged_role action=DELETE policies={"Users can delete items from any active session","Users can delete items when separating"}
+    role=supabase_privileged_role action=INSERT policies={"Users can create items in any active session","Users can insert items when separating"}
+    role=supabase_privileged_role action=SELECT policies={"Users can view all session items","Users can view items when separating"}
+    role=supabase_privileged_role action=UPDATE policies={"Users can update items in any active session","Users can update items when separating"}
+TABLE: active_sessions (6 entries)
+    role=anon action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+    role=authenticated action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+    role=authenticator action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+    role=cli_login_postgres action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+    role=dashboard_user action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+    role=supabase_privileged_role action=SELECT policies={"Users can view all active sessions","Users can view sessions when separating"}
+TABLE: bank_accounts (1 entries)
+    role=authenticated action=SELECT policies={bank_accounts_auth_read,bank_accounts_finance_write}
+TABLE: cargos (1 entries)
+    role=authenticated action=SELECT policies={cargos_auth_read,cargos_modify_rh}
+TABLE: configuracoes_sistema (1 entries)
+    role=authenticated action=SELECT policies={"Apenas admins podem editar configurações","Configurações visíveis para todos os usuários autenticados"}
+TABLE: contas_pagar_receber_parcelas (6 entries)
+    role=anon action=SELECT policies={auth_read,auth_write}
+    role=authenticated action=SELECT policies={auth_read,auth_write}
+    role=authenticator action=SELECT policies={auth_read,auth_write}
+    role=cli_login_postgres action=SELECT policies={auth_read,auth_write}
+    role=dashboard_user action=SELECT policies={auth_read,auth_write}
+    role=supabase_privileged_role action=SELECT policies={auth_read,auth_write}
+TABLE: contratos (6 entries)
+    role=anon action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+    role=authenticated action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+    role=authenticator action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+    role=cli_login_postgres action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+    role=dashboard_user action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+    role=supabase_privileged_role action=SELECT policies={contratos_modify_rh,contratos_select_via_employee}
+TABLE: corridas_ativas (6 entries)
+    role=anon action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+    role=authenticated action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+    role=authenticator action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+    role=cli_login_postgres action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+    role=dashboard_user action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+    role=supabase_privileged_role action=SELECT policies={"Users can view all active rides","Usuários podem ver todas as corridas ativas"}
+TABLE: credit_cards (1 entries)
+    role=authenticated action=SELECT policies={credit_cards_auth_read,credit_cards_finance_write}
+TABLE: daily_production (1 entries)
+    role=authenticated action=SELECT policies={"Daily production can be viewed by authenticated users",daily_production_select_authenticated}
+TABLE: employees (12 entries)
+    role=anon action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=anon action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+    role=authenticated action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=authenticated action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+    role=authenticator action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=authenticator action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+    role=cli_login_postgres action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=cli_login_postgres action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+    role=dashboard_user action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=dashboard_user action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+    role=supabase_privileged_role action=SELECT policies={employees_modify_rh,employees_select_gerente_loja,employees_select_rh,employees_select_self}
+    role=supabase_privileged_role action=UPDATE policies={employees_modify_rh,employees_update_estacao_gerente}
+TABLE: estoque_lotes (1 entries)
+    role=authenticated action=SELECT policies={el_auth_read,el_auth_write}
+TABLE: expedicoes (6 entries)
+    role=anon action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+    role=authenticated action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+    role=authenticator action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+    role=cli_login_postgres action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+    role=dashboard_user action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+    role=supabase_privileged_role action=SELECT policies={"Expedicoes: Gerenciamento Admin","Expedicoes: Leitura Authenticated"}
+TABLE: ferias_periodos (6 entries)
+    role=anon action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+    role=authenticated action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+    role=authenticator action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+    role=cli_login_postgres action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+    role=dashboard_user action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+    role=supabase_privileged_role action=SELECT policies={ferias_periodos_modify_rh,ferias_periodos_select}
+TABLE: finance_category_mgmt_map (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_cost_centers (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_document_types (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_mgmt_accounts (1 entries)
+    role=authenticated action=SELECT policies={finance_mgmt_accounts_auth_read,finance_mgmt_accounts_finance_write}
+TABLE: finance_mgmt_groups (1 entries)
+    role=authenticated action=SELECT policies={finance_mgmt_groups_auth_read,finance_mgmt_groups_finance_write}
+TABLE: finance_mgmt_subaccounts (1 entries)
+    role=authenticated action=SELECT policies={finance_mgmt_subaccounts_auth_read,finance_mgmt_subaccounts_finance_write}
+TABLE: finance_payment_methods (1 entries)
+    role=authenticated action=SELECT policies={finance_payment_methods_auth_read,finance_payment_methods_finance_write}
+TABLE: finance_tax_families (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_tax_posting_rules (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_tax_rates (1 entries)
+    role=authenticated action=SELECT policies={finance_tax_rates_auth_read,finance_tax_rates_finance_write}
+TABLE: finance_tax_set_items (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: finance_tax_sets (1 entries)
+    role=authenticated action=SELECT policies={"Enable read access for authenticated users","Enable write access for authenticated users"}
+TABLE: financial_entries (1 entries)
+    role=authenticated action=SELECT policies={financial_entries_auth_read,financial_entries_finance_write}
+TABLE: financial_payroll_entries (6 entries)
+    role=anon action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+    role=authenticated action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+    role=authenticator action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+    role=cli_login_postgres action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+    role=dashboard_user action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+    role=supabase_privileged_role action=SELECT policies={"Users can manage payroll for their stores","Users can view payroll from their stores"}
+TABLE: fornecedores (1 entries)
+    role=authenticated action=SELECT policies={fornecedores_modify_finance,fornecedores_select_authenticated}
+TABLE: freelancer_work_days (7 entries)
+    role=anon action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+    role=authenticated action=DELETE policies={"Admins can delete freelancer work days","Users can delete own freelancer work days"}
+    role=authenticated action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+    role=authenticator action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+    role=cli_login_postgres action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+    role=dashboard_user action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+    role=supabase_privileged_role action=INSERT policies={"Admins can insert freelancer work days","Users can insert freelancer work days"}
+TABLE: gidape_events (6 entries)
+    role=anon action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+    role=authenticated action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+    role=authenticator action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+    role=cli_login_postgres action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+    role=dashboard_user action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+    role=supabase_privileged_role action=SELECT policies={gidape_events_select_admin,gidape_events_select_own}
+TABLE: localizacoes_corrida (12 entries)
+    role=anon action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=anon action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+    role=authenticated action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=authenticated action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+    role=authenticator action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=authenticator action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+    role=cli_login_postgres action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=cli_login_postgres action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+    role=dashboard_user action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=dashboard_user action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+    role=supabase_privileged_role action=INSERT policies={"Users can create locations for their rides","Usuários podem inserir localizações para suas corridas"}
+    role=supabase_privileged_role action=SELECT policies={"Users can view all ride locations","Usuários podem ver localizações de corridas ativas"}
+TABLE: logistica_events (24 entries)
+    role=anon action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=anon action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=anon action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=anon action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticated action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticated action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticated action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticated action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticator action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticator action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticator action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=authenticator action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+    role=cli_login_postgres action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=cli_login_postgres action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=cli_login_postgres action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=cli_login_postgres action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+    role=dashboard_user action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=dashboard_user action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=dashboard_user action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=dashboard_user action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+    role=supabase_privileged_role action=DELETE policies={admins_manage_all_events,owners_manage_own_events}
+    role=supabase_privileged_role action=INSERT policies={admins_manage_all_events,owners_manage_own_events}
+    role=supabase_privileged_role action=SELECT policies={admins_manage_all_events,owners_manage_own_events}
+    role=supabase_privileged_role action=UPDATE policies={admins_manage_all_events,owners_manage_own_events}
+TABLE: lojas (1 entries)
+    role=authenticated action=SELECT policies={"Authenticated users can manage stores","Authenticated users can view stores"}
+TABLE: metodos_punitivos (6 entries)
+    role=anon action=SELECT policies={punitivos_modify_rh,punitivos_select}
+    role=authenticated action=SELECT policies={punitivos_modify_rh,punitivos_select}
+    role=authenticator action=SELECT policies={punitivos_modify_rh,punitivos_select}
+    role=cli_login_postgres action=SELECT policies={punitivos_modify_rh,punitivos_select}
+    role=dashboard_user action=SELECT policies={punitivos_modify_rh,punitivos_select}
+    role=supabase_privileged_role action=SELECT policies={punitivos_modify_rh,punitivos_select}
+TABLE: mia_action_log (12 entries)
+    role=anon action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=anon action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+    role=authenticated action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=authenticated action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+    role=authenticator action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=authenticator action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+    role=cli_login_postgres action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=cli_login_postgres action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+    role=dashboard_user action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=dashboard_user action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+    role=supabase_privileged_role action=INSERT policies={"Service role full access","Users can insert own actions"}
+    role=supabase_privileged_role action=SELECT policies={"Admin reads all mia actions","Service role full access","Users can read own actions"}
+TABLE: mia_batch_operations (24 entries)
+    role=anon action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=anon action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=anon action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=anon action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticated action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticated action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticated action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticated action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticator action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticator action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticator action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=authenticator action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=cli_login_postgres action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=cli_login_postgres action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=cli_login_postgres action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=cli_login_postgres action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=dashboard_user action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=dashboard_user action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=dashboard_user action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=dashboard_user action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=supabase_privileged_role action=DELETE policies={"Service role full access batch","Users can manage own batch ops"}
+    role=supabase_privileged_role action=INSERT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=supabase_privileged_role action=SELECT policies={"Service role full access batch","Users can manage own batch ops"}
+    role=supabase_privileged_role action=UPDATE policies={"Service role full access batch","Users can manage own batch ops"}
+TABLE: mia_pattern_reports (6 entries)
+    role=anon action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+    role=authenticated action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+    role=authenticator action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+    role=cli_login_postgres action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+    role=dashboard_user action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+    role=supabase_privileged_role action=SELECT policies={mia_pattern_reports_admin_read,mia_pattern_reports_service_all}
+TABLE: mia_query_logs (6 entries)
+    role=anon action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+    role=authenticated action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+    role=authenticator action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+    role=cli_login_postgres action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+    role=dashboard_user action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+    role=supabase_privileged_role action=SELECT policies={admins_read_all_query_logs,users_read_own_query_logs}
+TABLE: mia_sessions (1 entries)
+    role=authenticated action=SELECT policies={"Authenticated read all sessions",mia_sessions_select_own}
+TABLE: mia_skill_proposals (12 entries)
+    role=anon action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=anon action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+    role=authenticated action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=authenticated action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+    role=authenticator action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=authenticator action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+    role=cli_login_postgres action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=cli_login_postgres action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+    role=dashboard_user action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=dashboard_user action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+    role=supabase_privileged_role action=SELECT policies={mia_skill_proposals_admin_read,mia_skill_proposals_service_all}
+    role=supabase_privileged_role action=UPDATE policies={mia_skill_proposals_admin_update,mia_skill_proposals_service_all}
+TABLE: mia_skills_registry (6 entries)
+    role=anon action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+    role=authenticated action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+    role=authenticator action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+    role=cli_login_postgres action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+    role=dashboard_user action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+    role=supabase_privileged_role action=SELECT policies={mia_skills_registry_public_read,mia_skills_registry_service_write}
+TABLE: mia_telemetry_sessions (18 entries)
+    role=anon action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=anon action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=anon action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+    role=authenticated action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=authenticated action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=authenticated action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+    role=authenticator action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=authenticator action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=authenticator action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+    role=cli_login_postgres action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=cli_login_postgres action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=cli_login_postgres action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+    role=dashboard_user action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=dashboard_user action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=dashboard_user action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+    role=supabase_privileged_role action=INSERT policies={mia_sessions_own_insert,mia_sessions_service_all}
+    role=supabase_privileged_role action=SELECT policies={mia_sessions_own_read,mia_sessions_service_all}
+    role=supabase_privileged_role action=UPDATE policies={mia_sessions_own_update,mia_sessions_service_all}
+TABLE: mia_user_telemetry (12 entries)
+    role=anon action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=anon action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+    role=authenticated action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=authenticated action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+    role=authenticator action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=authenticator action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+    role=cli_login_postgres action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=cli_login_postgres action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+    role=dashboard_user action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=dashboard_user action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+    role=supabase_privileged_role action=INSERT policies={mia_telemetry_own_insert,mia_telemetry_service_all}
+    role=supabase_privileged_role action=SELECT policies={mia_telemetry_own_read,mia_telemetry_service_all}
+TABLE: mia_user_workflows (1 entries)
+    role=authenticated action=SELECT policies={mia_user_workflows_own,mia_user_workflows_shared_read}
+TABLE: noaa_alerts (24 entries)
+    role=anon action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=anon action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=anon action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=anon action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticated action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticated action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticated action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticated action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticator action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticator action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticator action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=authenticator action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=cli_login_postgres action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=cli_login_postgres action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=cli_login_postgres action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=cli_login_postgres action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=dashboard_user action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=dashboard_user action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=dashboard_user action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=dashboard_user action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=supabase_privileged_role action=DELETE policies={authenticated_all_alerts,service_role_all_alerts}
+    role=supabase_privileged_role action=INSERT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=supabase_privileged_role action=SELECT policies={authenticated_all_alerts,service_role_all_alerts}
+    role=supabase_privileged_role action=UPDATE policies={authenticated_all_alerts,service_role_all_alerts}
+TABLE: noaa_capacidade_producao (24 entries)
+    role=anon action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=anon action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=anon action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=anon action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticated action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticated action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticated action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticated action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticator action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticator action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticator action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=authenticator action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=cli_login_postgres action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=cli_login_postgres action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=cli_login_postgres action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=cli_login_postgres action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=dashboard_user action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=dashboard_user action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=dashboard_user action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=dashboard_user action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=supabase_privileged_role action=DELETE policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=supabase_privileged_role action=INSERT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=supabase_privileged_role action=SELECT policies={authenticated_all_capacidade,service_role_all_capacidade}
+    role=supabase_privileged_role action=UPDATE policies={authenticated_all_capacidade,service_role_all_capacidade}
+TABLE: noaa_catalogo (6 entries)
+    role=anon action=SELECT policies={read_catalogo_all,write_catalogo_service}
+    role=authenticated action=SELECT policies={read_catalogo_all,write_catalogo_service}
+    role=authenticator action=SELECT policies={read_catalogo_all,write_catalogo_service}
+    role=cli_login_postgres action=SELECT policies={read_catalogo_all,write_catalogo_service}
+    role=dashboard_user action=SELECT policies={read_catalogo_all,write_catalogo_service}
+    role=supabase_privileged_role action=SELECT policies={read_catalogo_all,write_catalogo_service}
+TABLE: noaa_conversation_reviews (24 entries)
+    role=anon action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=anon action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=anon action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=anon action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticated action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticated action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticated action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticated action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticator action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticator action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticator action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=authenticator action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=cli_login_postgres action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=cli_login_postgres action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=cli_login_postgres action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=cli_login_postgres action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=dashboard_user action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=dashboard_user action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=dashboard_user action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=dashboard_user action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=supabase_privileged_role action=DELETE policies={authenticated_all_reviews,service_role_all_reviews}
+    role=supabase_privileged_role action=INSERT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=supabase_privileged_role action=SELECT policies={authenticated_all_reviews,service_role_all_reviews}
+    role=supabase_privileged_role action=UPDATE policies={authenticated_all_reviews,service_role_all_reviews}
+TABLE: noaa_eval_runs (6 entries)
+    role=anon action=SELECT policies={eval_runs_read,eval_runs_write}
+    role=authenticated action=SELECT policies={eval_runs_read,eval_runs_write}
+    role=authenticator action=SELECT policies={eval_runs_read,eval_runs_write}
+    role=cli_login_postgres action=SELECT policies={eval_runs_read,eval_runs_write}
+    role=dashboard_user action=SELECT policies={eval_runs_read,eval_runs_write}
+    role=supabase_privileged_role action=SELECT policies={eval_runs_read,eval_runs_write}
+TABLE: noaa_frete_regioes (6 entries)
+    role=anon action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+    role=authenticated action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+    role=authenticator action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+    role=cli_login_postgres action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+    role=dashboard_user action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+    role=supabase_privileged_role action=SELECT policies={authenticated_select_frete,service_role_all_frete}
+TABLE: noaa_golden_conversations (24 entries)
+    role=anon action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=anon action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=anon action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=anon action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticated action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticated action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticated action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticated action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticator action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticator action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticator action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=authenticator action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+    role=cli_login_postgres action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=cli_login_postgres action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=cli_login_postgres action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=cli_login_postgres action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+    role=dashboard_user action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=dashboard_user action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=dashboard_user action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=dashboard_user action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+    role=supabase_privileged_role action=DELETE policies={authenticated_all_golden,service_role_all_golden}
+    role=supabase_privileged_role action=INSERT policies={authenticated_all_golden,service_role_all_golden}
+    role=supabase_privileged_role action=SELECT policies={authenticated_all_golden,service_role_all_golden}
+    role=supabase_privileged_role action=UPDATE policies={authenticated_all_golden,service_role_all_golden}
+TABLE: noaa_grupos_unidade (6 entries)
+    role=anon action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+    role=authenticated action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+    role=authenticator action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+    role=cli_login_postgres action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+    role=dashboard_user action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+    role=supabase_privileged_role action=SELECT policies={authenticated_select_grupos_unidade,service_role_all_grupos_unidade}
+TABLE: noaa_llm_calls (6 entries)
+    role=anon action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+    role=authenticated action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+    role=authenticator action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+    role=cli_login_postgres action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+    role=dashboard_user action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+    role=supabase_privileged_role action=SELECT policies={authenticated_select_llm_calls,service_role_all_llm_calls}
+TABLE: noaa_prompt_variants (24 entries)
+    role=anon action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=anon action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=anon action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=anon action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticated action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticated action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticated action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticated action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticator action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticator action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticator action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=authenticator action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+    role=cli_login_postgres action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=cli_login_postgres action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=cli_login_postgres action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=cli_login_postgres action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+    role=dashboard_user action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=dashboard_user action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=dashboard_user action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=dashboard_user action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+    role=supabase_privileged_role action=DELETE policies={authenticated_all_variants,service_role_all_variants}
+    role=supabase_privileged_role action=INSERT policies={authenticated_all_variants,service_role_all_variants}
+    role=supabase_privileged_role action=SELECT policies={authenticated_all_variants,service_role_all_variants}
+    role=supabase_privileged_role action=UPDATE policies={authenticated_all_variants,service_role_all_variants}
+TABLE: noaa_quality_scores (6 entries)
+    role=anon action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+    role=authenticated action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+    role=authenticator action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+    role=cli_login_postgres action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+    role=dashboard_user action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+    role=supabase_privileged_role action=SELECT policies={authenticated_select_quality,service_role_all_quality}
+TABLE: noaa_regression_runs (6 entries)
+    role=anon action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+    role=authenticated action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+    role=authenticator action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+    role=cli_login_postgres action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+    role=dashboard_user action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+    role=supabase_privileged_role action=SELECT policies={authenticated_select_regression,service_role_all_regression}
+TABLE: noaa_sessions (2 entries)
+    role=authenticated action=SELECT policies={"Service role full access on noaa_sessions",authenticated_read_noaa_sessions}
+    role=authenticated action=UPDATE policies={"Service role full access on noaa_sessions",authenticated_update_noaa_sessions}
+TABLE: noaa_whatsapp_sessions (6 entries)
+    role=anon action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+    role=authenticated action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+    role=authenticator action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+    role=cli_login_postgres action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+    role=dashboard_user action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+    role=supabase_privileged_role action=SELECT policies={wa_sessions_auth_read,wa_sessions_service_all}
+TABLE: pesquisa_clima_ciclos (6 entries)
+    role=anon action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+    role=authenticated action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+    role=authenticator action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+    role=cli_login_postgres action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+    role=dashboard_user action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+    role=supabase_privileged_role action=SELECT policies={pesquisa_clima_ciclos_modify_admin,pesquisa_clima_ciclos_select}
+TABLE: pipeline_funcionarios (24 entries)
+    role=anon action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=anon action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=anon action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=anon action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticated action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticated action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=authenticated action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticated action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticator action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticator action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=authenticator action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=authenticator action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=cli_login_postgres action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=cli_login_postgres action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=cli_login_postgres action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=cli_login_postgres action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=dashboard_user action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=dashboard_user action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=dashboard_user action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=dashboard_user action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=supabase_privileged_role action=DELETE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=supabase_privileged_role action=INSERT policies={"Admins see all funcionarios","Allow RPC function access","Users can insert pipeline funcionarios","Users see own assignments"}
+    role=supabase_privileged_role action=SELECT policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+    role=supabase_privileged_role action=UPDATE policies={"Admins see all funcionarios","Allow RPC function access","Users see own assignments"}
+TABLE: pipeline_separacao_itens (6 entries)
+    role=anon action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+    role=authenticated action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+    role=authenticator action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+    role=cli_login_postgres action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+    role=dashboard_user action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+    role=supabase_privileged_role action=SELECT policies={"Users can update their separacao items","Users can view separacao items"}
+TABLE: profiles (12 entries)
+    role=anon action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=anon action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+    role=authenticated action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=authenticated action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+    role=authenticator action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=authenticator action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+    role=cli_login_postgres action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=cli_login_postgres action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+    role=dashboard_user action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=dashboard_user action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+    role=supabase_privileged_role action=SELECT policies={"Admins can view all profiles (safe)","Users can view own profile"}
+    role=supabase_privileged_role action=UPDATE policies={"Admins can update all profiles (safe)","Admins podem atualizar qualquer perfil","Users can update own profile"}
+TABLE: requisicoes (12 entries)
+    role=anon action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=anon action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+    role=authenticated action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=authenticated action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+    role=authenticator action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=authenticator action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+    role=cli_login_postgres action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=cli_login_postgres action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+    role=dashboard_user action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=dashboard_user action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+    role=supabase_privileged_role action=INSERT policies={"Acesso público total a requisições","Users can insert requisitions"}
+    role=supabase_privileged_role action=UPDATE policies={"Acesso público total a requisições","Users can update own requisitions"}
+TABLE: requisicoes_itens (12 entries)
+    role=anon action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=anon action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+    role=authenticated action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=authenticated action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+    role=authenticator action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=authenticator action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+    role=cli_login_postgres action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=cli_login_postgres action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+    role=dashboard_user action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=dashboard_user action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+    role=supabase_privileged_role action=INSERT policies={"Acesso público total a itens de requisições","Users can insert requisition items"}
+    role=supabase_privileged_role action=UPDATE policies={"Acesso público total a itens de requisições","Users can update requisition items"}
+TABLE: requisition_pipelines (24 entries)
+    role=anon action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=anon action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=anon action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=anon action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticated action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticated action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticated action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticated action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticator action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticator action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticator action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=authenticator action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=cli_login_postgres action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=cli_login_postgres action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=cli_login_postgres action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=cli_login_postgres action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=dashboard_user action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=dashboard_user action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=dashboard_user action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=dashboard_user action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=supabase_privileged_role action=DELETE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=supabase_privileged_role action=INSERT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=supabase_privileged_role action=SELECT policies={"Admins see all pipelines","Coordinators see own pipelines"}
+    role=supabase_privileged_role action=UPDATE policies={"Admins see all pipelines","Coordinators see own pipelines"}
+TABLE: sessoes_motorista (6 entries)
+    role=anon action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+    role=authenticated action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+    role=authenticator action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+    role=cli_login_postgres action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+    role=dashboard_user action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+    role=supabase_privileged_role action=SELECT policies={"Users can view all driver sessions","Usuários podem ver todas as sessões ativas"}
+TABLE: subscriptions (6 entries)
+    role=anon action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+    role=authenticated action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+    role=authenticator action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+    role=cli_login_postgres action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+    role=dashboard_user action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+    role=supabase_privileged_role action=SELECT policies={"Service role can manage all subscriptions","Users can view their own subscriptions"}
+TABLE: system_announcements (6 entries)
+    role=anon action=SELECT policies={admins_manage_announcements,read_published_announcements}
+    role=authenticated action=SELECT policies={admins_manage_announcements,read_published_announcements}
+    role=authenticator action=SELECT policies={admins_manage_announcements,read_published_announcements}
+    role=cli_login_postgres action=SELECT policies={admins_manage_announcements,read_published_announcements}
+    role=dashboard_user action=SELECT policies={admins_manage_announcements,read_published_announcements}
+    role=supabase_privileged_role action=SELECT policies={admins_manage_announcements,read_published_announcements}
+TABLE: user_activity_log (12 entries)
+    role=anon action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=anon action=SELECT policies={"Admin reads all activity","Service role full activity"}
+    role=authenticated action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=authenticated action=SELECT policies={"Admin reads all activity","Service role full activity"}
+    role=authenticator action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=authenticator action=SELECT policies={"Admin reads all activity","Service role full activity"}
+    role=cli_login_postgres action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=cli_login_postgres action=SELECT policies={"Admin reads all activity","Service role full activity"}
+    role=dashboard_user action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=dashboard_user action=SELECT policies={"Admin reads all activity","Service role full activity"}
+    role=supabase_privileged_role action=INSERT policies={"Service role full activity","Users insert own activity"}
+    role=supabase_privileged_role action=SELECT policies={"Admin reads all activity","Service role full activity"}
+TABLE: user_admins (18 entries)
+    role=anon action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins"}
+    role=anon action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins"}
+    role=anon action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins"}
+    role=authenticated action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins","Allow delete for admins"}
+    role=authenticated action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins","Allow insert for admins"}
+    role=authenticated action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins","Enable read access for authenticated"}
+    role=authenticator action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins"}
+    role=authenticator action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins"}
+    role=authenticator action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins"}
+    role=cli_login_postgres action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins"}
+    role=cli_login_postgres action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins"}
+    role=cli_login_postgres action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins"}
+    role=dashboard_user action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins"}
+    role=dashboard_user action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins"}
+    role=dashboard_user action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins"}
+    role=supabase_privileged_role action=DELETE policies={"Acesso público total a user_admins","Admins can delete user_admins"}
+    role=supabase_privileged_role action=INSERT policies={"Acesso público total a user_admins","Admins can insert user_admins"}
+    role=supabase_privileged_role action=SELECT policies={"Acesso público total a user_admins","Allow authenticated to read user_admins"}
+TABLE: user_approvals (6 entries)
+    role=anon action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+    role=authenticated action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+    role=authenticator action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+    role=cli_login_postgres action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+    role=dashboard_user action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+    role=supabase_privileged_role action=SELECT policies={"Admins can manage all approvals","Users can view their own approvals"}
+TABLE: user_role_assignments (6 entries)
+    role=anon action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+    role=authenticated action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+    role=authenticator action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+    role=cli_login_postgres action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+    role=dashboard_user action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+    role=supabase_privileged_role action=SELECT policies={"Admins can manage role assignments","Users can view their role assignments"}
+TABLE: user_sessions (24 entries)
+    role=anon action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=anon action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=anon action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=anon action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticated action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticated action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticated action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=authenticated action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticator action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticator action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=authenticator action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=authenticator action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+    role=cli_login_postgres action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=cli_login_postgres action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=cli_login_postgres action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=cli_login_postgres action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+    role=dashboard_user action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=dashboard_user action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=dashboard_user action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=dashboard_user action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+    role=supabase_privileged_role action=DELETE policies={"Service role full sessions","Users manage own sessions"}
+    role=supabase_privileged_role action=INSERT policies={"Service role full sessions","Users manage own sessions"}
+    role=supabase_privileged_role action=SELECT policies={"Admin reads all sessions","Service role full sessions","Users manage own sessions"}
+    role=supabase_privileged_role action=UPDATE policies={"Service role full sessions","Users manage own sessions"}
+TABLE: user_stores (6 entries)
+    role=anon action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}
+    role=authenticated action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}
+    role=authenticator action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}
+    role=cli_login_postgres action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}
+    role=dashboard_user action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}
+    role=supabase_privileged_role action=SELECT policies={"Admins can manage all user-store associations","Users can view their own store associations"}

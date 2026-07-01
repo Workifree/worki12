@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "MIA actions + testes co-located",
+  "description": "Reescrever useMiaProntaEntregaActions para as novas ações. Testes vitest co-located: lógica de saldos/agregação e seletor de destino.",
+  "activeForm": "Atualizando MIA actions e testes",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

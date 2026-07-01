@@ -1,0 +1,151 @@
+{
+  "project": "Momma ERP - MIA Stock Module Full Integration",
+  "branchName": "ralph/mia-stock-full-granular",
+  "description": "Complete granular MIA integration for the entire Stock/Inventory module: VisualizacaoEstoque, Movimentacoes, VerificacaoPerdas (with LossAnalyticsDashboard), BatchTraceability, Producao (Insumos, FichasTecnicas, OrdensProducao, PerdasQualidade), and all sub-components.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Rewrite useMiaEstoqueActions with full granular coverage",
+      "description": "As a user on /visualizacao-estoque, I want MIA to control every aspect: sector filter, status filter, search, expand items, toggle visibility, and understand batch data.",
+      "acceptanceCriteria": [
+        "Rewrite src/hooks/estoque/useMiaEstoqueActions.ts with expanded interface: setSelectedSector, setSelectedStatus, setSearchTerm, setShowHidden, toggleExpand(id), toggleVisibility(item), items data array",
+        "Handlers: estoque_filter (sector+status+search), estoque_expand (product_id), estoque_toggle_hidden (show/hide hidden products), estoque_toggle_visibility (toggle specific product visibility), clear_filters",
+        "Wire into VisualizacaoEstoque.tsx — pass all actual setters including setShowHidden and toggleVisibility",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Read VisualizacaoEstoque.tsx first to get exact state names. toggleVisibility takes an item object with id and oculto flag."
+    },
+    {
+      "id": "US-002",
+      "title": "Rewrite useMiaMovimentacoesActions with full coverage",
+      "description": "As a user on /movimentacoes, I want MIA to filter by sector, search products, and paginate through movements.",
+      "acceptanceCriteria": [
+        "Rewrite src/hooks/estoque/useMiaMovimentacoesActions.ts with expanded interface: setSectorFilter, setProductSearch, setCurrentPage, movements data array",
+        "Handlers: movimentacoes_filter (sector+product search), movimentacoes_paginate (page number or next/prev), movimentacoes_search (dedicated product search), clear_filters",
+        "Wire into Movimentacoes.tsx — pass setSectorFilter, setProductSearch, setCurrentPage, movements",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Read Movimentacoes.tsx first. Note: currently NO MIA hook is wired — need to add import and call."
+    },
+    {
+      "id": "US-003",
+      "title": "Rewrite useMiaPerdasActions with full granular coverage including photo, lote, analytics",
+      "description": "As a user on /verificacao-perdas, I want MIA to fully manage losses: switch tabs, fill forms with all fields (store, product, qty, unit, reason, lote, validade, obs), submit, verify, delete, filter history, and trigger analytics.",
+      "acceptanceCriteria": [
+        "Rewrite src/hooks/perdas/useMiaPerdasActions.ts with FULL interface covering ALL state: activeTab, filterStore, filterProduct, filterDateStart, filterDateEnd, selectedStore, selectedProductId, selectedProductQuery, quantity, unit, reason, obs, lote, validade, handleSubmit, verifyLoss(id), deleteLoss(id), fetchLosses, losses array",
+        "Handlers: perdas_select_tab, perdas_filter (store+product+dateStart+dateEnd), perdas_create (fill ALL form fields including lote and validade), perdas_submit (trigger handleSubmit), perdas_verify (mark loss as verified), perdas_delete (delete a loss record), perdas_export (export Excel), perdas_analytics_filter (set analytics date range/store/reason), clear_filters",
+        "Wire into VerificacaoPerdas.tsx — pass ALL setters including selectedProductQuery, lote, validade, verifyLoss, deleteLoss, fetchLosses",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Read VerificacaoPerdas.tsx carefully. The form has: selectedStore, selectedProductQuery (autocomplete search), selectedProductId, quantity, unit, reason, obs, lote, validade. verifyLoss and deleteLoss are functions that take an ID."
+    },
+    {
+      "id": "US-004",
+      "title": "Create useMiaBatchTraceabilityActions for batch traceability page",
+      "description": "As a user on /batch-traceability, I want MIA to search batches and movements by lote code, product, or user.",
+      "acceptanceCriteria": [
+        "Create src/hooks/estoque/useMiaBatchTraceabilityActions.ts",
+        "Interface: setSearchTerm, setActiveTab (if tabs exist)",
+        "Handlers: batch_search (search term), batch_select_tab (if tabs), clear_filters",
+        "Wire into BatchTraceability.tsx",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Read BatchTraceability.tsx first. Simple page — may just have search + tab."
+    },
+    {
+      "id": "US-005",
+      "title": "Create useMiaInsumosActions for production insumos page",
+      "description": "As a user on /producao/insumos, I want MIA to search insumos, filter by category, and open the config modal.",
+      "acceptanceCriteria": [
+        "Create src/hooks/producao/useMiaInsumosActions.ts",
+        "Interface: setSearchTerm, setCategoriaFilter, setOpen (config modal), setForm (partial form fill), handleSave",
+        "Handlers: insumos_filter (search+categoria), insumos_open_config (open modal), insumos_fill_config (fill form fields: categoria, unidade_compra, unidade_producao, fator_conversao, alergenos, etc.), insumos_save (trigger save), clear_filters",
+        "Wire into Insumos.tsx page component",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Read src/pages/producao/Insumos.tsx first."
+    },
+    {
+      "id": "US-006",
+      "title": "Create useMiaFichasTecnicasActions for recipe/BOM page",
+      "description": "As a user on /producao/fichas-tecnicas, I want MIA to search fichas, filter by status, open create/edit modal, and fill recipe data.",
+      "acceptanceCriteria": [
+        "Create src/hooks/producao/useMiaFichasTecnicasActions.ts",
+        "Interface: setSearchTerm, setStatusFilter, setModalOpen, setEditingFicha, handleSave",
+        "Handlers: fichas_filter (search+status), fichas_create (open modal blank), fichas_edit (open modal with existing ficha), fichas_fill (fill form: nome, rendimento_quantidade, rendimento_unidade, tempo_preparo, etc.), fichas_approve (change status to aprovada), fichas_save (trigger save), clear_filters",
+        "Wire into FichasTecnicas.tsx page component",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Read src/pages/producao/FichasTecnicas.tsx first."
+    },
+    {
+      "id": "US-007",
+      "title": "Rewrite useMiaProducaoActions for OrdensProducao with full coverage",
+      "description": "As a user on /producao/ordens, I want MIA to filter OPs, create new OPs, fill apontamento (production reporting), and manage status transitions.",
+      "acceptanceCriteria": [
+        "Rewrite src/hooks/producao/useMiaProducaoActions.ts to cover OrdensProducao specifically",
+        "Interface: setBusca, setFiltroStatus, setCriarOpen (create OP modal), setApontamentoOpen, setApontamentoForm, selectedOP, handleCreateOP, handleSaveApontamento",
+        "Handlers: op_filter (search+status), op_create (open create modal), op_fill_create (fill ficha+qty+date+type), op_change_status (liberada→em_andamento etc.), op_apontamento (open apontamento modal), op_fill_apontamento (qty_produced, qty_lost, obs), op_save_apontamento, clear_filters",
+        "Wire into OrdensProducao.tsx — read file first to find exact state names",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Read src/pages/producao/OrdensProducao.tsx carefully. Status transitions: planejada→liberada→em_andamento→concluida→fechada."
+    },
+    {
+      "id": "US-008",
+      "title": "Create useMiaPerdasQualidadeActions for production losses page",
+      "description": "As a user on /producao/perdas, I want MIA to filter production losses by category and search.",
+      "acceptanceCriteria": [
+        "Create src/hooks/producao/useMiaPerdasQualidadeActions.ts",
+        "Interface: setBusca, setFiltroCategoria",
+        "Handlers: perdas_prod_filter (search+categoria), clear_filters",
+        "Wire into PerdasQualidade.tsx",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Simple page — just search + category filter chips."
+    },
+    {
+      "id": "US-009",
+      "title": "Add all new MiaActionType entries and ACTION_LABELS",
+      "description": "Types and labels for all new stock module action types.",
+      "acceptanceCriteria": [
+        "Add to src/types/mia.ts MiaActionType: estoque_toggle_hidden, estoque_toggle_visibility, movimentacoes_search, perdas_submit, perdas_verify, perdas_delete, perdas_analytics_filter, batch_search, batch_select_tab, insumos_filter, insumos_open_config, insumos_fill_config, insumos_save, fichas_filter, fichas_create, fichas_edit, fichas_fill, fichas_approve, fichas_save, op_filter, op_create, op_fill_create, op_change_status, op_apontamento, op_fill_apontamento, op_save_apontamento, perdas_prod_filter",
+        "Add ACTION_LABELS in MiaChatMessage.tsx with Portuguese labels and appropriate icons for each",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Add ACTION_TOOLS definitions and switch cases for all new stock actions",
+      "description": "Backend action resolver needs to know about all new stock/production action types.",
+      "acceptanceCriteria": [
+        "In supabase/functions/mia/index.ts ACTION_TOOLS array, add tool definitions for ALL new action types with proper parameter schemas",
+        "Add switch cases for each in the resolveActions function",
+        "Add/update rules in the system prompt covering: estoque visibility, batch traceability, insumos config, fichas técnicas CRUD, ordens de produção workflow, perdas qualidade, and production analytics",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Follow exact pattern of existing logistics tools. Each needs: definition + switch case + rule."
+    }
+  ]
+}

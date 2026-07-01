@@ -1,0 +1,1708 @@
+import { useEffect, useState } from "react";
+import { Users, Plus, Filter, BarChart3, TrendingUp, DollarSign, Calendar } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PermissionBlur } from "@/components/PermissionBlur";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useStore } from "@/hooks/useStore";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import * as XLSX from "xlsx";
+
+// Tipo para freelancer
+interface Freelancer {
+  id: string;
+  nome: string;
+  cpf: string;
+  valorDiaria: number;
+  diasTrabalhados: Date[];
+  diasDetalhados?: { data: Date; valor: number; lojaId?: number | null }[];
+  chavePix: string;
+  totalRecebido: number;
+  dataUltimoTrabalho: string;
+  status: 'ativo' | 'inativo';
+}
+
+// Trabalhos avulsos (sem perfil)
+interface AvulsoWork {
+  id: string;
+  nome: string;
+  work_date: string;
+  valor_diaria: number;
+  loja_id: number | null;
+  local_tipo: string | null;
+  evento_nome: string | null;
+  setor: string | null;
+  observacao: string | null;
+  created_at?: string | null;
+}
+
+// Integração real com Supabase (sem dados mock)
+const initialFreelancers: Freelancer[] = [];
+
+export default function Freelancers() {
+  const [freelancers, setFreelancers] = useState<Freelancer[]>(initialFreelancers);
+  const [filtroNome, setFiltroNome] = useState("");
+  const [filtroCpf, setFiltroCpf] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [novoFreelancer, setNovoFreelancer] = useState({
+    nome: '',
+    cpf: '',
+    valorDiaria: '',
+    diasTrabalhados: [] as Date[],
+    chavePix: '',
+    lojaId: '' as string | ''
+  });
+
+  const isMobile = useIsMobile();
+  const { selectedStore, canChangeStore, loading } = useStore();
+  const { canViewDashboard, isAdmin } = usePermissions();
+  const [stores, setStores] = useState<{ id: number; nome: string }[]>([]);
+  const [lojaFilter, setLojaFilter] = useState<string>('all');
+  const storesMap = Object.fromEntries(stores.map(s => [s.id, s.nome]));
+
+  // Avulsos state & filters
+  const [avulsos, setAvulsos] = useState<AvulsoWork[]>([]);
+  const [avulsoNome, setAvulsoNome] = useState<string>("");
+  const [avulsoLojaFilter, setAvulsoLojaFilter] = useState<string>('all');
+  const [avulsoDateStart, setAvulsoDateStart] = useState<string>("");
+  const [avulsoDateEnd, setAvulsoDateEnd] = useState<string>("");
+  const [isAvulsoDialogOpen, setIsAvulsoDialogOpen] = useState(false);
+  const [novoAvulso, setNovoAvulso] = useState<{
+    nome: string;
+    valorDiaria: string;
+    workDate: string; // yyyy-MM-dd
+    lojaId: string; // optional
+    localTipo: string;
+    eventoNome: string;
+    setor: string;
+    observacao: string;
+  }>({
+    nome: "",
+    valorDiaria: "",
+    workDate: "",
+    lojaId: "",
+    localTipo: "loja",
+    eventoNome: "",
+    setor: "",
+    observacao: "",
+  });
+
+  // Parse seguro de data vindo do banco (YYYY-MM-DD ou ISO), em horário local
+  const parseDateLocal = (s: string): Date => {
+    if (!s) return new Date(NaN);
+    const parts = s.split('-');
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const dPart = parts[2] || '01';
+    const d = Number(dPart.slice(0, 2));
+    return new Date(y, m - 1, d);
+  };
+
+  // Filtro de período para Analytics
+  const [periodo, setPeriodo] = useState<'mes_atual' | 'mes_anterior' | 'ultimos_7' | 'personalizado'>('mes_atual');
+  const [periodoRange, setPeriodoRange] = useState<{ from?: Date; to?: Date }>({});
+
+  // Exportação Excel - estados
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [selectedFreelancerIds, setSelectedFreelancerIds] = useState<string[]>([]);
+  const [selectedAvulsoIds, setSelectedAvulsoIds] = useState<string[]>([]);
+  const [exportMode, setExportMode] = useState<'mes_atual' | 'mes_anterior' | 'mes' | 'intervalo'>('mes_atual');
+  const [exportMonth, setExportMonth] = useState<number>(new Date().getMonth() + 1); // 1-12
+  const [exportYear, setExportYear] = useState<number>(new Date().getFullYear());
+  const [exportRange, setExportRange] = useState<{ from?: Date; to?: Date }>({});
+  const [includeResumo, setIncludeResumo] = useState(true);
+  const [includeDetalhado, setIncludeDetalhado] = useState(true);
+  const [detalhadoColumns, setDetalhadoColumns] = useState<{ nome: boolean; cpf: boolean; data: boolean; valor: boolean; loja: boolean; chavePix: boolean }>({
+    nome: true,
+    cpf: true,
+    data: true,
+    valor: true,
+    loja: true,
+    chavePix: false,
+  });
+
+  const getPeriodoRange = () => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    const last7 = new Date();
+    last7.setDate(last7.getDate() - 6);
+
+    if (periodo === 'mes_atual') return { from: startOfMonth, to: endOfMonth };
+    if (periodo === 'mes_anterior') return { from: prevMonthStart, to: prevMonthEnd };
+    if (periodo === 'ultimos_7') return { from: last7, to: now };
+    return { from: periodoRange.from, to: periodoRange.to };
+  };
+
+  const isWithinRange = (date: Date, from?: Date, to?: Date) => {
+    if (!from || !to) return true;
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const f = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    const t = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+    return d >= f && d <= t;
+  };
+
+  // Range de exportação baseado no modo selecionado
+  const getExportRange = () => {
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    if (exportMode === 'mes_atual') return { from: startOfCurrentMonth, to: endOfCurrentMonth };
+    if (exportMode === 'mes_anterior') return { from: startOfPrevMonth, to: endOfPrevMonth };
+    if (exportMode === 'mes') {
+      const from = new Date(exportYear, exportMonth - 1, 1);
+      const to = new Date(exportYear, exportMonth, 0);
+      return { from, to };
+    }
+    return { from: exportRange.from, to: exportRange.to };
+  };
+
+  const toggleFreelancerSelection = (id: string) => {
+    setSelectedFreelancerIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const selectAllFreelancers = (checked: boolean) => {
+    if (checked) setSelectedFreelancerIds(freelancersFiltrados.map(f => f.id));
+    else setSelectedFreelancerIds([]);
+  };
+
+  const toggleAvulsoSelection = (id: string) => {
+    setSelectedAvulsoIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const selectAllAvulsos = (checked: boolean) => {
+    if (checked) setSelectedAvulsoIds(avulsos.map(a => a.id));
+    else setSelectedAvulsoIds([]);
+  };
+
+  const handleExportExcel = () => {
+    const { from, to } = getExportRange();
+    const selected = selectedFreelancerIds.length > 0
+      ? freelancers.filter(f => selectedFreelancerIds.includes(f.id))
+      : freelancersFiltrados;
+
+    const selectedAvulsos = selectedAvulsoIds.length > 0
+      ? avulsos.filter(a => selectedAvulsoIds.includes(a.id))
+      : avulsos;
+
+    const wb = XLSX.utils.book_new();
+
+    if (includeResumo) {
+      const resumoRows = selected.map((f) => {
+        const dias = (f.diasDetalhados || []).filter(d => isWithinRange(d.data, from, to));
+        const total = dias.reduce((s, d) => s + d.valor, 0);
+        return {
+          Nome: f.nome,
+          CPF: f.cpf,
+          Dias: dias.length,
+          "Total Recebido (R$)": Number(total.toFixed(2)),
+          "Valor Diária (R$)": Number((f.valorDiaria || 0).toFixed(2)),
+          "Chave PIX": f.chavePix,
+        };
+      });
+      const wsResumo = XLSX.utils.json_to_sheet(resumoRows);
+      XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+    }
+
+    if (includeDetalhado) {
+      const detalhadoRows: any[] = [];
+      for (const f of selected) {
+        for (const d of (f.diasDetalhados || []).filter(d => isWithinRange(d.data, from, to))) {
+          const row: Record<string, any> = {};
+          if (detalhadoColumns.nome) row['Nome'] = f.nome;
+          if (detalhadoColumns.cpf) row['CPF'] = f.cpf;
+          if (detalhadoColumns.data) row['Data'] = format(d.data, 'yyyy-MM-dd');
+          if (detalhadoColumns.loja) row['Loja'] = d.lojaId != null ? (storesMap[d.lojaId] || '') : '';
+          if (detalhadoColumns.valor) row['Valor (R$)'] = Number(d.valor.toFixed(2));
+          if (detalhadoColumns.chavePix) row['Chave PIX'] = f.chavePix;
+          detalhadoRows.push(row);
+        }
+      }
+      const wsDetalhado = XLSX.utils.json_to_sheet(detalhadoRows);
+      XLSX.utils.book_append_sheet(wb, wsDetalhado, 'Detalhado');
+    }
+
+    // Planilha de Avulsos (sempre incluída; usa seleção quando houver)
+    const avulsoRows = selectedAvulsos.map((a) => ({
+      Nome: a.nome,
+      Data: format(new Date(a.work_date), 'yyyy-MM-dd'),
+      Loja: a.loja_id != null ? (storesMap[a.loja_id] || '') : '',
+      Valor: Number((a.valor_diaria || 0).toFixed(2)),
+      Tipo: a.local_tipo || '',
+      Evento: a.evento_nome || '',
+      Setor: a.setor || '',
+      Observacao: a.observacao || '',
+    }));
+    const wsAvulsos = XLSX.utils.json_to_sheet(avulsoRows);
+    XLSX.utils.book_append_sheet(wb, wsAvulsos, 'Avulsos');
+
+    const periodLabel = (() => {
+      if (exportMode === 'mes_atual') return 'mes_atual';
+      if (exportMode === 'mes_anterior') return 'mes_anterior';
+      if (exportMode === 'mes') return `${String(exportMonth).padStart(2,'0')}-${exportYear}`;
+      const fromStr = exportRange.from ? format(exportRange.from, 'yyyy-MM-dd') : 'inicio';
+      const toStr = exportRange.to ? format(exportRange.to, 'yyyy-MM-dd') : 'fim';
+      return `${fromStr}_a_${toStr}`;
+    })();
+
+    XLSX.writeFile(wb, `freelancers_${periodLabel}.xlsx`);
+    setIsExportDialogOpen(false);
+  };
+
+  // Carregar lista de lojas para seletor local
+  useEffect(() => {
+    const fetchStores = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('lojas')
+          .select('id, nome')
+          .order('nome');
+        if (error) throw error;
+        setStores(data || []);
+      } catch (error) {
+        console.error('[Freelancers] Erro ao carregar lojas:', error);
+      }
+    };
+    fetchStores();
+  }, []);
+
+  // Travar loja para usuários sem permissão de mudança
+  // Removido: página não usa contexto de loja; seleção será sempre manual
+
+  // Carregar freelancers quando o filtro de loja muda
+  useEffect(() => {
+    const run = async () => {
+      await fetchFreelancers();
+    };
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lojaFilter]);
+
+  // Carregar avulsos quando filtros mudam
+  useEffect(() => {
+    const run = async () => {
+      await fetchAvulsos();
+    };
+    run();
+  }, [avulsoLojaFilter, avulsoDateStart, avulsoDateEnd, avulsoNome]);
+
+  const fetchFreelancers = async () => {
+    try {
+      const { data: freelancerRows, error: freelancerError } = await supabase
+        .from('freelancers')
+        .select('*')
+        .order('nome');
+
+      if (freelancerError) throw freelancerError;
+      const baseFreelancers = freelancerRows || [];
+      const ids = baseFreelancers.map((f: any) => f.id);
+
+      // Buscar dias trabalhados para esses freelancers
+      let workRows: any[] = [];
+      if (ids.length > 0) {
+        const { data: wr, error: workError } = await supabase
+          .from('freelancer_work_days')
+          .select('freelancer_id, work_date, valor_diaria, loja_id')
+          .in('freelancer_id', ids);
+        if (workError) throw workError;
+        workRows = wr || [];
+      }
+
+      const workById: Record<string, { work_date: string; valor_diaria: number | null; loja_id?: number | null }[]> = {};
+      for (const wr of workRows) {
+        if (!workById[wr.freelancer_id]) workById[wr.freelancer_id] = [];
+        workById[wr.freelancer_id].push({ work_date: wr.work_date, valor_diaria: wr.valor_diaria ?? null, loja_id: wr.loja_id ?? null });
+      }
+
+      const mapped: Freelancer[] = (baseFreelancers || []).map((fr: any) => {
+        const diasItems = workById[fr.id] || [];
+        const diasTrabalhados = diasItems.map((d) => parseDateLocal(d.work_date));
+        const diasDetalhados = diasItems.map((d) => ({ data: parseDateLocal(d.work_date), valor: Number(d.valor_diaria ?? fr.valor_diaria ?? 0), lojaId: d.loja_id ?? null }));
+        const totalRecebido = diasItems.reduce((sum, d) => sum + (d.valor_diaria ?? fr.valor_diaria ?? 0), 0);
+        const ultimoDia = diasTrabalhados.length
+          ? new Date(Math.max(...diasTrabalhados.map((d) => d.getTime())))
+          : null;
+
+        return {
+          id: fr.id,
+          nome: fr.nome,
+          cpf: fr.cpf,
+          valorDiaria: Number(fr.valor_diaria ?? 0),
+          diasTrabalhados,
+          diasDetalhados,
+          chavePix: fr.chave_pix,
+          totalRecebido: Number(totalRecebido),
+          dataUltimoTrabalho: ultimoDia ? format(ultimoDia, 'yyyy-MM-dd') : '',
+          status: (fr.status as 'ativo' | 'inativo') ?? 'ativo',
+        };
+      });
+
+      setFreelancers(mapped);
+    } catch (err) {
+      console.error('[Freelancers] Erro ao buscar dados:', err);
+    }
+  };
+
+  const fetchAvulsos = async () => {
+    try {
+      let query = supabase
+        .from('freelancer_avulso_work_days')
+        .select('*');
+      if (avulsoDateStart) query = query.gte('work_date', avulsoDateStart);
+      if (avulsoDateEnd) query = query.lte('work_date', avulsoDateEnd);
+      if (avulsoLojaFilter !== 'all') query = query.eq('loja_id', Number(avulsoLojaFilter));
+      if (avulsoNome.trim()) query = query.ilike('nome', `%${avulsoNome.trim()}%`);
+      const { data, error } = await query.order('work_date', { ascending: false });
+      if (error) throw error;
+      setAvulsos((data as AvulsoWork[]) || []);
+    } catch (err) {
+      console.error('[Freelancers] Erro ao buscar avulsos:', err);
+    }
+  };
+
+  // Filtrar freelancers
+  const freelancersFiltrados = freelancers.filter(freelancer => {
+    const matchNome = freelancer.nome.toLowerCase().includes(filtroNome.toLowerCase());
+    const matchCpf = freelancer.cpf.toLowerCase().includes(filtroCpf.toLowerCase());
+    const matchStatus = filtroStatus === "todos" || freelancer.status === filtroStatus;
+    return matchNome && matchCpf && matchStatus;
+  });
+
+  // Calcular estatísticas
+  const totalFreelancers = freelancers.length;
+  const freelancersAtivos = freelancers.filter(f => f.status === 'ativo').length;
+  const { from: rangeFrom, to: rangeTo } = getPeriodoRange();
+  const totalPagoPeriodo = freelancers.reduce((acc, f) => {
+    const dias = (f.diasDetalhados || []).filter((d) => isWithinRange(d.data, rangeFrom, rangeTo));
+    return acc + dias.reduce((s, d) => s + d.valor, 0);
+  }, 0);
+  const mediaDiasTrabalho = totalFreelancers > 0
+    ? freelancers.reduce((acc, f) => acc + (f.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).length, 0) / totalFreelancers
+    : 0;
+
+  // Freelancer que mais trabalhou
+  const freelancerMaisTrabalhou = freelancers.reduce((prev, current) => {
+    const prevDias = (prev.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).length;
+    const currDias = (current.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).length;
+    return prevDias >= currDias ? prev : current;
+  }, freelancers[0]);
+
+  // Freelancer que mais recebeu
+  const freelancerMaisRecebeu = freelancers.reduce((prev, current) => {
+    const prevTotal = (prev.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).reduce((s, d) => s + d.valor, 0);
+    const currTotal = (current.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).reduce((s, d) => s + d.valor, 0);
+    return prevTotal >= currTotal ? prev : current;
+  }, freelancers[0]);
+
+  // Server-side aggregates via RPC for large periods
+  const [serverStats, setServerStats] = useState<any | null>(null);
+
+  useEffect(() => {
+    const fetchServerStats = async () => {
+      const hasRange = !!rangeFrom && !!rangeTo;
+      if (!hasRange) { setServerStats(null); return; }
+      const days = Math.ceil((rangeTo!.getTime() - rangeFrom!.getTime()) / (1000 * 60 * 60 * 24));
+      if (days <= 45) { setServerStats(null); return; }
+      try {
+        const lojaIdParam = lojaFilter !== 'all' ? Number(lojaFilter) : null;
+        const { data, error } = await supabase.rpc('freelancer_stats', {
+          start_date: format(rangeFrom!, 'yyyy-MM-dd'),
+          end_date: format(rangeTo!, 'yyyy-MM-dd'),
+          loja_id: lojaIdParam,
+        } as any);
+        if (error) throw error;
+        setServerStats(data ?? null);
+      } catch (err) {
+        console.warn('[Freelancers] RPC freelancer_stats falhou, usando cálculo local:', err);
+        setServerStats(null);
+      }
+    };
+    fetchServerStats();
+  }, [periodo, periodoRange, lojaFilter]);
+
+  const totalPagoDisplay = serverStats?.total_pago ?? totalPagoPeriodo;
+  const mediaDiasDisplay = serverStats?.media_dias ?? mediaDiasTrabalho;
+  const destaqueTrabalhouDias = serverStats?.mais_trabalhou_dias ?? ((freelancerMaisTrabalhou?.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).length || 0);
+  const destaqueRecebeuTotal = serverStats?.mais_recebeu_total ?? ((freelancerMaisRecebeu?.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).reduce((s, d) => s + d.valor, 0));
+
+  // Estado para edição e gerenciamento de dias
+  const [editFreelancer, setEditFreelancer] = useState<Freelancer | null>(null);
+  const [viewFreelancer, setViewFreelancer] = useState<Freelancer | null>(null);
+  const [addWorkFreelancer, setAddWorkFreelancer] = useState<Freelancer | null>(null);
+  const [workDias, setWorkDias] = useState<Date[]>([]);
+  const [workValorDiaria, setWorkValorDiaria] = useState<string>('');
+  const [workLojaId, setWorkLojaId] = useState<string>('');
+  const [workLocalTipo, setWorkLocalTipo] = useState<'loja' | 'evento'>('loja');
+  const [workEventoNome, setWorkEventoNome] = useState<string>('');
+  const [workSetor, setWorkSetor] = useState<string>('');
+  const [workObservacao, setWorkObservacao] = useState<string>('');
+
+  const handleUpdateFreelancer = async () => {
+    if (!editFreelancer) return;
+    try {
+      const { error } = await supabase
+        .from('freelancers')
+        .update({
+          nome: editFreelancer.nome,
+          cpf: editFreelancer.cpf,
+          valor_diaria: editFreelancer.valorDiaria,
+          chave_pix: editFreelancer.chavePix,
+          status: editFreelancer.status,
+        })
+        .eq('id', editFreelancer.id);
+      if (error) throw error;
+      setEditFreelancer(null);
+      await fetchFreelancers();
+    } catch (err) {
+      console.error('[Freelancers] Erro ao atualizar:', err);
+    }
+  };
+
+  const handleDeleteFreelancer = async (freelancerId: string) => {
+    try {
+      const { error: wdError } = await supabase
+        .from('freelancer_work_days')
+        .delete()
+        .eq('freelancer_id', freelancerId);
+      if (wdError) throw wdError;
+      const { error } = await supabase
+        .from('freelancers')
+        .delete()
+        .eq('id', freelancerId);
+      if (error) throw error;
+      await fetchFreelancers();
+    } catch (err) {
+      console.error('[Freelancers] Erro ao excluir freelancer:', err);
+    }
+  };
+
+  // Removido: edição direta de dias via popover
+
+  const handleAdicionarFreelancer = async () => {
+    if (!novoFreelancer.nome || !novoFreelancer.cpf || !novoFreelancer.chavePix) {
+      alert('Por favor, preencha nome, CPF e chave PIX');
+      return;
+    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('Você precisa estar autenticado para adicionar freelancers.');
+        return;
+      }
+      const valorDiariaNum = novoFreelancer.valorDiaria ? parseFloat(novoFreelancer.valorDiaria) : 0;
+      const lojaIdNum = novoFreelancer.lojaId ? Number(novoFreelancer.lojaId) : null;
+
+      // Inserir freelancer
+      const { data: inserted, error: insertError } = await supabase
+        .from('freelancers')
+        .insert({
+          nome: novoFreelancer.nome,
+          cpf: novoFreelancer.cpf,
+          valor_diaria: valorDiariaNum,
+          chave_pix: novoFreelancer.chavePix,
+          status: 'ativo',
+          loja_id: lojaIdNum,
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Recarregar lista
+      await fetchFreelancers();
+
+      // Resetar formulário e fechar
+      setNovoFreelancer({
+        nome: '',
+        cpf: '',
+        valorDiaria: '',
+        diasTrabalhados: [],
+        chavePix: '',
+        lojaId: ''
+      });
+      setIsDialogOpen(false);
+    } catch (err) {
+      console.error('[Freelancers] erro ao adicionar:', err);
+      alert('Erro ao adicionar freelancer. Verifique os dados e tente novamente.');
+    }
+  };
+
+  const handleSalvarTrabalho = async () => {
+    try {
+      if (!addWorkFreelancer) return;
+      if (workDias.length === 0) {
+        alert('Selecione ao menos um dia de trabalho');
+        return;
+      }
+      if (workLocalTipo === 'loja' && !workLojaId) {
+        alert('Selecione a loja para este trabalho');
+        return;
+      }
+      if (workLocalTipo === 'evento' && !workEventoNome.trim()) {
+        alert('Informe o nome do evento');
+        return;
+      }
+      const valorNum = parseFloat(workValorDiaria);
+      if (isNaN(valorNum) || valorNum <= 0) {
+        alert('Informe um valor de diária válido');
+        return;
+      }
+      if (!['PRODUÇÃO','ATENDIMENTO','APOIO','EVENTO'].includes(workSetor)) {
+        alert('Selecione o setor do trabalho');
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('Você precisa estar autenticado para registrar trabalhos.');
+        return;
+      }
+
+      const lojaNum = workLocalTipo === 'loja' ? Number(workLojaId) : null;
+      const rows = workDias.map((d) => ({
+        freelancer_id: addWorkFreelancer.id,
+        work_date: format(d, 'yyyy-MM-dd'),
+        valor_diaria: valorNum,
+        loja_id: lojaNum,
+        local_tipo: workLocalTipo,
+        evento_nome: workLocalTipo === 'evento' ? workEventoNome.trim() : null,
+        setor: workSetor,
+        observacao: workObservacao?.trim() || null,
+        created_by: user.id,
+      }));
+      const { error } = await supabase.from('freelancer_work_days').insert(rows);
+      if (error) throw error;
+
+      setAddWorkFreelancer(null);
+      setWorkDias([]);
+      setWorkValorDiaria('');
+      setWorkLojaId('');
+      setWorkLocalTipo('loja');
+      setWorkEventoNome('');
+      setWorkSetor('');
+      setWorkObservacao('');
+      await fetchFreelancers();
+    } catch (err) {
+      console.error('[Freelancers] Erro ao registrar trabalho:', err);
+      alert('Erro ao registrar trabalho. Verifique os dados e tente novamente.');
+    }
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setNovoFreelancer(prev => {
+        const diasTrabalhados = [...prev.diasTrabalhados];
+        const dateString = date.toDateString();
+        const existingIndex = diasTrabalhados.findIndex(d => d.toDateString() === dateString);
+        
+        if (existingIndex >= 0) {
+          // Se o dia já está selecionado, remove ele
+          diasTrabalhados.splice(existingIndex, 1);
+        } else {
+          // Se o dia não está selecionado, adiciona ele
+          diasTrabalhados.push(date);
+        }
+        
+        return {
+          ...prev,
+          diasTrabalhados: diasTrabalhados.sort((a, b) => a.getTime() - b.getTime())
+        };
+      });
+    }
+  };
+
+  const formatarDatasTrabalho = (datas: Date[]) => {
+    if (!datas || datas.length === 0) return "Nenhum dia";
+    const sorted = [...datas].sort((a, b) => a.getTime() - b.getTime());
+    return sorted.map(d => format(d, 'dd/MM', { locale: ptBR })).join(', ');
+  };
+
+  // Helpers: mês atual
+  const isInCurrentMonth = (date: Date) => {
+    const now = new Date();
+    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  };
+  const diasDoMesAtual = (f: Freelancer) => (f.diasDetalhados || []).filter(d => {
+    const inMonth = isInCurrentMonth(d.data);
+    const lojaMatches = lojaFilter === 'all' ? true : d.lojaId === Number(lojaFilter);
+    return inMonth && lojaMatches;
+  });
+  const totalRecebidoMesAtual = (f: Freelancer) => diasDoMesAtual(f).reduce((s, d) => s + d.valor, 0);
+
+  // Listar últimos dias trabalhados (até 5 datas)
+  const listarUltimosDias = (datas: Date[]) => {
+    if (!datas || datas.length === 0) return '-';
+    const sorted = [...datas].sort((a, b) => b.getTime() - a.getTime());
+    const subset = sorted.slice(0, 5);
+    return subset.map(d => format(d, 'dd/MM', { locale: ptBR })).join(', ');
+  };
+
+  // Loading leve enquanto dados iniciais carregam
+  if (loading && stores.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+      <PermissionBlur hasPermission={isAdmin()} moduleName="Freelancers">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+        {/* Header Section */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="p-2 sm:p-3 rounded-xl momma-gradient">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-3 mb-1">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">
+                    Gerência de Freelancers
+                  </h1>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Controle e gestão de freelancers contratados pela loja
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                onClick={() => setIsExportDialogOpen(true)}
+              >
+                Exportar Excel
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Tabs defaultValue="lista" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="lista">Fixos</TabsTrigger>
+            <TabsTrigger value="avulsos">Avulsos</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="lista" className="space-y-4">
+            {/* Barra com botão de Filtro e ação de adicionar */}
+            <div className="flex items-center justify-between gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filtro
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[360px] p-4" align="start">
+                  <div className="grid gap-3">
+                    <div className="grid gap-2">
+                      <Label>Nome</Label>
+                      <Input
+                        placeholder="Filtrar por nome..."
+                        value={filtroNome}
+                        onChange={(e) => setFiltroNome(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>CPF</Label>
+                      <Input
+                        placeholder="Filtrar por CPF..."
+                        value={filtroCpf}
+                        onChange={(e) => setFiltroCpf(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Status</Label>
+                      <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos">Todos</SelectItem>
+                          <SelectItem value="ativo">Ativos</SelectItem>
+                          <SelectItem value="inativo">Inativos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Loja</Label>
+                      <Select
+                        value={lojaFilter}
+                        onValueChange={(value) => setLojaFilter(value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas</SelectItem>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={String(store.id)}>{store.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setFiltroNome('');
+                          setFiltroCpf('');
+                          setFiltroStatus('todos');
+                          setLojaFilter('all');
+                        }}
+                      >
+                        Limpar filtros
+                      </Button>
+                      <Button variant="default">Aplicar</Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full sm:w-auto">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Freelancer
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Adicionar Novo Freelancer</DialogTitle>
+                    <DialogDescription>
+                      Cadastre os dados básicos do freelancer. Os trabalhos (dias e diária) serão registrados depois.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="nome">Nome</Label>
+                      <Input
+                        id="nome"
+                        value={novoFreelancer.nome}
+                        onChange={(e) => setNovoFreelancer({...novoFreelancer, nome: e.target.value})}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="loja">Loja principal (opcional)</Label>
+                      <Select
+                        value={novoFreelancer.lojaId}
+                        onValueChange={(value) => setNovoFreelancer({ ...novoFreelancer, lojaId: value })}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione a loja" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={String(store.id)}>{store.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="cpf">CPF</Label>
+                      <Input
+                        id="cpf"
+                        value={novoFreelancer.cpf}
+                        onChange={(e) => setNovoFreelancer({...novoFreelancer, cpf: e.target.value})}
+                        placeholder="000.000.000-00"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="chavePix">Chave PIX</Label>
+                      <Input
+                        id="chavePix"
+                        value={novoFreelancer.chavePix}
+                        onChange={(e) => setNovoFreelancer({...novoFreelancer, chavePix: e.target.value})}
+                        placeholder="email@exemplo.com ou telefone"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" onClick={handleAdicionarFreelancer}>
+                      Adicionar Freelancer
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Modal de Exportação Excel */}
+              <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+                <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Exportar Freelancers para Excel</DialogTitle>
+                    <DialogDescription>Selecione os freelancers, período e colunas para exportação.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-6 py-2">
+                  <div className="grid gap-2">
+                    <Label>Selecionar Freelancers</Label>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="selectAll" checked={selectedFreelancerIds.length === freelancersFiltrados.length && freelancersFiltrados.length > 0}
+                        onCheckedChange={(c: boolean) => selectAllFreelancers(Boolean(c))} />
+                      <Label htmlFor="selectAll">Selecionar todos</Label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[240px] overflow-y-auto border rounded-md p-2">
+                      {freelancersFiltrados.map((f) => (
+                        <label key={f.id} className="flex items-center gap-2">
+                          <Checkbox checked={selectedFreelancerIds.includes(f.id)} onCheckedChange={() => toggleFreelancerSelection(f.id)} />
+                          <span className="text-sm truncate">{f.nome} ({f.cpf})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Seleção de Avulsos para exportação */}
+                  <div className="grid gap-2">
+                    <Label>Selecionar Avulsos</Label>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="selectAllAvulsos" checked={selectedAvulsoIds.length === avulsos.length && avulsos.length > 0}
+                        onCheckedChange={(c: boolean) => selectAllAvulsos(Boolean(c))} />
+                      <Label htmlFor="selectAllAvulsos">Selecionar todos</Label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[240px] overflow-y-auto border rounded-md p-2">
+                      {avulsos.map((a) => (
+                        <label key={a.id} className="flex items-center gap-2">
+                          <Checkbox checked={selectedAvulsoIds.includes(a.id)} onCheckedChange={() => toggleAvulsoSelection(a.id)} />
+                          <span className="text-sm truncate">{a.nome} — {format(new Date(a.work_date), 'dd/MM/yyyy')}</span>
+                        </label>
+                      ))}
+                      {avulsos.length === 0 && (
+                        <span className="text-sm text-muted-foreground">Nenhum avulso no filtro atual</span>
+                      )}
+                    </div>
+                  </div>
+
+                    <div className="grid gap-2">
+                      <Label>Período</Label>
+                      <Select value={exportMode} onValueChange={(v) => setExportMode(v as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mes_atual">Mês atual</SelectItem>
+                          <SelectItem value="mes_anterior">Mês anterior</SelectItem>
+                          <SelectItem value="mes">Escolher mês</SelectItem>
+                          <SelectItem value="intervalo">Intervalo personalizado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {exportMode === 'mes' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label>Mês</Label>
+                            <Select value={String(exportMonth)} onValueChange={(v) => setExportMonth(Number(v))}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                  <SelectItem key={m} value={String(m)}>{String(m).padStart(2,'0')}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Ano</Label>
+                            <Input type="number" value={exportYear} onChange={(e) => setExportYear(Number(e.target.value))} />
+                          </div>
+                        </div>
+                      )}
+                      {exportMode === 'intervalo' && (
+                        <div className="grid gap-2">
+                          <Label>Intervalo de datas</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !exportRange.from && "text-muted-foreground")}> 
+                                <Calendar className="mr-2 h-4 w-4" />
+                                {exportRange.from ? (
+                                  exportRange.to ? (
+                                    <>
+                                      {format(exportRange.from, "dd/MM/yyyy")} - {format(exportRange.to, "dd/MM/yyyy")}
+                                    </>
+                                  ) : (
+                                    format(exportRange.from, "dd/MM/yyyy")
+                                  )
+                                ) : (
+                                  <span>Selecione o intervalo</span>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <CalendarComponent initialFocus mode="range" selected={exportRange} onSelect={setExportRange} locale={ptBR} />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label>Opções de dados</Label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2"><Checkbox checked={includeResumo} onCheckedChange={(c: boolean) => setIncludeResumo(Boolean(c))} />Resumo por freelancer</label>
+                        <label className="flex items-center gap-2"><Checkbox checked={includeDetalhado} onCheckedChange={(c: boolean) => setIncludeDetalhado(Boolean(c))} />Detalhamento por dia</label>
+                      </div>
+                      {includeDetalhado && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.nome} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, nome: !detalhadoColumns.nome })} />Nome</label>
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.cpf} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, cpf: !detalhadoColumns.cpf })} />CPF</label>
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.data} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, data: !detalhadoColumns.data })} />Data</label>
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.loja} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, loja: !detalhadoColumns.loja })} />Loja</label>
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.valor} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, valor: !detalhadoColumns.valor })} />Valor</label>
+                          <label className="flex items-center gap-2"><Checkbox checked={detalhadoColumns.chavePix} onCheckedChange={() => setDetalhadoColumns({ ...detalhadoColumns, chavePix: !detalhadoColumns.chavePix })} />Chave PIX</label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="secondary" onClick={() => setIsExportDialogOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleExportExcel}>Exportar</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Tabela de Freelancers */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Lista de Freelancers</CardTitle>
+                <CardDescription>
+                  {freelancersFiltrados.length} freelancer(s) encontrado(s)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>CPF</TableHead>
+                        <TableHead>Dias Trabalhados</TableHead>
+                        <TableHead>Chave PIX</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {freelancersFiltrados.map((freelancer) => (
+                        <TableRow key={freelancer.id}>
+                          <TableCell className="font-medium">{freelancer.nome}</TableCell>
+                          <TableCell>{freelancer.cpf}</TableCell>
+                          <TableCell>
+                            <div className="text-sm text-muted-foreground">
+                              {listarUltimosDias(freelancer.diasTrabalhados || [])}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-32 truncate">{freelancer.chavePix}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                              <Button
+                                variant="secondary"
+                                size="icon"
+                                aria-label="Registrar trabalho"
+                                title="Registrar trabalho"
+                                onClick={() => {
+                                  setAddWorkFreelancer(freelancer);
+                                  setWorkDias([]);
+                                  setWorkValorDiaria('');
+                                  setWorkLojaId('');
+                                }}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditFreelancer({ ...freelancer })}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setViewFreelancer(freelancer)}
+                              >
+                                Detalhes
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteFreelancer(freelancer.id)}
+                              >
+                                Excluir
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Dialog de edição de Freelancer */}
+            <Dialog open={!!editFreelancer} onOpenChange={(open) => !open && setEditFreelancer(null)}>
+              <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Editar Freelancer</DialogTitle>
+                  <DialogDescription>Atualize as informações do freelancer.</DialogDescription>
+                </DialogHeader>
+                {editFreelancer && (
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="editNome">Nome</Label>
+                      <Input
+                        id="editNome"
+                        value={editFreelancer.nome}
+                        onChange={(e) => setEditFreelancer({ ...editFreelancer, nome: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="editCpf">CPF</Label>
+                      <Input
+                        id="editCpf"
+                        value={editFreelancer.cpf}
+                        onChange={(e) => setEditFreelancer({ ...editFreelancer, cpf: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="editValor">Valor da Diária (R$)</Label>
+                      <Input
+                        id="editValor"
+                        type="number"
+                        value={editFreelancer.valorDiaria}
+                        onChange={(e) => setEditFreelancer({ ...editFreelancer, valorDiaria: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="editPix">Chave PIX</Label>
+                      <Input
+                        id="editPix"
+                        value={editFreelancer.chavePix}
+                        onChange={(e) => setEditFreelancer({ ...editFreelancer, chavePix: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={editFreelancer.status}
+                        onValueChange={(v) => setEditFreelancer({ ...editFreelancer, status: v as any })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ativo">Ativo</SelectItem>
+                          <SelectItem value="inativo">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="secondary" onClick={() => setEditFreelancer(null)}>Cancelar</Button>
+                  <Button onClick={handleUpdateFreelancer}>Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            {/* Dialog de detalhes do Freelancer */}
+            <Dialog open={!!viewFreelancer} onOpenChange={(open) => !open && setViewFreelancer(null)}>
+              <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Detalhes do Freelancer</DialogTitle>
+                  <DialogDescription>Visão geral e histórico de dias trabalhados deste freelancer.</DialogDescription>
+                </DialogHeader>
+                {viewFreelancer && (
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label>Nome</Label>
+                        <div className="text-sm">{viewFreelancer.nome}</div>
+                      </div>
+                      <div>
+                        <Label>CPF</Label>
+                        <div className="text-sm">{viewFreelancer.cpf}</div>
+                      </div>
+                      <div>
+                        <Label>Valor Diária</Label>
+                        <div className="text-sm">R$ {viewFreelancer.valorDiaria.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <Label>Status</Label>
+                        <Badge variant={viewFreelancer.status === 'ativo' ? 'default' : 'secondary'}>{viewFreelancer.status}</Badge>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label>Chave PIX</Label>
+                        <div className="text-sm break-all">{viewFreelancer.chavePix}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label>Dias trabalhados (todos)</Label>
+                        <div className="text-sm text-muted-foreground">{(viewFreelancer.diasDetalhados || []).length} dias</div>
+                      </div>
+                      <div>
+                        <Label>Último trabalho</Label>
+                        <div className="text-sm text-muted-foreground">{viewFreelancer.dataUltimoTrabalho || '-'}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label>Recebido (mês atual)</Label>
+                        <div className="text-sm">R$ {totalRecebidoMesAtual(viewFreelancer).toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <Label>Total recebido (histórico)</Label>
+                        <div className="text-sm">R$ {((viewFreelancer.diasDetalhados || []).reduce((s,d) => s + d.valor, 0)).toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Lista de dias trabalhados</Label>
+                      <div className="border rounded-md overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Loja</TableHead>
+                              <TableHead className="text-right">Valor (R$)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(viewFreelancer.diasDetalhados || []).sort((a,b) => a.data.getTime() - b.data.getTime()).map((d, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell>{format(d.data, 'dd/MM/yyyy')}</TableCell>
+                                <TableCell>{d.lojaId != null ? (storesMap[d.lojaId] || '-') : '-'}</TableCell>
+                                <TableCell className="text-right">{d.valor.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="secondary" onClick={() => setViewFreelancer(null)}>Fechar</Button>
+                  {viewFreelancer && (
+                    <Button onClick={() => {
+                      const wb = XLSX.utils.book_new();
+                      const detalhadoRows = (viewFreelancer.diasDetalhados || []).map((d) => ({
+                        Nome: viewFreelancer.nome,
+                        CPF: viewFreelancer.cpf,
+                        Data: format(d.data, 'yyyy-MM-dd'),
+                        Loja: d.lojaId != null ? (storesMap[d.lojaId] || '') : '',
+                        "Valor (R$)": Number(d.valor.toFixed(2)),
+                        "Chave PIX": viewFreelancer.chavePix,
+                      }));
+                      const resumoRows = [{
+                        Nome: viewFreelancer.nome,
+                        CPF: viewFreelancer.cpf,
+                        Dias: (viewFreelancer.diasDetalhados || []).length,
+                        "Total Recebido (R$)": Number(((viewFreelancer.diasDetalhados || []).reduce((s,d) => s + d.valor, 0)).toFixed(2)),
+                        "Valor Diária (R$)": Number((viewFreelancer.valorDiaria || 0).toFixed(2)),
+                        "Chave PIX": viewFreelancer.chavePix,
+                      }];
+                      const wsResumo = XLSX.utils.json_to_sheet(resumoRows);
+                      const wsDetalhado = XLSX.utils.json_to_sheet(detalhadoRows);
+                      XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+                      XLSX.utils.book_append_sheet(wb, wsDetalhado, 'Detalhado');
+                      XLSX.writeFile(wb, `freelancer_${viewFreelancer.nome.replace(/\s+/g,'_')}.xlsx`);
+                    }}>Exportar Excel (este freelancer)</Button>
+                  )}
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Dialog de registrar novo trabalho */}
+            <Dialog open={!!addWorkFreelancer} onOpenChange={(open) => {
+              if (!open) {
+                setAddWorkFreelancer(null);
+                setWorkDias([]);
+                setWorkValorDiaria('');
+                setWorkLojaId('');
+                setWorkLocalTipo('loja');
+                setWorkEventoNome('');
+                setWorkSetor('');
+                setWorkObservacao('');
+              }
+            }}>
+              <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Registrar Trabalho</DialogTitle>
+                  <DialogDescription>
+                    {addWorkFreelancer ? `Adicionar dias e valor da diária para ${addWorkFreelancer.nome}` : 'Adicionar dias e diária'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  {addWorkFreelancer && (
+                    <div className="text-sm text-muted-foreground">
+                      <p><strong>CPF:</strong> {addWorkFreelancer.cpf}</p>
+                      <p><strong>Diária sugerida:</strong> R$ {addWorkFreelancer.valorDiaria.toFixed(2)}</p>
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label>Local do trabalho</Label>
+                    <Select value={workLocalTipo} onValueChange={(v) => setWorkLocalTipo(v as 'loja' | 'evento')}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="loja">Loja</SelectItem>
+                        <SelectItem value="evento">Evento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {workLocalTipo === 'loja' && (
+                    <div className="grid gap-2">
+                      <Label>Loja</Label>
+                      <Select value={workLojaId} onValueChange={(v) => setWorkLojaId(v)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione a loja" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stores.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>{s.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {workLocalTipo === 'evento' && (
+                    <div className="grid gap-2">
+                      <Label>Nome do evento</Label>
+                      <Input
+                        value={workEventoNome}
+                        onChange={(e) => setWorkEventoNome(e.target.value)}
+                        placeholder="Ex.: Feira XYZ, Evento ABC"
+                      />
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label>Setor do trabalho</Label>
+                    <Select value={workSetor} onValueChange={(v) => setWorkSetor(v)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o setor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PRODUÇÃO">PRODUÇÃO</SelectItem>
+                        <SelectItem value="ATENDIMENTO">ATENDIMENTO</SelectItem>
+                        <SelectItem value="APOIO">APOIO</SelectItem>
+                        <SelectItem value="EVENTO">EVENTO</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="valorTrabalho">Valor da Diária (R$)</Label>
+                    <Input
+                      id="valorTrabalho"
+                      type="number"
+                      value={workValorDiaria}
+                      onChange={(e) => setWorkValorDiaria(e.target.value)}
+                      placeholder={addWorkFreelancer ? addWorkFreelancer.valorDiaria.toFixed(2) : '150.00'}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Dias do trabalho</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal',
+                            workDias.length === 0 && 'text-muted-foreground'
+                          )}
+                        >
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {workDias.length === 0 ? 'Selecione os dias' : `${workDias.length} dia(s) selecionado(s)`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="multiple"
+                          selected={workDias as any}
+                          onSelect={(ds: any) => setWorkDias(ds || [])}
+                          initialFocus
+                          className="p-3"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {workDias.length > 0 && (
+                      <div className="text-sm text-muted-foreground">
+                        <p><strong>Dias selecionados:</strong> {formatarDatasTrabalho(workDias)}</p>
+                        <p><strong>Total:</strong> R$ {((parseFloat(workValorDiaria || '0')) * workDias.length).toFixed(2)}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Observação</Label>
+                    <Textarea
+                      value={workObservacao}
+                      onChange={(e) => setWorkObservacao(e.target.value)}
+                      placeholder="Descreva detalhes daquele trabalho (opcional)"
+                      className="min-h-[80px]"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="secondary" onClick={() => {
+                    setAddWorkFreelancer(null);
+                    setWorkDias([]);
+                    setWorkValorDiaria('');
+                    setWorkLojaId('');
+                    setWorkLocalTipo('loja');
+                    setWorkEventoNome('');
+                    setWorkSetor('');
+                    setWorkObservacao('');
+                  }}>Cancelar</Button>
+                  <Button onClick={handleSalvarTrabalho}>Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          {/* Avulsos Tab */}
+          <TabsContent value="avulsos" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Trabalhos Avulsos</CardTitle>
+                <CardDescription>Registre trabalhos sem perfil e exporte para XLSX</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Filtros */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Nome</Label>
+                    <Input placeholder="Filtrar por nome" value={avulsoNome} onChange={(e) => setAvulsoNome(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Loja</Label>
+                    <Select value={avulsoLojaFilter} onValueChange={setAvulsoLojaFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {stores.map((store) => (
+                          <SelectItem key={store.id} value={String(store.id)}>{store.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Início</Label>
+                    <Input type="date" value={avulsoDateStart} onChange={(e) => setAvulsoDateStart(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Fim</Label>
+                    <Input type="date" value={avulsoDateEnd} onChange={(e) => setAvulsoDateEnd(e.target.value)} />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button variant="ghost" onClick={() => { setAvulsoNome(''); setAvulsoLojaFilter('all'); setAvulsoDateStart(''); setAvulsoDateEnd(''); }}>Limpar</Button>
+                    <Button onClick={() => fetchAvulsos()}>Aplicar</Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Button className="gap-2" onClick={() => setIsAvulsoDialogOpen(true)}>
+                    <Plus className="w-4 h-4" /> Registrar trabalho avulso
+                  </Button>
+                </div>
+
+                {/* Tabela */}
+                <div className="border rounded-md overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Loja</TableHead>
+                        <TableHead className="text-right">Valor (R$)</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Evento</TableHead>
+                        <TableHead>Setor</TableHead>
+                        <TableHead>Observação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {avulsos.map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell>{a.nome}</TableCell>
+                          <TableCell>{format(new Date(a.work_date), 'dd/MM/yyyy')}</TableCell>
+                          <TableCell>{a.loja_id != null ? (storesMap[a.loja_id] || '-') : '-'}</TableCell>
+                          <TableCell className="text-right">{(a.valor_diaria || 0).toFixed(2)}</TableCell>
+                          <TableCell>{a.local_tipo || '-'}</TableCell>
+                          <TableCell>{a.evento_nome || '-'}</TableCell>
+                          <TableCell>{a.setor || '-'}</TableCell>
+                          <TableCell className="max-w-64 truncate">{a.observacao || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                      {avulsos.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center text-muted-foreground">Nenhum trabalho avulso encontrado</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Dialog Registrar Avulso */}
+                <Dialog open={isAvulsoDialogOpen} onOpenChange={setIsAvulsoDialogOpen}>
+                  <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Registrar trabalho avulso</DialogTitle>
+                      <DialogDescription>Salve um trabalho pontual, sem criar perfil.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label>Nome</Label>
+                        <Input value={novoAvulso.nome} onChange={(e) => setNovoAvulso({ ...novoAvulso, nome: e.target.value })} placeholder="Nome do trabalhador" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Valor da diária</Label>
+                        <Input value={novoAvulso.valorDiaria} onChange={(e) => setNovoAvulso({ ...novoAvulso, valorDiaria: e.target.value })} placeholder="150.00" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Data do trabalho</Label>
+                        <Input type="date" value={novoAvulso.workDate} onChange={(e) => setNovoAvulso({ ...novoAvulso, workDate: e.target.value })} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Loja (opcional)</Label>
+                        <Select value={novoAvulso.lojaId} onValueChange={(value) => setNovoAvulso({ ...novoAvulso, lojaId: value })}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione a loja" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stores.map((store) => (
+                              <SelectItem key={store.id} value={String(store.id)}>{store.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Tipo de local</Label>
+                        <Select value={novoAvulso.localTipo} onValueChange={(value) => setNovoAvulso({ ...novoAvulso, localTipo: value })}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="loja">Loja</SelectItem>
+                            <SelectItem value="evento">Evento</SelectItem>
+                            <SelectItem value="outro">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Evento (opcional)</Label>
+                        <Input value={novoAvulso.eventoNome} onChange={(e) => setNovoAvulso({ ...novoAvulso, eventoNome: e.target.value })} placeholder="Nome do evento" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Setor (opcional)</Label>
+                        <Input value={novoAvulso.setor} onChange={(e) => setNovoAvulso({ ...novoAvulso, setor: e.target.value })} placeholder="Setor" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Observação</Label>
+                        <Textarea value={novoAvulso.observacao} onChange={(e) => setNovoAvulso({ ...novoAvulso, observacao: e.target.value })} placeholder="Observações" />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="secondary" onClick={() => setIsAvulsoDialogOpen(false)}>Cancelar</Button>
+                      <Button onClick={async () => {
+                        try {
+                          if (!novoAvulso.nome.trim()) { alert('Informe o nome'); return; }
+                          if (!novoAvulso.valorDiaria.trim()) { alert('Informe o valor da diária'); return; }
+                          if (!novoAvulso.workDate.trim()) { alert('Informe a data'); return; }
+                          const valorNum = parseFloat(novoAvulso.valorDiaria);
+                          if (isNaN(valorNum) || valorNum <= 0) { alert('Valor inválido'); return; }
+                          const lojaIdNum = novoAvulso.lojaId ? Number(novoAvulso.lojaId) : null;
+                          const { data: { user } } = await supabase.auth.getUser();
+                          const { error } = await supabase
+                            .from('freelancer_avulso_work_days')
+                            .insert({
+                              nome: novoAvulso.nome.trim(),
+                              valor_diaria: valorNum,
+                              work_date: novoAvulso.workDate,
+                              loja_id: lojaIdNum,
+                              local_tipo: novoAvulso.localTipo,
+                              evento_nome: novoAvulso.eventoNome || null,
+                              setor: novoAvulso.setor || null,
+                              observacao: novoAvulso.observacao || null,
+                              created_by: user?.id || null,
+                            });
+                          if (error) throw error;
+                          setIsAvulsoDialogOpen(false);
+                          setNovoAvulso({ nome: '', valorDiaria: '', workDate: '', lojaId: '', localTipo: 'loja', eventoNome: '', setor: '', observacao: '' });
+                          await fetchAvulsos();
+                        } catch (err) {
+                          console.error('[Freelancers] Erro ao registrar avulso:', err);
+                          alert('Erro ao registrar trabalho avulso');
+                        }
+                      }}>Salvar</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-4">
+            {/* Filtro de Período para Analytics */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <div className="flex gap-2 items-center">
+                <Select value={periodo} onValueChange={(v) => setPeriodo(v as any)}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mes_atual">Mês atual</SelectItem>
+                    <SelectItem value="mes_anterior">Mês anterior</SelectItem>
+                    <SelectItem value="ultimos_7">Últimos 7 dias</SelectItem>
+                    <SelectItem value="personalizado">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {periodo === 'personalizado' && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="justify-start">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {periodoRange.from && periodoRange.to
+                          ? `${format(periodoRange.from, 'dd/MM/yyyy')} - ${format(periodoRange.to, 'dd/MM/yyyy')}`
+                          : 'Selecionar intervalo'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="range"
+                        selected={periodoRange as any}
+                        onSelect={(r: any) => setPeriodoRange(r || {})}
+                        initialFocus
+                        className="p-3"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            </div>
+            {/* Cards de Estatísticas */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total de Freelancers</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{totalFreelancers}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {freelancersAtivos} ativos
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Pago</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">R$ {totalPagoDisplay.toFixed(2)}</div>
+                  <p className="text-xs text-muted-foreground">
+                    No período selecionado
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Média de Dias</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{mediaDiasDisplay.toFixed(1)}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Por freelancer no período
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Freelancers Ativos</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{freelancersAtivos}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {((freelancersAtivos / totalFreelancers) * 100).toFixed(1)}% do total
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Cards de Destaques */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Freelancer que Mais Trabalhou
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold">{freelancerMaisTrabalhou?.nome ?? '-'}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {destaqueTrabalhouDias} dias trabalhados
+                    </p>
+                    <p className="text-sm">
+                      Total recebido: R$ {((freelancerMaisTrabalhou?.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).reduce((s, d) => s + d.valor, 0)).toFixed(2)}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Freelancer que Mais Recebeu
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold">{freelancerMaisRecebeu?.nome ?? '-'}</p>
+                    <p className="text-sm text-muted-foreground">
+                      R$ {destaqueRecebeuTotal.toFixed(2)} recebidos
+                    </p>
+                    <p className="text-sm">
+                      {((freelancerMaisRecebeu?.diasDetalhados || []).filter(d => isWithinRange(d.data, rangeFrom, rangeTo)).length) || 0} dias trabalhados
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </PermissionBlur>
+  );

@@ -1,0 +1,569 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight[39m
+
+ [32m✓[39m src/features/producao/ui/PadronizarNomesProducaoButton.test.tsx[2m > [22mPadronizarNomesProducaoButton[2m > [22m1. renderiza o botão "Padronizar nomes"[33m 718[2mms[22m[39m
+ [32m✓[39m src/features/producao/ui/PadronizarNomesProducaoButton.test.tsx[2m > [22mPadronizarNomesProducaoButton[2m > [22m2. ao clicar no botão, o dialog abre e exibe nomes com contagem[33m 567[2mms[22m[39m
+ [32m✓[39m src/features/producao/ui/PadronizarNomesProducaoButton.test.tsx[2m > [22mPadronizarNomesProducaoButton[2m > [22m3. Enter no input chama rpc com p_old_name e p_new_name; argumento contém SOMENTE essas duas chaves[33m 1515[2mms[22m[39m
+[90mstderr[2m | src/features/producao/ui/PadronizarNomesProducaoButton.test.tsx[2m > [22m[2mPadronizarNomesProducaoButton[2m > [22m[2m4. renomear para nome já existente exibe AlertDialog de fusão; rpc NÃO é chamado antes de confirmar
+[22m[39mWarning: An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:93:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:42:13
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:25:78
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/dialog.tsx:40:73
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:93:64
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:42:13
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:25:78
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+Warning: An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:24:7
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:15:5
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:206:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:132:58
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:123:64
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:7:13)
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:53:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:33:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-slot/dist/index.mjs:9:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-primitive/dist/index.mjs:28:13
+    at file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-portal/dist/index.mjs:11:22
+    at Presence (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-presence/dist/index.mjs:19:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at DialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:85:11)
+    at AlertDialogPortal (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:34:11)
+    at C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/shared/ui/alert-dialog.tsx:35:78
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at AlertDialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-alert-dialog/dist/index.mjs:18:11)
+    at Provider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-context/dist/index.mjs:27:15)
+    at Dialog (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@radix-ui/react-dialog/dist/index.mjs:25:5)
+    at PadronizarNomesProducaoButton (C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/src/features/producao/ui/PadronizarNomesProducaoButton.tsx:28:63)
+    at QueryClientProvider (file:///C:/Users/olive_/OneDrive/Documentos/codigo/Momma/momma-stock-insight/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+
+ [32m✓[39m src/features/producao/ui/PadronizarNomesProducaoButton.test.tsx[2m > [22mPadronizarNomesProducaoButton[2m > [22m4. renomear para nome já existente exibe AlertDialog de fusão; rpc NÃO é chamado antes de confirmar[33m 1391[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 15:00:11
+[2m   Duration [22m 10.88s[2m (transform 682ms, setup 603ms, import 1.96s, tests 4.20s, environment 3.48s)[22m
+

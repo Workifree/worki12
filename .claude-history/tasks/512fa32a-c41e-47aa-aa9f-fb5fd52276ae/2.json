@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Página Pronta Entrega v2 (feature FSD pronta-entrega)",
+  "description": "Nova feature src/features/pronta-entrega/: visão unificada Estoque|Expositora|Total por produto, busca, negativo destacado, ações Mover p/ expositora, Ajuste com motivo, Contagem guiada, Histórico. Mobile-first, MommaPageLayout + GlassCard. Rota /pronta-entrega e menu mantidos. src/pages/ProntaEntrega.tsx substituída.",
+  "activeForm": "Construindo página Pronta Entrega v2",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

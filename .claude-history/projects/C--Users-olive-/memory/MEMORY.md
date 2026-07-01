@@ -1,0 +1,4 @@
+- [Hardware do PC](hardware_pc.md) — Samsung notebook 550XBE/350XBE: i5-8265U + UHD 620 iGPU + 16GB RAM + SSD Kingston A400; tela 1080p60. iGPU é o gargalo.
+- [Perfil Steam / CS2](steam_cs2_profile.md) — Steam ID ativo é 362123109 (KfZiN). Conta secundária 450114195.
+- [Caminhos CS2](cs2_paths.md) — Onde ficam autoexec, cs2_video.txt, user_convars no PC do usuário.
+- [Estilo de colaboração](feedback_collab_style.md) — Quando autoriza explicitamente, faça as alterações de sistema; não pedir confirmação a cada passo.

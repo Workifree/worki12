@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Scanner: seletor de destino Expositora/Saída definitiva",
+  "description": "Em src/pages/Scanner.tsx (batch saída) e SaidaAvulsaDialog (retirada avulsa): toggle de destino \"Expositora (vitrine)\" vs \"Saída definitiva\". Bip exposicao usa nova etapa da RPC; retirada avulsa passa destino.",
+  "activeForm": "Adicionando destino no Scanner",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "Commit em stg + sync docs + push",
+  "description": "Commit seletivo (feat(pronta-entrega): ...) direto em stg, sem co-author, pt-BR. Sync docs de usuário (docs/modulos/) via agent Gemini + docs:build. Push origin stg.",
+  "activeForm": "Commitando e sincronizando docs",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

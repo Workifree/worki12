@@ -1,0 +1,150 @@
+docs\visao-geral-funcionalidades.md:16:> A **única exceção é a tela _Pronta Entrega_** — existe e funciona, mas **hoje não é usada na prática**.
+docs\visao-geral-funcionalidades.md:27:├─ 📦 INVENTÁRIO ........ Produtos · Movimentações · Marketing · Perdas · Pronta Entrega · Scanner/Etiquetas
+docs\visao-geral-funcionalidades.md:60:| **Pronta Entrega** | Visão do estoque disponível para entrega imediata. **A tela funciona, mas hoje não é usada na operação** — é a única funcionalidade ociosa do sistema. | ⚠️ |
+docs\visao-geral-funcionalidades.md:175:- **Tudo está em uso na operação** — a única tela ociosa hoje é **Pronta Entrega**.
+docs\arquitetura\seguranca-permissoes.md:87:| `view_pronta_entrega` | Pronta Entrega | Acesso ao módulo de pronta entrega |
+docs\arquitetura\seguranca-permissoes.md:111:**Pronta Entrega** herda do estoque:
+docs\README.md:34:    Produtos, movimentações de estoque, marketing, verificação de perdas e pronta entrega
+docs\inteligencia-artificial\README.md:77:| 📦 **Estoque** | Estoque, validades, produção diária, perdas, pronta-entrega |
+docs\inteligencia-artificial\mia-chat.md:113:| 📦 **Estoque** | Estoque, lotes, validades, produção diária, perdas, pronta-entrega |
+docs\SUMMARY.md:48:* [🧊 Pronta Entrega](modulos/pronta-entrega.md)
+docs\regras-de-negocio\autenticacao-permissoes.md:84:### Regra Especial: Pronta Entrega
+docs\regras-de-negocio\autenticacao-permissoes.md:86:O acesso ao módulo Pronta Entrega tem lógica especial que herda da permissão de Estoque:
+docs\mia\action-catalog.json:673:        "file": "src/components/pronta-entrega/ProntaEntregaAnalytics.tsx",
+docs\mia\action-catalog.json:6841:    "pronta-entrega": [
+docs\guia-rapido\navegacao.md:33:| 📦 **Inventário** | Produtos, Movimentações, Marketing, Verificação de Perdas, Pronta Entrega |
+docs\guia-rapido\navegacao.md:64:2. 📦 **Inventário** — Produtos, Movimentações, Marketing, Verificação de Perdas, Pronta Entrega
+docs\qa-security-review\2026-05-15-architecture-audit.md:111:| `src/pages/ProntaEntrega.tsx:1` | 994 | 8 | Criar feature `pronta-entrega` |
+docs\qa-security-review\2026-05-15-architecture-audit.md:215:- `src/components/pronta-entrega/ProntaEntregaAnalytics.tsx:1`.
+docs\mia\sitemap.json:164:    "/pronta-entrega": {
+docs\mia\sitemap.json:168:      "description": "Pronta Entrega — produtos prontos pra venda, organizados em geladeira/balcão/expositor com drag-and-drop entre seções e lojas.",
+docs\mia\mia.md:205:- /pronta-entrega = câmaras
+docs\mia\STATUS.md:82:- `data-mia-*` em +7 pages (funcionarios, eventos, logistica, requisicao, produtos, encomendas, pronta-entrega)
+docs\mia\codebase-index.json:128:      "path": "/pronta-entrega",
+docs\mia\codebase-index.json:655:      "path": "src/components/pronta-entrega/ProntaEntregaAnalytics.tsx",
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:6:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:7:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:8:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\flow_patterns.jsonl:10:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:29:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:30:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:31:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:33:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:55:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:56:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:58:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:59:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:60:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:61:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:63:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:64:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:66:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:70:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:71:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:77:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:78:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:91:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:99:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:102:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\classifications.jsonl:134:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\clusters.json:1513:          "produtos à pronta entrega",
+docs\noaa\analise-flows-clientes\raw\clusters.json:1519:          "Qualificação inicial clara (pergunta sobre pronta entrega vs encomenda) para dir",
+docs\noaa\analise-flows-clientes\raw\clusters.json:1742:        "atendente respondeu 'Tenho disponível na asa sul' mas não confirmou explicitamente qual produto (cenoura com brigadeiro 1kg) ou se é pronta entrega; poderia ter dito 'Sim, o bolo cenoura com brigadeiro 1kg está disponível para pronta entrega na Asa Sul' para fechar a dúvida com clareza e abrir para próximo passo (venda)"
+docs\noaa\analise-flows-clientes\raw\clusters.json:1746:        "atendente respondeu 'Tenho disponível na asa sul' mas não confirmou explicitamente qual produto (cenoura com brigadeiro 1kg) ou se é pronta entrega; poderia ter dito 'Sim, o bolo cenoura com brigadeiro 1kg está disponível para pronta entrega na Asa Sul' para fechar a dúvida com clareza e abrir para próximo passo (venda)"
+docs\modulos\dashboard.md:35:* ⚡ **Atalhos rápidos** — Acesso direto aos módulos mais usados (Produtos, Movimentações, Requisições, Pronta Entrega)
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:14:- Cliente Impaciente (busca pronta entrega, quer resposta direta)
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:23:| 1 | cliente | Cliente inicia com pergunta sobre disponibilidade ou especificação de produto | _Tem bolo zero açúcar pronta entrega?_ |
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:27:| 5 | atendente | Se produto indisponível, atendente oferece alternativas ou prazo de encomenda | _Não temos vulcão de cenoura pronta entrega, mas posso fazer encomenda para [data_ |
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:52:### Tem [produto] pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:56:- > Tem bolo zero açúcar pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:57:- > Tem vulcao de cenoura a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:59:- > Tem algum bolo a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:95:**Resposta recomendada para Noa:** Noa deve responder: (1) Confirmar se tem opção sem leite/vegana/zero açúcar; (2) Listar produtos específicos que atendem a restrição; (3) Se não tem pronta entrega, oferecer encomenda com prazo; (4) Exemplo: 'Temos Sorvete Sem Leite de Manga com Maracujá (pronta entrega) e posso fazer Bolo Naked Vegano em encomenda para [data]. Qual te interessa?'
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:103:- > Tem algum bolo a pronta entrega? Na asa norte tem algum disponível?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:105:**Resposta recomendada para Noa:** Noa deve responder: (1) Esclarecer se produto está em cardápio mas não em pronta entrega; (2) Oferecer encomenda com prazo específico; (3) Se é produto novo/sazonal, explicar; (4) Nunca deixar cliente com dúvida sem resposta clara. Exemplo: 'O Bolo Vulcão está no cardápio mas só em encomenda. Posso fazer para você em 2 dias úteis. Quer?'
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:120:- _Tem algum bolo a pronta entrega?_
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:129:- _Tem vulcao de cenoura a pronta entrega?_
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:133:- _Tem bolo zero açúcar pronta entrega?_
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:145:### Produto não está disponível em pronta entrega
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:146:- > Tem vulcao de cenoura a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:147:- > Tem bolo zero açúcar pronta entrega?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:150:→ **Resposta:** Noa deve: (1) Reconhecer a indisponibilidade; (2) Oferecer alternativas similares disponíveis; (3) Oferecer encomenda com prazo específico; (4) Nunca responder apenas 'Não temos'. Exemplo: 'Não temos vulcão de cenoura pronta entrega, mas posso fazer em encomenda para segunda-feira. Enquanto isso, temos Bolo Naked de Chocolate que é muito procurado. Quer conhecer?'
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:166:→ **Resposta:** Noa deve: (1) Confirmar se tem opção que atende restrição; (2) Listar produtos específicos; (3) Se não tem pronta entrega, oferecer encomenda com prazo; (4) Nunca deixar cliente sem alternativa. Exemplo: 'Temos Sorvete Sem Leite de Manga com Maracujá pronta entrega. Para bolos sem leite, posso fazer encomenda em 2 dias. Qual te interessa?'
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:171:- > Tem algum bolo a pronta entrega? Na asa norte tem algum disponível?
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:173:→ **Resposta:** Noa deve esclarecer: (1) Se produto está em cardápio mas não em pronta entrega; (2) Se é produto sazonal/novo; (3) Oferecer encomenda com prazo; (4) Nunca deixar ambiguidade. Exemplo: 'O Bolo Vulcão está no cardápio mas só em encomenda. Posso fazer para você em 2 dias úteis. Quer?'
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:199:> _Não temos vulcão de cenoura pronta entrega, mas posso fazer encomenda para [data]. Quer conhecer outras opções similares?_
+docs\noaa\analise-flows-clientes\flows\duvida-cardapio.md:234:- {'momento': 'Cliente pergunta sobre disponibilidade de produto específico', 'decisao': "Se Noa responde com alternativas + prazo de encomenda, cliente continua engajado. Se responde apenas 'Não temos', cliente abandona.", 'exemplo': "Chat 6192686814: Cliente pergunta 'Tem vulcao de cenoura a pronta entrega?' → Atendente responde 'Não temos' sem alternativa → Cliente responde com emoji triste e conversa encerra."}
+docs\noaa\analise-flows-clientes\flows\delivery.md:37:- ✅ Categoria/tipo de produto desejado (doce, pronta entrega, encomenda)
+docs\noaa\analise-flows-clientes\flows\delivery.md:131:> _Pergunta sobre pronta entrega vs encomenda para direcionar melhor_
+docs\noaa\analise-flows-clientes\flows\delivery.md:151:- {'momento': 'Turn 1-3: Qualificação inicial', 'decisao': 'Se Noa qualifica tipo de pedido (pronta entrega vs encomenda) e pergunta endereço, cliente segue engajado. Se não, cliente pode desistir se descobrir depois que não entrega.', 'impacto': 'Alto — define se conversa segue ou não.'}
+docs\modulos\pronta-entrega.md:3:title: 🧊 Pronta Entrega
+docs\modulos\pronta-entrega.md:8:# 🧊 Pronta Entrega
+docs\modulos\pronta-entrega.md:10:Organiza os produtos prontos por **local de armazenamento** (`/pronta-entrega`). Você movimenta os produtos entre locais com arrastar e soltar, e todo movimento fica registrado.
+docs\modulos\pronta-entrega.md:25:| 🖥️ **Expositora** | `expositor` | balcão de exposição |
+docs\modulos\README.md:60:| [🧊 Pronta Entrega](pronta-entrega.md) | Estoque pronto para vitrine e entrega | 🔐 `view_pronta_entrega` |
+docs\noaa\analise-flows-clientes\flows\encomenda-festa-aniversario.md:16:- Cliente de última hora (quer entrega rápida ou pronta entrega, menos flexível com customização)
+docs\noaa\analise-flows-clientes\flows\encomenda-festa-aniversario.md:166:- > Só consigo o que temos na loja já a pronta entrega [não esclarece se encomenda é possível]
+docs\noaa\analise-flows-clientes\flows\encomenda-festa-aniversario.md:203:> _pronta entrega no delivery ou encomenda?_
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:14:- Cliente com pressa (quer pronta entrega, questiona horários)
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:25:| 3 | atendente | Atendente confirma disponibilidade imediatamente (loja, horário, estoque) | _Tem bolo de cenoura a pronta entrega? Tá na unidade da asa sul?_ |
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:61:### Vocês têm [produto] a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:66:- > Tens algum bolo ou torta a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:67:- > Tem bolo de cenoura a pronta entrega?
+docs\noaa\analise-flows-clientes\flows\retirada-pedido.md:70:**Resposta recomendada para Noa:** Confirmar imediatamente: (1) se tem em estoque, (2) em qual loja, (3) se é realmente pronta entrega ou precisa de tempo de preparo. Exemplo: 'Sim! Temos bolo de cenoura tamanho P pronto agora na Asa Sul. Você quer retirar hoje?'
+docs\noaa\analise-flows-clientes\raw\corpus.json:13022:          "content": "Olá !!!! Tudo bem? \nPessoal, vocês tem o bolo de cenoura a pronta entrega ?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:13108:          "content_anon": "Olá !!!! Tudo bem? \nPessoal, vocês tem o bolo de cenoura a pronta entrega ?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:13687:          "content_anon": "Bom dia, para encomenda, hoje não temos, apenas os bolos disponíveis em loja a pronta entrega!"
+docs\noaa\analise-flows-clientes\raw\corpus.json:14668:          "content_anon": "Somente os itens a pronta entrega nas lojas!"
+docs\noaa\analise-flows-clientes\raw\corpus.json:14710:          "content_anon": "Temos alguns vulcões disponíveis a pronta entrega na asa sul!"
+docs\noaa\analise-flows-clientes\raw\corpus.json:15383:          "content_anon": "sabe me dizer se tem vulcao de cenoura a pronta entrega ai?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:21381:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:21820:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:22385:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:22862:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:23135:          "content": "Tens algum bolo ou torta a pronta entrega"
+docs\noaa\analise-flows-clientes\raw\corpus.json:23373:          "content_anon": "Tens algum bolo ou torta a pronta entrega"
+docs\noaa\analise-flows-clientes\raw\corpus.json:23415:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24096:          "content_anon": "A gente costuma deixar alguns tortas/nakeds/bolos a pronta entrega"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24679:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24701:          "content_anon": "Pronta entrega no delivery"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24745:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24846:          "content": "Pronta entrega no delivery"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24966:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:24986:          "content_anon": "Pronta entrega no delivery"
+docs\noaa\analise-flows-clientes\raw\corpus.json:25028:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:25352:          "content": "Tem algum bolo a pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:25480:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:25542:          "content_anon": "Tem algum bolo a pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:25564:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:26759:          "content": "Não tem nenhuma opção sem leite a pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:26903:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:26985:          "content_anon": "Não tem nenhuma opção sem leite a pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:27213:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:27301:          "content_anon": "Não tem nenhuma opção sem leite a pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:27519:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:29468:          "content": "Gostaria de saber se tem bolo zero açúcar pronta entrega ?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:29550:          "content_anon": "Gostaria de saber se tem bolo zero açúcar pronta entrega ?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:29616:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:30166:          "content_anon": "Para o final de semana so consigo oque temos na loja já a pronta entrega!"
+docs\noaa\analise-flows-clientes\raw\corpus.json:30546:          "content_anon": "Essas são as que vc tem de pronta entrega??"
+docs\noaa\analise-flows-clientes\raw\corpus.json:30568:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:32802:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:36692:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:39237:          "content": "Os bolos tem a pronta entrega nas lojas? O cenoura com brigadeiro de 1kg?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:39311:          "content_anon": "Os bolos tem a pronta entrega nas lojas? O cenoura com brigadeiro de 1kg?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:40041:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:40249:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:40544:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:43571:          "content_anon": "Pra eu te direcionar melhor, me conta: você está buscando produtos à pronta entrega no delivery ou gostaria de fazer uma encomenda?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:43791:          "content_anon": "Ah ótimo! Para os produtos à pronta entrega, a gente trabalha com o nosso *cardápio digital* 💚"
+docs\noaa\analise-flows-clientes\raw\corpus.json:44033:          "content_anon": "Podemos sim reservar para você, mas para garantir a disponibilidade, trabalhamos com reserva apenas mediante pagamento antecipado.\n\nComo os produtos são de pronta entrega e saem com frequência na loja, ao reservarmos, deixamos de vendê-los para outros clientes. Por isso, para que possamos separar com segurança, é necessário que o pagamento seja feito no momento da reserva.\n\nSe estiver tudo certo por aí, podemos te passar as opções de pagamento."
+docs\noaa\analise-flows-clientes\raw\corpus.json:44231:          "content_anon": "Temos sim! Todos os dias, trabalhamos com algumas opções a pronta entrega.\n\nHoje temos disponíveis:\n▪ Naked de chocolate com doce de leite (Mini, P e M)\n▪ Naked pistache (Mini, P e M)\n▪ Bolo vulcão de chocolate com brigadeiro de pistache\n▪ Bolo de baunilha com brigadeiro de limão\n\nVocê consegue retirar aqui na Asa Sul?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:44880:          "content_anon": "quais produtos temos em asa norte na vitrine expositora?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:44902:          "content_anon": "quais produtos temos em asa norte na vitrine expositora?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:44924:          "content_anon": "quais produtos temos em asa norte na vitrine expositora?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:45672:[Omitted long matching line]
+docs\noaa\analise-flows-clientes\raw\corpus.json:60126:          "content_anon": "É a aba pronta entrega?"
+docs\noaa\analise-flows-clientes\raw\corpus.json:60280:          "content_anon": "Só registro os nakeds e vulcões na pronta entrega? Ou deveria ter em contagem de estoque tbm? \n\nTo aprendendo aqui ainda, sozinho."
+docs\noaa\analise-flows-clientes\raw\corpus.json:60302:          "content_anon": "Pode registrar na contagem. Essa aba de pronta entrega a Ana que pediu pra fazer na época. Não sei como ela usava, se ela fazia o controle pelas duas ou só por pronta entrega. A meneira simplificada é fazer tudo na contagem. Fica melhor pra vc msm."
+docs\noaa\analise-flows-clientes\raw\corpus.json:60522:          "content_anon": "Deve aparecer na categoria pronta entrega"
+docs\noaa\analise-flows-clientes\raw\corpus.json:66165:[Omitted long matching line]
