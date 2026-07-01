@@ -27,6 +27,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
 const Wallet = lazy(() => import('./pages/Wallet'));
+const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
@@ -155,6 +156,7 @@ function App() {
                       <Route path="my-jobs" element={<MyJobs />} />
                       <Route path="analytics" element={<Analytics />} />
                       <Route path="wallet" element={<Wallet />} />
+                      <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />
                       <Route path="notifications" element={<Notifications />} />

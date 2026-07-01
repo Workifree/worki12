@@ -72,8 +72,8 @@ export default function InviteAccept() {
   return (
     <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
       <PageMeta
-        title="Convite de Equipe"
-        description="Aceite o convite para entrar na equipe de uma empresa no Worki."
+        title="Convite de Elenco"
+        description="Aceite o convite para entrar no elenco de uma empresa no Worki."
       />
 
       <div className="w-full max-w-md">
@@ -84,7 +84,7 @@ export default function InviteAccept() {
               <Building2 size={32} className="text-primary" />
             </div>
             <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Convite de Equipe
+              Convite de Elenco
             </h1>
             <div className="flex items-center justify-center gap-3 text-gray-500 mt-6">
               <Loader2 className="animate-spin text-primary" size={24} />
@@ -107,7 +107,7 @@ export default function InviteAccept() {
               Convite Aceito!
             </h1>
             <p className="text-gray-600 font-bold mb-8">
-              Você entrou para a equipe da empresa. Agora pode receber convites de turno diretamente.
+              Você entrou para o elenco da empresa. Agora pode receber convites de turno diretamente.
             </p>
             <button
               onClick={() => navigate('/my-jobs')}
@@ -126,7 +126,7 @@ export default function InviteAccept() {
               <CheckCircle2 size={32} className="text-primary" />
             </div>
             <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Você já está na equipe
+              Você já está no elenco
             </h1>
             <p className="text-gray-600 font-bold mb-8">
               Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.

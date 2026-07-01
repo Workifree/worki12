@@ -56,7 +56,7 @@ function MemberCard({ member }: MemberCardProps) {
 
       {/* Status badge */}
       <span className="flex-shrink-0 bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
-        Equipe
+        Elenco
       </span>
     </div>
   );
@@ -181,7 +181,7 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
         {method === 'link' && (
           <div className="space-y-4">
             <p className="text-sm font-bold text-gray-600">
-              Compartilhe este link com o freela. Ele abrirá o Worki e aceitará o convite de entrada na sua equipe.
+              Compartilhe este link com o freela. Ele abrirá o Worki e aceitará o convite de entrada no seu elenco.
             </p>
             <div className="bg-gray-50 border-2 border-black rounded-xl p-4 flex items-center gap-3 font-mono text-xs break-all text-gray-700">
               <span className="flex-1">{inviteUrl}</span>
@@ -263,9 +263,9 @@ export default function CompanyTeam() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter">Minha Equipe</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">Meu Elenco</h1>
           <p className="text-gray-500 font-bold mt-1">
-            {teamMembers.length} freela{teamMembers.length !== 1 ? 's' : ''} na equipe
+            {teamMembers.length} freela{teamMembers.length !== 1 ? 's' : ''} no elenco
             {pendingConnections.length > 0 && (
               <span className="ml-2 text-yellow-600">· {pendingConnections.length} aguardando aceite</span>
             )}
@@ -279,11 +279,11 @@ export default function CompanyTeam() {
         </button>
       </div>
 
-      {/* Equipe aceita */}
+      {/* Elenco aceito */}
       {teamMembers.length > 0 && (
         <section className="mb-8">
           <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-            <Users size={20} /> Equipe Ativa
+            <Users size={20} /> Elenco Ativo
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {teamMembers.map((member) => (
@@ -311,7 +311,7 @@ export default function CompanyTeam() {
       {teamMembers.length === 0 && pendingConnections.length === 0 && (
         <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
           <Users size={48} className="mx-auto mb-4 text-gray-300" />
-          <h3 className="text-xl font-black uppercase mb-2">Equipe vazia</h3>
+          <h3 className="text-xl font-black uppercase mb-2">Elenco vazio</h3>
           <p className="text-gray-500 font-bold mb-6 max-w-sm mx-auto">
             Adicione freelas via link de convite, Worki ID ou QR (em breve). Eles aparecerão aqui após aceitarem.
           </p>

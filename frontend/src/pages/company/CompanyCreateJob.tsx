@@ -176,7 +176,7 @@ export default function CompanyCreateJob() {
                 const { data: newJob, error } = await supabase.from('jobs').insert(payload).select().single();
                 if (error) throw error;
 
-                addToast('Turno criado! Convide um freela da sua equipe.', 'success');
+                addToast('Turno criado! Convide um freela do seu elenco.', 'success');
                 setCreatedJobId(newJob.id);
                 setShowInvitePanel(true);
             }
@@ -529,7 +529,7 @@ export default function CompanyCreateJob() {
                         </div>
 
                         <p className="text-sm font-bold text-gray-600 mb-5">
-                            Turno criado! Convide um freela da sua equipe para este turno.
+                            Turno criado! Convide um freela do seu elenco para este turno.
                         </p>
 
                         {teamLoading && (
@@ -541,8 +541,8 @@ export default function CompanyCreateJob() {
                         {!teamLoading && teamMembers.length === 0 && (
                             <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
-                                <p className="font-bold text-sm">Sua equipe está vazia.</p>
-                                <p className="text-xs mt-1">Adicione freelas em <strong>Minha Equipe</strong> primeiro.</p>
+                                <p className="font-bold text-sm">Seu elenco está vazio.</p>
+                                <p className="text-xs mt-1">Adicione freelas em <strong>Meu Elenco</strong> primeiro.</p>
                             </div>
                         )}
 

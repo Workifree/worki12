@@ -678,7 +678,7 @@ export default function Profile() {
                         </button>
                     </div>
                     <p className="text-sm font-bold text-gray-600 mb-5 text-center">
-                        Mostre este QR para uma empresa te adicionar à equipe. Cada scan é único para você.
+                        Mostre este QR para uma empresa te adicionar ao elenco dela. Cada scan é único para você.
                     </p>
                     <div className="flex justify-center mb-5">
                         <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
