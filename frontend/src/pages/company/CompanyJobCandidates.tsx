@@ -37,6 +37,11 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
+// Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
+// é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
+// contradiz o pagamento opcional (modo A, ADR-20260630). Religar na Fase 2 = flip para true.
+const PULL_HIRE_ENABLED = false;
+
 export default function CompanyJobCandidates() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -554,7 +559,7 @@ export default function CompanyJobCandidates() {
                                             >
                                                 <MessageSquare size={24} />
                                             </button>
-                                            {app.status === 'pending' && (
+                                            {PULL_HIRE_ENABLED && app.status === 'pending' && (
                                                 <>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
@@ -611,12 +616,14 @@ export default function CompanyJobCandidates() {
                                                             >
                                                                 <MessageSquare size={14} /> Chat
                                                             </button>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
-                                                                className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors"
-                                                            >
-                                                                Contratar
-                                                            </button>
+                                                            {PULL_HIRE_ENABLED && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
+                                                                    className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors"
+                                                                >
+                                                                    Contratar
+                                                                </button>
+                                                            )}
                                                         </>
                                                     )}
 
