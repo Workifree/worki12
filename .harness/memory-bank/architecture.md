@@ -83,6 +83,15 @@ push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem de
 
 ## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
 
+> ⚠️ **REVISADO por ADR-20260630-pagamento-opcional-piloto (2026-06-30).** No piloto o pagamento pelo Worki é
+> **OPCIONAL**. Três modos coexistem: **(A) pagamento externo registrado** — default do piloto, Worki registra
+> PIX/dinheiro fora + recibo, **sem mover saldo** (novo marcador de pagamento por turno, fora de
+> `escrow_transactions`); **(B) PIX-único → distribuição** — conveniência opt-in, 1 PIX da empresa distribuído
+> a N freelas via RPC atômica idempotente; **(C) postpago cartão on-file** — o fluxo descrito abaixo, agora
+> **opt-in / semente da expansão**, não o trilho padrão. Article 8/9 seguem valendo para B/C (todo movimento
+> de saldo por RPC atômica). O modo A não toca saldo. O BI de gasto passa a unir escrow (B/C) + marcador (A).
+> Diagramas abaixo = caminho postpago histórico, preservado.
+
 ### Fluxo prepago (Slice 1 — pull legado; intacto)
 
 ```
@@ -212,3 +221,6 @@ Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show 
 - Mover lógica privilegiada do Edge Function para o frontend.
 - Trocar o modelo de isolamento de papel (worker/company).
 - Mudar a direção postpago (Slice 1) para prepago — Slice 2 trata dessa migração.
+- Tornar o pagamento pelo Worki **obrigatório** de novo (reabrir postpago/hold como default), criar o marcador
+  de pagamento externo, ou a RPC de distribuição PIX-único — ver ADR-20260630 (pagamento opcional no piloto)
+  e seus gatilhos de reabertura.
