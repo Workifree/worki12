@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import NotificationBell from '../components/NotificationBell';
+import InviteTakeover from '../components/InviteTakeover';
 
 export default function MainLayout() {
     const navigate = useNavigate();
@@ -67,6 +68,9 @@ export default function MainLayout() {
 
     return (
         <div className="min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto">
+            {/* Aviso em tela cheia de convite de turno (worker only) */}
+            <InviteTakeover />
+
             {/* Desktop Sidebar */}
             <Sidebar />
 
