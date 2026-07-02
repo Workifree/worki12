@@ -225,6 +225,8 @@ export const PaymentRecordService = {
    * Usado pela UI para decidir entre mostrar "Registrar pagamento" ou "Ver recibo".
    */
   async getPaymentByJob(jobId: string): Promise<ShiftPayment | null> {
+    // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
+    if (!jobId) return null;
     try {
       const { data, error } = await supabase
         .from('shift_payments')
@@ -250,6 +252,8 @@ export const PaymentRecordService = {
    * dona nem freela pago) recebe null.
    */
   async getReceipt(jobId: string): Promise<ShiftPaymentReceipt | null> {
+    // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
+    if (!jobId) return null;
     try {
       const { data, error } = await supabase
         .from('shift_payments')

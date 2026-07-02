@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -684,6 +684,26 @@ export default function Profile() {
                 >
                     {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
                     Alterar Senha
+                </button>
+            </div>
+
+            {/* Meu link de perfil — seção top-level (G2). Espelha a seção equivalente
+                do CompanyProfile.tsx. O botão dentro do modal QR foi mantido também. */}
+            <div className="border-t-2 border-gray-200 pt-8 mt-8">
+                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <Link2 size={20} /> Meu Link de Perfil
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Compartilhe este link com uma empresa (WhatsApp, etc.) para ela te adicionar ao elenco
+                    sem precisar de QR ou Worki ID.
+                </p>
+                <button
+                    onClick={handleCopyMyLink}
+                    disabled={!workerId}
+                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                    {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
                 </button>
             </div>
 

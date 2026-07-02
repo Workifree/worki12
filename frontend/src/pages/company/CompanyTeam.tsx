@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
@@ -195,13 +195,30 @@ function QrScannerPane({ onDecoded, processing }: QrScannerPaneProps) {
     return () => {
       cancelled = true;
       const instance = scannerRef.current;
-      if (instance) {
+      if (!instance) return;
+      // G1: instance.stop() pode lançar SINCRONAMENTE (não é promise rejection)
+      // quando o scanner nunca chegou a iniciar (ex.: desktop sem webcam ou
+      // permissão negada) — isso derrubava a tela inteira no unmount. Por
+      // isso todo o cleanup vai dentro de um try/catch defensivo, e só
+      // chamamos stop() se o estado indicar que a câmera está de fato rodando.
+      try {
+        const state = instance.getState?.();
+        const isRunning =
+          state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED;
+        if (!isRunning) {
+          // Nunca iniciou (ou já parou) — nada a interromper, só limpa o DOM.
+          instance.clear();
+          return;
+        }
         instance
           .stop()
           .then(() => instance.clear())
           .catch(() => {
             // câmera pode já ter sido interrompida (unmount rápido) — seguro ignorar
           });
+      } catch {
+        // stop()/getState()/clear() lançou de forma síncrona — nunca deixar
+        // isso escapar do cleanup do unmount.
       }
     };
   }, []);
@@ -243,7 +260,10 @@ interface AddWorkerModalProps {
 }
 
 function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
-  const [method, setMethod] = useState<AddMethod>('qr');
+  // G1: default é 'phone' (Worki ID) — NÃO monta a câmera (nem pede
+  // permissão) ao abrir o modal. QR fica como tab opt-in, só monta o
+  // scanner quando o usuário clica na aba QR.
+  const [method, setMethod] = useState<AddMethod>('phone');
   const [phone, setPhone] = useState('');
   const [workerId, setWorkerId] = useState('');
   const [linkInput, setLinkInput] = useState('');
