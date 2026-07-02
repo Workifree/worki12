@@ -50,7 +50,7 @@ export const WalletService = {
             .from('wallets')
             .select('*')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
         if (existing) return existing as Wallet;
 
@@ -83,7 +83,7 @@ export const WalletService = {
             .from('wallets')
             .select('balance')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
         return data?.balance || 0;
     },
@@ -93,7 +93,7 @@ export const WalletService = {
             .from('wallets')
             .select('id')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
         if (!wallet) return [];
 
@@ -264,7 +264,7 @@ export const WalletService = {
             .from('wallets')
             .select('id')
             .eq('user_id', companyUserId)
-            .single();
+            .maybeSingle();
 
         if (!wallet) return [];
 

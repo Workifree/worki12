@@ -2,10 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Wallet, WalletTransaction, EscrowTransaction } from './walletService'
 
 // Mock supabase
+// mockSingle serve tanto .single() quanto .maybeSingle() — ambos resolvem { data, error } e o
+// teste controla o cenário (linha existe / ausente) via mockResolvedValueOnce, igual no client real.
 const mockSingle = vi.fn()
-const mockSelect = vi.fn(() => ({ single: mockSingle, eq: vi.fn(() => ({ single: mockSingle })), order: vi.fn(() => ({ data: [] })) }))
-const mockEq = vi.fn(() => ({ single: mockSingle, select: mockSelect, order: vi.fn(() => ({ data: [] })) }))
-const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) }))
+const mockSelect = vi.fn(() => ({
+  single: mockSingle,
+  maybeSingle: mockSingle,
+  eq: vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle })),
+  order: vi.fn(() => ({ data: [] })),
+}))
+const mockEq = vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle, select: mockSelect, order: vi.fn(() => ({ data: [] })) }))
+const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle })) }))
 const mockFrom = vi.fn(() => ({ select: mockSelect, eq: mockEq, insert: mockInsert }))
 const mockRpc = vi.fn()
 
@@ -171,6 +178,28 @@ describe('WalletService methods', () => {
 
     expect(result).toEqual(existingWallet)
     expect(mockFrom).toHaveBeenCalledWith('wallets')
+  })
+
+  // Caracterização do fix B2: no primeiro acesso (onboarding) ainda não existe linha em `wallets`.
+  // A busca inicial usa `.maybeSingle()` (não `.single()`) para que a AUSÊNCIA de linha resolva
+  // como `{ data: null, error: null }` (sem 406) em vez de lançar erro — só então o fluxo cria a
+  // wallet via INSERT.
+  it('getOrCreateWallet cria wallet nova quando ainda nao existe (sem 406 na busca inicial)', async () => {
+    const newWallet = {
+      id: 'w-2', user_id: 'u-2', balance: 0, user_type: 'worker',
+      created_at: '2024-01-01', updated_at: '2024-01-01'
+    }
+
+    // 1ª resolução: busca inicial (.maybeSingle()) — ausência de linha, sem erro.
+    mockSingle.mockResolvedValueOnce({ data: null, error: null })
+    // 2ª resolução: INSERT ... .select().single() — cria e retorna a wallet nova.
+    mockSingle.mockResolvedValueOnce({ data: newWallet, error: null })
+
+    const { WalletService } = await import('./walletService')
+    const result = await WalletService.getOrCreateWallet('u-2', 'worker')
+
+    expect(result).toEqual(newWallet)
+    expect(mockInsert).toHaveBeenCalledWith({ user_id: 'u-2', balance: 0.00, user_type: 'worker' })
   })
 
   it('getBalance retorna 0 quando wallet nao existe', async () => {

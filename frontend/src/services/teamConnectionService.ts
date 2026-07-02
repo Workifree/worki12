@@ -300,49 +300,20 @@ export const TeamConnectionService = {
     if (!user) {
       return { connection: null, error: 'Sessão expirada. Faça login antes de aceitar o convite.' };
     }
-    const workerId = user.id;
-
-    // 3. Verificar que a empresa existe
-    const { data: company, error: cErr } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('id', companyId)
-      .single();
-
-    if (cErr || !company) {
-      return { connection: null, error: 'Empresa do convite não encontrada.' };
-    }
-
-    // 4. Idempotência: verificar se já existe a conexão
-    const { data: existing } = await supabase
-      .from('team_connections')
-      .select('*')
-      .eq('company_id', companyId)
-      .eq('worker_id', workerId)
-      .maybeSingle();
-
-    if (existing) {
-      return { connection: existing as TeamConnection, alreadyExists: true };
-    }
-
-    // 5. Inserir conexão pending
-    const { data, error } = await supabase
-      .from('team_connections')
-      .insert({
-        company_id: companyId,
-        worker_id: workerId,
-        status: 'pending' as TeamConnectionStatus,
-        source: 'link' as TeamConnectionSource,
-      })
-      .select()
-      .single();
+    // 3. Registrar via RPC SECURITY DEFINER (accept_company_invite_by_token): o INSERT direto do
+    // worker viola tc_insert_company (só a empresa insere); a RPC força server-side
+    // worker_id=auth.uid() + status='accepted' + source='link' (a empresa consentiu ao gerar/mandar
+    // o link, o worker ao abrir logado). Idempotente. Ver ADR-20260702-worker-join-by-invite-token.
+    const { data, error } = await supabase.rpc('accept_company_invite_by_token', { p_token: token });
 
     if (error) {
-      if (error.code === '23505') {
-        return { connection: null, alreadyExists: true };
-      }
-      logError('teamConnection.addToTeamByToken.insert', error);
-      return { connection: null, error: 'Não foi possível registrar o convite.' };
+      logError('teamConnection.addToTeamByToken.rpc', error);
+      const m = error.message ?? '';
+      const msg = m.includes('company_not_found') ? 'Empresa do convite não encontrada.'
+        : m.includes('not_a_worker') ? 'Apenas freelas entram em um elenco por este link.'
+        : m.includes('invalid_token') ? 'Link de convite inválido ou expirado.'
+        : 'Não foi possível registrar o convite.';
+      return { connection: null, error: msg };
     }
 
     return { connection: data as TeamConnection };
