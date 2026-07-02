@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Login from '../Login'
@@ -10,13 +10,18 @@ vi.mock('../../lib/supabase', () => ({
     auth: {
       signInWithPassword: vi.fn(),
       signUp: vi.fn(),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
     },
   },
 }))
 
-function renderLogin() {
+vi.mock('../../lib/logger', () => ({ logError: vi.fn() }))
+
+import { supabase } from '../../lib/supabase'
+
+function renderLogin(initialEntry = '/login?type=work') {
   return render(
-    <MemoryRouter initialEntries={['/login?type=work']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Login />
     </MemoryRouter>
   )
@@ -61,5 +66,65 @@ describe('Login', () => {
     await user.click(screen.getByText('Cadastre-se'))
 
     expect(screen.getByRole('button', { name: /criar conta/i })).toBeInTheDocument()
+  })
+})
+
+describe('Login — R1: papel divergente no login (nunca redireciona silenciosamente)', () => {
+  it('mostra aviso claro e NAO redireciona quando conta ja existe com o OUTRO papel', async () => {
+    const user = userEvent.setup()
+    vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
+      data: { user: { id: 'u1', user_metadata: { user_type: 'hire' } }, session: {} },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>)
+
+    // Usuario chega via ?type=work mas a conta é 'hire' (empresa)
+    renderLogin('/login?type=work')
+
+    await user.type(screen.getByLabelText('Email'), 'ja@existe.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /entrar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/já está cadastrado como/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /ir para o dashboard de empresa/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /usar outro e-mail/i })).toBeInTheDocument()
+  })
+
+  it('nao mostra aviso quando o papel da conta bate com o type da URL', async () => {
+    vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
+      data: { user: { id: 'u2', user_metadata: { user_type: 'work' } }, session: {} },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>)
+
+    const user = userEvent.setup()
+    renderLogin('/login?type=work')
+
+    await user.type(screen.getByLabelText('Email'), 'ok@existe.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /entrar/i }))
+
+    await waitFor(() => {
+      expect(supabase.auth.signInWithPassword).toHaveBeenCalled()
+    })
+    expect(screen.queryByText(/já está cadastrado como/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('Login — R2: cadastro com e-mail ja existente mostra mensagem especifica', () => {
+  it('exibe mensagem mencionando o outro papel quando signUp falha com "User already registered"', async () => {
+    const user = userEvent.setup()
+    vi.mocked(supabase.auth.signUp).mockRejectedValue(new Error('User already registered'))
+
+    renderLogin('/login?type=work')
+    await user.click(screen.getByText('Cadastre-se'))
+
+    await user.type(screen.getByLabelText('Email'), 'ja@existe.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /criar conta/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/já tem conta cadastrada como empresa/i)).toBeInTheDocument()
+    })
   })
 })

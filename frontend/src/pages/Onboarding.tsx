@@ -45,29 +45,17 @@ export default function Onboarding() {
         {/* Left: Value Prop */}
         <div className="flex-1 space-y-8 max-w-xl">
           <h1 className="text-6xl md:text-8xl font-black leading-[0.9] tracking-tighter">
-            TRABALHE <br />
-            <span className="text-primary text-stroke-black">AGORA.</span>
+            CONFIANÇA <br />
+            <span className="text-primary text-stroke-black">DE VERDADE.</span>
           </h1>
           <p className="text-xl font-medium text-gray-600 max-w-md border-l-4 border-primary pl-4">
-            A plataforma gig para a força de trabalho moderna. Encontre turnos, receba rápido e cresça na carreira.
+            A camada de confiança e pagamento entre empresas e freelas que já trabalham juntos.
+            Contrate, pague e registre tudo num só lugar — sem virar vínculo, sem bagunça de WhatsApp.
           </p>
 
-          <div className="flex gap-4">
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-300" />
-              ))}
-            </div>
-            <div>
-              <div className="flex items-center text-primary">
-                <Star fill="currentColor" size={16} />
-                <Star fill="currentColor" size={16} />
-                <Star fill="currentColor" size={16} />
-                <Star fill="currentColor" size={16} />
-                <Star fill="currentColor" size={16} />
-              </div>
-              <span className="text-sm font-bold">Aprovado por 10k+ Pros</span>
-            </div>
+          <div className="flex items-center gap-2 text-sm font-bold text-gray-500">
+            <Users size={18} className="text-primary" strokeWidth={2.5} />
+            Feito pra quem já trabalha junto — não pra estranhos.
           </div>
         </div>
 
@@ -80,13 +68,13 @@ export default function Onboarding() {
             className="group relative bg-white border-2 border-black rounded-2xl p-8 text-left transition-all hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(0,166,81,1)]"
           >
             <div className="absolute top-4 right-4 bg-primary text-white text-xs font-bold px-2 py-1 rounded-sm uppercase">
-              Para Profissionais
+              Para Freelas
             </div>
             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-white transition-colors border-2 border-black">
               <DollarSign size={24} strokeWidth={3} />
             </div>
             <h3 className="text-2xl font-black uppercase mb-1">Quero Trabalhar</h3>
-            <p className="text-gray-500 font-medium text-sm">Ganhe dinheiro no seu horário. Bartender, Estoquista, Eventos e mais.</p>
+            <p className="text-gray-500 font-medium text-sm">Sua carteira de trabalho portátil: histórico, avaliação e recebimento — seus, em qualquer job.</p>
             <ArrowRight className="absolute bottom-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
 
@@ -102,7 +90,7 @@ export default function Onboarding() {
               <Briefcase size={24} strokeWidth={3} />
             </div>
             <h3 className="text-2xl font-black uppercase mb-1">Quero Contratar</h3>
-            <p className="text-gray-400 font-medium text-sm">Preencha turnos instantaneamente com profissionais avaliados. Sem dor de cabeça.</p>
+            <p className="text-gray-400 font-medium text-sm">Centralize sua equipe de freelas de confiança: contrate, pague e registre tudo num só lugar.</p>
             <ArrowRight className="absolute bottom-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
 

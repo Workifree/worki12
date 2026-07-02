@@ -27,6 +27,10 @@ vi.mock('../contexts/ToastContext', () => ({
   useToast: vi.fn(() => ({ addToast: vi.fn(), removeToast: vi.fn() })),
 }))
 
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'worker-1' }, loading: false, signOut: vi.fn().mockResolvedValue(undefined) })),
+}))
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
@@ -42,6 +46,7 @@ vi.mock('../lib/validation', () => ({
 
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 
 const WORKER_DATA = {
@@ -201,5 +206,40 @@ describe('Profile - Seguranca', () => {
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
     expect(screen.getByRole('button', { name: /alterar senha/i })).toBeDisabled()
+  })
+})
+
+describe('Profile — logout (R3/R4)', () => {
+  it('chama AuthContext.signOut e navega para /login ao clicar em Sair da conta', async () => {
+    setupMocks()
+    const mockSignOut = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'worker-1' }, loading: false, signOut: mockSignOut } as unknown as ReturnType<typeof useAuth>)
+    const mockNavigate = vi.fn()
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate)
+
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }))
+
+    await waitFor(() => {
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockNavigate).toHaveBeenCalledWith('/login')
+    })
+  })
+
+  it('mostra toast de erro quando signOut falha, sem travar em silencio', async () => {
+    const { mockAddToast } = setupMocks()
+    const mockSignOut = vi.fn().mockRejectedValue(new Error('network error'))
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'worker-1' }, loading: false, signOut: mockSignOut } as unknown as ReturnType<typeof useAuth>)
+
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }))
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Não foi possível sair. Tente novamente.', 'error')
+    })
   })
 })

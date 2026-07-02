@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
@@ -22,6 +23,7 @@ interface Company {
 
 export default function CompanyProfile() {
     const navigate = useNavigate();
+    const { signOut } = useAuth();
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -30,6 +32,7 @@ export default function CompanyProfile() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
     const [company, setCompany] = useState<Company>({
         name: '',
         industry: '',
@@ -215,6 +218,22 @@ export default function CompanyProfile() {
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setCompany({ ...company, [e.target.name]: e.target.value });
+    };
+
+    // R3/R4: logout acessível no mobile (via item "Perfil" do BottomNav) — fonte única
+    // AuthContext.signOut, com try/catch + toast de erro + estado de loading (A3/A4).
+    const handleLogout = async () => {
+        if (loggingOut) return;
+        setLoggingOut(true);
+        try {
+            await signOut();
+            navigate('/login');
+        } catch (error) {
+            logError('CompanyProfile.handleLogout', error);
+            addToast('Não foi possível sair. Tente novamente.', 'error');
+        } finally {
+            setLoggingOut(false);
+        }
     };
 
     const handleDeleteAccount = async () => {
@@ -628,6 +647,22 @@ export default function CompanyProfile() {
                     </button>
                 </div>
             )}
+
+            {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
+            <div className="mt-8 bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-xl">
+                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <LogOut size={20} /> Sessão
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
+                <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
+                    {loggingOut ? 'Saindo...' : 'Sair da conta'}
+                </button>
+            </div>
 
             {/* Zona de Perigo */}
             <div className="border-t-2 border-red-200 pt-8 mt-8">
