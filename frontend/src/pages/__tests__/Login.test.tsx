@@ -127,4 +127,45 @@ describe('Login — R2: cadastro com e-mail ja existente mostra mensagem especif
       expect(screen.getByText(/já tem conta cadastrada como empresa/i)).toBeInTheDocument()
     })
   })
+
+  it('exibe mensagem de e-mail ja existente quando signUp retorna sucesso ofuscado (identities vazio)', async () => {
+    const user = userEvent.setup()
+    // Anti-enumeracao do Supabase: signUp de e-mail ja existente e confirmado NAO
+    // retorna erro — retorna data.user com identities: [] e sem session.
+    vi.mocked(supabase.auth.signUp).mockResolvedValue({
+      data: { user: { id: 'u3', identities: [], user_metadata: { user_type: 'work' } }, session: null },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signUp>>)
+
+    renderLogin('/login?type=work')
+    await user.click(screen.getByText('Cadastre-se'))
+
+    await user.type(screen.getByLabelText('Email'), 'ja@existe.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /criar conta/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/este e-mail já tem uma conta/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/conta criada/i)).not.toBeInTheDocument()
+  })
+
+  it('mantem o fluxo de "Conta criada" quando identities tem itens (cadastro novo de verdade)', async () => {
+    const user = userEvent.setup()
+    vi.mocked(supabase.auth.signUp).mockResolvedValue({
+      data: { user: { id: 'u4', identities: [{ id: 'id1' }], user_metadata: { user_type: 'work' } }, session: null },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signUp>>)
+
+    renderLogin('/login?type=work')
+    await user.click(screen.getByText('Cadastre-se'))
+
+    await user.type(screen.getByLabelText('Email'), 'novo@exemplo.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /criar conta/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/conta criada! verifique seu email/i)).toBeInTheDocument()
+    })
+  })
 })

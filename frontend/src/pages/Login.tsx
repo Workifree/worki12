@@ -101,7 +101,13 @@ export default function Login() {
 
                 if (signUpError) throw signUpError;
 
-                if (data.user && data.session) {
+                // R2: o Supabase tem proteção anti-enumeração — signUp de um e-mail JÁ
+                // existente e confirmado retorna "sucesso" ofuscado (sem erro, sem sessão).
+                // O único sinal client-side é `identities` vazio (nenhuma identidade nova
+                // criada). Sem isso, a UI mostraria "Conta criada!" para uma conta que já existe.
+                if (data.user && data.user.identities && data.user.identities.length === 0) {
+                    setError('Este e-mail já tem uma conta. Faça login (ou use outro e-mail).');
+                } else if (data.user && data.session) {
                     // Auto-confirmed: redirect immediately
                     const pendingRedirect = resolvePendingInviteRedirect(redirectTo);
                     if (pendingRedirect) {
