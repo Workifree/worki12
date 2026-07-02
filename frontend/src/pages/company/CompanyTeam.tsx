@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Link2, Phone, QrCode, Copy, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
+import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,6 +10,25 @@ import type { TeamMember, TeamConnection } from '../../types';
 // UUID "solto" — mesmo formato usado como Worki ID (auth.uid()). O QR de
 // identidade (Profile.tsx) codifica o workerId cru, sem prefixo/URL.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Extrai o token de convite de um texto colado pelo usuário.
+ *
+ * O freela pode colar a URL completa (`https://.../convite/w_xxxx`) ou só o
+ * token (`w_xxxx`). Se `raw` for uma URL válida, pega o último segmento do
+ * path; caso contrário, assume que já é o token puro.
+ */
+function extractInviteToken(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    const segments = url.pathname.split('/').filter(Boolean);
+    return segments[segments.length - 1] ?? trimmed;
+  } catch {
+    return trimmed;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de membro da equipe
@@ -218,31 +237,37 @@ function QrScannerPane({ onDecoded, processing }: QrScannerPaneProps) {
 type AddMethod = 'link' | 'phone' | 'qr';
 
 interface AddWorkerModalProps {
-  companyId: string;
   onClose: () => void;
   onAdded: () => void;
   addWorker: (workerId: string, source: 'qr' | 'link' | 'phone') => Promise<boolean>;
 }
 
-function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerModalProps) {
-  const [method, setMethod] = useState<AddMethod>('link');
+function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
+  const [method, setMethod] = useState<AddMethod>('qr');
   const [phone, setPhone] = useState('');
   const [workerId, setWorkerId] = useState('');
+  const [linkInput, setLinkInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [qrProcessing, setQrProcessing] = useState(false);
   const qrLockRef = useRef(false);
   const { addToast } = useToast();
 
-  const { url: inviteUrl } = TeamConnectionService.generateInviteToken(companyId);
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // fallback: selecionar o texto
+  // A empresa adiciona SEMPRE pelo perfil do freela (QR/Worki ID/link DO
+  // freela) — nunca mandando o próprio link da empresa (esse é usado para a
+  // empresa SER encontrada/adicionada, não para adicionar alguém).
+  const handleLinkSubmit = async () => {
+    const token = extractInviteToken(linkInput);
+    const targetWorkerId = TeamConnectionService.resolveWorkerInviteToken(token);
+    if (!targetWorkerId) {
+      addToast('Link inválido. Peça ao freela o link de perfil dele (Perfil → "Copiar meu link").', 'error');
+      return;
+    }
+    setLoading(true);
+    const ok = await addWorker(targetWorkerId, 'link');
+    setLoading(false);
+    if (ok) {
+      onAdded();
+      onClose();
     }
   };
 
@@ -291,19 +316,22 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
     >
       <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-2xl font-black uppercase tracking-tight">Adicionar Freela</h2>
           <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
             <X size={20} />
           </button>
         </div>
+        <p className="text-sm font-bold text-gray-500 mb-6">
+          Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou.
+        </p>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b-2 border-gray-200 pb-1">
           {([
-            { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
             { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
-            { id: 'phone' as AddMethod, icon: Phone, label: 'Telefone' },
+            { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
+            { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
           ] as const).map((tab) => (
             <button
               key={tab.id}
@@ -323,17 +351,29 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
         {method === 'link' && (
           <div className="space-y-4">
             <p className="text-sm font-bold text-gray-600">
-              Compartilhe este link com o freela. Ele abrirá o Worki e aceitará o convite de entrada no seu elenco.
+              Cole o <span className="font-black">link de perfil</span> que o freela te enviou
+              (ele encontra em Perfil → "Copiar meu link").
             </p>
-            <div className="bg-gray-50 border-2 border-black rounded-xl p-4 flex items-center gap-3 font-mono text-xs break-all text-gray-700">
-              <span className="flex-1">{inviteUrl}</span>
+            <div className="space-y-2">
+              <label htmlFor="worker-link-input" className="text-xs font-bold uppercase tracking-wide">
+                Link de perfil do freela
+              </label>
+              <input
+                id="worker-link-input"
+                type="text"
+                value={linkInput}
+                onChange={(e) => setLinkInput(e.target.value)}
+                placeholder="Cole aqui o link enviado pelo freela"
+                className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
+              />
             </div>
             <button
-              onClick={handleCopyLink}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors"
+              onClick={handleLinkSubmit}
+              disabled={loading || !linkInput.trim()}
+              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {copied ? <Check size={18} /> : <Copy size={18} />}
-              {copied ? 'Copiado!' : 'Copiar Link'}
+              {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
+              {loading ? 'Adicionando...' : 'Adicionar pelo Link'}
             </button>
             <p className="text-xs text-gray-400 text-center">
               O freela aparecerá em "Aguardando" até aceitar o convite.
@@ -396,7 +436,7 @@ function AddWorkerModal({ companyId, onClose, onAdded, addWorker }: AddWorkerMod
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, companyId, addWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, addWorker, refresh } = useCompanyTeam();
   const [showAddModal, setShowAddModal] = useState(false);
 
   if (loading) {
@@ -468,7 +508,8 @@ export default function CompanyTeam() {
           <Users size={48} className="mx-auto mb-4 text-gray-300" />
           <h3 className="text-xl font-black uppercase mb-2">Elenco vazio</h3>
           <p className="text-gray-500 font-bold mb-6 max-w-sm mx-auto">
-            Adicione freelas via link de convite, QR de identidade ou Worki ID. Eles aparecerão aqui após aceitarem.
+            Adicione freelas pelo QR de identidade, Worki ID ou pelo link de perfil que eles te enviarem.
+            Eles aparecerão aqui após aceitarem.
           </p>
           <button
             onClick={() => setShowAddModal(true)}
@@ -482,7 +523,6 @@ export default function CompanyTeam() {
       {/* Modal Adicionar */}
       {showAddModal && (
         <AddWorkerModal
-          companyId={companyId}
           onClose={() => setShowAddModal(false)}
           onAdded={refresh}
           addWorker={addWorker}

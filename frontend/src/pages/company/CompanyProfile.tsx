@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
+import { TeamConnectionService } from '../../services/teamConnectionService';
 
 interface Company {
     name: string;
@@ -33,6 +34,10 @@ export default function CompanyProfile() {
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
+    // "Meu link de perfil" — a EMPRESA compartilha o PRÓPRIO link (nunca o do
+    // freela) para ser encontrada/adicionada por quem abrir (InviteAccept →
+    // addToTeamByToken). Espelha o "meu link" do worker em Profile.tsx.
+    const [linkCopied, setLinkCopied] = useState(false);
     const [company, setCompany] = useState<Company>({
         name: '',
         industry: '',
@@ -219,6 +224,19 @@ export default function CompanyProfile() {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setCompany({ ...company, [e.target.name]: e.target.value });
     };
+
+    const handleCopyMyLink = useCallback(async () => {
+        if (!userId) return;
+        const { url } = TeamConnectionService.generateInviteToken(userId);
+        try {
+            await navigator.clipboard.writeText(url);
+            setLinkCopied(true);
+            addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
+            setTimeout(() => setLinkCopied(false), 2500);
+        } catch {
+            addToast('Não foi possível copiar o link.', 'error');
+        }
+    }, [userId, addToast]);
 
     // R3/R4: logout acessível no mobile (via item "Perfil" do BottomNav) — fonte única
     // AuthContext.signOut, com try/catch + toast de erro + estado de loading (A3/A4).
@@ -627,6 +645,26 @@ export default function CompanyProfile() {
                 >
                     {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
                     Alterar Senha
+                </button>
+            </div>
+
+            {/* Meu link de perfil — a empresa compartilha o PRÓPRIO link para ser
+                adicionada/conectada por quem abrir (nunca manda o link do freela). */}
+            <div className="mt-8 bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-xl">
+                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <Link2 size={20} /> Meu Link de Elenco
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
+                    para o seu elenco sem precisar de QR ou Worki ID.
+                </p>
+                <button
+                    onClick={handleCopyMyLink}
+                    disabled={!userId}
+                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                    {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
                 </button>
             </div>
 
