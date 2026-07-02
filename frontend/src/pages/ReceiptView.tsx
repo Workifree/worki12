@@ -50,13 +50,16 @@ export default function ReceiptView() {
     }, [jobId]);
 
     const fetchReceipt = async () => {
+        // G3: guarda de id falsy — evita `shift_payments?job_id=eq.null` mesmo se essa função
+        // for chamada de outro lugar além do useEffect que já checa `if (jobId)`.
+        if (!jobId) { setLoading(false); return; }
         setLoading(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { navigate('/login'); return; }
             setCurrentUserId(user.id);
 
-            const data = await PaymentRecordService.getReceipt(jobId as string);
+            const data = await PaymentRecordService.getReceipt(jobId);
             setReceipt(data);
         } catch (error) {
             logError('ReceiptView: fetchReceipt', error);

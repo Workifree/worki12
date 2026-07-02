@@ -62,6 +62,9 @@ export default function CompanyJobDetails() {
     }, [id]);
 
     const fetchJobDetails = async () => {
+        // G3: guarda de id falsy — evita `jobs?id=eq.null`/`applications?job_id=eq.null`
+        // mesmo se essa função for chamada de outro lugar além do useEffect que já checa `if (id)`.
+        if (!id) { navigate('/company/jobs'); return; }
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { navigate('/login'); return; }

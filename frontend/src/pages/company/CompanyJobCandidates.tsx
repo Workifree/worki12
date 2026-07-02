@@ -90,6 +90,10 @@ export default function CompanyJobCandidates() {
     }, [id]);
 
     const fetchCandidates = async () => {
+        // G3: guarda de id falsy — o useEffect já checa `if (id)` antes de chamar,
+        // mas repetimos aqui pra nunca consultar `jobs?id=eq.null`/`applications?job_id=eq.null`
+        // mesmo se essa função for chamada de outro lugar (ex.: `fetchCandidates()` após ações).
+        if (!id) { navigate('/company/jobs'); return; }
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { navigate('/login'); return; }
@@ -136,7 +140,7 @@ export default function CompanyJobCandidates() {
             setEscrowKindMap(kindMap);
 
             // Modo A: existe registro de pagamento externo já feito para este turno?
-            const payment = await PaymentRecordService.getPaymentByJob(id as string);
+            const payment = await PaymentRecordService.getPaymentByJob(id);
             setShiftPayment(payment);
         } catch (error) {
             logError('CompanyJobCandidates', error);
