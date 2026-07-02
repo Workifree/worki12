@@ -33,6 +33,26 @@ export type AuthorizePaymentOutcome =
   | { kind: 'card_declined'; errorMsg: string };
 
 // ---------------------------------------------------------------------------
+// Feature flag: pré-autorização postpago (Slice 2 / modo C — opt-in)
+// ---------------------------------------------------------------------------
+
+/**
+ * No piloto (ADR-20260630-pagamento-opcional-piloto) o modo padrão é (A) — pagamento externo
+ * registrado, SEM escrow/cartão. O caminho postpago (modo C, hold via `asaas-authorize-payment`)
+ * é opt-in / semente de expansão, não o trilho padrão.
+ *
+ * Por que uma flag e não uma checagem de "a empresa tem cartão on-file?": quem dispara este
+ * hold é o WORKER (ao aceitar o convite) e a RLS de `payment_methods` restringe SELECT ao owner
+ * da empresa (Article 4/8 — ver `20260622000600_payment_methods.sql`), então o client do worker
+ * nunca teria como saber, sem uma mudança de backend, se a empresa aderiu ao modo C.
+ *
+ * Mantemos o disparo desligado por flag para o piloto: evita a chamada órfã (e o erro de CORS
+ * no console) no modo A, sem remover o suporte postpago. Reversível: virar `true` (ou substituir
+ * por uma checagem real assim que existir um mecanismo seguro) quando o modo C for reaberto.
+ */
+const POSTPAY_AUTHORIZE_ENABLED = false;
+
+// ---------------------------------------------------------------------------
 // Helper interno: disparar pré-autorização postpago (best-effort, não bloqueia o aceite)
 // ---------------------------------------------------------------------------
 
@@ -410,7 +430,9 @@ export const ShiftInviteService = {
       //    Modo 'authorize': cria hold no cartão da empresa. Modo 'charge_on_demand': no-op aqui.
       //    A captura (ou cobrança direta) ocorre na conclusão via asaas-capture-payment.
       //    Em card_declined, dispatchAuthorizePayment já envia notificação à empresa.
-      if (response === 'accepted') {
+      //    Desligado no piloto (modo A — ver POSTPAY_AUTHORIZE_ENABLED): não dispara chamada
+      //    ao caminho postpago, evitando o erro de CORS órfão no console do worker.
+      if (response === 'accepted' && POSTPAY_AUTHORIZE_ENABLED) {
         await dispatchAuthorizePayment(current.job_id, applicationId, companyOwnerId ?? '');
       }
 
@@ -501,6 +523,10 @@ export const ShiftInviteService = {
    * Para o operador acompanhar respostas.
    */
   async listInvitesByJob(jobId: string): Promise<Application[]> {
+    // Guarda: sem jobId (ex.: turno ainda não criado/persistido), não há o que consultar.
+    // Evita `GET /applications?...&job_id=eq.&...` (400 — filtro vazio é inválido no PostgREST).
+    if (!jobId) return [];
+
     try {
       const { data, error } = await supabase
         .from('applications')

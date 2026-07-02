@@ -126,6 +126,14 @@ export function useCompanyInvites(jobId: string): UseCompanyInvitesResult {
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
+    // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
+    // (`job_id=eq.` vazio é filtro inválido no PostgREST).
+    if (!jobId) {
+      setInvites([]);
+      setLoading(false);
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -142,7 +150,17 @@ export function useCompanyInvites(jobId: string): UseCompanyInvitesResult {
 
   useEffect(() => {
     let active = true;
+
     void (async () => {
+      // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
+      // (`job_id=eq.` vazio é filtro inválido no PostgREST).
+      if (!jobId) {
+        if (!active) return;
+        setInvites([]);
+        setLoading(false);
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();

@@ -17,6 +17,23 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
+/**
+ * Formata uma data "date-only" (ex.: `job.start_date`, ou `payment.paid_at` quando gravado
+ * a partir de um `<input type="date">` — ver CompanyJobCandidates `paymentPaidAt`) como data
+ * LOCAL, sem shift de fuso.
+ *
+ * `new Date("YYYY-MM-DD")` é interpretado pelo JS como meia-noite UTC; `date-fns format`
+ * formata em fuso local. Em BRT (UTC-3) isso recua a data em 1 dia (ex.: 01/07 vira 30/06).
+ * Mesmo padrão já usado em `components/JobCard.tsx` (fix do off-by-one em `start_date`).
+ * Só ajusta a EXIBIÇÃO — não altera como o dado é gravado.
+ */
+function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
+    const dateStr = isoOrDateOnly.split('T')[0];
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return format(date, pattern, { locale: ptBR });
+}
+
 export default function ReceiptView() {
     const { jobId } = useParams<{ jobId: string }>();
     const navigate = useNavigate();
@@ -149,7 +166,7 @@ export default function ReceiptView() {
                         {job?.start_date && (
                             <span className="flex items-center gap-1">
                                 <Clock size={12} />
-                                {format(new Date(job.start_date), "dd/MM/yyyy", { locale: ptBR })}
+                                {formatDateOnly(job.start_date, "dd/MM/yyyy")}
                                 {job.work_start_time && ` • ${job.work_start_time}`}
                                 {job.work_end_time && ` – ${job.work_end_time}`}
                             </span>
@@ -173,7 +190,7 @@ export default function ReceiptView() {
                     </div>
                     <div className="border-2 border-black rounded-xl p-4">
                         <span className="block text-xs font-black uppercase text-gray-400 mb-1">Data do pagamento</span>
-                        <p className="font-bold text-lg">{format(new Date(payment.paid_at), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                        <p className="font-bold text-lg">{formatDateOnly(payment.paid_at, 'dd/MM/yyyy')}</p>
                     </div>
                 </div>
 
