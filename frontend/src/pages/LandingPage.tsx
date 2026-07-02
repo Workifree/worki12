@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, Shield, Zap, Users, CreditCard, Clock } from 'lucide-react'
+import { Shield, Zap, Users, UserPlus, CreditCard, Clock } from 'lucide-react'
 import PageMeta from '../components/PageMeta'
 
 export default function LandingPage() {
@@ -8,8 +8,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#F4F4F0]">
       <PageMeta
-        title="Sobre a Worki - Marketplace de Freelancers"
-        description="Worki conecta empresas a trabalhadores freelancers. Encontre talentos ou oportunidades de trabalho na sua região. Pagamento seguro via PIX."
+        title="Sobre a Worki - Confiança e Pagamento para Freelancers"
+        description="Worki é a camada de confiança e pagamento pra empresa e freela que já trabalham juntos. Monte seu elenco, convide para turnos, pague e registre tudo em um só lugar."
       />
 
       {/* Navigation Bar */}
@@ -33,12 +33,12 @@ export default function LandingPage() {
       <section className="relative overflow-hidden px-4 py-20 md:py-32">
         <div className="max-w-6xl mx-auto text-center">
           <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter mb-6">
-            Encontre o profissional ideal ou o trabalho perfeito
+            A camada de confiança e pagamento pra quem já trabalha junto
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-12 font-medium">
-            O Worki é o marketplace que conecta empresas a freelancers qualificados.
-            Contrate talentos avaliados ou encontre oportunidades de trabalho na sua região,
-            com pagamento seguro via PIX e garantia de entrega.
+            Empresa: centralize seu elenco de freelas de confiança — contrate, pague e registre tudo
+            num lugar só, sem virar vínculo e sem bagunça de WhatsApp. Freela: construa sua carteira de
+            trabalho portátil — histórico, avaliação e recebimento que são seus, onde você for.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
@@ -67,33 +67,33 @@ export default function LandingPage() {
             {[
               {
                 icon: <Shield className="w-10 h-10 text-primary" />,
-                title: 'Pagamento Garantido',
-                description: 'Sistema de escrow protege seu dinheiro. O pagamento só é liberado quando o trabalho é concluído e aprovado pela empresa. Sem risco de calote.'
+                title: 'Sem Calote, Sem Sumiço',
+                description: 'Cada turno vira recibo e histórico registrado. Empresa tem comprovante do pagamento, freela tem prova do trabalho feito. Confiança dos dois lados.'
               },
               {
                 icon: <Zap className="w-10 h-10 text-blue-600" />,
-                title: 'PIX Instantâneo',
-                description: 'Receba seus pagamentos via PIX diretamente na sua conta. Sem espera de dias úteis, sem intermediários bancários. Seu dinheiro na hora.'
+                title: 'PIX Quando Quiser',
+                description: 'Pague direto ao freela ou use o Worki pra registrar e distribuir. Sem espera de dias úteis, sem intermediário — do jeito que fizer sentido pra vocês.'
               },
               {
                 icon: <Users className="w-10 h-10 text-primary" />,
-                title: 'Profissionais Avaliados',
-                description: 'Sistema de avaliação com estrelas e reviews detalhados. Empresas contratam com confiança, profissionais constroem reputação comprovada.'
+                title: 'Seu Elenco de Confiança',
+                description: 'Monte a lista dos freelas que você já testou e confia. Chame só quem já provou que entrega — sem depender de estranho de plataforma.'
               },
               {
-                icon: <Briefcase className="w-10 h-10 text-blue-600" />,
-                title: 'Vagas na Sua Região',
-                description: 'Encontre oportunidades de trabalho freelancer perto de você. Filtre por cidade, modalidade e faixa de orçamento para achar a vaga ideal.'
+                icon: <UserPlus className="w-10 h-10 text-blue-600" />,
+                title: 'Convite em Segundos',
+                description: 'Convide freelas por link ou telefone. Depois de aceitar, ele fica no seu elenco pra sempre — sem renegociar tudo de novo a cada turno.'
               },
               {
                 icon: <CreditCard className="w-10 h-10 text-primary" />,
-                title: 'Taxa Justa e Transparente',
-                description: 'Taxa de servico competitiva e transparente. Sem mensalidades, sem cobranças escondidas. Empresas pagam taxas no deposito e contratam sem custos extras. Workers pagam apenas no saque.'
+                title: 'Sem Mensalidade',
+                description: 'Usar o Worki pra organizar sua operação é gratuito. Sem taxa escondida, sem letra miúda — o valor é centralizar contratação, pagamento e registro.'
               },
               {
                 icon: <Clock className="w-10 h-10 text-blue-600" />,
-                title: 'Controle Total',
-                description: 'Check-in e check-out digital para controle de horas. Dashboard completo com histórico de trabalhos, ganhos e analytics em tempo real.'
+                title: 'Check-in e Check-out',
+                description: 'Controle de horas simples no turno. Histórico completo de quem trabalhou, quando e quanto recebeu, num único lugar.'
               },
             ].map((feature, i) => (
               <div
@@ -116,19 +116,19 @@ export default function LandingPage() {
             Como funciona
           </h2>
 
-          {/* Para Profissionais */}
+          {/* Para Empresas */}
           <div className="mb-16">
-            <h3 className="text-2xl font-black uppercase tracking-tight text-primary mb-8 text-center">
-              Para Profissionais
+            <h3 className="text-2xl font-black uppercase tracking-tight text-blue-600 mb-8 text-center">
+              Para Empresas
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
-                { step: '1', title: 'Cadastre-se', desc: 'Crie seu perfil gratuito em minutos. Adicione suas habilidades, experiência e região de atuação para ser encontrado por empresas.' },
-                { step: '2', title: 'Candidate-se', desc: 'Navegue pelas vagas disponíveis e candidate-se às que combinam com seu perfil. Receba notificações quando for selecionado.' },
-                { step: '3', title: 'Receba via PIX', desc: 'Complete o trabalho, receba a avaliação da empresa e saque seus ganhos instantaneamente via PIX. Simples assim.' },
+                { step: '1', title: 'Monte seu Elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
+                { step: '2', title: 'Crie o Turno e Convide', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
+                { step: '3', title: 'Pague e Registre', desc: 'Confirme o turno, pague como preferir (direto ou pelo Worki) e receba o recibo automático pra seu controle.' },
               ].map((item) => (
                 <div key={item.step} className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-primary text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="w-16 h-16 bg-blue-600 text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     {item.step}
                   </div>
                   <h4 className="text-lg font-black uppercase tracking-tight mb-2">{item.title}</h4>
@@ -138,19 +138,19 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Para Empresas */}
+          {/* Para Freelas */}
           <div>
-            <h3 className="text-2xl font-black uppercase tracking-tight text-blue-600 mb-8 text-center">
-              Para Empresas
+            <h3 className="text-2xl font-black uppercase tracking-tight text-primary mb-8 text-center">
+              Para Freelas
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
-                { step: '1', title: 'Publique a Vaga', desc: 'Descreva o trabalho que precisa, defina o orçamento e a localização. Em minutos sua vaga estará visível para milhares de profissionais.' },
-                { step: '2', title: 'Escolha o Melhor', desc: 'Receba candidaturas, avalie perfis com ratings e reviews, e contrate o profissional ideal. O pagamento fica em escrow seguro.' },
-                { step: '3', title: 'Aprove e Pague', desc: 'Quando o trabalho estiver concluído, aprove a entrega e o pagamento é liberado automaticamente ao profissional via PIX.' },
+                { step: '1', title: 'Aceite o Convite', desc: 'Receba o convite de empresas que já confiam em você e aceite em um toque. Sem cadastro complicado.' },
+                { step: '2', title: 'Trabalhe', desc: 'Faça check-in e check-out no turno combinado. Simples, sem burocracia extra.' },
+                { step: '3', title: 'Construa sua Carteira', desc: 'Cada turno vira histórico, avaliação e recibo — sua carteira de trabalho portátil, que ninguém tira.' },
               ].map((item) => (
                 <div key={item.step} className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-blue-600 text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="w-16 h-16 bg-primary text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     {item.step}
                   </div>
                   <h4 className="text-lg font-black uppercase tracking-tight mb-2">{item.title}</h4>
@@ -169,8 +169,8 @@ export default function LandingPage() {
             Comece agora. É grátis.
           </h2>
           <p className="text-xl text-gray-300 mb-12 font-medium">
-            Junte-se a milhares de profissionais e empresas que já usam o Worki
-            para conectar talentos a oportunidades. Cadastro gratuito, sem compromisso.
+            Centralize sua operação de freelancer — contrate, pague e registre em um só lugar.
+            Cadastro gratuito, sem compromisso.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
@@ -191,7 +191,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="px-4 py-8 bg-gray-100 text-center text-sm text-gray-500 font-medium">
-        <p>&copy; {new Date().getFullYear()} Worki — Marketplace de Freelancers. Todos os direitos reservados.</p>
+        <p>&copy; {new Date().getFullYear()} Worki — Confiança e pagamento para freelancers e empresas. Todos os direitos reservados.</p>
         <div className="flex gap-4 justify-center mt-4">
           <button onClick={() => navigate('/termos')} className="hover:text-black transition-colors">Termos de Uso</button>
           <button onClick={() => navigate('/privacidade')} className="hover:text-black transition-colors">Política de Privacidade</button>
