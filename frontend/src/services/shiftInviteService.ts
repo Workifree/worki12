@@ -522,9 +522,11 @@ export const ShiftInviteService = {
    * Lista convites enviados por uma empresa para um job específico.
    * Para o operador acompanhar respostas.
    */
-  async listInvitesByJob(jobId: string): Promise<Application[]> {
-    // Guarda: sem jobId (ex.: turno ainda não criado/persistido), não há o que consultar.
-    // Evita `GET /applications?...&job_id=eq.&...` (400 — filtro vazio é inválido no PostgREST).
+  async listInvitesByJob(jobId: string | null | undefined): Promise<Application[]> {
+    // Guarda: sem jobId (ex.: turno ainda não criado/persistido, ou id ainda não resolvido pelo
+    // router), não há o que consultar. `!jobId` cobre '', null E undefined — evita tanto
+    // `GET /applications?...&job_id=eq.&...` (400, filtro vazio) quanto `...&job_id=eq.null`
+    // (400/dado incorreto, caso algum chamador passe null/undefined em vez de coalescer para '').
     if (!jobId) return [];
 
     try {

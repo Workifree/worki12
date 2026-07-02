@@ -118,7 +118,7 @@ export interface UseCompanyInvitesResult {
   refresh: () => void;
 }
 
-export function useCompanyInvites(jobId: string): UseCompanyInvitesResult {
+export function useCompanyInvites(jobId: string | null | undefined): UseCompanyInvitesResult {
   const [invites, setInvites] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitingWorkerId, setInvitingWorkerId] = useState<string | null>(null);
@@ -185,6 +185,11 @@ export function useCompanyInvites(jobId: string): UseCompanyInvitesResult {
       workerId: string,
       opts: { expiresInHours?: number; message?: string } = {},
     ): Promise<boolean> => {
+      // Guarda: sem jobId (turno ainda não criado/persistido) não há para onde convidar.
+      if (!jobId) {
+        addToast('Turno ainda não foi criado. Tente novamente em instantes.', 'error');
+        return false;
+      }
       setInvitingWorkerId(workerId);
       const result = await ShiftInviteService.inviteWorkerToShift(jobId, workerId, opts);
       setInvitingWorkerId(null);
