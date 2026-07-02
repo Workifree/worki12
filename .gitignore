@@ -22,3 +22,4 @@ frontend/playwright-report/
 
 # Gemini API key for harness frontend-builder (do not commit)
 scripts/.gemini-key
+.env*

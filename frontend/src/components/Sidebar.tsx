@@ -1,6 +1,9 @@
-import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox } from 'lucide-react';
+import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
 import { useEffect, useState } from 'react';
 
@@ -21,10 +24,24 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
 
     const [workerData, setWorkerData] = useState<WorkerData | null>(null);
     const navigate = useNavigate();
+    const { signOut } = useAuth();
+    const { addToast } = useToast();
+    const [loggingOut, setLoggingOut] = useState(false);
 
+    // R4: fonte única de verdade (AuthContext.signOut) + try/catch + toast de erro +
+    // estado de loading/disabled — nunca falha em silêncio.
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        navigate('/login');
+        if (loggingOut) return;
+        setLoggingOut(true);
+        try {
+            await signOut();
+            navigate('/login');
+        } catch (error) {
+            logError('Sidebar.handleLogout', error);
+            addToast('Não foi possível sair. Tente novamente.', 'error');
+        } finally {
+            setLoggingOut(false);
+        }
     };
 
     useEffect(() => {
@@ -143,9 +160,11 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
 
                 <button
                     onClick={handleLogout}
-                    className="flex items-center justify-center gap-2 w-full py-2 rounded-xl font-bold uppercase text-xs text-red-600 hover:bg-red-50 border-2 border-transparent hover:border-red-200 transition-all"
+                    disabled={loggingOut}
+                    className="flex items-center justify-center gap-2 w-full py-2 rounded-xl font-bold uppercase text-xs text-red-600 hover:bg-red-50 border-2 border-transparent hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <LogOut size={16} /> Sair
+                    {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+                    {loggingOut ? 'Saindo...' : 'Sair'}
                 </button>
             </div>
         </aside>

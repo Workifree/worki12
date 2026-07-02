@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getPasswordStrength } from '../lib/validation';
+import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 
@@ -22,9 +23,18 @@ function resolvePendingInviteRedirect(explicitRedirect: string | null): string |
     return null;
 }
 
+/** Rótulo humano do papel da conta ('work' | 'hire') para mensagens de erro/aviso. */
+function roleLabel(userType: string | undefined | null): string {
+    return userType === 'hire' ? 'empresa' : 'freelancer';
+}
+
 export default function Login() {
     const [searchParams] = useSearchParams();
-    const type = searchParams.get('type') || 'work'; // 'work' or 'hire'
+    // 'explicitType' só existe quando o usuário chegou por um link que declara a intenção
+    // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
+    // 'type' — nesse caso não há intenção explícita de papel a comparar (R1).
+    const explicitType = searchParams.get('type');
+    const type = explicitType || 'work'; // 'work' or 'hire' — usado só para tema visual
     const reason = searchParams.get('reason');
     // Preserva o destino pretendido (ex.: /convite/<token>) quando o usuário chega ao
     // login vindo de um link que exigia sessão — ver InviteAccept.tsx (item 11 do GTM).
@@ -37,14 +47,39 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    // R1: quando a conta autenticada tem um papel diferente do 'type' que trouxe o usuário
+    // até aqui, guardamos o papel REAL da conta e mostramos um aviso em vez de redirecionar
+    // silenciosamente para o dashboard errado.
+    const [roleMismatch, setRoleMismatch] = useState<{ actualType: 'work' | 'hire' } | null>(null);
 
     const isHire = type === 'hire';
+
+    const handleGoToCorrectDashboard = () => {
+        if (!roleMismatch) return;
+        navigate(roleMismatch.actualType === 'hire' ? '/company/dashboard' : '/dashboard');
+    };
+
+    const handleUseAnotherEmail = async () => {
+        // A conta logada não é a que o usuário queria acessar — encerra a sessão pra
+        // permitir tentar de novo com outro e-mail sem ficar "preso" no papel errado.
+        try {
+            await supabase.auth.signOut();
+        } catch (err) {
+            // Best-effort: mesmo se o signOut falhar, seguimos limpando o formulário local.
+            logError('Login.handleUseAnotherEmail', err);
+        }
+        setRoleMismatch(null);
+        setEmail('');
+        setPassword('');
+        setError(null);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
         setSuccessMessage(null);
+        setRoleMismatch(null);
 
         try {
             if (isSignUp) {
@@ -94,17 +129,23 @@ export default function Login() {
 
                 if (data.user) {
                     const pendingRedirect = resolvePendingInviteRedirect(redirectTo);
+                    const userType = data.user.user_metadata?.user_type;
+
                     if (pendingRedirect) {
                         navigate(pendingRedirect);
+                    } else if (
+                        explicitType &&
+                        (userType === 'work' || userType === 'hire') &&
+                        userType !== explicitType
+                    ) {
+                        // R1: o e-mail pertence a uma conta do OUTRO papel — nunca redirecionar
+                        // silenciosamente. Mostra aviso claro com ação pra ir ao dashboard
+                        // correto ou usar outro e-mail (A1).
+                        setRoleMismatch({ actualType: userType });
+                    } else if (userType === 'hire') {
+                        navigate('/company/dashboard');
                     } else {
-                        // Check user metadata for correct redirection
-                        const userType = data.user.user_metadata?.user_type;
-
-                        if (userType === 'hire') {
-                            navigate('/company/dashboard');
-                        } else {
-                            navigate('/dashboard');
-                        }
+                        navigate('/dashboard');
                     }
                 }
             }
@@ -115,7 +156,12 @@ export default function Login() {
             } else if (msg.includes('Email not confirmed')) {
                 setError('Por favor, verifique seu email antes de fazer login.');
             } else if (msg.includes('User already registered')) {
-                setError('Este email ja esta cadastrado. Faca login.');
+                // R2: mensagem específica (não o genérico "Erro ao fazer login") — a causa mais
+                // comum desse erro no cadastro é o e-mail já ter conta com o OUTRO papel (A2).
+                const oppositeType = type === 'hire' ? 'work' : 'hire';
+                setError(
+                    `Este e-mail já tem conta cadastrada como ${roleLabel(oppositeType)}. Entre por lá ou use outro e-mail.`
+                );
             } else if (msg.includes('rate_limit') || msg.includes('429') || msg.includes('over_email_send_rate_limit') || (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 429)) {
                 setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
             } else {
@@ -171,6 +217,31 @@ export default function Login() {
                     {error && (
                         <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-xl text-sm font-medium">
                             {error}
+                        </div>
+                    )}
+
+                    {roleMismatch && (
+                        <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl text-sm font-medium space-y-3">
+                            <p>
+                                Este e-mail já está cadastrado como <strong className="font-black">{roleLabel(roleMismatch.actualType)}</strong>.
+                                {' '}Não é possível entrar como {roleLabel(explicitType)} com esta conta.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleGoToCorrectDashboard}
+                                    className="flex-1 bg-black text-white font-black uppercase text-xs py-2.5 rounded-lg hover:bg-primary transition-colors"
+                                >
+                                    Ir para o dashboard de {roleLabel(roleMismatch.actualType)}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleUseAnotherEmail}
+                                    className="flex-1 border-2 border-amber-600 text-amber-900 font-black uppercase text-xs py-2.5 rounded-lg hover:bg-amber-100 transition-colors"
+                                >
+                                    Usar outro e-mail
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -255,6 +326,7 @@ export default function Login() {
                                 setIsSignUp(!isSignUp);
                                 setError(null);
                                 setSuccessMessage(null);
+                                setRoleMismatch(null);
                             }}
                             className="underline decoration-2 hover:text-primary transition-colors font-bold"
                         >

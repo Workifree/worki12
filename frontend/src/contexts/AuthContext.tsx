@@ -45,7 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const signOut = async () => {
-        await supabase.auth.signOut();
+        // R4: propaga o erro pro chamador (Sidebar/Profile/CompanyProfile) tratar com
+        // toast + estado de loading — nunca falha em silêncio.
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
         setUser(null);
     };
 

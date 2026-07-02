@@ -1,8 +1,9 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
@@ -43,10 +44,12 @@ interface FormData {
 
 export default function Profile() {
     const navigate = useNavigate();
+    const { signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<WorkerProfile | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const coverInputRef = useRef<HTMLInputElement>(null);
     const { addToast } = useToast();
@@ -281,6 +284,22 @@ export default function Profile() {
         addToast('Senha alterada com sucesso.', 'success');
         setNewPassword('');
         setConfirmPassword('');
+    };
+
+    // R3/R4: logout acessível no mobile (via item "Perfil" do BottomNav) — fonte única
+    // AuthContext.signOut, com try/catch + toast de erro + estado de loading (A3/A4).
+    const handleLogout = async () => {
+        if (loggingOut) return;
+        setLoggingOut(true);
+        try {
+            await signOut();
+            navigate('/login');
+        } catch (error) {
+            logError('Profile.handleLogout', error);
+            addToast('Não foi possível sair. Tente novamente.', 'error');
+        } finally {
+            setLoggingOut(false);
+        }
     };
 
     const handleDeleteAccount = async () => {
@@ -665,6 +684,22 @@ export default function Profile() {
                 >
                     {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
                     Alterar Senha
+                </button>
+            </div>
+
+            {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
+            <div className="border-t-2 border-gray-200 pt-8 mt-8">
+                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <LogOut size={20} /> Sessão
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
+                <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
+                    {loggingOut ? 'Saindo...' : 'Sair da conta'}
                 </button>
             </div>
 
