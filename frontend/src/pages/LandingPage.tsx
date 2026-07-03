@@ -8,8 +8,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#F4F4F0]">
       <PageMeta
-        title="Sobre a Worki - Confiança e Pagamento para Freelancers"
-        description="Worki é a camada de confiança e pagamento pra empresa e freela que já trabalham juntos. Monte seu elenco, convide para turnos, pague e registre tudo em um só lugar."
+        title="Confiança e registro para o trabalho freela"
+        description="Empresa organiza e registra sua equipe de freelas de confiança. Freela constrói uma carreira que é sua — histórico, avaliação e comprovante de renda. Sem vínculo, sem bagunça."
       />
 
       {/* Navigation Bar */}
@@ -33,12 +33,11 @@ export default function LandingPage() {
       <section className="relative overflow-hidden px-4 py-20 md:py-32">
         <div className="max-w-6xl mx-auto text-center">
           <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter mb-6">
-            A camada de confiança e pagamento pra quem já trabalha junto
+            O trabalho freela, com a segurança que faltava
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-12 font-medium">
-            Empresa: centralize seu elenco de freelas de confiança — contrate, pague e registre tudo
-            num lugar só, sem virar vínculo e sem bagunça de WhatsApp. Freela: construa sua carteira de
-            trabalho portátil — histórico, avaliação e recebimento que são seus, onde você for.
+            A empresa organiza e registra sua equipe de freelas. O freela constrói uma carreira que é
+            sua. Sem vínculo, sem calote, sem bagunça.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
@@ -68,32 +67,32 @@ export default function LandingPage() {
               {
                 icon: <Shield className="w-10 h-10 text-primary" />,
                 title: 'Sem Calote, Sem Sumiço',
-                description: 'Cada turno vira recibo e histórico registrado. Empresa tem comprovante do pagamento, freela tem prova do trabalho feito. Confiança dos dois lados.'
+                description: 'Comprovante e histórico de cada turno registrado — você tem prova do pagamento e do trabalho feito, dos dois lados.'
               },
               {
                 icon: <Zap className="w-10 h-10 text-blue-600" />,
-                title: 'PIX Quando Quiser',
-                description: 'Pague direto ao freela ou use o Worki pra registrar e distribuir. Sem espera de dias úteis, sem intermediário — do jeito que fizer sentido pra vocês.'
+                title: 'Do Seu Jeito de Pagar',
+                description: 'PIX direto ao freela ou pelo Worki pra registrar tudo — você escolhe como pagar.'
               },
               {
                 icon: <Users className="w-10 h-10 text-primary" />,
                 title: 'Seu Elenco de Confiança',
-                description: 'Monte a lista dos freelas que você já testou e confia. Chame só quem já provou que entrega — sem depender de estranho de plataforma.'
+                description: 'Só quem você já conhece e testou — sem depender de estranho de plataforma.'
               },
               {
                 icon: <UserPlus className="w-10 h-10 text-blue-600" />,
                 title: 'Convite em Segundos',
-                description: 'Convide freelas por link ou telefone. Depois de aceitar, ele fica no seu elenco pra sempre — sem renegociar tudo de novo a cada turno.'
+                description: 'Chame o freela direto pro seu elenco — sem grupo de WhatsApp, sem renegociar tudo de novo.'
               },
               {
                 icon: <CreditCard className="w-10 h-10 text-primary" />,
                 title: 'Sem Mensalidade',
-                description: 'Usar o Worki pra organizar sua operação é gratuito. Sem taxa escondida, sem letra miúda — o valor é centralizar contratação, pagamento e registro.'
+                description: 'Comece de graça — organizar sua operação de freelas não custa nada.'
               },
               {
                 icon: <Clock className="w-10 h-10 text-blue-600" />,
-                title: 'Check-in e Check-out',
-                description: 'Controle de horas simples no turno. Histórico completo de quem trabalhou, quando e quanto recebeu, num único lugar.'
+                title: 'Comprovante Que É Seu',
+                description: 'Renda, avaliação e histórico portáteis — registrados a cada turno, que ninguém tira de você.'
               },
             ].map((feature, i) => (
               <div
@@ -124,7 +123,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
                 { step: '1', title: 'Monte seu Elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
-                { step: '2', title: 'Crie o Turno e Convide', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
+                { step: '2', title: 'Convide pra um Turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
                 { step: '3', title: 'Pague e Registre', desc: 'Confirme o turno, pague como preferir (direto ou pelo Worki) e receba o recibo automático pra seu controle.' },
               ].map((item) => (
                 <div key={item.step} className="flex flex-col items-center text-center">
@@ -147,7 +146,7 @@ export default function LandingPage() {
               {[
                 { step: '1', title: 'Aceite o Convite', desc: 'Receba o convite de empresas que já confiam em você e aceite em um toque. Sem cadastro complicado.' },
                 { step: '2', title: 'Trabalhe', desc: 'Faça check-in e check-out no turno combinado. Simples, sem burocracia extra.' },
-                { step: '3', title: 'Construa sua Carteira', desc: 'Cada turno vira histórico, avaliação e recibo — sua carteira de trabalho portátil, que ninguém tira.' },
+                { step: '3', title: 'Construa sua Reputação', desc: 'Cada turno vira histórico, avaliação e recibo — sua carteira de trabalho portátil, que ninguém tira.' },
               ].map((item) => (
                 <div key={item.step} className="flex flex-col items-center text-center">
                   <div className="w-16 h-16 bg-primary text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -166,10 +165,10 @@ export default function LandingPage() {
       <section className="px-4 py-16 md:py-24 bg-black text-white">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tighter mb-6">
-            Comece agora. É grátis.
+            Comece agora — leva menos de 2 minutos
           </h2>
           <p className="text-xl text-gray-300 mb-12 font-medium">
-            Centralize sua operação de freelancer — contrate, pague e registre em um só lugar.
+            A empresa organiza e registra sua equipe. O freela constrói uma carreira que é sua.
             Cadastro gratuito, sem compromisso.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -191,7 +190,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="px-4 py-8 bg-gray-100 text-center text-sm text-gray-500 font-medium">
-        <p>&copy; {new Date().getFullYear()} Worki — Confiança e pagamento para freelancers e empresas. Todos os direitos reservados.</p>
+        <p>&copy; {new Date().getFullYear()} Worki — Confiança e registro para o trabalho freela. Todos os direitos reservados.</p>
         <div className="flex gap-4 justify-center mt-4">
           <button onClick={() => navigate('/termos')} className="hover:text-black transition-colors">Termos de Uso</button>
           <button onClick={() => navigate('/privacidade')} className="hover:text-black transition-colors">Política de Privacidade</button>
