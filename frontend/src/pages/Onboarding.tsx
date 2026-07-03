@@ -45,12 +45,12 @@ export default function Onboarding() {
         {/* Left: Value Prop */}
         <div className="flex-1 space-y-8 max-w-xl">
           <h1 className="text-6xl md:text-8xl font-black leading-[0.9] tracking-tighter">
-            CONFIANÇA <br />
-            <span className="text-primary text-stroke-black">DE VERDADE.</span>
+            O JEITO CERTO DE TRABALHAR <br />
+            <span className="text-primary text-stroke-black">COM QUEM VOCÊ JÁ CONFIA.</span>
           </h1>
           <p className="text-xl font-medium text-gray-600 max-w-md border-l-4 border-primary pl-4">
-            A camada de confiança e pagamento entre empresas e freelas que já trabalham juntos.
-            Contrate, pague e registre tudo num só lugar — sem virar vínculo, sem bagunça de WhatsApp.
+            Empresa e freela que já trabalham juntos — agora com contrato, comprovante e reputação.
+            Sem virar vínculo, sem bagunça de WhatsApp.
           </p>
 
           <div className="flex items-center gap-2 text-sm font-bold text-gray-500">
@@ -68,13 +68,13 @@ export default function Onboarding() {
             className="group relative bg-white border-2 border-black rounded-2xl p-8 text-left transition-all hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(0,166,81,1)]"
           >
             <div className="absolute top-4 right-4 bg-primary text-white text-xs font-bold px-2 py-1 rounded-sm uppercase">
-              Para Freelas
+              Para Freelancers
             </div>
             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-white transition-colors border-2 border-black">
               <DollarSign size={24} strokeWidth={3} />
             </div>
             <h3 className="text-2xl font-black uppercase mb-1">Quero Trabalhar</h3>
-            <p className="text-gray-500 font-medium text-sm">Sua carteira de trabalho portátil: histórico, avaliação e recebimento — seus, em qualquer job.</p>
+            <p className="text-gray-500 font-medium text-sm">Seja dono do seu trabalho. Seu histórico, sua avaliação e seu comprovante de renda — que ninguém tira de você.</p>
             <ArrowRight className="absolute bottom-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
 
@@ -90,7 +90,7 @@ export default function Onboarding() {
               <Briefcase size={24} strokeWidth={3} />
             </div>
             <h3 className="text-2xl font-black uppercase mb-1">Quero Contratar</h3>
-            <p className="text-gray-400 font-medium text-sm">Centralize sua equipe de freelas de confiança: contrate, pague e registre tudo num só lugar.</p>
+            <p className="text-gray-400 font-medium text-sm">Monte seu elenco de freelas de confiança. Contrate direto, registre cada turno e controle o gasto — tudo num lugar só.</p>
             <ArrowRight className="absolute bottom-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
 
@@ -166,7 +166,7 @@ export default function Onboarding() {
                     <CalendarCheck size={18} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <p className="font-bold text-white">Confirme seus turnos</p>
+                    <p className="font-bold text-white">Trabalhe</p>
                     <p className="text-sm text-gray-400 font-medium">Faça check-in e checkout direto pelo app quando o turno acontecer.</p>
                   </div>
                 </li>
@@ -175,7 +175,7 @@ export default function Onboarding() {
                     <DollarSign size={18} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <p className="font-bold text-white">Construa seu histórico</p>
+                    <p className="font-bold text-white">Construa sua reputação</p>
                     <p className="text-sm text-gray-400 font-medium">Cada turno vira histórico, avaliação e recibo — sua carteira de trabalho.</p>
                   </div>
                 </li>
