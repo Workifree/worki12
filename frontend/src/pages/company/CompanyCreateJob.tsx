@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Globe, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -13,6 +14,7 @@ export default function CompanyCreateJob() {
     const { id } = useParams(); // Add useParams
     const isEditing = !!id;
     const { addToast } = useToast();
+    const queryClient = useQueryClient();
 
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -164,6 +166,10 @@ export default function CompanyCreateJob() {
             if (isEditing) {
                 const { error } = await supabase.from('jobs').update(payload).eq('id', id);
                 if (error) throw error;
+                // Invalida o cache do React Query (staleTime 5min) para o dashboard não
+                // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
+                await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
+                await queryClient.invalidateQueries({ queryKey: ['companyApplications'] });
                 addToast('Turno atualizado com sucesso!', 'success');
                 navigate('/company/dashboard');
             } else {
@@ -171,6 +177,8 @@ export default function CompanyCreateJob() {
                 const { data: newJob, error } = await supabase.from('jobs').insert(payload).select().single();
                 if (error) throw error;
 
+                // Novo turno deve aparecer imediatamente no dashboard (invalida cache).
+                await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
                 addToast('Turno criado! Convide um freela do seu elenco.', 'success');
                 setCreatedJobId(newJob.id);
                 setShowInvitePanel(true);

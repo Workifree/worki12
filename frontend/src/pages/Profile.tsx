@@ -121,6 +121,7 @@ export default function Profile() {
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [workerId, setWorkerId] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
+    const [idCopied, setIdCopied] = useState(false);
 
     const handleCopyMyLink = useCallback(async () => {
         if (!workerId) return;
@@ -132,6 +133,20 @@ export default function Profile() {
             setTimeout(() => setLinkCopied(false), 2500);
         } catch {
             addToast('Não foi possível copiar o link.', 'error');
+        }
+    }, [workerId, addToast]);
+
+    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar Freela → Worki ID".
+    // Distinto de handleCopyMyLink (que copia a URL do convite).
+    const handleCopyWorkiId = useCallback(async () => {
+        if (!workerId) return;
+        try {
+            await navigator.clipboard.writeText(workerId);
+            setIdCopied(true);
+            addToast('Worki ID copiado! Envie para a empresa te adicionar ao elenco.', 'success');
+            setTimeout(() => setIdCopied(false), 2500);
+        } catch {
+            addToast('Não foi possível copiar o Worki ID.', 'error');
         }
     }, [workerId, addToast]);
 
@@ -765,14 +780,21 @@ export default function Profile() {
                         <p className="font-mono text-xs font-bold text-gray-700 break-all">{workerId}</p>
                     </div>
                     <button
+                        onClick={handleCopyWorkiId}
+                        className="w-full mt-3 bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
+                    >
+                        {idCopied ? <Check size={18} /> : <Copy size={18} />}
+                        {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                    </button>
+                    <button
                         onClick={handleCopyMyLink}
-                        className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
+                        className="w-full mt-2 bg-white hover:bg-gray-50 text-black border-2 border-black px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
                     >
                         {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                         {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
                     </button>
                     <p className="text-xs text-gray-400 text-center mt-3 font-bold">
-                        Envie este link direto (WhatsApp, etc.) para uma empresa te adicionar ao elenco sem precisar do QR.
+                        Cole o <span className="font-black">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
                     </p>
                 </div>
             </div>

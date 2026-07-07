@@ -292,9 +292,24 @@ function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
   };
 
   const handlePhoneSubmit = async () => {
-    if (!workerId.trim()) return;
+    const raw = workerId.trim();
+    if (!raw) return;
+
+    // Tolerante ao erro comum: colar o LINK/token de perfil no campo do Worki ID.
+    // Se não for um UUID cru, tenta resolver como token de convite antes de desistir.
+    let target = raw;
+    if (!UUID_RE.test(raw)) {
+      const resolved = TeamConnectionService.resolveWorkerInviteToken(extractInviteToken(raw));
+      if (resolved) {
+        target = resolved;
+      } else {
+        addToast('Worki ID inválido. Cole o Worki ID do freela (Perfil → "Meu QR de Identidade" → "Copiar Worki ID") ou use a aba Link.', 'error');
+        return;
+      }
+    }
+
     setLoading(true);
-    const ok = await addWorker(workerId.trim(), 'phone');
+    const ok = await addWorker(target, 'phone');
     setLoading(false);
     if (ok) {
       onAdded();
