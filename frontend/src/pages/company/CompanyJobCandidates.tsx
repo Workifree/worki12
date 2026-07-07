@@ -160,12 +160,12 @@ export default function CompanyJobCandidates() {
             // reserva escrow atômico (RAISE EXCEPTION em Postgres se saldo insuficiente). A
             // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
             // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
-            addToast(error.message || 'Erro ao atualizar status do candidato.', 'error');
+            addToast(error.message || 'Erro ao atualizar status do freela.', 'error');
             return;
         }
 
         if (newStatus === 'hired') {
-            addToast('Candidato contratado! O job agora está em andamento.', 'success');
+            addToast('Freela contratado! O turno agora está em andamento.', 'success');
         }
         fetchCandidates();
     };
@@ -508,10 +508,10 @@ export default function CompanyJobCandidates() {
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
-                        <ArrowLeft size={16} strokeWidth={3} /> Voltar para Vagas
+                        <ArrowLeft size={16} strokeWidth={3} /> Voltar para Turnos
                     </button>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Candidatos</h1>
-                    <p className="text-gray-500 font-bold">{jobTitle} • {candidates.length} aplicações</p>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter">Freelas do Turno</h1>
+                    <p className="text-gray-500 font-bold">{jobTitle} • {candidates.length} freela{candidates.length !== 1 ? 's' : ''}</p>
                 </div>
             </div>
 
@@ -526,7 +526,7 @@ export default function CompanyJobCandidates() {
                 ) : candidates.length === 0 ? (
                     <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
                         <Users size={40} className="mx-auto mb-3 text-gray-300" />
-                        <p className="text-gray-500 text-lg font-bold">Nenhum freela atrelado a esta vaga.</p>
+                        <p className="text-gray-500 text-lg font-bold">Nenhum freela atrelado a este turno.</p>
                         <p className="text-gray-400 text-sm mt-2 mb-5">Convide um freela do seu elenco para começar.</p>
                         <button
                             onClick={() => void openInvitePicker()}
@@ -579,7 +579,7 @@ export default function CompanyJobCandidates() {
                                                 onClick={(e) => { e.stopPropagation(); handleChat(app); }}
                                                 className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors"
                                                 title="Chat"
-                                                aria-label="Abrir chat com candidato"
+                                                aria-label="Abrir chat com freela"
                                             >
                                                 <MessageSquare size={24} />
                                             </button>
@@ -589,7 +589,7 @@ export default function CompanyJobCandidates() {
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
                                                         className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
                                                         title="Descartar"
-                                                        aria-label="Descartar candidato"
+                                                        aria-label="Descartar freela"
                                                     >
                                                         <XCircle size={24} />
                                                     </button>
@@ -597,7 +597,7 @@ export default function CompanyJobCandidates() {
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'interview'); }}
                                                         className="p-2 hover:bg-green-50 text-gray-300 hover:text-green-600 rounded-lg transition-colors"
                                                         title="Aprovar para Entrevista"
-                                                        aria-label="Aprovar candidato para entrevista"
+                                                        aria-label="Aprovar freela para entrevista"
                                                     >
                                                         <CheckCircle size={24} />
                                                     </button>
@@ -780,7 +780,7 @@ export default function CompanyJobCandidates() {
                         <p className="text-sm font-bold text-gray-600 mb-5">
                             {reopenApp
                                 ? 'O convite anterior expirou sem resposta. O slot deste turno está livre — escolha outro freela da sua equipe.'
-                                : 'Escolha um freela do seu elenco para atrelar a esta vaga.'}
+                                : 'Escolha um freela do seu elenco para atrelar a este turno.'}
                         </p>
 
                         {reopenLoading && (

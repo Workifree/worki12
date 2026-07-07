@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Users, Briefcase, TrendingUp, Search, Filter, Bell, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Briefcase, TrendingUp, Search, Filter, Bell, AlertTriangle, RefreshCw, PlayCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useQuery } from '@tanstack/react-query';
@@ -65,27 +65,42 @@ export default function CompanyDashboard() {
         enabled: !!company
     });
 
+    // Turnos "em andamento" (freela contratado/atuando agora) — distinto de turnos só abertos.
+    const { data: inProgressCount = 0 } = useQuery({
+        queryKey: ['companyInProgress'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return 0;
+            const { data } = await supabase
+                .from('applications')
+                .select('job_id, jobs!inner(company_id)')
+                .eq('jobs.company_id', user.id)
+                .in('status', ['hired', 'in_progress']);
+            return new Set((data || []).map((r: { job_id: string }) => r.job_id)).size;
+        },
+        enabled: !!company
+    });
+
     // Derived State
     const companyName = company?.name || '';
     const loading = isLoadingCompany;
 
     const stats = {
         activeJobs: isErrorJobs ? null : jobs.filter(j => j.status === 'open').length,
-        totalCandidates: isErrorJobs ? null : jobs.reduce((acc: number, job: Record<string, unknown>) => acc + ((job.candidates_count as number) || 0), 0),
-        views: isErrorJobs ? null : jobs.reduce((acc: number, job: Record<string, unknown>) => acc + ((job.views as number) || 0), 0)
+        totalJobs: isErrorJobs ? null : jobs.length,
     };
 
     // Blend Activities (only from successfully loaded data)
     const activities = [
         ...(isErrorJobs ? [] : jobs.slice(0, 5).map(job => ({
             type: 'job_created',
-            text: `Vaga criada: "${job.title}"`,
+            text: `Turno criado: "${job.title}"`,
             time: job.created_at as string,
             id: job.id as string
         }))),
         ...(isErrorApps ? [] : applications.map(app => ({
             type: 'application',
-            text: `Novo candidato para "${(app.jobs as Record<string, unknown>).title}"`,
+            text: `Novo freela para "${(app.jobs as Record<string, unknown>).title}"`,
             time: app.created_at as string,
             id: app.id as string
         })))
@@ -127,20 +142,20 @@ export default function CompanyDashboard() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                     {[
-                        { title: 'Vagas Ativas', value: stats.activeJobs, icon: Briefcase, color: 'bg-blue-100 text-blue-600' },
-                        { title: 'Total Candidatos', value: stats.totalCandidates, icon: Users, color: 'bg-green-100 text-green-600' },
-                        { title: 'Visualizações', value: stats.views, icon: TrendingUp, color: 'bg-purple-100 text-purple-600' }
+                        { title: 'Turnos Ativos', value: stats.activeJobs, icon: Briefcase, color: 'bg-blue-100 text-blue-600', hint: 'Abertos', onClick: () => navigate('/company/jobs?filter=open') },
+                        { title: 'Em Andamento', value: inProgressCount, icon: PlayCircle, color: 'bg-green-100 text-green-600', hint: 'Agora', onClick: () => navigate('/company/jobs?filter=andamento') },
+                        { title: 'Total de Turnos', value: stats.totalJobs, icon: TrendingUp, color: 'bg-purple-100 text-purple-600', hint: 'Tudo', onClick: () => navigate('/company/jobs') }
                     ].map((stat, i) => (
-                        <div key={i} className="bg-white border-2 border-black rounded-xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,0.15)] transition-shadow">
+                        <button key={i} onClick={stat.onClick} className="text-left bg-white border-2 border-black rounded-xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 transition-all">
                             <div className="flex items-center justify-between mb-4">
                                 <div className={`p-3 rounded-lg ${stat.color} border-2 border-black`}>
                                     <stat.icon size={24} />
                                 </div>
-                                <span className="text-xs font-black uppercase bg-gray-100 px-2 py-1 rounded">Hoje</span>
+                                <span className="text-xs font-black uppercase bg-gray-100 px-2 py-1 rounded">{stat.hint}</span>
                             </div>
                             <h3 className="text-4xl font-black mb-1">{stat.value ?? '-'}</h3>
                             <p className="text-gray-500 font-bold uppercase text-xs">{stat.title}</p>
-                        </div>
+                        </button>
                     ))}
                 </div>
             )}
@@ -151,7 +166,7 @@ export default function CompanyDashboard() {
                 <div className="lg:col-span-2 space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-black uppercase flex items-center gap-2">
-                            <Briefcase size={20} /> Vagas Recentes
+                            <Briefcase size={20} /> Turnos Recentes
                         </h2>
                         <div className="flex gap-2">
                             <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors border-2 border-transparent hover:border-black">
@@ -166,7 +181,7 @@ export default function CompanyDashboard() {
                     <div className="space-y-4">
                         {isErrorJobs ? (
                             <SectionError
-                                message="Erro ao carregar vagas. Tente novamente."
+                                message="Erro ao carregar turnos. Tente novamente."
                                 onRetry={() => { refetchJobs(); }}
                             />
                         ) : loading || isLoadingJobs ? (
@@ -177,8 +192,8 @@ export default function CompanyDashboard() {
                             </div>
                         ) : jobs.length === 0 ? (
                             <div className="text-center py-10 border-2 border-dashed border-gray-300 rounded-xl">
-                                <p className="font-bold text-gray-500">Nenhuma vaga encontrada.</p>
-                                <button onClick={() => navigate('/company/create')} className="text-blue-600 font-black text-sm uppercase mt-2 hover:underline">Criar primeira vaga</button>
+                                <p className="font-bold text-gray-500">Nenhum turno encontrado.</p>
+                                <button onClick={() => navigate('/company/create')} className="text-blue-600 font-black text-sm uppercase mt-2 hover:underline">Criar primeiro turno</button>
                             </div>
                         ) : (
                             jobs.slice(0, 5).map((job) => (
@@ -189,18 +204,11 @@ export default function CompanyDashboard() {
                                             <p className="text-xs font-bold text-gray-400 uppercase">{job.location || 'Remoto'} • {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border border-black ${job.status === 'open' ? 'bg-green-400' : 'bg-gray-200'}`}>
-                                            {job.status === 'open' ? 'Ativa' : 'Fechada'}
+                                            {job.status === 'open' ? 'Ativo' : 'Fechado'}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm font-bold border-t-2 border-gray-50 pt-3 mt-3">
-                                        <div className="flex items-center gap-1.5">
-                                            <Users size={16} className="text-gray-400" />
-                                            <span>{job.candidates_count || 0} Candidatos</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-gray-400">
-                                            <TrendingUp size={16} />
-                                            <span>{job.views || 0} Visualizações</span>
-                                        </div>
+                                    <div className="flex items-center gap-4 text-sm font-bold border-t-2 border-gray-50 pt-3 mt-3 text-gray-400">
+                                        <span>Criado {formatDistanceToNow(new Date(job.created_at as string), { addSuffix: true, locale: ptBR })}</span>
                                     </div>
                                 </div>
                             ))
@@ -258,7 +266,7 @@ export default function CompanyDashboard() {
 
                     <div className="bg-blue-600 text-white border-2 border-black rounded-xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         <h3 className="font-black uppercase text-lg mb-2">Dica Pro</h3>
-                        <p className="text-sm opacity-90 mb-4">Empresas com perfis completos recebem 3x mais candidatos qualificados.</p>
+                        <p className="text-sm opacity-90 mb-4">Empresas com perfis completos engajam 3x mais freelas qualificados.</p>
                         <button onClick={() => navigate('/company/profile')} className="bg-white text-black w-full py-2 rounded-lg font-bold uppercase text-xs hover:bg-gray-100 transition-colors">
                             Completar Perfil
                         </button>

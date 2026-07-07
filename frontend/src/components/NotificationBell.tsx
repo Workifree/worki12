@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell, Check, Info, MessageSquare, CreditCard, AlertCircle } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import { format } from 'date-fns';
@@ -8,13 +9,46 @@ import { useNavigate } from 'react-router-dom';
 export default function NotificationBell({ className = "" }: { className?: string }) {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    // O painel é renderizado num portal com posição `fixed` ancorada no sino —
+    // assim ele escapa do `overflow-hidden` do menu lateral (Sidebar), que antes
+    // o cortava em vez de deixá-lo abrir por cima do conteúdo.
+    const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
 
-    // Close dropdown when clicking outside
+    // Calcula a posição do painel a partir do retângulo do botão (alinhado à direita).
+    const updateCoords = useCallback(() => {
+        const rect = buttonRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        setCoords({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+    }, []);
+
+    // Enquanto aberto: mantém o painel alinhado ao sino em resize/scroll.
+    // (A posição inicial é calculada no clique de abertura, evitando setState no corpo do efeito.)
+    useEffect(() => {
+        if (!isOpen) return;
+        window.addEventListener('resize', updateCoords);
+        window.addEventListener('scroll', updateCoords, true);
+        return () => {
+            window.removeEventListener('resize', updateCoords);
+            window.removeEventListener('scroll', updateCoords, true);
+        };
+    }, [isOpen, updateCoords]);
+
+    const toggleOpen = () => {
+        if (!isOpen) updateCoords(); // calcula a posição a partir do retângulo do sino antes de abrir
+        setIsOpen((o) => !o);
+    };
+
+    // Fecha ao clicar fora (considera botão E painel, que vive no portal).
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            if (
+                buttonRef.current && !buttonRef.current.contains(target) &&
+                panelRef.current && !panelRef.current.contains(target)
+            ) {
                 setIsOpen(false);
             }
         }
@@ -22,7 +56,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [dropdownRef]);
+    }, []);
 
     const handleNotificationClick = async (id: string, link?: string) => {
         await markAsRead(id);
@@ -43,9 +77,10 @@ export default function NotificationBell({ className = "" }: { className?: strin
     };
 
     return (
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative">
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                ref={buttonRef}
+                onClick={toggleOpen}
                 className={`relative p-2 rounded-full hover:bg-white/10 transition-colors ${className}`}
                 aria-label="Notifications"
             >
@@ -57,8 +92,12 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 )}
             </button>
 
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-xl shadow-2xl border-2 border-black z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+            {isOpen && coords && createPortal(
+                <div
+                    ref={panelRef}
+                    style={{ position: 'fixed', top: coords.top, right: coords.right }}
+                    className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-xl shadow-2xl border-2 border-black z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right"
+                >
                     <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                         <h3 className="font-bold text-sm">Notificações</h3>
                         {unreadCount > 0 && (
@@ -116,7 +155,8 @@ export default function NotificationBell({ className = "" }: { className?: strin
                             Ver todas as notificações
                         </button>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
