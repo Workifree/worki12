@@ -186,7 +186,7 @@ export default function WorkerOnboarding() {
                 {/* Header */}
                 <div className="text-center mb-10">
                     <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Bem-vindo ao Worki</h1>
-                    <p className="text-gray-500 font-medium">Vamos criar seu perfil profissional para você começar a faturar.</p>
+                    <p className="text-gray-500 font-medium">Vamos criar seu perfil pra empresas te chamarem pros turnos.</p>
                 </div>
 
                 {/* Progress Bar */}
@@ -356,9 +356,9 @@ export default function WorkerOnboarding() {
 
                                 <div className="space-y-6">
                                     <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">O que você busca no Worki?</label>
+                                        <label className="block text-xs font-bold uppercase mb-3">O que você procura como freela?</label>
                                         <div className="grid grid-cols-1 gap-3">
-                                            {['Renda Extra (Freelancer)', 'Emprego Fixo', 'Ganhar Experiência'].map(opt => (
+                                            {['Renda extra com quem já confio', 'Mais turnos / mais trabalho', 'Construir minha reputação e histórico'].map(opt => (
                                                 <label key={opt} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex items-center gap-3 font-bold ${formData.goal === opt ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-black'}`}>
                                                     <input
                                                         type="radio"

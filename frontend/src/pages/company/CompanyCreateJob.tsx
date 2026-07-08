@@ -2,12 +2,29 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Globe, Send, Users, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import type { TeamMember } from '../../types';
+
+// Categorias focadas no mercado presencial de atendimento/serviço (pivô empresa-primeiro).
+// Sem tech/remoto — o turno é sempre presencial, definido pela função (salão/cozinha/evento).
+const SHIFT_CATEGORIES: { name: string; slug: string }[] = [
+    { name: 'Garçom / Garçonete', slug: 'garcom' },
+    { name: 'Barman / Bartender', slug: 'barman' },
+    { name: 'Cozinha / Auxiliar', slug: 'cozinha' },
+    { name: 'Atendente / Balcão', slug: 'atendente' },
+    { name: 'Caixa', slug: 'caixa' },
+    { name: 'Recepção / Hostess', slug: 'recepcao' },
+    { name: 'Limpeza / Copa', slug: 'limpeza' },
+    { name: 'Estoque / Logística', slug: 'estoque' },
+    { name: 'Segurança / Portaria', slug: 'seguranca' },
+    { name: 'Promotor / Panfletagem', slug: 'promotor' },
+    { name: 'Auxiliar de Eventos', slug: 'eventos' },
+    { name: 'Outro', slug: 'outro' },
+];
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -18,13 +35,12 @@ export default function CompanyCreateJob() {
 
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [categories, setCategories] = useState<{ name: string, slug: string }[]>([]);
     const [createdJobId, setCreatedJobId] = useState<string | null>(null);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
         category: '',
-        type: 'freelance', // freelance, full-time
+        type: 'freelance', // sempre freelance/diária no pivô presencial (sem CLT/fixo)
         description: '',
         requirements: '',
         briefing: '',
@@ -32,7 +48,7 @@ export default function CompanyCreateJob() {
         budget: '',
         budget_type: 'daily', // hourly, daily, project — postpago v1 = fixo por turno
         start_date: '',
-        scope: 'on-site', // on-site, remote, hybrid
+        scope: 'on-site', // sempre presencial no pivô (sem remoto/híbrido)
         work_start_time: '',
         work_end_time: '',
         has_lunch: false
@@ -41,28 +57,6 @@ export default function CompanyCreateJob() {
     // Hooks de equipe e convites — carregados após criação do job
     const { teamMembers, loading: teamLoading } = useCompanyTeam();
     const { invite, invitingWorkerId, invites: sentInvites } = useCompanyInvites(createdJobId ?? '');
-
-    useEffect(() => {
-        // Fetch Categories
-        async function loadCategories() {
-            const { data } = await supabase.from('job_categories').select('name, slug');
-            if (data && data.length > 0) {
-                setCategories(data);
-            } else {
-                setCategories([
-                    { name: 'Tecnologia', slug: 'tech' },
-                    { name: 'Varejo', slug: 'retail' },
-                    { name: 'Bares e Restaurantes', slug: 'hospitality' },
-                    { name: 'Eventos', slug: 'events' },
-                    { name: 'Construção Civil', slug: 'construction' },
-                    { name: 'Logística', slug: 'logistics' },
-                    { name: 'Saúde', slug: 'health' },
-                    { name: 'Outro', slug: 'other' }
-                ]);
-            }
-        }
-        loadCategories();
-    }, []);
 
     // Fetch Job Data if Editing
     useEffect(() => {
@@ -224,64 +218,31 @@ export default function CompanyCreateJob() {
                                     type="text"
                                     aria-label="Título do Turno"
                                     className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold text-lg placeholder:text-gray-300 transition-all"
-                                    placeholder="Ex: Designer UI Senior"
+                                    placeholder="Ex: Garçom para evento de sábado"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase tracking-wide">Categoria</label>
-                                    <select
-                                        aria-label="Categoria"
-                                        className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold appearance-none"
-                                        value={formData.category}
-                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {categories.map(cat => (
-                                            <option key={cat.slug} value={cat.slug}>{cat.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase tracking-wide">Modelo</label>
-                                    <div className="flex bg-gray-50 rounded-xl p-1 border-2 border-transparent">
-                                        <button
-                                            onClick={() => setFormData({ ...formData, type: 'freelance' })}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-all ${formData.type === 'freelance' ? 'bg-black text-white shadow-sm' : 'text-gray-400 hover:text-black'}`}
-                                        >
-                                            Freelance
-                                        </button>
-                                        <button
-                                            onClick={() => setFormData({ ...formData, type: 'full-time' })}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-all ${formData.type === 'full-time' ? 'bg-black text-white shadow-sm' : 'text-gray-400 hover:text-black'}`}
-                                        >
-                                            Fixo
-                                        </button>
-                                    </div>
-                                </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase tracking-wide">Função</label>
+                                <select
+                                    aria-label="Função"
+                                    className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold appearance-none"
+                                    value={formData.category}
+                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                >
+                                    <option value="">Selecione a função...</option>
+                                    {SHIFT_CATEGORIES.map(cat => (
+                                        <option key={cat.slug} value={cat.slug}>{cat.name}</option>
+                                    ))}
+                                </select>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold uppercase tracking-wide">Formato de Trabalho</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    {[
-                                        { id: 'on-site', label: 'Presencial', icon: MapPin },
-                                        { id: 'remote', label: 'Remoto', icon: Globe },
-                                        { id: 'hybrid', label: 'Híbrido', icon: Briefcase }
-                                    ].map(sc => (
-                                        <button
-                                            key={sc.id}
-                                            onClick={() => setFormData({ ...formData, scope: sc.id })}
-                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${formData.scope === sc.id ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-gray-100 text-gray-400 hover:border-black'}`}
-                                        >
-                                            <sc.icon size={20} />
-                                            <span className="text-[10px] font-black uppercase mt-1">{sc.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
+                            {/* Turno é sempre presencial no pivô — sem seletor de formato/remoto */}
+                            <div className="flex items-center gap-2 rounded-xl bg-blue-50 border-2 border-blue-100 px-4 py-3 text-blue-700">
+                                <MapPin size={18} className="flex-shrink-0" />
+                                <span className="text-xs font-black uppercase tracking-wide">Turno presencial</span>
                             </div>
                         </div>
                     )}

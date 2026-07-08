@@ -33,7 +33,7 @@ export default function Onboarding() {
       {/* Hero Marquee - Abstract Representation without external lib */}
       <div className="relative w-full overflow-hidden bg-accent py-3 rotate-[-1deg] scale-105 my-8 shadow-float">
         <div className="whitespace-nowrap animate-marquee flex gap-8 text-white font-black text-xl uppercase tracking-widest">
-          {Array(20).fill("WORKI • INSTANT SHIFTS • GET PAID • HIRE PROS • ").map((text, i) => (
+          {Array(20).fill("WORKI • SEU ELENCO DE CONFIANÇA • CONVIDE PRO TURNO • PAGUE E REGISTRE • ").map((text, i) => (
             <span key={i}>{text}</span>
           ))}
         </div>

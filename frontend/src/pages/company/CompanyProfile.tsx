@@ -320,12 +320,9 @@ export default function CompanyProfile() {
                 )}
             </div>
 
-            <div className="bg-white border-2 border-gray-100 rounded-3xl overflow-hidden shadow-xl">
+            <div className="bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 {/* Cover Image */}
-                <div className="h-48 md:h-64 bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-400 relative group">
-                    {/* Add overlay to ensure text contrast if we had text here, but mostly for premium feel */}
-                    <div className="absolute inset-0 bg-black/5 transition-opacity" />
-
+                <div className="h-32 sm:h-48 bg-black relative group">
                     {company.cover_url && (
                         <img src={company.cover_url} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
                     )}
@@ -354,8 +351,8 @@ export default function CompanyProfile() {
                     {/* Header Section with Logo and Actions logic */}
                     <div className="flex flex-col md:flex-row gap-6 relative -top-12 mb-8 items-start">
                         {/* Logo Container */}
-                        <div className="relative">
-                            <div className="w-32 h-32 bg-white rounded-2xl border-4 border-white shadow-xl flex items-center justify-center relative group overflow-hidden z-10">
+                        <div className="relative shrink-0">
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex items-center justify-center relative group overflow-hidden z-10">
                                 {company.logo_url ? (
                                     <img src={company.logo_url} alt="Logo" className="w-full h-full object-cover" />
                                 ) : (
@@ -598,7 +595,7 @@ export default function CompanyProfile() {
 
 
             {/* Secao Seguranca */}
-            <div className="mt-8 bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-xl">
+            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
                     <Lock size={20} /> Seguranca
                 </h3>
@@ -650,7 +647,7 @@ export default function CompanyProfile() {
 
             {/* Meu link de perfil — a empresa compartilha o PRÓPRIO link para ser
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
-            <div className="mt-8 bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-xl">
+            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
                     <Link2 size={20} /> Meu Link de Elenco
                 </h3>
@@ -668,26 +665,8 @@ export default function CompanyProfile() {
                 </button>
             </div>
 
-            {/* Enterprise Banner Footer */}
-            {!isEditing && (
-                <div className="mt-8 bg-black text-white p-8 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-white/10 transition-colors"></div>
-
-                    <div className="relative z-10 text-center md:text-left">
-                        <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
-                            <Star className="fill-white text-white" size={20} />
-                            <h3 className="font-black uppercase text-2xl">Plano Enterprise</h3>
-                        </div>
-                        <p className="text-gray-400 max-w-lg font-medium">Sua conta tem acesso total aos recursos da plataforma.</p>
-                    </div>
-                    <button className="relative z-10 bg-white text-black px-6 py-3 rounded-xl font-black uppercase text-xs hover:bg-gray-200 transition-colors shadow-lg hover:scale-105 transform duration-200">
-                        Gerenciar Assinatura
-                    </button>
-                </div>
-            )}
-
             {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
-            <div className="mt-8 bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-xl">
+            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
                     <LogOut size={20} /> Sessão
                 </h3>
@@ -703,7 +682,7 @@ export default function CompanyProfile() {
             </div>
 
             {/* Zona de Perigo */}
-            <div className="border-t-2 border-red-200 pt-8 mt-8">
+            <div className="mt-8 bg-white border-2 border-red-500 rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(239,68,68,1)]">
                 <h3 className="text-red-600 font-black uppercase text-lg mb-4">Zona de Perigo</h3>
                 <p className="text-sm text-gray-600 mb-4">A exclusão da sua empresa é irreversível. Todos os dados da empresa serão anonimizados.</p>
                 <button
@@ -728,7 +707,7 @@ export default function CompanyProfile() {
                         </li>
                         <li className="flex items-start gap-2">
                             <span className="font-black text-red-500 mt-0.5">&#8226;</span>
-                            Todas as vagas e candidaturas serão canceladas
+                            Todos os turnos e convites serão cancelados
                         </li>
                         <li className="flex items-start gap-2">
                             <span className="font-black text-red-500 mt-0.5">&#8226;</span>
