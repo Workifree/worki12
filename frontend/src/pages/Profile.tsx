@@ -361,8 +361,7 @@ export default function Profile() {
         <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-4xl mx-auto">
 
             {/* Header / Cover */}
-            {/* Header / Cover */}
-            <div className="relative mb-12 group">
+            <div className="relative mb-32 sm:mb-12 group">
                 <div className="h-48 bg-gray-900 rounded-3xl border-2 border-black overflow-hidden relative">
                     {profile.cover_url ? (
                         <img src={profile.cover_url} alt="Foto de capa do perfil" className="w-full h-full object-cover" />
@@ -388,9 +387,9 @@ export default function Profile() {
                 />
 
                 {/* Profile Card Overlay */}
-                <div className="absolute -bottom-12 left-6 right-6 flex flex-col md:flex-row items-end md:items-center justify-between gap-4">
-                    <div className="flex items-end gap-4">
-                        <div className="w-32 h-32 bg-white rounded-full border-4 border-black p-1 relative shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] group">
+                <div className="absolute -bottom-12 left-6 right-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-end gap-4 min-w-0">
+                        <div className="w-28 h-28 sm:w-32 sm:h-32 shrink-0 aspect-square bg-white rounded-full border-4 border-black p-1 relative shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] group">
                             {/* Avatar Placeholder or Image */}
                             <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center overflow-hidden relative">
                                 {profile.avatar_url ? (
@@ -426,10 +425,10 @@ export default function Profile() {
                                     value={formData.full_name}
                                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                                     aria-label="Nome completo"
-                                    className="text-3xl font-black uppercase tracking-tight text-white drop-shadow-md bg-transparent border-b border-white mb-2 w-full outline-none"
+                                    className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white [text-shadow:_0_1px_3px_rgba(0,0,0,0.9)] bg-transparent border-b border-white mb-2 w-full outline-none"
                                 />
                             ) : (
-                                <h1 className="text-3xl font-black uppercase tracking-tight text-white drop-shadow-md">{profile.full_name}</h1>
+                                <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white [text-shadow:_0_1px_3px_rgba(0,0,0,0.9)] break-words">{profile.full_name}</h1>
                             )}
 
                             <div className="flex items-center gap-2 text-white/80 font-bold text-sm bg-black/50 px-2 py-1 rounded-lg backdrop-blur-sm w-fit">

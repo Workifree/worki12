@@ -164,7 +164,7 @@ export default function CompanyOnboarding() {
                 {/* Header */}
                 <div className="text-center mb-10">
                     <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Primeiro Acesso</h1>
-                    <p className="text-gray-500 font-medium">Vamos configurar sua empresa para começar a contratar.</p>
+                    <p className="text-gray-500 font-medium">Vamos configurar sua empresa para montar seu elenco e organizar os turnos.</p>
                 </div>
 
                 {/* Progress Bar */}
@@ -270,14 +270,14 @@ export default function CompanyOnboarding() {
                         {step === 2 && (
                             <div className="space-y-6 animate-in slide-in-from-right duration-500">
                                 <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <Target className="text-green-600" /> Objetivos de Contratação
+                                    <Target className="text-green-600" /> Como você usa freelas
                                 </h2>
 
                                 <div className="space-y-6">
                                     <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">O que você busca?</label>
+                                        <label className="block text-xs font-bold uppercase mb-3">Como você monta seus turnos?</label>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {['Contratação Fixa (CLT)', 'Freelancers Pontuais', 'Temporários', 'Estágio'].map(opt => (
+                                            {['Turnos pontuais (eventos/picos)', 'Escala recorrente (mesma equipe)', 'Reforço de fim de semana', 'Cobertura de faltas'].map(opt => (
                                                 <label key={opt} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex items-center gap-3 font-bold ${formData.hiringGoal === opt ? 'border-black bg-black/5' : 'border-gray-200 hover:border-black'}`}>
                                                     <input
                                                         type="radio"
@@ -295,13 +295,13 @@ export default function CompanyOnboarding() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">Volume de Contratação Mensal</label>
+                                        <label className="block text-xs font-bold uppercase mb-3">Turnos por mês (estimativa)</label>
                                         <div className="flex gap-4">
                                             {['1-5', '6-20', '20+'].map(opt => (
                                                 <label key={opt} className={`flex-1 border-2 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-center justify-center font-bold text-center ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-black'}`}>
-                                                    <input type="radio" name="volume" value={opt} aria-label={`${opt} vagas por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="hidden" />
+                                                    <input type="radio" name="volume" value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="hidden" />
                                                     <span className="text-lg">{opt}</span>
-                                                    <span className="text-[10px] uppercase font-normal opacity-70">Vagas</span>
+                                                    <span className="text-[10px] uppercase font-normal opacity-70">Turnos</span>
                                                 </label>
                                             ))}
                                         </div>
