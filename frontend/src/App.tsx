@@ -21,8 +21,6 @@ const CompanyOnboarding = lazy(() => import('./pages/company/CompanyOnboarding')
 const WorkerOnboarding = lazy(() => import('./pages/worker/WorkerOnboarding'));
 const WorkerDashboard = lazy(() => import('./pages/worker/WorkerDashboard'));
 const CompanyDashboard = lazy(() => import('./pages/company/CompanyDashboard'));
-// Fase 2 — feed publico / analytics de marketplace, fora do piloto (rotas comentadas abaixo)
-// const Jobs = lazy(() => import('./pages/Jobs'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Profile = lazy(() => import('./pages/Profile'));
 // const Analytics = lazy(() => import('./pages/Analytics'));
@@ -34,7 +32,6 @@ const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
 const CompanyJobs = lazy(() => import('./pages/company/CompanyJobs'));
 const CompanyProfile = lazy(() => import('./pages/company/CompanyProfile'));
-// const CompanyAnalytics = lazy(() => import('./pages/company/CompanyAnalytics'));
 const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails'));
 const CompanyJobCandidates = lazy(() => import('./pages/company/CompanyJobCandidates'));
 const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
@@ -160,8 +157,6 @@ function App() {
                     {/* Worker Layout Routes */}
                     <Route path="/" element={<MainLayout />}>
                       <Route path="dashboard" element={<Dashboard />} />
-                      {/* Fase 2 — feed publico / analytics de marketplace, fora do piloto */}
-                      {/* <Route path="jobs" element={<Jobs />} /> */}
                       <Route path="my-jobs" element={<MyJobs />} />
                       {/* <Route path="analytics" element={<Analytics />} /> */}
                       <Route path="wallet" element={<Wallet />} />
@@ -184,8 +179,6 @@ function App() {
                       <Route path="profile" element={<CompanyProfile />} />
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="wallet" element={<CompanyWallet />} />
-                      {/* Fase 2 — feed publico / analytics de marketplace, fora do piloto */}
-                      {/* <Route path="analytics" element={<CompanyAnalytics />} /> */}
                       <Route path="team" element={<CompanyTeam />} />
                       <Route path="financeiro" element={<CompanyFinancial />} />
                       <Route path="notifications" element={<Notifications />} />

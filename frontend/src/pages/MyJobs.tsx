@@ -66,25 +66,23 @@ interface JobApplication {
     company_checkout_confirmed_at: string | null;
 }
 
-type ActiveTab = 'invites' | 'applied' | 'in_progress' | 'scheduled' | 'history';
+type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
 
 export default function MyJobs() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
     const [jobs, setJobs] = useState<{
-        applied: JobApplication[],
         in_progress: JobApplication[],
         scheduled: JobApplication[],
         history: JobApplication[]
-    }>({ applied: [], in_progress: [], scheduled: [], history: [] });
+    }>({ in_progress: [], scheduled: [], history: [] });
 
     // Rating State
     const [rateModalOpen, setRateModalOpen] = useState(false);
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
     const { addToast } = useToast();
 
     // Hook de convites push
@@ -136,7 +134,6 @@ export default function MyJobs() {
         if (error) {
             logError('Error fetching applications:', error);
         } else {
-            const applied: JobApplication[] = [];
             const in_progress: JobApplication[] = [];
             const scheduled: JobApplication[] = [];
             const history: JobApplication[] = [];
@@ -217,9 +214,7 @@ export default function MyJobs() {
 
                 const isInProgress = (app.status === 'hired' && isJobToday && isWithinWorkHours) || app.status === 'in_progress';
 
-                if (app.status === 'pending' || app.status === 'reviewing' || app.status === 'interview') {
-                    applied.push(application);
-                } else if (isInProgress) {
+                if (isInProgress) {
                     in_progress.push(application);
                 } else if (app.status === 'hired') {
                     scheduled.push(application);
@@ -228,7 +223,7 @@ export default function MyJobs() {
                 }
             });
 
-            setJobs({ applied, in_progress, scheduled, history });
+            setJobs({ in_progress, scheduled, history });
         }
         setLoading(false);
     }, [navigate]);
@@ -236,25 +231,6 @@ export default function MyJobs() {
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
-
-    const handleCancelApplication = async (appId: string) => {
-        setActionLoading(appId);
-        try {
-            const { error } = await supabase
-                .from('applications')
-                .update({ status: 'cancelled' })
-                .eq('id', appId);
-
-            if (error) throw error;
-            addToast('Candidatura cancelada.', 'success');
-            await fetchJobs();
-        } catch (err) {
-            logError('Error cancelling application:', err);
-            addToast('Erro ao cancelar candidatura. Tente novamente.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
 
     const handleCheckin = async (appId: string) => {
         setActionLoading(appId);
@@ -365,7 +341,6 @@ export default function MyJobs() {
             <div className="flex gap-2 border-b-2 border-gray-200 pb-1 overflow-x-auto scrollbar-hide">
                 {[
                     { id: 'invites' as ActiveTab, label: 'Convites', count: pendingInvites.length, urgent: true },
-                    { id: 'applied' as ActiveTab, label: 'Candidaturas', count: jobs.applied.length },
                     { id: 'in_progress' as ActiveTab, label: 'Em Andamento', count: jobs.in_progress.length },
                     { id: 'scheduled' as ActiveTab, label: 'Agendados', count: jobs.scheduled.length },
                     { id: 'history' as ActiveTab, label: 'Histórico', count: jobs.history.length }
@@ -513,34 +488,6 @@ export default function MyJobs() {
                         })}
                     </>
                 )}
-
-                {/* ── ABA CANDIDATURAS ── */}
-                {activeTab === 'applied' && jobs.applied.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Você não tem candidaturas pendentes.</p>
-                        <button onClick={() => navigate('/dashboard')} className="mt-4 text-primary underline font-bold">Buscar Vagas</button>
-                    </div>
-                )}
-                {activeTab === 'applied' && jobs.applied.map((job) => (
-                    <div key={job.id} className="bg-white border-2 border-gray-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center opacity-80 hover:opacity-100 transition-opacity gap-4">
-                        <div>
-                            <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
-                            <p className="text-sm font-bold text-gray-500">{job.company_name} • {job.location}</p>
-                            <span className="inline-block mt-2 bg-yellow-100 text-yellow-700 text-xs font-black px-2 py-1 rounded-xl uppercase">
-                                {job.status === 'pending' ? 'Aguardando' : job.status === 'interview' ? 'Em Entrevista' : 'Em Análise'}
-                            </span>
-                        </div>
-                        <button
-                            onClick={() => setConfirmCancelId(job.id)}
-                            disabled={actionLoading === job.id}
-                            className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors self-end md:self-center disabled:opacity-50"
-                            title="Cancelar Candidatura"
-                            aria-label="Cancelar candidatura"
-                        >
-                            {actionLoading === job.id ? <Loader2 className="animate-spin" size={24} /> : <XCircle size={24} />}
-                        </button>
-                    </div>
-                ))}
 
                 {/* ── ABA EM ANDAMENTO ── */}
                 {activeTab === 'in_progress' && jobs.in_progress.length === 0 && (
@@ -709,7 +656,7 @@ export default function MyJobs() {
                                 </div>
                             ) : (
                                 <span className="text-xs font-black text-red-500 flex items-center gap-1 uppercase bg-red-100 px-2 py-1 rounded-xl">
-                                    <XCircle size={12} /> {job.status === 'rejected' ? 'Não Selecionado' : job.status === 'declined' ? 'Recusado' : 'Cancelado'}
+                                    <XCircle size={12} /> {job.status === 'declined' ? 'Recusado' : 'Cancelado'}
                                 </span>
                             )}
                         </div>
@@ -727,29 +674,6 @@ export default function MyJobs() {
                 subtitle={selectedJobToRate?.title}
             />
 
-            {/* Modal de confirmação de cancelamento */}
-            {confirmCancelId && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
-                        <h3 className="text-xl font-black uppercase mb-2">Cancelar candidatura?</h3>
-                        <p className="text-sm font-bold text-gray-500 mb-6">Esta ação não pode ser desfeita.</p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setConfirmCancelId(null)}
-                                className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-gray-100 transition-colors"
-                            >
-                                Voltar
-                            </button>
-                            <button
-                                onClick={() => { const id = confirmCancelId; setConfirmCancelId(null); handleCancelApplication(id); }}
-                                className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-sm transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
