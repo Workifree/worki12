@@ -150,7 +150,7 @@ export default function Messages() {
             const convList: ConversationItem[] = myConversations.map((c) => ({
                 id: c.id,
                 application_uuid: c.application_uuid,
-                job_title: c.application?.job?.title || 'Vaga',
+                job_title: c.application?.job?.title || 'Turno',
                 company_name: c.application?.job?.company?.name || 'Empresa',
                 company_logo: c.application?.job?.company?.logo_url ?? undefined,
                 status: c.application?.status || 'pending',
@@ -301,9 +301,10 @@ export default function Messages() {
 
     const getStatusLabel = (status: string) => {
         switch (status) {
-            case 'pending': return 'Aguardando';
-            case 'approved': return 'Aprovado';
-            case 'scheduled': return 'Agendado';
+            case 'invited': return 'Convite';
+            case 'hired': return 'Contratado';
+            case 'in_progress': return 'Em Andamento';
+            case 'declined':
             case 'rejected': return 'Recusado';
             case 'completed': return 'Concluído';
             default: return status;
@@ -332,7 +333,7 @@ export default function Messages() {
             {/* Header */}
             <div className="mb-4">
                 <h2 className="text-4xl font-black uppercase tracking-tighter">Mensagens</h2>
-                <p className="text-gray-500 font-bold">Converse com empresas sobre suas candidaturas.</p>
+                <p className="text-gray-500 font-bold">Converse com empresas sobre seus turnos.</p>
             </div>
 
             <div className="flex-1 flex gap-6 min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
@@ -348,7 +349,7 @@ export default function Messages() {
                             <div className="p-6 text-center text-gray-400">
                                 <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>
-                                <p className="text-sm mt-2">Candidate-se a uma vaga para iniciar uma conversa.</p>
+                                <p className="text-sm mt-2">Aceite um convite de turno para iniciar uma conversa.</p>
                             </div>
                         ) : (
                             conversations.map(conv => (

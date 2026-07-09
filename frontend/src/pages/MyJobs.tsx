@@ -172,7 +172,7 @@ export default function MyJobs() {
                     id: app.id,
                     job_id: app.job?.id || '',
                     status: app.status,
-                    title: app.job?.title || 'Job Desconhecido',
+                    title: app.job?.title || 'Turno',
                     company_id: app.job?.company?.id || '',
                     company_name: app.job?.company?.name || 'Empresa Confidencial',
                     company_logo: app.job?.company?.logo_url ?? null,
@@ -308,15 +308,24 @@ export default function MyJobs() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
+            // Sem company_id não há quem avaliar (evita review órfã apontando p/ '').
+            if (!selectedJobToRate.company_id) {
+                addToast('Não foi possível identificar a empresa deste turno.', 'error');
+                return;
+            }
+
             const direction: ReviewDirection = 'company';
 
+            // created_at é obrigatório na tabela reviews (sem default) — o insert da empresa
+            // (CompanyJobCandidates) já enviava; o do freela não, e por isso falhava silenciosamente.
             const { error } = await supabase.from('reviews').insert({
                 job_id: selectedJobToRate.job_id,
                 reviewer_id: user.id,
                 reviewed_id: selectedJobToRate.company_id, // empresa sendo avaliada
                 direction,
                 rating,
-                comment
+                comment,
+                created_at: new Date().toISOString()
             });
 
             if (error) throw error;
@@ -346,10 +355,10 @@ export default function MyJobs() {
 
     return (
         <div className="flex flex-col gap-6 pb-24 font-sans text-accent max-w-4xl mx-auto">
-            <PageMeta title="Meus Jobs" description="Acompanhe suas candidaturas, trabalhos agendados e histórico na Worki." />
+            <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
 
             <header>
-                <h2 className="text-4xl font-black uppercase tracking-tighter">Meus Jobs</h2>
+                <h2 className="text-4xl font-black uppercase tracking-tighter">Meus Turnos</h2>
             </header>
 
             {/* Tabs — Convites PRIMEIRO */}
@@ -633,7 +642,7 @@ export default function MyJobs() {
                 {/* ── ABA AGENDADOS ── */}
                 {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
                     <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Nenhum job agendado no momento.</p>
+                        <p className="font-bold">Nenhum turno agendado no momento.</p>
                     </div>
                 )}
                 {activeTab === 'scheduled' && jobs.scheduled.map((job) => (

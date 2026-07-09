@@ -503,7 +503,7 @@ export default function Profile() {
                         <h3 className="text-lg font-black uppercase mb-4">Estatísticas</h3>
                         <div className="space-y-4">
                             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                                <span className="text-sm font-bold text-gray-500">Jobs Realizados</span>
+                                <span className="text-sm font-bold text-gray-500">Turnos Realizados</span>
                                 <span className="text-lg font-black">{stats.completedJobs}</span>
                             </div>
                             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
@@ -642,7 +642,7 @@ export default function Profile() {
 
                         <div className="text-center py-8 text-gray-400 font-medium">
                             <p>Nenhuma avaliação recebida ainda.</p>
-                            <p className="text-sm mt-2">Complete jobs para receber avaliações de empresas.</p>
+                            <p className="text-sm mt-2">Complete turnos para receber avaliações de empresas.</p>
                         </div>
                     </div>
 
@@ -811,7 +811,7 @@ export default function Profile() {
                         </li>
                         <li className="flex items-start gap-2">
                             <span className="font-black text-red-500 mt-0.5">•</span>
-                            Vagas e candidaturas ativas serão canceladas
+                            Turnos e convites ativos serão cancelados
                         </li>
                         <li className="flex items-start gap-2">
                             <span className="font-black text-red-500 mt-0.5">•</span>

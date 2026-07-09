@@ -154,7 +154,7 @@ export default function CompanyWallet() {
                             className="flex-1 bg-white text-blue-600 py-4 rounded-xl font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:shadow-none hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                             onClick={() => navigate('/company/create')}
                         >
-                            <DollarSign size={20} /> Criar Vaga
+                            <DollarSign size={20} /> Criar Turno
                         </button>
                         <button
                             className="flex-1 bg-white/10 text-white py-4 rounded-xl font-bold uppercase hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
@@ -183,14 +183,14 @@ export default function CompanyWallet() {
                         <Lock size={20} /> <span className="text-xs font-black uppercase">Em Escrow</span>
                     </div>
                     <h3 className="text-2xl font-black">R$ {stats.inEscrow.toFixed(2).replace('.', ',')}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Reservado para vagas ativas</p>
+                    <p className="text-xs text-gray-400 mt-1">Reservado para turnos ativos</p>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border-2 border-black">
                     <div className="flex items-center gap-2 mb-2 text-gray-600">
                         <ArrowUpRight size={20} /> <span className="text-xs font-black uppercase">Total Pago</span>
                     </div>
                     <h3 className="text-2xl font-black">R$ {stats.totalSpent.toFixed(2).replace('.', ',')}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Pagamentos a freelancers</p>
+                    <p className="text-xs text-gray-400 mt-1">Pagamentos aos freelas</p>
                 </div>
             </div>
 
@@ -204,7 +204,7 @@ export default function CompanyWallet() {
                         {escrows.filter(e => e.status === 'reserved').map((escrow) => (
                             <div key={escrow.id} className="flex justify-between items-center bg-white p-4 rounded-xl border border-orange-200">
                                 <div>
-                                    <h4 className="font-bold text-sm">{escrow.job?.title || 'Vaga'}</h4>
+                                    <h4 className="font-bold text-sm">{escrow.job?.title || 'Turno'}</h4>
                                     <p className="text-xs text-gray-400">Reservado em {formatDate(escrow.created_at)}</p>
                                 </div>
                                 <span className="text-lg font-black text-orange-600">

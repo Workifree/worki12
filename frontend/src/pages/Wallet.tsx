@@ -319,14 +319,14 @@ export default function Wallet() {
                         <ArrowDownLeft size={20} /> <span className="text-xs font-black uppercase">Total Recebido</span>
                     </div>
                     <h3 className="text-2xl font-black">R$ {stats.income.toFixed(2).replace('.', ',')}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Pagamentos por trabalhos</p>
+                    <p className="text-xs text-gray-400 mt-1">Pagamentos por turnos</p>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border-2 border-black">
                     <div className="flex items-center gap-2 mb-2 text-orange-600">
                         <DollarSign size={20} /> <span className="text-xs font-black uppercase">A Receber</span>
                     </div>
                     <h3 className="text-2xl font-black">R$ {stats.pending.toFixed(2).replace('.', ',')}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Jobs em andamento</p>
+                    <p className="text-xs text-gray-400 mt-1">Turnos em andamento</p>
                 </div>
             </div>
 
@@ -356,7 +356,7 @@ export default function Wallet() {
                         <div className="text-center py-8 text-gray-400">
                             <WalletIcon size={48} className="mx-auto mb-4 opacity-30" />
                             <p className="font-bold text-sm">Nenhuma transação ainda.</p>
-                            <p className="text-xs mt-1">Complete jobs para começar a ganhar!</p>
+                            <p className="text-xs mt-1">Complete turnos para começar a ganhar!</p>
                         </div>
                     )}
                 </div>
