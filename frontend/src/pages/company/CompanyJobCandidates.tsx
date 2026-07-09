@@ -353,7 +353,7 @@ export default function CompanyJobCandidates() {
             if (reviewError) {
                 logError('CompanyJobCandidates: review error', reviewError);
                 if (reviewError.code === '23505') {
-                    addToast('Você já avaliou este profissional para este job.', 'error');
+                    addToast('Você já avaliou este freela para este turno.', 'error');
                 } else {
                     addToast('Erro ao salvar avaliação. Tente novamente.', 'error');
                 }
@@ -567,7 +567,7 @@ export default function CompanyJobCandidates() {
                                                     {app.worker?.rating_average ? Number(app.worker.rating_average).toFixed(1) : '5.0'}
                                                     <span className="text-gray-400 font-medium ml-1">({app.worker?.reviews_count || 0} avaliações)</span>
                                                 </span>
-                                                <span className="flex items-center gap-1"><Clock size={12} /> Aplicou {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
+                                                <span className="flex items-center gap-1"><Clock size={12} /> Convidado {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
                                             </div>
                                         </div>
 
@@ -738,7 +738,7 @@ export default function CompanyJobCandidates() {
                                     {/* Cover Letter Snippet */}
                                     <div className="mt-4 bg-gray-50 p-3 rounded-xl border-l-4 border-gray-300">
                                         <p className="text-sm font-medium text-gray-600 italic line-clamp-2">
-                                            "{app.cover_letter || 'Sem carta de apresentação...'}"
+                                            "{app.cover_letter || 'Sem observações do freela.'}"
                                         </p>
                                     </div>
 
@@ -793,7 +793,7 @@ export default function CompanyJobCandidates() {
                             <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Nenhum freela disponível para convidar.</p>
-                                <p className="text-xs mt-1">Todos da equipe já têm candidatura neste turno, ou seu elenco está vazio.</p>
+                                <p className="text-xs mt-1">Todos da equipe já foram convidados para este turno, ou seu elenco está vazio.</p>
                             </div>
                         )}
 
@@ -1002,7 +1002,7 @@ export default function CompanyJobCandidates() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-black uppercase tracking-tight">Avaliar Freelancer</h3>
+                            <h3 className="text-2xl font-black uppercase tracking-tight">Avaliar Freela</h3>
                             <button onClick={() => setRatingModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                                 <XCircle size={24} />
                             </button>

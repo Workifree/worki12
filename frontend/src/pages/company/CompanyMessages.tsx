@@ -152,9 +152,9 @@ export default function CompanyMessages() {
         const convList: ConversationItem[] = myConversations.map((c) => ({
             id: c.id,
             application_uuid: c.application_uuid,
-            worker_name: c.application?.worker?.full_name || 'Candidato Desconhecido',
+            worker_name: c.application?.worker?.full_name || 'Freela',
             worker_avatar: c.application?.worker?.avatar_url,
-            job_title: c.application?.job?.title || 'Vaga Sem Título',
+            job_title: c.application?.job?.title || 'Turno sem título',
             status: c.application?.status || 'pending',
             last_message: undefined,
             last_message_at: c.createdat,
@@ -323,9 +323,10 @@ export default function CompanyMessages() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'approved':
-            case 'scheduled':
+            case 'hired':
+            case 'in_progress':
                 return 'bg-green-100 text-green-700';
+            case 'declined':
             case 'rejected':
                 return 'bg-red-100 text-red-700';
             case 'completed':
@@ -337,11 +338,12 @@ export default function CompanyMessages() {
 
     const getStatusLabel = (status: string) => {
         switch (status) {
-            case 'pending': return 'Em Aberto';
-            case 'approved': return 'Aprovado';
-            case 'scheduled': return 'Agendado';
-            case 'rejected': return 'Recusado';
+            case 'invited': return 'Convidado';
+            case 'hired': return 'Contratado';
+            case 'in_progress': return 'Em Andamento';
             case 'completed': return 'Concluído';
+            case 'declined':
+            case 'rejected': return 'Recusado';
             default: return status;
         }
     };
@@ -367,14 +369,14 @@ export default function CompanyMessages() {
 
             <div className="mb-4">
                 <h2 className="text-4xl font-black uppercase tracking-tighter">Mensagens</h2>
-                <p className="text-gray-500 font-bold">Converse com candidatos das suas vagas.</p>
+                <p className="text-gray-500 font-bold">Converse com os freelas dos seus turnos.</p>
             </div>
 
             <div className="flex-1 flex gap-6 min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
 
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-4 border-b border-gray-200">
-                        <h3 className="font-bold uppercase text-sm text-gray-500">Candidatos ({conversations.length})</h3>
+                        <h3 className="font-bold uppercase text-sm text-gray-500">Freelas ({conversations.length})</h3>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -382,7 +384,7 @@ export default function CompanyMessages() {
                             <div className="p-6 text-center text-gray-400">
                                 <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>
-                                <p className="text-sm mt-2">Candidatos aparecerão aqui quando aplicarem às suas vagas.</p>
+                                <p className="text-sm mt-2">Os freelas aparecem aqui quando você inicia uma conversa a partir de um turno.</p>
                             </div>
                         ) : (
                             conversations.map(conv => (
@@ -458,7 +460,7 @@ export default function CompanyMessages() {
                                     <div className="text-center py-12 text-gray-400">
                                         <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>
-                                        <p className="text-sm mt-2">Inicie a conversa com o candidato.</p>
+                                        <p className="text-sm mt-2">Inicie a conversa com o freela.</p>
                                     </div>
                                 ) : (
                                     messages.map(msg => (
@@ -527,7 +529,7 @@ export default function CompanyMessages() {
                             <div className="text-center">
                                 <MessageSquare size={64} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold text-lg">Selecione uma conversa</p>
-                                <p className="text-sm mt-2">Escolha um candidato à esquerda para ver as mensagens.</p>
+                                <p className="text-sm mt-2">Escolha um freela à esquerda para ver as mensagens.</p>
                             </div>
                         </div>
                     )}

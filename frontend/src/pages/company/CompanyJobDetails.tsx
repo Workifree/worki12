@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Users, Briefcase, Eye, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -106,15 +106,15 @@ export default function CompanyJobDetails() {
         await supabase.from('applications').update({ status: 'cancelled' }).eq('job_id', id).in('status', ['hired', 'in_progress']);
 
         // 2. First refund any pending escrow back to the company wallet
-        await WalletService.refundEscrow(id, 'Dinheiro retornado do escrow - vaga deletada');
+        await WalletService.refundEscrow(id, 'Dinheiro retornado do escrow - turno deletado');
 
         // 3. Then mark the job as deleted
         const { error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', id);
         if (!error) {
-            addToast('Vaga excluída com sucesso.', 'success');
+            addToast('Turno excluído com sucesso.', 'success');
             navigate('/company/jobs');
         } else {
-            addToast('Erro ao excluir vaga.', 'error');
+            addToast('Erro ao excluir turno.', 'error');
         }
         setShowDeleteConfirm(false);
     };
@@ -134,13 +134,13 @@ export default function CompanyJobDetails() {
     return (
         <>
         <PageMeta
-          title={job ? job.title : 'Detalhes da Vaga'}
+          title={job ? job.title : 'Detalhes do Turno'}
           description={job ? (job.description?.slice(0, 160) ?? undefined) : undefined}
         />
         {showDeleteConfirm && (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                    <h3 className="text-xl font-black uppercase mb-2">Excluir Vaga</h3>
+                    <h3 className="text-xl font-black uppercase mb-2">Excluir Turno</h3>
                     <p className="text-sm text-gray-600 mb-6">Tem certeza? O escrow será reembolsado e workers contratados serão notificados.</p>
                     <div className="flex gap-3">
                         <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-bold uppercase text-sm hover:bg-gray-50">Cancelar</button>
@@ -198,12 +198,12 @@ export default function CompanyJobDetails() {
                     <div className="flex justify-between items-start mb-6">
                         <div>
                             <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase mb-3 border border-black ${job.status === 'open' ? 'bg-green-400' : 'bg-gray-200'}`}>
-                                {job.status === 'open' ? 'Vaga Ativa' : job.status === 'paused' ? 'Pausada' : 'Fechada'}
+                                {job.status === 'open' ? 'Turno Ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
                             </span>
                             <h1 className="text-3xl font-black uppercase tracking-tight mb-2">{job.title}</h1>
                             <div className="flex items-center gap-4 text-sm font-bold text-gray-500">
-                                <span className="flex items-center gap-1"><MapPin size={16} /> {job.location || 'Remoto'}</span>
-                                <span className="flex items-center gap-1"><Briefcase size={16} /> {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</span>
+                                <span className="flex items-center gap-1"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
+                                <span className="flex items-center gap-1"><MapPin size={16} /> Presencial</span>
                                 <span className="flex items-center gap-1"><Clock size={16} /> {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
                             </div>
                         </div>
@@ -241,26 +241,22 @@ export default function CompanyJobDetails() {
                         {/* Stats Sidebar */}
                         <div className="space-y-4">
                             <div className="bg-blue-50 border-2 border-blue-100 rounded-xl p-6">
-                                <h3 className="font-black uppercase text-blue-800 mb-4">Performance</h3>
+                                <h3 className="font-black uppercase text-blue-800 mb-4">Resumo do Turno</h3>
                                 <div className="space-y-4">
                                     {(job.candidates_count || 0) > 0 ? (
                                         <button
                                             onClick={() => navigate(`/company/jobs/${id}/candidates`)}
                                             className="w-full flex items-center justify-between hover:bg-white p-2 rounded-lg transition-all cursor-pointer group"
                                         >
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Users size={16} /> Candidatos</span>
+                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Users size={16} /> Freelas</span>
                                             <span className="text-2xl font-black text-blue-900 group-hover:scale-110 transition-transform">{job.candidates_count}</span>
                                         </button>
                                     ) : (
                                         <div className="p-2">
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2 mb-2"><Users size={16} /> Candidatos</span>
-                                            <p className="text-sm text-gray-500 font-medium">Nenhum candidato para esta vaga ainda.</p>
+                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2 mb-2"><Users size={16} /> Freelas</span>
+                                            <p className="text-sm text-gray-500 font-medium">Nenhum freela convidado para este turno ainda.</p>
                                         </div>
                                     )}
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Eye size={16} /> Visualizações</span>
-                                        <span className="text-2xl font-black text-blue-900">{job.views || 0}</span>
-                                    </div>
                                     <div
                                         className={`flex justify-between items-center rounded-lg p-2 -mx-2 transition-colors ${activeWorkersCount > 0 ? 'cursor-pointer hover:bg-white' : ''}`}
                                         onClick={() => activeWorkersCount > 0 && navigate(`/company/jobs/${id}/candidates`)}

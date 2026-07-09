@@ -48,7 +48,7 @@ export default function InviteAccept() {
     ? 'worker'
     : 'company';
   const redirectTo = direction === 'worker' ? '/company/team' : '/my-jobs';
-  const redirectLabel = direction === 'worker' ? 'Ver Meu Elenco' : 'Ver Meus Jobs';
+  const redirectLabel = direction === 'worker' ? 'Ver Meu Elenco' : 'Ver Meus Turnos';
 
   useEffect(() => {
     let active = true;
