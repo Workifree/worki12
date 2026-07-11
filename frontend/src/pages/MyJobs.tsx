@@ -1,7 +1,7 @@
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2 } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -68,6 +68,16 @@ interface JobApplication {
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
 
+// Formata timestamp ISO para HH:mm (pt-BR); '—' quando ausente.
+function fmtTime(iso: string | null): string {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+        return '—';
+    }
+}
+
 export default function MyJobs() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
@@ -83,6 +93,10 @@ export default function MyJobs() {
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
+    const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
+    // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
+    const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
 
     // Hook de convites push
@@ -231,6 +245,19 @@ export default function MyJobs() {
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
+
+    // Avaliação obrigatória pós-pagamento: assim que o turno é concluído/pago pela
+    // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
+    // abrimos o modal automaticamente (1x por visita) para o freela avaliar a empresa.
+    useEffect(() => {
+        if (autoRatePrompted.current || loading) return;
+        const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id));
+        if (pending) {
+            autoRatePrompted.current = true;
+            setSelectedJobToRate(pending);
+            setRateModalOpen(true);
+        }
+    }, [jobs.history, reviewedJobIds, loading]);
 
     const handleCheckin = async (appId: string) => {
         setActionLoading(appId);
@@ -629,7 +656,14 @@ export default function MyJobs() {
                     </div>
                 )}
                 {activeTab === 'history' && jobs.history.map((job) => (
-                    <div key={job.id} className="bg-gray-50 border-2 border-transparent hover:border-black p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center transition-all cursor-pointer gap-2">
+                    <div
+                        key={job.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setDetailJob(job)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailJob(job); } }}
+                        className="bg-gray-50 border-2 border-transparent hover:border-black p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center transition-all cursor-pointer gap-2"
+                    >
                         <div>
                             <h3 className="font-black text-lg uppercase mb-1 text-gray-700">{job.title}</h3>
                             <p className="text-sm font-bold text-gray-400">{job.date} • {job.company_name}</p>
@@ -673,6 +707,90 @@ export default function MyJobs() {
                 title="Avaliar Empresa"
                 subtitle={selectedJobToRate?.title}
             />
+
+            {/* Detalhe do turno no histórico */}
+            {detailJob && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    onClick={(e) => { if (e.target === e.currentTarget) setDetailJob(null); }}
+                >
+                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3 mb-5">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                    {detailJob.company_logo ? (
+                                        <img src={detailJob.company_logo} alt={detailJob.company_name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-black text-white"><Building2 size={22} /></div>
+                                    )}
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-xl font-black uppercase tracking-tight truncate">{detailJob.title}</h3>
+                                    <p className="text-sm font-bold text-gray-500 truncate">{detailJob.company_name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setDetailJob(null)} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors flex-shrink-0">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Status */}
+                        <div className="mb-5">
+                            {detailJob.status === 'completed' ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-black text-green-700 bg-green-100 border-2 border-green-200 px-3 py-1.5 rounded-xl uppercase">
+                                    <CheckCircle2 size={14} /> Concluído e pago
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-black text-red-600 bg-red-100 border-2 border-red-200 px-3 py-1.5 rounded-xl uppercase">
+                                    <XCircle size={14} /> {detailJob.status === 'declined' ? 'Recusado' : 'Cancelado'}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Grid de infos */}
+                        <div className="grid grid-cols-2 gap-3 mb-5">
+                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
+                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Data</p>
+                                <p className="font-bold text-sm">{detailJob.date}</p>
+                            </div>
+                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
+                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Valor</p>
+                                <p className="font-black text-sm text-primary">R$ {detailJob.pay}</p>
+                            </div>
+                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
+                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
+                                <p className="font-bold text-sm">{fmtTime(detailJob.worker_checkin_at)}</p>
+                            </div>
+                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
+                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
+                                <p className="font-bold text-sm">{fmtTime(detailJob.worker_checkout_at)}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-sm font-bold text-gray-500 mb-5">
+                            <MapPin size={16} /> {detailJob.location}
+                            <span className="text-gray-300">•</span>
+                            <Clock size={16} /> {detailJob.time}{detailJob.end_time ? ` - ${detailJob.end_time}` : ''}
+                        </div>
+
+                        {/* Avaliação */}
+                        {detailJob.status === 'completed' && (
+                            reviewedJobIds.has(detailJob.job_id) ? (
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-500 border-t-2 border-gray-100 pt-4">
+                                    <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => { const j = detailJob; setDetailJob(null); handleOpenRateModal(j); }}
+                                    className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors border-t-2 border-gray-100"
+                                >
+                                    <Star size={16} /> Avaliar esta empresa
+                                </button>
+                            )
+                        )}
+                    </div>
+                </div>
+            )}
 
         </div>
     );

@@ -66,6 +66,25 @@ export default function CompanyCreateJob() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchJobData usa state setters estaveis, so precisa re-executar quando id muda
     }, [id]);
 
+    // Pré-preenche o Briefing com o briefing padrão do negócio (só ao criar, e só se
+    // ainda estiver vazio — a empresa pode ajustar/incrementar por turno).
+    useEffect(() => {
+        if (isEditing) return;
+        let active = true;
+        void (async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase
+                .from('companies')
+                .select('default_briefing')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (!active || !data?.default_briefing) return;
+            setFormData(prev => (prev.briefing ? prev : { ...prev, briefing: data.default_briefing as string }));
+        })();
+        return () => { active = false; };
+    }, [isEditing]);
+
     const fetchJobData = async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
