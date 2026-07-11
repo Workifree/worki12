@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -15,6 +15,7 @@ interface Company {
     website: string;
     email: string;
     address: string;
+    default_briefing?: string;
     logo_url?: string;
     cover_url?: string;
     rating_average?: number;
@@ -57,7 +58,7 @@ export default function CompanyProfile() {
         address: '',
     });
 
-    const editableFields = ['name', 'industry', 'description', 'website', 'email', 'address'] as const;
+    const editableFields = ['name', 'industry', 'description', 'website', 'email', 'address', 'default_briefing'] as const;
     const isDirty = isEditing && editableFields.some(
         field => (company[field] || '') !== (initialCompanyRef.current[field] || '')
     );
@@ -108,17 +109,25 @@ export default function CompanyProfile() {
         if (!userId) return;
         setSaving(true);
         try {
-            const { error } = await supabase
+            const basePayload = {
+                name: company.name,
+                industry: company.industry,
+                description: company.description,
+                website: company.website,
+                email: company.email,
+                address: company.address,
+            };
+
+            // Tenta salvar com o briefing padrão; se a coluna ainda não foi migrada no
+            // banco, refaz sem ela (deploy do frontend nunca quebra a edição do perfil).
+            let { error } = await supabase
                 .from('companies')
-                .update({
-                    name: company.name,
-                    industry: company.industry,
-                    description: company.description,
-                    website: company.website,
-                    email: company.email,
-                    address: company.address,
-                })
+                .update({ ...basePayload, default_briefing: company.default_briefing })
                 .eq('id', userId);
+
+            if (error && /default_briefing/i.test(error.message || '')) {
+                ({ error } = await supabase.from('companies').update(basePayload).eq('id', userId));
+            }
 
             if (error) throw error;
             initialCompanyRef.current = { ...company };
@@ -593,6 +602,40 @@ export default function CompanyProfile() {
                 </div>
             </div>
 
+
+            {/* Briefing padrão do negócio — pré-preenchido ao criar um turno */}
+            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                    <h3 className="text-xl font-black uppercase flex items-center gap-2">
+                        <ClipboardList size={20} /> Briefing Padrão
+                    </h3>
+                    {!isEditing && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="text-xs font-black uppercase text-gray-400 hover:text-black flex items-center gap-1 transition-colors flex-shrink-0"
+                        >
+                            <Pencil size={14} /> Editar
+                        </button>
+                    )}
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                    Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
+                </p>
+                {isEditing ? (
+                    <textarea
+                        name="default_briefing"
+                        value={company.default_briefing || ''}
+                        onChange={handleChange}
+                        aria-label="Briefing padrão do negócio"
+                        className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
+                        placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
+                    />
+                ) : (
+                    <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
+                        {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
+                    </p>
+                )}
+            </div>
 
             {/* Secao Seguranca */}
             <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
