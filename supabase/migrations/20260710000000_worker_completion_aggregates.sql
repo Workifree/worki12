@@ -44,6 +44,7 @@ CREATE OR REPLACE FUNCTION public.worker_level_for_xp(p_xp integer)
 RETURNS integer
 LANGUAGE sql
 IMMUTABLE
+SET search_path = ''
 AS $$
     SELECT CASE
         WHEN p_xp >= 4500 THEN 10
