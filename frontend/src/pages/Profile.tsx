@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2 } from 'lucide-react';
+import ProfileReviews from '../components/ProfileReviews';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -190,6 +191,36 @@ export default function Profile() {
         fetchProfile();
     }, [navigate]);
 
+    // Best-effort: recomputa XP/nível/ganhos/turnos via RPC (recompute_my_aggregates,
+    // SECURITY DEFINER, usa auth.uid()) e mescla o resultado no state do perfil, para a
+    // UI refletir o novo XP/nível na hora (sem esperar um reload). Erro aqui não deve
+    // quebrar o fluxo de salvar perfil / upload de foto.
+    const refreshAggregates = async (profileId: string) => {
+        try {
+            const { error: rpcError } = await supabase.rpc('recompute_my_aggregates');
+            if (rpcError) throw rpcError;
+
+            const { data, error: fetchError } = await supabase
+                .from('workers')
+                .select('xp, level, earnings_total, completed_jobs_count')
+                .eq('id', profileId)
+                .maybeSingle();
+            if (fetchError) throw fetchError;
+
+            if (data) {
+                setProfile(prev => prev ? { ...prev, ...data } : prev);
+                setStats(prev => ({
+                    ...prev,
+                    completedJobs: data.completed_jobs_count ?? prev.completedJobs,
+                    totalEarnings: data.earnings_total ?? prev.totalEarnings,
+                    hoursWorked: Math.floor((data.completed_jobs_count ?? prev.completedJobs) * 6)
+                }));
+            }
+        } catch (error) {
+            logError('Profile.refreshAggregates', error);
+        }
+    };
+
     const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
         if (!profile) return;
         try {
@@ -234,6 +265,10 @@ export default function Profile() {
 
             setProfile({ ...profile, ...updates } as WorkerProfile);
             addToast(`${type === 'avatar' ? 'Foto de perfil' : 'Capa'} atualizada!`, 'success');
+
+            if (type === 'avatar') {
+                await refreshAggregates(profile.id);
+            }
         } catch (error) {
             addToast('Erro ao fazer upload!', 'error');
             logError('Erro inesperado', error);
@@ -270,6 +305,8 @@ export default function Profile() {
             initialFormDataRef.current = { ...formData };
             setIsEditing(false);
             addToast('Perfil atualizado com sucesso!', 'success');
+
+            await refreshAggregates(profile.id);
         } catch (error) {
             addToast('Erro ao atualizar perfil!', 'error');
             logError('Erro inesperado', error);
@@ -634,17 +671,8 @@ export default function Profile() {
                         </div>
                     </div>
 
-                    {/* Reviews Section - Placeholder for now until we have reviews table populated */}
-                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <h3 className="text-xl font-black uppercase mb-6 flex items-center gap-2">
-                            <Star size={20} /> Avaliações Recentes
-                        </h3>
-
-                        <div className="text-center py-8 text-gray-400 font-medium">
-                            <p>Nenhuma avaliação recebida ainda.</p>
-                            <p className="text-sm mt-2">Complete turnos para receber avaliações de empresas.</p>
-                        </div>
-                    </div>
+                    {/* Avaliações recebidas de empresas */}
+                    {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
 
                 </div>
 
@@ -657,8 +685,9 @@ export default function Profile() {
                 </h3>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
+                    <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
                     <input
+                        id="new-password"
                         type="password"
                         value={newPassword}
                         onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
@@ -678,8 +707,9 @@ export default function Profile() {
                 </div>
 
                 <div className="mb-2">
-                    <label className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
+                    <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
                     <input
+                        id="confirm-password"
                         type="password"
                         value={confirmPassword}
                         onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
@@ -827,6 +857,7 @@ export default function Profile() {
                         onChange={(e) => setDeleteConfirmText(e.target.value)}
                         className="w-full border-2 border-gray-300 rounded-xl px-4 py-2 mb-6 font-bold focus:border-red-500 outline-none"
                         placeholder="EXCLUIR"
+                        aria-label="Confirmar exclusão"
                     />
                     <div className="flex gap-3">
                         <button

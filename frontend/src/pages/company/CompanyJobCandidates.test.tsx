@@ -333,7 +333,7 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
 
     // Rating modal should be open
     await waitFor(() => {
-      expect(screen.getByText('Avaliar Freelancer')).toBeInTheDocument()
+      expect(screen.getByText('Avaliar Freela')).toBeInTheDocument()
     })
 
     // Submit the review
@@ -341,7 +341,7 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Você já avaliou este profissional para este job.',
+        'Você já avaliou este freela para este turno.',
         'error'
       )
     })

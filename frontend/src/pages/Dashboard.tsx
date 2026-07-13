@@ -93,9 +93,12 @@ export default function Dashboard() {
     const { myStores, loading: storesLoading } = useWorkerStores();
 
     // Quests Logic (derived from worker data)
+    // R: XP só é concedido por foto de perfil (+50) e especialidades (+75) — ver RPC
+    // recompute_my_aggregates(). Confirmar email não gera XP, então essa quest não
+    // promete XP (xp: 0 e o selo "+XP" só renderiza quando quest.xp > 0).
     const quests = worker ? [
         { id: 1, title: 'Adicionar Foto de Perfil', xp: 50, done: !!worker.avatar_url, action: '/profile' },
-        { id: 2, title: 'Confirmar Email', xp: 100, done: !!authUser?.email_confirmed_at, action: '/profile' },
+        { id: 2, title: 'Confirmar Email', xp: 0, done: !!authUser?.email_confirmed_at, action: '/profile' },
         { id: 3, title: 'Adicionar Especialidades', xp: 75, done: (worker.roles && worker.roles.length > 0) || !!worker.primary_role, action: '/profile' },
     ] : [];
 
@@ -252,9 +255,15 @@ export default function Dashboard() {
                             {quests.filter(q => !q.done).slice(0, 2).map(quest => (
                                 <button key={quest.id} onClick={() => navigate('/profile')} className="flex items-center justify-between w-full md:w-80 bg-white p-3 rounded-xl border-2 border-gray-200 hover:border-black hover:shadow-md transition-all group text-left">
                                     <span className="text-sm font-bold text-gray-700">{quest.title}</span>
-                                    <span className="text-xs font-black bg-primary text-white px-2 py-1 rounded-md group-hover:scale-110 transition-transform">
-                                        +{quest.xp} XP
-                                    </span>
+                                    {quest.xp > 0 ? (
+                                        <span className="text-xs font-black bg-primary text-white px-2 py-1 rounded-md group-hover:scale-110 transition-transform">
+                                            +{quest.xp} XP
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs font-black bg-gray-200 text-gray-600 px-2 py-1 rounded-md group-hover:scale-110 transition-transform">
+                                            Verificação
+                                        </span>
+                                    )}
                                 </button>
                             ))}
                         </div>

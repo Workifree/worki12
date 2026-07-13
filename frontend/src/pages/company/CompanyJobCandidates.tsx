@@ -7,8 +7,8 @@ import { SpendLimitService } from '../../services/spendLimitService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
@@ -36,6 +36,16 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     cash: 'Dinheiro',
     other: 'Outro',
 };
+
+/**
+ * Formata uma data "date-only" (`scheduled_for`, YYYY-MM-DD) como data LOCAL, sem shift de
+ * fuso. `new Date("YYYY-MM-DD")` é interpretado como meia-noite UTC; em BRT (UTC-3) isso
+ * recua a data em 1 dia. Mesmo padrão de `ReceiptView.formatDateOnly` / `components/JobCard.tsx`.
+ */
+function formatDateOnly(dateOnly: string): string {
+    const [y, m, d] = dateOnly.split('-').map(Number);
+    return format(new Date(y, m - 1, d), 'dd/MM/yyyy', { locale: ptBR });
+}
 
 // Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
 // é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
@@ -73,6 +83,17 @@ export default function CompanyJobCandidates() {
     const [paymentNote, setPaymentNote] = useState('');
     const [recordingPayment, setRecordingPayment] = useState(false);
     const [paymentRecorded, setPaymentRecorded] = useState(false);
+
+    // Modal "Agendar pagamento" (modo A — ADR-20260712, promessa com data prevista)
+    const [scheduleModalApp, setScheduleModalApp] = useState<Application | null>(null);
+    const [scheduleSource, setScheduleSource] = useState<PaymentSource>('external_pix');
+    const [scheduleAmount, setScheduleAmount] = useState(0);
+    const [scheduledFor, setScheduledFor] = useState(() => new Date().toISOString().slice(0, 10));
+    const [scheduleNote, setScheduleNote] = useState('');
+    const [scheduling, setScheduling] = useState(false);
+    const [paymentScheduled, setPaymentScheduled] = useState(false);
+    // Efetivação de um pagamento já agendado ("Marcar como pago") — guarda o id em efetivação.
+    const [effectivatingId, setEffectivatingId] = useState<string | null>(null);
 
     // "Convidar outro" — convite expirado sem resposta; o slot está livre para outro freela (R8).
     const [reopenApp, setReopenApp] = useState<Application | null>(null);
@@ -208,6 +229,21 @@ export default function CompanyJobCandidates() {
         setPaymentRecorded(false);
     };
 
+    // Modo A (pagamento agendado) — abre o modal "Agendar pagamento" pré-preenchido com o valor do turno.
+    const openScheduleModal = (app: Application) => {
+        setScheduleModalApp(app);
+        setScheduleSource('external_pix');
+        setScheduleAmount(jobBudget);
+        setScheduledFor(new Date().toISOString().slice(0, 10));
+        setScheduleNote('');
+        setPaymentScheduled(false);
+    };
+
+    const closeScheduleModal = () => {
+        setScheduleModalApp(null);
+        setPaymentScheduled(false);
+    };
+
     // Abre o picker "Convidar outro" para um convite expirado (status='invited' + prazo vencido).
     // O slot está livre: qualquer outro membro da equipe (que ainda não tenha application para
     // este job) pode ser convidado. Não escreve nada no convite antigo — é só leitura + novo convite.
@@ -319,6 +355,81 @@ export default function CompanyJobCandidates() {
             addToast('Erro ao registrar pagamento.', 'error');
         } finally {
             setRecordingPayment(false);
+        }
+    };
+
+    // ADR-20260712 — agenda a PROMESSA de pagamento (status='scheduled', data prevista).
+    // Mesma lógica de "marcar o turno como concluído só após sucesso" do registro imediato:
+    // a entrega (chegada+saída confirmadas) já aconteceu, só o pagamento fica pendente.
+    const handleSchedulePayment = async () => {
+        if (!scheduleModalApp) return;
+        if (!(scheduleAmount > 0)) {
+            addToast('Informe um valor previsto maior que zero.', 'error');
+            return;
+        }
+        if (!scheduledFor) {
+            addToast('Informe a data prevista do pagamento.', 'error');
+            return;
+        }
+        setScheduling(true);
+        try {
+            const result = await PaymentRecordService.scheduleExternalPayment({
+                jobId: scheduleModalApp.job_id,
+                workerId: scheduleModalApp.worker_id,
+                applicationId: scheduleModalApp.id,
+                source: scheduleSource,
+                amount: scheduleAmount,
+                scheduledFor,
+                note: scheduleNote.trim() || undefined,
+            });
+
+            if (!result.success) {
+                if (result.alreadyActive) {
+                    addToast('Este turno já tem um pagamento registrado ou agendado. Veja o comprovante.', 'info');
+                    closeScheduleModal();
+                    fetchCandidates();
+                    return;
+                }
+                addToast(result.error || 'Não foi possível agendar o pagamento.', 'error');
+                return;
+            }
+
+            const { error: updateError } = await supabase
+                .from('applications')
+                .update({ status: 'completed' })
+                .eq('id', scheduleModalApp.id);
+            if (updateError) {
+                logError('CompanyJobCandidates: handleSchedulePayment.updateStatus', updateError);
+                addToast('Pagamento agendado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
+            } else {
+                addToast('Pagamento agendado com sucesso!', 'success');
+            }
+            setPaymentScheduled(true);
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleSchedulePayment', error);
+            addToast('Erro ao agendar pagamento.', 'error');
+        } finally {
+            setScheduling(false);
+        }
+    };
+
+    // Efetiva um pagamento agendado ("Marcar como pago") — scheduled → recorded, grava paid_at real.
+    const handleEffectivatePayment = async (paymentId: string) => {
+        setEffectivatingId(paymentId);
+        try {
+            const result = await PaymentRecordService.effectivateScheduledPayment(paymentId);
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível marcar como pago.', 'error');
+                return;
+            }
+            addToast('Pagamento marcado como pago!', 'success');
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleEffectivatePayment', error);
+            addToast('Erro ao marcar pagamento como pago.', 'error');
+        } finally {
+            setEffectivatingId(null);
         }
     };
 
@@ -468,8 +579,35 @@ export default function CompanyJobCandidates() {
         ];
     };
 
-    // Ramificação modo A (pagamento externo) vs C (postpago/cartão) vs prepago legado.
-    // Sem entrada em escrowKindMap = nenhum escrow reservado para este turno → modo A (default do piloto).
+    // Bloco de ações para um marcador 'scheduled' (promessa) — reaproveitado no gatilho de
+    // conclusão e na seção pós-conclusão (mesma lógica, dois pontos de renderização).
+    const renderScheduledPaymentBlock = (payment: ShiftPayment) => (
+        <div className="flex items-center gap-2 flex-wrap">
+            {payment.scheduled_for && (
+                <span className="flex items-center gap-1 text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-yellow-50 border-yellow-200 text-yellow-700">
+                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for)}
+                </span>
+            )}
+            <button
+                onClick={(e) => { e.stopPropagation(); handleEffectivatePayment(payment.id); }}
+                disabled={effectivatingId === payment.id}
+                className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1 disabled:opacity-50"
+            >
+                {effectivatingId === payment.id && <Loader2 size={14} className="animate-spin" />}
+                Marcar como pago
+            </button>
+            <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}`); }}
+                className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+            >
+                <Receipt size={14} /> Ver Comprovante
+            </button>
+        </div>
+    );
+
+    // Ramificação modo A (pagamento externo, registrado OU agendado) vs C (postpago/cartão)
+    // vs prepago legado. Sem entrada em escrowKindMap = nenhum escrow reservado para este
+    // turno → modo A (default do piloto).
     const renderCompletionAction = (app: Application) => {
         const kind = escrowKindMap[app.id];
         if (kind === 'prepaid' || kind === 'postpaid') {
@@ -482,23 +620,38 @@ export default function CompanyJobCandidates() {
                 </button>
             );
         }
-        if (shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id) {
+        const matchingPayment =
+            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
+                ? shiftPayment
+                : null;
+        if (matchingPayment?.status === 'recorded') {
             return (
                 <button
                     onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
-                    className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                 >
                     <Receipt size={14} /> Ver Recibo
                 </button>
             );
         }
+        if (matchingPayment?.status === 'scheduled') {
+            return renderScheduledPaymentBlock(matchingPayment);
+        }
         return (
-            <button
-                onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
-                className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-            >
-                Registrar Pagamento
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+                <button
+                    onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
+                    className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                >
+                    Registrar Pagamento
+                </button>
+                <button
+                    onClick={(e) => { e.stopPropagation(); openScheduleModal(app); }}
+                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                >
+                    <CalendarClock size={14} /> Agendar Pagamento
+                </button>
+            </div>
         );
     };
 
@@ -692,27 +845,45 @@ export default function CompanyJobCandidates() {
                                                         </>
                                                     )}
 
-                                                    {/* Ver Recibo — turno finalizado via modo A (pagamento externo) */}
-                                                    {app.status === 'completed' && shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
-                                                            className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
-                                                        >
-                                                            <Receipt size={14} /> Ver Recibo
-                                                        </button>
-                                                    )}
-
-                                                    {/* Rede de segurança (defense-in-depth): turno concluído em modo A (sem escrow)
-                                                        mas sem registro de pagamento — caminho de recuperação caso o registro tenha
-                                                        falhado depois da conclusão em algum fluxo legado/edge case. */}
-                                                    {app.status === 'completed' && !escrowKindMap[app.id] && !(shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id) && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
-                                                            className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                                                        >
-                                                            Registrar Pagamento
-                                                        </button>
-                                                    )}
+                                                    {/* Turno finalizado via modo A (pagamento externo) — ramifica por status do marcador. */}
+                                                    {app.status === 'completed' && !escrowKindMap[app.id] && (() => {
+                                                        const matchingPayment =
+                                                            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
+                                                                ? shiftPayment
+                                                                : null;
+                                                        if (matchingPayment?.status === 'recorded') {
+                                                            return (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                                                                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <Receipt size={14} /> Ver Recibo
+                                                                </button>
+                                                            );
+                                                        }
+                                                        if (matchingPayment?.status === 'scheduled') {
+                                                            return renderScheduledPaymentBlock(matchingPayment);
+                                                        }
+                                                        // Rede de segurança (defense-in-depth): turno concluído em modo A (sem escrow)
+                                                        // mas sem registro/agendamento de pagamento — caminho de recuperação caso o
+                                                        // registro tenha falhado depois da conclusão em algum fluxo legado/edge case.
+                                                        return (
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
+                                                                    className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                                                                >
+                                                                    Registrar Pagamento
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); openScheduleModal(app); }}
+                                                                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <CalendarClock size={14} /> Agendar Pagamento
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })()}
 
                                                     {/* Botão Avaliar — apenas para candidatos já finalizados */}
                                                     {app.status === 'completed' && (
@@ -989,6 +1160,133 @@ export default function CompanyJobCandidates() {
                                         className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Receipt size={16} /> Ver Recibo
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal "Agendar Pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
+            {scheduleModalApp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        {!paymentScheduled ? (
+                            <>
+                                <h2 className="text-xl font-black uppercase tracking-tight mb-1">Agendar Pagamento</h2>
+                                <p className="text-xs font-bold text-gray-500 uppercase mb-5">
+                                    Promessa de pagamento por fora do Worki — comprovante para o freela
+                                </p>
+
+                                <div className="mb-4">
+                                    <span className="block text-sm font-bold uppercase mb-2">Forma de pagamento</span>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(Object.keys(PAYMENT_SOURCE_LABELS) as PaymentSource[]).map((src) => (
+                                            <button
+                                                key={src}
+                                                type="button"
+                                                onClick={() => setScheduleSource(src)}
+                                                aria-pressed={scheduleSource === src}
+                                                className={`py-3 min-h-[44px] rounded-xl border-2 border-black font-black text-xs uppercase transition-colors ${scheduleSource === src ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {PAYMENT_SOURCE_LABELS[src]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label htmlFor="schedule-amount" className="block text-sm font-bold uppercase mb-2">
+                                        Valor previsto (R$)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
+                                        <input
+                                            id="schedule-amount"
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={scheduleAmount}
+                                            onChange={(e) => setScheduleAmount(Number(e.target.value))}
+                                            className="w-full border-2 border-black rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold tabular-nums"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label htmlFor="schedule-for" className="block text-sm font-bold uppercase mb-2">
+                                        Data prevista do pagamento
+                                    </label>
+                                    <input
+                                        id="schedule-for"
+                                        type="date"
+                                        value={scheduledFor}
+                                        onChange={(e) => setScheduledFor(e.target.value)}
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                                    />
+                                </div>
+
+                                <div className="mb-6">
+                                    <label htmlFor="schedule-note" className="block text-sm font-bold uppercase mb-2">
+                                        Nota (opcional)
+                                    </label>
+                                    <textarea
+                                        id="schedule-note"
+                                        value={scheduleNote}
+                                        onChange={(e) => setScheduleNote(e.target.value)}
+                                        placeholder="Ex.: pagamento no fechamento do mês..."
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-medium h-20 resize-none"
+                                    />
+                                </div>
+
+                                <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                                    <p className="text-xs font-bold text-yellow-800">
+                                        Isto é uma PROMESSA, ainda não um pagamento — o dinheiro não passa pelo Worki.
+                                        O comprovante de agendamento fica disponível para o freela; ao efetivar, marque
+                                        "Marcar como pago". Ao confirmar, o turno será marcado como concluído.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={closeScheduleModal}
+                                        disabled={scheduling}
+                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleSchedulePayment}
+                                        disabled={scheduling || !(scheduleAmount > 0) || !scheduledFor}
+                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {scheduling ? <><Loader2 size={16} className="animate-spin" /> Agendando...</> : 'Confirmar Agendamento'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center text-center py-4">
+                                <div className="w-16 h-16 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
+                                    <CalendarClock size={32} className="text-primary" />
+                                </div>
+                                <h2 className="text-xl font-black uppercase tracking-tight mb-2">Pagamento agendado!</h2>
+                                <p className="text-gray-600 font-medium mb-6">
+                                    O comprovante de agendamento já está disponível para você e para o profissional.
+                                </p>
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={closeScheduleModal}
+                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                                    >
+                                        Fechar
+                                    </button>
+                                    <button
+                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}`)}
+                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Receipt size={16} /> Ver Comprovante
                                     </button>
                                 </div>
                             </div>

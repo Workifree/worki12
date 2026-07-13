@@ -10,6 +10,27 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Agregados e Histórico Detalhado do Freela (2026-07-12)
+
+**Freela:**
+- **XP e nível corretos:** ao concluir turnos, XP sobe (100 por turno) + bônus de perfil (foto +50, especialidades +75), nível progride automaticamente
+- **Ganhos totais visíveis:** o total de ganhos e número de turnos concluídos agora aparecem corretos na tela inicial
+- **Histórico detalhado:** ao clicar em um turno concluído, vê chegada/saída (timestamps), valor, status de pagamento e avaliação recebida
+- **Avaliações no perfil:** tanto freela quanto empresa veem a lista de avaliações recebidas (estrelas + comentário) em seus perfis públicos
+- **Avaliação obrigatória após pagamento:** ao receber um turno pago, o freela é solicitado uma vez (por visita) a avaliar a empresa antes de deixar a tela de histórico
+
+#### Pagamento Agendado e Comprovante (2026-07-12)
+
+**Empresa e Freelancer:**
+- **Agendamento de pagamento:** a empresa pode agendar pagamento com data prevista, gerando um "Comprovante de Agendamento" que dá respaldo ao freela
+- **Transição para pago:** após o agendamento, a empresa marca como efetivamente pago (status → 'recorded'), gerando o recibo normal
+
+#### Briefing Padrão (2026-07-12)
+
+**Empresa:**
+- **Briefing padrão do negócio:** configurar uma vez no perfil da empresa (regras da casa, dress code, apresentação)
+- **Pré-preenchimento ao criar turno:** ao criar novo turno, o briefing padrão vem preenchido e pode ser ajustado por turno
+
 #### Modo A — Pagamento Externo (Piloto 2026-07-01)
 
 **Empresa e Freelancer:**

@@ -21,7 +21,7 @@
   TanStack React Query 5.90.20 está no `package.json` e um `QueryClient` é montado em `App.tsx`, mas
   **as páginas NÃO usam `useQuery` na prática.** Seguir o padrão existente (useState/useEffect) ao
   implementar features novas, salvo decisão explícita de migrar.
-- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push), `financialBIService` (BI unificado), `spendLimitService` (teto + alerta).
+- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push), `financialBIService` (BI unificado), `spendLimitService` (teto + alerta).
 - **Toda query autenticada começa com** `supabase.auth.getUser()` → redireciona para `/login` se `null`.
 - **Backend:** Supabase (PostgREST + Realtime + Auth + Storage + Edge Functions Deno)
 - **Supabase JS:** 2.91.0 — client em `frontend/src/lib/supabase.ts` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
@@ -41,6 +41,8 @@
 - **QR code:** `qrcode.react` 4.2.0 (geração em `<QRCodeSVG>` para links de convite); **`html5-qrcode` 2.3.8** (leitura de QR/Worki ID via câmera, aba QR em team connections)
 - **Util:** `clsx` + `tailwind-merge` + `class-variance-authority`; datas via `date-fns`
 - **Fonte:** Inter (sans-serif), pesos pesados (`font-black`, `uppercase`)
+- **Componentes novos (Slice 4):**
+  - **`ProfileReviews`** — lista avaliações recebidas (estrelas + comentário). Props: `reviewedId`, `reviewerRole` ('company' | 'worker'). Filtra por `direction` inverso (worker que avalia company = direction='company'). Neo-brutalista com border 2px + sombra offset.
 
 ## Pagamentos — Asaas (único gateway)
 
@@ -88,10 +90,18 @@
 - **Config tables (Slice 3, sem RPC de saldo — Article 8):**
   - **`company_spend_limits`** (20260623000000) — teto mensal por empresa. Campos: `company_id, period='month', amount, alert_thresholds[]` (default [80,90,100]), `scope` ('' = empresa inteira, v1 single-store), `financial_contact_email/phone`. RLS por owner. Sem saldo.
   - **`company_monthly_revenue`** (20260623000100) — faturamento mensal declarado (input para BI-3). Campos: `company_id, year_month` (DATE dia 1), `amount`. Upsert (company_id, year_month). RLS por owner.
+  - **`companies.default_briefing`** (20260710000100) — texto de briefing padrão do negócio (pré-preenche turno). Simples, NÃO toca saldo.
+- **Mudanças em shift_payments (Slice 3, modo A + agendamento):**
+  - **20260712000000** — novo status `scheduled`, coluna `scheduled_for date` (promessa imutável), `paid_at` agora nullable (NULL em scheduled, setado na efetivação). UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')`. Trigger reescrito para liberar SÓ transição `scheduled→recorded` de `paid_at`. Máquina de estados: `scheduled→recorded|voided`, `recorded→voided`. ZERO impacto em saldo/escrow.
 - **Policy adicional (20260623000200):**
   - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
 - Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,
-  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova).
+  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for).
+- **RPCs de agregados do worker (Slice 4):**
+  - **`recompute_worker_aggregates(uuid)`** — recomputa `xp`, `level`, `completed_jobs_count`, `earnings_total`. SECURITY DEFINER, service_role only, idempotente. Fórmula: `xp = completed_jobs_count*100 + bônus_perfil` (foto +50, especialidades +75).
+  - **`recompute_my_aggregates()`** — wrapper auth-scoped para cliente recomputar próprios agregados após editar perfil. GRANT EXECUTE TO authenticated.
+  - **Trigger `trg_worker_completion_aggregates`** (AFTER INSERT/UPDATE status ON applications WHEN →'completed') — chama `recompute_worker_aggregates(worker_id)` (SECURITY DEFINER).
+  - **Landmark:** trigger legado `award_xp_on_job_completion` NÃO era DEFINER → RLS bloqueava UPDATE do freela quando empresa concluía turno (causa real de "XP não sobe") = **foi removido**.
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
   `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir.
