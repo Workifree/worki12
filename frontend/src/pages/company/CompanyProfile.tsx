@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import ProfileReviews from '../../components/ProfileReviews';
 
 interface Company {
     name: string;
@@ -637,6 +638,9 @@ export default function CompanyProfile() {
                 )}
             </div>
 
+            {/* Avaliações recebidas de freelas */}
+            {userId && <ProfileReviews reviewedId={userId} reviewerRole="worker" />}
+
             {/* Secao Seguranca */}
             <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
@@ -644,8 +648,9 @@ export default function CompanyProfile() {
                 </h3>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
+                    <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
                     <input
+                        id="new-password"
                         type="password"
                         value={newPassword}
                         onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
@@ -665,8 +670,9 @@ export default function CompanyProfile() {
                 </div>
 
                 <div className="mb-2">
-                    <label className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
+                    <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
                     <input
+                        id="confirm-password"
                         type="password"
                         value={confirmPassword}
                         onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}

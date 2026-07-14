@@ -152,5 +152,25 @@ no aceite de convite, hold no cartão; na conclusão, captura. Reservado para ex
 exibe detalhes do turno, valor, método (PIX/dinheiro/outro), confirmação bilateral, para auditoria/arquivo.
 
 **Shift payment / Marcador de pagamento** — Registro em `shift_payments` indicando que um turno foi pago fora do Worki
-(modo A). Tabela: `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, recorded_by_company_at,
-confirmed_by_worker_at, note)`. UNIQUE `(job_id)` WHERE `status='recorded'` garante 1 pagamento por turno. NUNCA move saldo.
+(modo A). Tabela: `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by,
+worker_confirmed_at, voided_at, void_reason, note, created_at)`. Status: `scheduled | recorded | voided`. UNIQUE `(job_id)` WHERE 
+`status IN ('scheduled','recorded')` garante 1 marcador ativo por turno. NUNCA move saldo.
+
+**Pagamento agendado (scheduled)** — Status novo de `shift_payments` (modo A). Empresa cria promessa: data prevista (`scheduled_for`), 
+`status='scheduled'`, `paid_at=null`. Comprovante de agendamento no ReceiptView. Transições: `scheduled→recorded` (efetivar, `paid_at` 
+setado UMA vez) ou `scheduled→voided` (cancelar). BI NÃO conta promessas (SÓ `recorded`). Zero impacto em saldo.
+
+**Efetivação de agendamento** — Transição `scheduled→recorded` de um `shift_payment`. Empresa seta `paid_at` (data real do pagamento). 
+Depois imutável. Torna-se `recorded` e entra no BI de gasto. Service: `paymentRecordService.effectivateScheduledPayment`.
+
+**Comprovante de agendamento** — Documento exibido no ReceiptView quando `shift_payment.status='scheduled'`. Mostra "Pagamento agendado 
+para {scheduled_for}", sem "Confirmar Recebimento" (nada recebido ainda). Respaldo ao freela; não é garantia de pagamento nem documento fiscal.
+
+**Agregados do worker** — Campos derivados e recomputados: `xp`, `level`, `completed_jobs_count`, `earnings_total`. Função canônica: 
+`recompute_worker_aggregates(worker_id)` (SECURITY DEFINER, service_role only). Fórmula: `xp = completed_jobs_count*100 + bônus_perfil 
+(+50 foto, +75 especialidades)`. Chamada pelo trigger de conclusão DE turno E por cliente via `recompute_my_aggregates()` após editar perfil. 
+Landmark: trigger legado `award_xp_on_job_completion` NÃO era DEFINER → RLS bloqueava UPDATE do freela quando empresa concluía turno (causa 
+real de "XP não sobe") = foi removido.
+
+**Briefing padrão** — Campo `companies.default_briefing` (text). Empresa cadastra UMA vez (ex.: "calça jeans, boa apresentação, barba feita"). 
+Ao criar turno, pré-preenche a descrição; empresa ajusta/incrementa por turno (ex.: "camisa verde"). Operacional, NÃO toca saldo.

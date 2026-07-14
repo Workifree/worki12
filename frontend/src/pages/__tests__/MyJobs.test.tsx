@@ -69,26 +69,6 @@ interface ApplicationRow {
   } | null
 }
 
-const APP_APPLIED: ApplicationRow = {
-  id: 'app-1',
-  status: 'pending',
-  created_at: '2026-03-10T10:00:00Z',
-  worker_checkin_at: null,
-  worker_checkout_at: null,
-  company_checkin_confirmed_at: null,
-  company_checkout_confirmed_at: null,
-  job: {
-    id: 'job-1',
-    title: 'Garcom para Evento',
-    budget: 150,
-    start_date: '2026-04-10',
-    work_start_time: '18:00',
-    work_end_time: '23:00',
-    location: 'Sao Paulo',
-    company: { id: 'company-1', name: 'Buffet Premium', logo_url: null },
-  },
-}
-
 const APP_IN_PROGRESS: ApplicationRow = {
   id: 'app-2',
   status: 'in_progress',
@@ -183,108 +163,70 @@ beforeEach(() => {
 })
 
 describe('MyJobs - Tabs de status', () => {
-  it('renderiza todas as tabs de status', async () => {
-    setupMocks([APP_APPLIED])
+  it('renderiza todas as tabs de status (pivô: sem Candidaturas)', async () => {
+    setupMocks([APP_IN_PROGRESS])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Candidaturas')).toBeInTheDocument()
+      expect(screen.getByText('Convites')).toBeInTheDocument()
     })
 
     expect(screen.getByText('Em Andamento')).toBeInTheDocument()
     expect(screen.getByText('Agendados')).toBeInTheDocument()
     expect(screen.getByText(/Histórico/)).toBeInTheDocument()
+    // Aba "Candidaturas" foi removida no pivô push (invite-only).
+    expect(screen.queryByText('Candidaturas')).not.toBeInTheDocument()
   })
 
-  it('troca de tab ao clicar e mostra jobs corretos', async () => {
-    setupMocks([APP_APPLIED, APP_COMPLETED])
+  it('troca de tab ao clicar e mostra turnos corretos', async () => {
+    setupMocks([APP_IN_PROGRESS, APP_COMPLETED])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
+      expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    // Click on Candidaturas tab
-    fireEvent.click(screen.getByText('Candidaturas'))
-
+    // Em Andamento
+    fireEvent.click(screen.getByText('Em Andamento'))
     await waitFor(() => {
-      expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
+      expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
     })
 
-    // Click on History tab
+    // Histórico
     fireEvent.click(screen.getByText(/Histórico/))
-
     await waitFor(() => {
       expect(screen.getByText('Cozinheiro para Evento')).toBeInTheDocument()
     })
   })
 })
 
-describe('MyJobs - Botao check-in', () => {
-  it('exibe botao Check-in para jobs in_progress sem checkin', async () => {
+describe('MyJobs - Botao check-out', () => {
+  it('exibe botao Check-out para turnos in_progress com checkin e sem checkout', async () => {
     setupMocks([APP_IN_PROGRESS])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
+      expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    // Switch to In Progress tab
     fireEvent.click(screen.getByText('Em Andamento'))
 
     await waitFor(() => {
       expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
     })
 
-    // Check-out button should be visible since worker_checkin_at is set but worker_checkout_at is null
+    // worker_checkin_at setado e worker_checkout_at null → botão Check-out visível
     expect(screen.getByText('Check-out')).toBeInTheDocument()
   })
 })
 
-describe('MyJobs - Botao cancelar aplicacao', () => {
-  it('exibe botao de cancelar para jobs applied', async () => {
-    setupMocks([APP_APPLIED])
-    renderComponent()
-
-    await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
-    })
-
-    // Switch to Candidaturas tab
-    fireEvent.click(screen.getByText('Candidaturas'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
-    })
-
-    // Cancel button should exist (XCircle icon button)
-    const cancelBtn = screen.getByTitle('Cancelar Candidatura')
-    expect(cancelBtn).toBeInTheDocument()
-  })
-})
-
 describe('MyJobs - Estado vazio por tab', () => {
-  it('exibe estado vazio na tab Candidaturas quando nao ha aplicacoes', async () => {
+  it('exibe estado vazio na tab Em Andamento quando nao ha turnos', async () => {
     setupMocks([])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByText('Candidaturas'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Você não tem candidaturas pendentes.')).toBeInTheDocument()
-    })
-  })
-
-  it('exibe estado vazio na tab Em Andamento quando nao ha jobs', async () => {
-    setupMocks([])
-    renderComponent()
-
-    await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
+      expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByText('Em Andamento'))
@@ -294,28 +236,27 @@ describe('MyJobs - Estado vazio por tab', () => {
     })
   })
 
-  it('exibe estado vazio na tab Agendados quando nao ha jobs', async () => {
+  it('exibe estado vazio na tab Agendados quando nao ha turnos', async () => {
     setupMocks([])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
+      expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    // Convites e a tab padrao; trocar para Agendados
     fireEvent.click(screen.getByText('Agendados'))
 
     await waitFor(() => {
-      expect(screen.getByText('Nenhum job agendado no momento.')).toBeInTheDocument()
+      expect(screen.getByText('Nenhum turno agendado no momento.')).toBeInTheDocument()
     })
   })
 
-  it('exibe estado vazio na tab Historico quando nao ha jobs', async () => {
+  it('exibe estado vazio na tab Historico quando nao ha turnos', async () => {
     setupMocks([])
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('Meus Jobs')).toBeInTheDocument()
+      expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByText(/Histórico/))

@@ -121,9 +121,10 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 
 - **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
-- **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, recorded_by_company_at, confirmed_by_worker_at, note, created_at)`.
-  UNIQUE parcial `(job_id)` WHERE `status='recorded'` — garante 1 registro pago por turno.
-  RLS bilateral: empresa vê seu registro, worker vê seu recibo. **NUNCA toca saldo** (auditoria, não liquidação).
+- **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by, worker_confirmed_at, voided_at, void_reason, note, created_at)`.
+  Status: `scheduled | recorded | voided`. `scheduled_for` (data prevista) é material/imutável; `paid_at` é nullable (NULL em scheduled, setado na efetivação) e depois imutável.
+  UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` — garante 1 marcador ativo por turno.
+  RLS bilateral: empresa (registra/efetiva/cancela), worker (confirma recebimento em recorded). **NUNCA toca saldo** (auditoria, não liquidação).
 - **`escrow_transactions`** (estendida):
   - `kind`: `'prepaid'` (default) | `'postpaid'`
   - `status`: `'reserved' | 'authorized' | 'captured' | 'released' | 'refunded'`
@@ -140,6 +141,60 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 - **Taxa de plataforma:** 5% no saque (worker), TBD no escrow (empresa).
 - **Coexistência:** prepago e postpago rodam em paralelo por `kind`. Ramificação acontece em `walletService.releaseOrCaptureEscrow(jobId, workerId, kind)`
   que despacha para `asaas-checkout` (prepago) ou `asaas-capture-payment` (postpago).
+
+## Agregados do worker (Slice 4: engajamento)
+
+Campos derivados (`xp`, `level`, `completed_jobs_count`, `earnings_total`) são **recomputados canonicamente** por uma única função Postgres
+`recompute_worker_aggregates(worker_id)` (SECURITY DEFINER, search_path='', idempotente).
+
+**Fórmula (XP):** `xp = completed_jobs_count * 100 + profile_bonus`
+- `completed_jobs_count` = COUNT de `applications` com `status='completed'` (source de verdade)
+- `profile_bonus` = 50 (foto/avatar_url) + 75 (especialidades: primary_role OU roles array) = até +125
+- `level` derivado via função `worker_level_for_xp(xp)`
+- `earnings_total` = SUM dos budgets dos turnos concluídos (agregado de exibição, não saldo — Article 8 intacto)
+
+**Fontes de chamada:**
+1. **Trigger `trg_worker_completion_aggregates` (AFTER INSERT/UPDATE OF status ON applications WHEN status→'completed')** — empresa conclui turno, recomputa do worker.
+2. **Cliente via `recompute_my_aggregates()` (SECURITY DEFINER)** — após worker editar foto/especialidades no perfil (mudou bônus).
+
+**Segurança:**
+- `recompute_worker_aggregates(uuid)` é SECURITY DEFINER com search_path='', **sem GRANT a PUBLIC/anon/authenticated** — só service_role e trigger interno.
+- Cliente acessa via wrapper `recompute_my_aggregates()` (auth-scoped, trabalha sobre `auth.uid()` apenas) — GRANT EXECUTE TO authenticated.
+- Landmine corrigido: trigger legado `award_xp_on_job_completion` NÃO era SECURITY DEFINER → quando a empresa concluía o turno, o RLS bloqueava o UPDATE em workers (invoker não tinha permissão na linha do worker) = causa real de "XP não sobe"; **foi removido** e substituído pelo novo que é DEFINER.
+
+## Pagamento agendado (Slice 3: modo A pós-turno)
+
+`shift_payments` (modo A — pagamento externo registrado) ganhou suporte a **agendamento** com status `scheduled` + data prevista.
+
+**Máquina de estados (mesma linha):**
+```
+INSERT → scheduled (promessa) ──efetivar──► recorded (realizado) ──estornar──► voided
+             │                                                                   ▲
+             └─────────────────── cancelar ───────────────────────────────────┘
+INSERT → recorded (direto legado) ──estornar──► voided
+```
+
+**Colunas novas:**
+- `scheduled_for date` — data prevista do pagamento (imutável; reagendar = void + novo). NULL em registros diretos (`recorded` sem agendamento prévio).
+- `paid_at` — agora **NULLABLE** (era NOT NULL). NULL enquanto `scheduled`; setado **UMA vez** na efetivação (`scheduled→recorded`) e depois imutável. Timestamps reais (nunca data futura disfarçada).
+
+**Dedupe:** UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` = **um marcador ativo por turno**, impedindo duas promessas ou promessa+pagamento em linhas separadas. N linhas `voided` permitidas (re-agendar/re-registrar).
+
+**Trigger `enforce_shift_payment_immutability` reescrito:**
+- Material columns (job_id, company_id, worker_id, application_id, source, amount, recorded_by, note, created_at, **scheduled_for**) → imutáveis sempre.
+- `paid_at` → imutável, EXCETO na única transição permitida: `scheduled→recorded` (NULL→data real, uma vez).
+- Transições válidas (só empresa): `scheduled→recorded` (efetivar), `scheduled→voided` (cancelar), `recorded→voided` (estornar). Qualquer outra é rejeitada.
+- Partição por papel: empresa efetiva/cancela/estorna; worker só confirma recebimento em `recorded`.
+
+**BI e comprovante:**
+- BI de gasto conta **SÓ** `recorded` (promessa ≠ liquidação — `scheduled` não infla gasto).
+- `ReceiptView` reutilizável: ramifica por status (scheduled → "Comprovante de Agendamento", recorded → recibo bilateral).
+- ZERO impacto em saldo/escrow/RPC — Article 8 intacto.
+
+## Briefing padrão (Slice 3: operação)
+
+`companies.default_briefing` (text, nullable) — a empresa cadastra UMA vez o briefing padrão do negócio (ex.: "calça jeans, barba feita, camisa branca").
+Ao criar um turno, pré-preenche o campo Briefing; empresa ajusta/incrementa por turno (ex.: "camisa verde" para estoquista). Simples editável, NÃO toca saldo (Article 8).
 
 ## Segurança
 

@@ -16,6 +16,7 @@ function makeChain(result: { data: any; error: any }) {
     insert: vi.fn(() => chain),
     update: vi.fn(() => chain),
     eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
     maybeSingle: vi.fn(() => promise),
     single: vi.fn(() => promise),
     then: promise.then.bind(promise),
@@ -70,6 +71,7 @@ const SHIFT_PAYMENT_ROW: ShiftPayment = {
   application_id: 'app-1',
   source: 'external_pix',
   amount: 150,
+  scheduled_for: null,
   paid_at: '2026-06-30T12:00:00Z',
   recorded_by: 'user-company-1',
   worker_confirmed_at: null,
@@ -78,6 +80,14 @@ const SHIFT_PAYMENT_ROW: ShiftPayment = {
   voided_at: null,
   void_reason: null,
   created_at: '2026-06-30T12:00:00Z',
+}
+
+const SCHEDULED_PAYMENT_ROW: ShiftPayment = {
+  ...SHIFT_PAYMENT_ROW,
+  id: 'sp-2',
+  status: 'scheduled',
+  scheduled_for: '2026-07-20',
+  paid_at: null,
 }
 
 // ---------------------------------------------------------------------------
@@ -96,9 +106,9 @@ describe('Tipos ShiftPayment', () => {
     sources.forEach((s) => expect(['external_pix', 'cash', 'other']).toContain(s))
   })
 
-  it('ShiftPaymentStatus aceita recorded | voided', () => {
-    const statuses: ShiftPaymentStatus[] = ['recorded', 'voided']
-    statuses.forEach((s) => expect(['recorded', 'voided']).toContain(s))
+  it('ShiftPaymentStatus aceita scheduled | recorded | voided', () => {
+    const statuses: ShiftPaymentStatus[] = ['scheduled', 'recorded', 'voided']
+    statuses.forEach((s) => expect(['scheduled', 'recorded', 'voided']).toContain(s))
   })
 
   it('ShiftPayment aceita voided com voided_at/void_reason preenchidos', () => {
@@ -110,6 +120,12 @@ describe('Tipos ShiftPayment', () => {
     }
     expect(voided.status).toBe('voided')
     expect(voided.voided_at).not.toBeNull()
+  })
+
+  it('ShiftPayment aceita scheduled com scheduled_for preenchido e paid_at nulo', () => {
+    expect(SCHEDULED_PAYMENT_ROW.status).toBe('scheduled')
+    expect(SCHEDULED_PAYMENT_ROW.scheduled_for).toBe('2026-07-20')
+    expect(SCHEDULED_PAYMENT_ROW.paid_at).toBeNull()
   })
 })
 
@@ -311,6 +327,154 @@ describe('PaymentRecordService.recordExternalPayment', () => {
 })
 
 // ---------------------------------------------------------------------------
+// scheduleExternalPayment (ADR-20260712 — pagamento agendado)
+// ---------------------------------------------------------------------------
+
+describe('PaymentRecordService.scheduleExternalPayment', () => {
+  it('rejeita amount <= 0 sem chamar o supabase', async () => {
+    const { PaymentRecordService } = await import('./paymentRecordService')
+
+    const result = await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'cash',
+      amount: 0,
+      scheduledFor: '2026-07-20',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/maior que zero/)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejeita scheduledFor vazio sem chamar o supabase', async () => {
+    const { PaymentRecordService } = await import('./paymentRecordService')
+
+    const result = await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'cash',
+      amount: 100,
+      scheduledFor: '',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/data prevista/)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('rejeita quando o turno (application) não está concluído', async () => {
+    routeFrom({
+      applications: makeChain({
+        data: { ...APPLICATION_COMPLETED, company_checkout_confirmed_at: null },
+        error: null,
+      }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'cash',
+      amount: 100,
+      scheduledFor: '2026-07-20',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/concluído/)
+  })
+
+  it('agenda com sucesso quando o turno está concluído — status scheduled, sem paid_at', async () => {
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      companies: makeChain({ data: COMPANY_ROW, error: null }),
+      shift_payments: makeChain({ data: SCHEDULED_PAYMENT_ROW, error: null }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'external_pix',
+      amount: 150,
+      scheduledFor: '2026-07-20',
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.payment?.status).toBe('scheduled')
+    expect(result.payment?.paid_at).toBeNull()
+    expect(mockFrom).toHaveBeenCalledWith('shift_payments')
+  })
+
+  it('trata violação do UNIQUE parcial (23505) como alreadyActive, sem crashar', async () => {
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      companies: makeChain({ data: COMPANY_ROW, error: null }),
+      shift_payments: makeChain({
+        data: null,
+        error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+      }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'cash',
+      amount: 100,
+      scheduledFor: '2026-07-20',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.alreadyActive).toBe(true)
+    expect(result.error).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// effectivateScheduledPayment (scheduled → recorded)
+// ---------------------------------------------------------------------------
+
+describe('PaymentRecordService.effectivateScheduledPayment', () => {
+  it('efetiva com sucesso — status recorded, paid_at preenchido', async () => {
+    routeFrom({
+      shift_payments: makeChain({
+        data: { ...SCHEDULED_PAYMENT_ROW, status: 'recorded', paid_at: '2026-07-20T00:00:00Z' },
+        error: null,
+      }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.effectivateScheduledPayment('sp-2')
+
+    expect(result.success).toBe(true)
+    expect(result.payment?.status).toBe('recorded')
+    expect(result.payment?.paid_at).toBeTruthy()
+    expect(mockFrom).toHaveBeenCalledWith('shift_payments')
+  })
+
+  it('retorna erro quando o UPDATE falha (ex.: trigger de imutabilidade/transição inválida)', async () => {
+    routeFrom({
+      shift_payments: makeChain({
+        data: null,
+        error: { message: 'shift_payments: transicao de status invalida' },
+      }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.effectivateScheduledPayment('sp-2')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // getPaymentByJob
 // ---------------------------------------------------------------------------
 
@@ -323,6 +487,16 @@ describe('PaymentRecordService.getPaymentByJob', () => {
 
     expect(result).toEqual(SHIFT_PAYMENT_ROW)
     expect(mockFrom).toHaveBeenCalledWith('shift_payments')
+  })
+
+  it('retorna o registro scheduled (promessa) do turno — o comprovante de agendamento também deve aparecer', async () => {
+    routeFrom({ shift_payments: makeChain({ data: SCHEDULED_PAYMENT_ROW, error: null }) })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.getPaymentByJob('job-1')
+
+    expect(result).toEqual(SCHEDULED_PAYMENT_ROW)
+    expect(result?.status).toBe('scheduled')
   })
 
   it('retorna null quando não há registro', async () => {

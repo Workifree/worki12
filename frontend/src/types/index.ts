@@ -475,19 +475,22 @@ export interface FinancialBIData {
 export type PaymentSource = 'external_pix' | 'cash' | 'other';
 
 /**
- * Estado do registro. 'voided' é totalmente imutável (correção = novo registro).
+ * Estado do registro. 'scheduled' é a promessa (data prevista, sem paid_at). 'voided' é
+ * totalmente imutável (correção = novo registro). Ver ADR-20260712 (pagamento agendado).
  */
-export type ShiftPaymentStatus = 'recorded' | 'voided';
+export type ShiftPaymentStatus = 'scheduled' | 'recorded' | 'voided';
 
 /**
  * Espelha a tabela `shift_payments` (marcador de pagamento externo por turno).
  * Registro/auditoria declaratório — NÃO move saldo, NÃO toca wallets/escrow_transactions,
  * sem RPC (Article 8 intacto). Gerado à mão conforme migration
- * `20260630000000_shift_payments.sql`.
+ * `20260630000000_shift_payments.sql` + `20260712000000_shift_payment_scheduled.sql`.
  *
  * Imutabilidade (trigger `enforce_shift_payment_immutability`):
  *  - Colunas materiais (job_id, company_id, worker_id, application_id, source, amount,
- *    paid_at, recorded_by, note, created_at) são imutáveis após o INSERT.
+ *    recorded_by, note, created_at, scheduled_for) são imutáveis após o INSERT.
+ *  - `paid_at` é NULL enquanto `scheduled`; setado UMA vez na efetivação (scheduled→recorded)
+ *    e então imutável.
  *  - `worker_confirmed_at` é one-way (NULL → timestamp).
  *  - Correção = estorno lógico (status='voided' + voided_at + void_reason).
  */
@@ -502,15 +505,17 @@ export interface ShiftPayment {
   source: PaymentSource;
   /** Valor declarado pago (BRL). Sempre > 0. */
   amount: number;
-  /** Quando o pagamento aconteceu (declarado). */
-  paid_at: string;
+  /** Data prevista do pagamento (promessa, YYYY-MM-DD) quando status='scheduled'. Material/imutável. */
+  scheduled_for: string | null;
+  /** Quando o pagamento aconteceu de fato (declarado). NULL enquanto 'scheduled'. */
+  paid_at: string | null;
   /** auth.uid() de quem registrou (empresa no v1). */
   recorded_by: string;
   /** Confirmação de recebimento pelo freela (bilateral ativo). One-way NULL→ts. Não bloqueia ciclo. */
   worker_confirmed_at: string | null;
   /** Observação livre (ex.: "pago em 2x", referência PIX). Imutável. */
   note: string | null;
-  /** recorded (ativo) | voided (estornado, imutável). */
+  /** scheduled (promessa) | recorded (efetivado/ativo) | voided (estornado, imutável). */
   status: ShiftPaymentStatus;
   voided_at: string | null;
   void_reason: string | null;

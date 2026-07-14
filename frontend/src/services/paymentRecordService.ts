@@ -63,6 +63,36 @@ export interface RecordExternalPaymentResult {
   error?: string;
 }
 
+/**
+ * ADR-20260712 — Pagamento agendado. `scheduleExternalPayment` registra a PROMESSA
+ * (`status='scheduled'`, `scheduled_for`), sem `paid_at`. NÃO move saldo, NÃO chama RPC.
+ */
+export interface ScheduleExternalPaymentParams {
+  jobId: string;
+  workerId: string;
+  applicationId: string;
+  source: PaymentSource;
+  /** Valor previsto a pagar (BRL). Deve ser > 0 (também reforçado por CHECK no DB). */
+  amount: number;
+  /** Data PREVISTA do pagamento (promessa), formato YYYY-MM-DD. */
+  scheduledFor: string;
+  note?: string;
+}
+
+export interface ScheduleExternalPaymentResult {
+  success: boolean;
+  payment?: ShiftPayment;
+  /** true quando já existe um marcador ATIVO (scheduled ou recorded) para este job_id (UNIQUE parcial, 23505). */
+  alreadyActive?: boolean;
+  error?: string;
+}
+
+export interface EffectivateScheduledPaymentResult {
+  success: boolean;
+  payment?: ShiftPayment;
+  error?: string;
+}
+
 export interface ConfirmReceiptResult {
   success: boolean;
   error?: string;
@@ -221,8 +251,128 @@ export const PaymentRecordService = {
   },
 
   /**
-   * Busca o registro 'recorded' (ativo) de um turno, se existir.
-   * Usado pela UI para decidir entre mostrar "Registrar pagamento" ou "Ver recibo".
+   * Agenda a PROMESSA de pagamento de um turno (ADR-20260712) — status='scheduled',
+   * `scheduled_for` preenchido, `paid_at` NULL (ainda não pagou). NÃO move saldo, NÃO
+   * chama RPC, NÃO toca wallets/escrow_transactions (mesma fronteira do modo A).
+   *
+   * Reutiliza a MESMA validação defensiva de "turno concluído" de `recordExternalPayment`
+   * (chegada e saída confirmadas pela empresa) — a promessa também exige lastro de trabalho.
+   *
+   * Idempotência: o UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` rejeita
+   * um segundo marcador ATIVO para o mesmo turno (Postgres 23505) — tratado como `alreadyActive: true`.
+   */
+  async scheduleExternalPayment(
+    params: ScheduleExternalPaymentParams,
+  ): Promise<ScheduleExternalPaymentResult> {
+    try {
+      const { jobId, workerId, applicationId, source, amount, scheduledFor, note } = params;
+
+      if (!(amount > 0)) {
+        return { success: false, error: 'O valor previsto deve ser maior que zero.' };
+      }
+      if (!scheduledFor) {
+        return { success: false, error: 'Informe a data prevista do pagamento.' };
+      }
+
+      // 1. Validação defensiva: turno concluído (mesmo sinal REAL de recordExternalPayment).
+      const { data: application, error: appErr } = await supabase
+        .from('applications')
+        .select('id, job_id, worker_id, company_checkin_confirmed_at, company_checkout_confirmed_at')
+        .eq('id', applicationId)
+        .maybeSingle();
+
+      if (appErr) {
+        logError('paymentRecord.scheduleExternalPayment.checkApplication', appErr);
+        return { success: false, error: 'Erro ao verificar o turno.' };
+      }
+      if (!application) {
+        return { success: false, error: 'Candidatura/turno não encontrado.' };
+      }
+      if (application.job_id !== jobId || application.worker_id !== workerId) {
+        return {
+          success: false,
+          error: 'A candidatura informada não corresponde ao turno/freela informado.',
+        };
+      }
+      if (!application.company_checkin_confirmed_at || !application.company_checkout_confirmed_at) {
+        return {
+          success: false,
+          error: 'O turno precisa estar concluído (chegada e saída confirmadas) antes de agendar o pagamento.',
+        };
+      }
+
+      // 2. Resolver a empresa dona (RLS exige company_id = empresa do auth.uid()).
+      const companyId = await getAuthCompanyId();
+
+      // 3. INSERT — nasce 'scheduled': sem paid_at, sem confirmação, sem void.
+      const { data: payment, error: insertErr } = await supabase
+        .from('shift_payments')
+        .insert({
+          job_id: jobId,
+          company_id: companyId,
+          worker_id: workerId,
+          application_id: applicationId,
+          source,
+          amount,
+          status: 'scheduled',
+          scheduled_for: scheduledFor,
+          paid_at: null,
+          note: note ?? null,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        if (insertErr.code === '23505') {
+          return { success: false, alreadyActive: true };
+        }
+        logError('paymentRecord.scheduleExternalPayment.insert', insertErr);
+        return { success: false, error: 'Não foi possível agendar o pagamento.' };
+      }
+
+      return { success: true, payment: payment as ShiftPayment };
+    } catch (err) {
+      logError('paymentRecord.scheduleExternalPayment', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erro inesperado.' };
+    }
+  },
+
+  /**
+   * Efetiva uma promessa (`scheduled` → `recorded`), gravando a data REAL do pagamento em
+   * `paid_at` (uma única vez — o trigger `enforce_shift_payment_immutability` congela depois).
+   * Só a empresa dona pode efetivar (RLS `sp_update_company` + trigger). NÃO altera nenhuma
+   * outra coluna material (job_id, amount, source, scheduled_for, ...) — o trigger bloqueia.
+   */
+  async effectivateScheduledPayment(
+    paymentId: string,
+    paidAt?: string | Date,
+  ): Promise<EffectivateScheduledPaymentResult> {
+    try {
+      const { data: payment, error } = await supabase
+        .from('shift_payments')
+        .update({
+          status: 'recorded',
+          paid_at: normalizePaidAt(paidAt),
+        })
+        .eq('id', paymentId)
+        .select()
+        .single();
+
+      if (error) {
+        logError('paymentRecord.effectivateScheduledPayment', error);
+        return { success: false, error: 'Não foi possível marcar o pagamento como efetivado.' };
+      }
+      return { success: true, payment: payment as ShiftPayment };
+    } catch (err) {
+      logError('paymentRecord.effectivateScheduledPayment', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erro inesperado.' };
+    }
+  },
+
+  /**
+   * Busca o marcador ATIVO ('scheduled' ou 'recorded') de um turno, se existir.
+   * Usado pela UI para decidir entre "Registrar/Agendar pagamento", "Marcar como pago" ou
+   * "Ver recibo/comprovante". O UNIQUE parcial garante no máximo 1 linha ativa por job_id.
    */
   async getPaymentByJob(jobId: string): Promise<ShiftPayment | null> {
     // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
@@ -232,7 +382,7 @@ export const PaymentRecordService = {
         .from('shift_payments')
         .select('*')
         .eq('job_id', jobId)
-        .eq('status', 'recorded')
+        .in('status', ['scheduled', 'recorded'])
         .maybeSingle();
 
       if (error) {
@@ -266,7 +416,7 @@ export const PaymentRecordService = {
         `,
         )
         .eq('job_id', jobId)
-        .eq('status', 'recorded')
+        .in('status', ['scheduled', 'recorded'])
         .maybeSingle();
 
       if (error) {
