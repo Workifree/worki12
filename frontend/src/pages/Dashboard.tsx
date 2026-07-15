@@ -15,7 +15,7 @@ interface NextJobData {
     status: string;
     job: {
         title: string;
-        date: string;
+        start_date: string;
         start_time: string;
         company: { name: string };
     };
@@ -61,10 +61,29 @@ export default function Dashboard() {
                 .from('applications')
                 .select('status, job:jobs(*, company:companies(name))')
                 .eq('worker_id', user.id)
-                .in('status', ['approved', 'scheduled', 'hired', 'in_progress'])
-                .limit(1)
-                .maybeSingle();
-            return data as unknown as NextJobData;
+                .in('status', ['hired', 'in_progress']);
+
+            const rows = (data as unknown as NextJobData[] | null) ?? [];
+            if (rows.length === 0) return null;
+
+            // Turno em andamento tem prioridade sobre qualquer "próximo" agendado.
+            const inProgress = rows.find(r => r.status === 'in_progress');
+            if (inProgress) return inProgress;
+
+            // PostgREST não ordena de forma confiável por coluna de embed (job.start_date),
+            // então ordenamos no cliente e ignoramos linhas sem start_date válido.
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const upcoming = rows
+                .filter(r => r.status === 'hired')
+                .filter(r => {
+                    const d = r.job?.start_date ? new Date(r.job.start_date) : null;
+                    return d instanceof Date && !isNaN(d.getTime()) && d >= today;
+                })
+                .sort((a, b) => new Date(a.job.start_date).getTime() - new Date(b.job.start_date).getTime());
+
+            return upcoming[0] ?? null;
         },
         enabled: !!worker
     });
@@ -183,14 +202,24 @@ export default function Dashboard() {
                 {/* Próximo Turno */}
                 <div className="bg-black text-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]">
                     <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-primary" /> Próximo Turno
+                        <Clock size={18} className="text-primary" /> {nextJob?.status === 'in_progress' ? 'Você está no turno agora' : 'Próximo Turno'}
                     </h3>
                     {nextJob ? (
                         <>
                             <div className="bg-white/10 p-4 rounded-xl border border-white/10 mb-4">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className="text-2xl font-black">{new Date(nextJob.job.date).getDate()} {new Date(nextJob.job.date).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
-                                    <span className="bg-primary text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">{nextJob.status}</span>
+                                    {(() => {
+                                        const parsedDate = nextJob.job?.start_date ? new Date(nextJob.job.start_date) : null;
+                                        const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
+                                        return hasValidDate ? (
+                                            <span className="text-2xl font-black">{parsedDate!.getDate()} {parsedDate!.toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+                                        ) : (
+                                            <span className="text-sm font-black text-gray-400 uppercase">Data indefinida</span>
+                                        );
+                                    })()}
+                                    <span className="bg-primary text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                        {nextJob.status === 'in_progress' ? 'Em andamento' : 'Agendado'}
+                                    </span>
                                 </div>
                                 <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
                                 <p className="text-sm text-gray-400">{nextJob.job.start_time || 'Horário indefinido'}</p>
@@ -201,7 +230,7 @@ export default function Dashboard() {
                         </>
                     ) : (
                         <div className="text-center py-6 text-gray-500 font-bold bg-white/5 rounded-xl border border-white/5">
-                            Nenhum turno agendado.
+                            Sem próximos turnos marcados.
                         </div>
                     )}
                 </div>

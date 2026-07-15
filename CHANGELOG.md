@@ -10,6 +10,27 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Cancelamento de Turno Agendado (2026-07-14)
+
+**Freelancer:**
+- Botão "Cancelar turno" na aba Agendados permite cancelar um turno que já foi aceito
+- Empresa recebe notificação automática do cancelamento e o turno volta a ficar disponível
+
+### Corrigido
+
+#### Perfil, Home e Notificações (2026-07-14)
+
+**Freelancer e Empresa:**
+- **Perfil:** seções de Segurança (trocar senha), Sair e Zona de Perigo agora ficam ocultas atrás do botão "Configurações da Conta" (reduz poluição visual e risco de clique acidental)
+
+**Freelancer:**
+- **Próximo Turno na home:** exibe corretamente o próximo turno agendado (antes mostrava "Invalid Date")
+- **Status do turno em andamento:** destaca quando o freelancer está no turno agora
+- **Sem turnos:** exibe "Sem próximos turnos marcados" quando não há agendamento
+- **Notificações de mensagem:** o sino limpa as notificações de mensagem ao abrir a conversa (antes ficavam presas)
+
+### Adicionado
+
 #### Agregados e Histórico Detalhado do Freela (2026-07-12)
 
 **Freela:**

@@ -93,6 +93,8 @@
   - **`companies.default_briefing`** (20260710000100) — texto de briefing padrão do negócio (pré-preenche turno). Simples, NÃO toca saldo.
 - **Mudanças em shift_payments (Slice 3, modo A + agendamento):**
   - **20260712000000** — novo status `scheduled`, coluna `scheduled_for date` (promessa imutável), `paid_at` agora nullable (NULL em scheduled, setado na efetivação). UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')`. Trigger reescrito para liberar SÓ transição `scheduled→recorded` de `paid_at`. Máquina de estados: `scheduled→recorded|voided`, `recorded→voided`. ZERO impacto em saldo/escrow.
+- **Notificação de cancelamento pelo worker (Slice 5):**
+  - **20260714000000** — novo trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path='') em `applications`. AFTER UPDATE WHEN (NEW.status='cancelled' AND OLD.status IN ('hired','in_progress')) → insere notificação para dono da empresa (type='status_change'). **Landmark:** notificação automática à contraparte que RLS bloqueia inserir direto.
 - **Policy adicional (20260623000200):**
   - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
 - Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,

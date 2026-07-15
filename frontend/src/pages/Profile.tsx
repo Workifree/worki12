@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2 } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -123,6 +123,9 @@ export default function Profile() {
     const [workerId, setWorkerId] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
+
+    // Seções sensíveis (Segurança, Sessão, Zona de Perigo) ficam ocultas por padrão
+    const [showAccountSettings, setShowAccountSettings] = useState(false);
 
     const handleCopyMyLink = useCallback(async () => {
         if (!workerId) return;
@@ -678,59 +681,6 @@ export default function Profile() {
 
             </div>
 
-            {/* Secao Seguranca */}
-            <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                    <Lock size={20} /> Seguranca
-                </h3>
-
-                <div className="mb-4">
-                    <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
-                    <input
-                        id="new-password"
-                        type="password"
-                        value={newPassword}
-                        onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
-                        className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                    />
-                    {newPassword && (() => {
-                        const strength = getPasswordStrength(newPassword);
-                        return (
-                            <div className="mt-1">
-                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                    <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">Forca: {strength.label}</p>
-                            </div>
-                        );
-                    })()}
-                </div>
-
-                <div className="mb-2">
-                    <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
-                    <input
-                        id="confirm-password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
-                        className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                    />
-                </div>
-
-                {passwordError && (
-                    <p className="text-red-600 text-sm font-bold mb-4">{passwordError}</p>
-                )}
-
-                <button
-                    onClick={handleChangePassword}
-                    disabled={!newPassword || !confirmPassword || passwordLoading}
-                    className="bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                    {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                    Alterar Senha
-                </button>
-            </div>
-
             {/* Meu link de perfil — seção top-level (G2). Espelha a seção equivalente
                 do CompanyProfile.tsx. O botão dentro do modal QR foi mantido também. */}
             <div className="border-t-2 border-gray-200 pt-8 mt-8">
@@ -751,33 +701,102 @@ export default function Profile() {
                 </button>
             </div>
 
-            {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
+            {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}
             <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                    <LogOut size={20} /> Sessão
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
                 <button
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setShowAccountSettings(prev => !prev)}
+                    aria-expanded={showAccountSettings}
+                    className="flex items-center justify-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-black hover:text-white transition-colors"
                 >
-                    {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
-                    {loggingOut ? 'Saindo...' : 'Sair da conta'}
+                    <Settings size={18} />
+                    {showAccountSettings ? 'Ocultar Configurações da Conta' : 'Configurações da Conta'}
                 </button>
             </div>
 
-            {/* Zona de Perigo */}
-            <div className="border-t-2 border-red-200 pt-8 mt-8">
-                <h3 className="text-red-600 font-black uppercase text-lg mb-4">Zona de Perigo</h3>
-                <p className="text-sm text-gray-600 mb-4">A exclusão da sua conta é irreversível. Todos os seus dados pessoais serão anonimizados.</p>
-                <button
-                    onClick={() => setDeleteModalOpen(true)}
-                    className="border-2 border-red-500 text-red-500 bg-white hover:bg-red-50 font-bold uppercase px-4 py-2 rounded-xl transition-colors"
-                >
-                    Excluir minha conta
-                </button>
-            </div>
+            {showAccountSettings && (
+                <>
+                    {/* Secao Seguranca */}
+                    <div className="border-t-2 border-gray-200 pt-8 mt-8">
+                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                            <Lock size={20} /> Seguranca
+                        </h3>
+
+                        <div className="mb-4">
+                            <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
+                            <input
+                                id="new-password"
+                                type="password"
+                                value={newPassword}
+                                onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
+                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
+                            />
+                            {newPassword && (() => {
+                                const strength = getPasswordStrength(newPassword);
+                                return (
+                                    <div className="mt-1">
+                                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                            <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Forca: {strength.label}</p>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div className="mb-2">
+                            <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
+                            <input
+                                id="confirm-password"
+                                type="password"
+                                value={confirmPassword}
+                                onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
+                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
+                            />
+                        </div>
+
+                        {passwordError && (
+                            <p className="text-red-600 text-sm font-bold mb-4">{passwordError}</p>
+                        )}
+
+                        <button
+                            onClick={handleChangePassword}
+                            disabled={!newPassword || !confirmPassword || passwordLoading}
+                            className="bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
+                            Alterar Senha
+                        </button>
+                    </div>
+
+                    {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
+                    <div className="border-t-2 border-gray-200 pt-8 mt-8">
+                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                            <LogOut size={20} /> Sessão
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
+                        <button
+                            onClick={handleLogout}
+                            disabled={loggingOut}
+                            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
+                            {loggingOut ? 'Saindo...' : 'Sair da conta'}
+                        </button>
+                    </div>
+
+                    {/* Zona de Perigo */}
+                    <div className="border-t-2 border-red-200 pt-8 mt-8">
+                        <h3 className="text-red-600 font-black uppercase text-lg mb-4">Zona de Perigo</h3>
+                        <p className="text-sm text-gray-600 mb-4">A exclusão da sua conta é irreversível. Todos os seus dados pessoais serão anonimizados.</p>
+                        <button
+                            onClick={() => setDeleteModalOpen(true)}
+                            className="border-2 border-red-500 text-red-500 bg-white hover:bg-red-50 font-bold uppercase px-4 py-2 rounded-xl transition-colors"
+                        >
+                            Excluir minha conta
+                        </button>
+                    </div>
+                </>
+            )}
 
         </div>
 
