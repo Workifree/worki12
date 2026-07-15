@@ -58,6 +58,22 @@ export default function Messages() {
             .eq('conversationid', conversationId)
             .neq('senderid', userId)
             .is('read_at', null);
+
+        // Também limpa as notificações de mensagem do usuário (sino) — best-effort,
+        // não deve quebrar o fluxo de leitura da conversa se falhar.
+        try {
+            const { error: notifError } = await supabase
+                .from('notifications')
+                .update({ read_at: new Date().toISOString() })
+                .eq('user_id', userId)
+                .eq('type', 'message')
+                .is('read_at', null);
+            if (notifError) {
+                logError('Messages.markAsRead.notifications', notifError);
+            }
+        } catch (err) {
+            logError('Messages.markAsRead.notifications', err);
+        }
     };
 
     // Scroll to bottom when messages change

@@ -95,6 +95,9 @@ export default function MyJobs() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
     const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
+    // Confirmação de cancelamento de turno agendado (aba "Agendados").
+    const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
+    const [cancelLoading, setCancelLoading] = useState(false);
     // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
@@ -295,6 +298,30 @@ export default function MyJobs() {
             addToast('Erro ao fazer check-out. Tente novamente.', 'error');
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
+    // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel).
+    const handleCancelShift = async () => {
+        if (!cancelJob) return;
+        setCancelLoading(true);
+        try {
+            const { error } = await supabase
+                .from('applications')
+                .update({ status: 'cancelled' })
+                .eq('id', cancelJob.id);
+
+            if (error) throw error;
+
+            setCancelJob(null);
+            addToast('Turno cancelado. A empresa foi avisada.', 'success');
+            await fetchJobs();
+        } catch (err) {
+            logError('Error cancelling shift:', err);
+            addToast('Erro ao cancelar turno. Tente novamente.', 'error');
+        } finally {
+            setCancelLoading(false);
         }
     };
 
@@ -644,7 +671,15 @@ export default function MyJobs() {
                                 <span className="block text-sm font-bold text-gray-400 uppercase">Receber</span>
                                 <span className="block text-2xl font-black text-primary">R$ {job.pay}</span>
                             </div>
-                            <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
+                            <div className="flex flex-col items-end gap-2">
+                                <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
+                                <button
+                                    onClick={() => setCancelJob(job)}
+                                    className="text-xs font-black text-red-600 hover:text-white hover:bg-red-500 uppercase px-3 py-2 rounded-xl border-2 border-red-200 hover:border-red-500 transition-colors flex items-center gap-1 min-h-[44px]"
+                                >
+                                    <XCircle size={14} /> Cancelar turno
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -788,6 +823,51 @@ export default function MyJobs() {
                                 </button>
                             )
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Confirmação de cancelamento de turno agendado */}
+            {cancelJob && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    onClick={(e) => { if (e.target === e.currentTarget && !cancelLoading) setCancelJob(null); }}
+                >
+                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-xl border-2 border-black bg-red-100 flex items-center justify-center flex-shrink-0">
+                                <XCircle size={20} className="text-red-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black uppercase tracking-tight">Cancelar este turno?</h3>
+                                <p className="text-sm font-bold text-gray-500 mt-1">
+                                    A empresa será avisada e o turno volta a ficar disponível.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3 mb-5">
+                            <p className="font-black text-sm uppercase">{cancelJob.title}</p>
+                            <p className="text-xs font-bold text-gray-500">{cancelJob.date} • {cancelJob.time}</p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCancelJob(null)}
+                                disabled={cancelLoading}
+                                className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-4 py-3 rounded-xl font-black uppercase border-2 border-gray-300 transition-colors disabled:opacity-50 min-h-[44px]"
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                onClick={handleCancelShift}
+                                disabled={cancelLoading}
+                                className="flex-1 bg-red-500 hover:bg-black text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 min-h-[44px]"
+                            >
+                                {cancelLoading ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
+                                Cancelar turno
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

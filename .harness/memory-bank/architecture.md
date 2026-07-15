@@ -81,6 +81,32 @@ trigger `auto_reserve_escrow_on_hire` pula a reserva no aceite de convite (ADR-2
 legado** (candidatura → hired) ainda reserva no aceite (modelo prepago original, inalterado). O pagamento do
 push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem depósito antecipado).
 
+## Cancelamento de turno pelo worker (Slice 5: notificação obrigatória)
+
+Worker pode cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`). A ação dispara automaticamente
+um trigger SECURITY DEFINER (`trg_notify_company_on_worker_cancel`) que insere uma notificação (type='status_change')
+para o **dono da empresa** — nenhum lado pode suprimir a notificação. **Landmark pattern:** notificação à contraparte
+que RLS não permite inserir direto (`applications` é worker-owned; company precisa saber via sistema automático, não
+query puxada).
+
+**Máquina de estados:** cancelamento é transição irreversível: `hired` → `cancelled`, `in_progress` → `cancelled`.
+Worker pode cancelar; empresa NÃO pode forçar cancelamento.
+
+**Trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path=''):**
+```
+AFTER UPDATE ON applications
+WHEN (NEW.status='cancelled' AND OLD.status IN ('hired','in_progress'))
+→ INSERT INTO notifications: user_id = (SELECT company_id FROM jobs WHERE id=NEW.job_id),
+    type='status_change', title='Turno cancelado por freelancer', 
+    link='/company/candidatos?job_id=<job_id>'
+```
+
+**Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
+`refundEscrow` se desejado.
+
+**Fluxo complementar (Slice 1):** cancelamento não toca saldo; empresa se quiser devolver a reserva ao próprio saldo
+chama `refundEscrow(jobId, workerUserId, 'worker_cancelled')` (ADR-20260714-cancelamento-freela aguarda).
+
 ## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
 
 > ⚠️ **REVISADO por ADR-20260630-pagamento-opcional-piloto (2026-06-30).** No piloto o pagamento pelo Worki é

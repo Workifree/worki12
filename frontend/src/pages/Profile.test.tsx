@@ -103,6 +103,13 @@ function renderComponent() {
   )
 }
 
+// Segurança, Sessão e Zona de Perigo ficam ocultas por padrão atrás do botão
+// "Configurações da Conta" — os testes que interagem com essas seções
+// precisam abri-las primeiro.
+function openAccountSettings() {
+  fireEvent.click(screen.getByRole('button', { name: /configura(ç|c)ões da conta/i }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
@@ -124,6 +131,7 @@ describe('Profile — modal de exclusão de conta', () => {
       expect(screen.getByText('Maria Silva')).toBeInTheDocument()
     })
 
+    openAccountSettings()
     fireEvent.click(screen.getByText('Excluir minha conta'))
 
     const confirmarBtn = screen.getByText('Confirmar Exclusão')
@@ -138,6 +146,7 @@ describe('Profile — modal de exclusão de conta', () => {
       expect(screen.getByText('Maria Silva')).toBeInTheDocument()
     })
 
+    openAccountSettings()
     fireEvent.click(screen.getByText('Excluir minha conta'))
 
     const input = screen.getByPlaceholderText('EXCLUIR')
@@ -159,6 +168,7 @@ describe('Profile — modal de exclusão de conta', () => {
       expect(screen.getByText('Maria Silva')).toBeInTheDocument()
     })
 
+    openAccountSettings()
     fireEvent.click(screen.getByText('Excluir minha conta'))
 
     const input = screen.getByPlaceholderText('EXCLUIR')
@@ -184,6 +194,7 @@ describe('Profile — modal de exclusão de conta', () => {
       expect(screen.getByText('Maria Silva')).toBeInTheDocument()
     })
 
+    openAccountSettings()
     fireEvent.click(screen.getByText('Excluir minha conta'))
 
     const input = screen.getByPlaceholderText('EXCLUIR')
@@ -205,6 +216,7 @@ describe('Profile - Seguranca', () => {
     setupMocks()
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+    openAccountSettings()
     expect(screen.getByRole('button', { name: /alterar senha/i })).toBeDisabled()
   })
 })
@@ -220,6 +232,7 @@ describe('Profile — logout (R3/R4)', () => {
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
 
+    openAccountSettings()
     fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }))
 
     await waitFor(() => {
@@ -236,6 +249,7 @@ describe('Profile — logout (R3/R4)', () => {
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
 
+    openAccountSettings()
     fireEvent.click(screen.getByRole('button', { name: /sair da conta/i }))
 
     await waitFor(() => {
