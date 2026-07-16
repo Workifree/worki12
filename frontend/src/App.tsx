@@ -38,6 +38,7 @@ const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
 const CompanyWallet = lazy(() => import('./pages/company/CompanyWallet'));
 const CompanyTeam = lazy(() => import('./pages/company/CompanyTeam'));
 const CompanyFinancial = lazy(() => import('./pages/company/CompanyFinancial'));
+const CompanyOrdersReport = lazy(() => import('./pages/company/CompanyOrdersReport'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
@@ -181,6 +182,7 @@ function App() {
                       <Route path="wallet" element={<CompanyWallet />} />
                       <Route path="team" element={<CompanyTeam />} />
                       <Route path="financeiro" element={<CompanyFinancial />} />
+                      <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="notifications" element={<Notifications />} />
                     </Route>
 
