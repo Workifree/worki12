@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2 } from 'lucide-react';
+import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2, FileText } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -90,6 +90,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
         { icon: TrendingDown, label: 'Financeiro', path: '/company/financeiro' },
+        { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];
 
