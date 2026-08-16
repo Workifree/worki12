@@ -5,6 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
+import { formatDateOnly } from '../lib/dateUtils';
 import { useToast } from '../contexts/ToastContext';
 import PageMeta from '../components/PageMeta';
 import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2, LogIn, LogOut } from 'lucide-react';
@@ -63,23 +64,6 @@ function formatWorkedHours(hours: number): string {
     if (h === 0) return `${m}min`;
     if (m === 0) return `${h}h`;
     return `${h}h${String(m).padStart(2, '0')}`;
-}
-
-/**
- * Formata uma data "date-only" (ex.: `job.start_date`, ou `payment.paid_at` quando gravado
- * a partir de um `<input type="date">` — ver CompanyJobCandidates `paymentPaidAt`) como data
- * LOCAL, sem shift de fuso.
- *
- * `new Date("YYYY-MM-DD")` é interpretado pelo JS como meia-noite UTC; `date-fns format`
- * formata em fuso local. Em BRT (UTC-3) isso recua a data em 1 dia (ex.: 01/07 vira 30/06).
- * Mesmo padrão já usado em `components/JobCard.tsx` (fix do off-by-one em `start_date`).
- * Só ajusta a EXIBIÇÃO — não altera como o dado é gravado.
- */
-function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
-    const dateStr = isoOrDateOnly.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return format(date, pattern, { locale: ptBR });
 }
 
 export default function ReceiptView() {

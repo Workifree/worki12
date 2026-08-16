@@ -8,11 +8,11 @@ import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { logError } from '../../lib/logger';
 import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
-import EscrowStatusBadge from '../../components/EscrowStatusBadge';
+import { todayLocalDate, formatDateOnly } from '../../lib/dateUtils';
 import type { Application, PaymentSource, ShiftPayment, TeamMember } from '../../types';
 
 /**
@@ -48,31 +48,6 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     cash: 'Dinheiro',
     other: 'Outro',
 };
-
-/**
- * Formata uma data "date-only" (`scheduled_for`, YYYY-MM-DD) como data LOCAL, sem shift de
- * fuso. `new Date("YYYY-MM-DD")` é interpretado como meia-noite UTC; em BRT (UTC-3) isso
- * recua a data em 1 dia. Mesmo padrão de `ReceiptView.formatDateOnly` / `components/JobCard.tsx`.
- */
-function formatDateOnly(dateOnly: string): string {
-    const [y, m, d] = dateOnly.split('-').map(Number);
-    return format(new Date(y, m - 1, d), 'dd/MM/yyyy', { locale: ptBR });
-}
-
-/**
- * Data de HOJE em horário LOCAL (YYYY-MM-DD), para pré-preencher inputs `type="date"`.
- * `new Date().toISOString().slice(0, 10)` usa UTC: perto da meia-noite em BRT (UTC-3) isso
- * pré-preenche o dia SEGUINTE — e `paid_at`/`scheduled_for` são imutáveis depois de gravados
- * (trigger `enforce_shift_payment_immutability`), então a data errada vira definitiva no
- * recibo. Mesma construção de `CompanyCreateJob.todayLocalDate()`.
- */
-function todayLocalDate(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-}
 
 /**
  * Monta o timestamp ISO absoluto do fallback manual de chegada/saída — quando a EMPRESA
@@ -146,7 +121,6 @@ export default function CompanyJobCandidates() {
     const [confirmingManualAttendance, setConfirmingManualAttendance] = useState(false);
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
-    const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
     // Modo A (pagamento externo declaratório) — ramifica por escrow.kind por application.
     // Sem entrada no map = turno sem escrow (modo A); 'prepaid'/'postpaid' = caminho de escrow existente.
     const [escrowKindMap, setEscrowKindMap] = useState<Record<string, 'prepaid' | 'postpaid'>>({});
@@ -257,22 +231,18 @@ export default function CompanyJobCandidates() {
             if (error) throw error;
             setCandidates(data || []);
 
-            // Fetch escrow status + kind per application for this job
+            // Fetch escrow kind per application for this job (só o kind é usado para ramificar
+            // Confirmar Entrega vs Registrar Pagamento — ver `renderCompletionAction`).
             const { data: escrowRows } = await supabase
                 .from('escrow_transactions')
-                .select('application_id, status, kind')
+                .select('application_id, kind')
                 .eq('job_id', id);
-            const statusMap: Record<string, 'reserved' | 'released'> = {};
             const kindMap: Record<string, 'prepaid' | 'postpaid'> = {};
             (escrowRows || []).forEach((row) => {
-                if (row.application_id && (row.status === 'reserved' || row.status === 'released')) {
-                    statusMap[row.application_id] = row.status;
-                }
                 if (row.application_id && (row.kind === 'prepaid' || row.kind === 'postpaid')) {
                     kindMap[row.application_id] = row.kind;
                 }
             });
-            setEscrowStatusMap(statusMap);
             setEscrowKindMap(kindMap);
 
             // Modo A: registros de pagamento externo já feitos para este turno — um por
@@ -382,7 +352,7 @@ export default function CompanyJobCandidates() {
         const message = buildShiftInviteWhatsAppMessage({
             companyName,
             jobTitle,
-            dateLabel: jobStartDate ? formatDateOnly(jobStartDate) : null,
+            dateLabel: jobStartDate ? formatDateOnly(jobStartDate, 'dd/MM/yyyy') : null,
             timeLabel,
             location: jobLocation,
             amount: jobBudget,
@@ -839,7 +809,7 @@ export default function CompanyJobCandidates() {
         <div className="flex items-center gap-2 flex-wrap">
             {payment.scheduled_for && (
                 <span className="flex items-center gap-1 text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-yellow-50 border-yellow-200 text-yellow-700">
-                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for)}
+                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy')}
                 </span>
             )}
             <button
@@ -976,9 +946,6 @@ export default function CompanyJobCandidates() {
                                         </div>
 
                                         <div className="flex items-center gap-2 flex-wrap justify-end">
-                                            {/* Escrow Status Badge — per-candidate status */}
-                                            <EscrowStatusBadge escrowStatus={escrowStatusMap[app.id] ?? null} />
-
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleChat(app); }}
                                                 className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors"

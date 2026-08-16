@@ -1,12 +1,18 @@
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { parseDateOnly, formatDateOnly } from './dateUtils';
 
 // ---------------------------------------------------------------------------
 // Agenda por dia (CompanyJobs) — a pergunta nº1 da operação é "quem trabalha
 // amanhã?". Lógica pura de agrupamento/ordenação de turnos por dia, extraída
 // da página para viver em `lib/` (testável sem montar componente, e sem
 // precisar exportar de um arquivo de página com eslint-disable).
+//
+// `parseDateOnly`/`formatDateOnly` vivem em `lib/dateUtils.ts` (utilitário de
+// data genérico — usado também por datas de pagamento em `ReceiptView`/
+// `CompanyJobCandidates`, não só agenda de turnos); reexportados aqui para não
+// quebrar quem já importa deste módulo (ex.: `CompanyJobs.tsx`).
 // ---------------------------------------------------------------------------
+
+export { parseDateOnly, formatDateOnly };
 
 export type DayBucketKey = 'today' | 'tomorrow' | 'week' | 'later' | 'no_date' | 'past';
 
@@ -26,19 +32,6 @@ export const BUCKET_LABELS: Record<DayBucketKey, string> = {
 };
 
 export const BUCKET_ORDER: DayBucketKey[] = ['today', 'tomorrow', 'week', 'later', 'no_date', 'past'];
-
-// Fuso-safe: mesmo padrão de `ReceiptView.formatDateOnly` — "YYYY-MM-DD" é interpretado
-// como data LOCAL (não UTC). `new Date("YYYY-MM-DD")` direto recuaria a data em 1 dia em
-// BRT e faria "amanhã" aparecer como "hoje" — exatamente o bug que destruiria a feature.
-export function parseDateOnly(isoOrDateOnly: string): Date {
-    const dateStr = isoOrDateOnly.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d);
-}
-
-export function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
-    return format(parseDateOnly(isoOrDateOnly), pattern, { locale: ptBR });
-}
 
 function startOfDay(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
