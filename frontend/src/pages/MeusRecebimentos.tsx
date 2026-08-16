@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import {
     Receipt,
     Clock,
@@ -17,28 +15,13 @@ import type { WorkerShiftPaymentListItem } from '../services/paymentRecordServic
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import type { PaymentSource } from '../types';
+import { formatDateOnly } from '../lib/dateUtils';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
     cash: 'Dinheiro',
     other: 'Outro',
 };
-
-/**
- * Formata uma data "date-only" (`scheduled_for`, ou `paid_at`/`created_at` quando
- * gravado a partir de um valor date-only) como data LOCAL, sem shift de fuso.
- *
- * `new Date("YYYY-MM-DD")` é interpretado pelo JS como meia-noite UTC; formatar direto
- * em fuso local (BRT, UTC-3) recua a data em 1 dia. Mesmo padrão de `ReceiptView.tsx`.
- * Aqui o valor pode vir como timestamp completo (`paid_at`) OU date-only
- * (`scheduled_for`) — em ambos os casos só a parte `YYYY-MM-DD` importa para exibição.
- */
-function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
-    const dateStr = isoOrDateOnly.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return format(date, pattern, { locale: ptBR });
-}
 
 function formatCurrency(amount: number): string {
     return `R$ ${amount.toFixed(2).replace('.', ',')}`;

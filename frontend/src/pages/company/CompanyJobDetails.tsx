@@ -3,20 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, MapPin, Clock, Calendar, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
-
-// Fuso-safe: mesmo padrão de `ReceiptView.formatDateOnly` / `CompanyJobs.tsx` — "YYYY-MM-DD" é
-// interpretado como data LOCAL (não UTC), evitando o off-by-one que faria o turno de amanhã
-// aparecer como hoje em BRT.
-function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
-    const dateStr = isoOrDateOnly.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return format(new Date(y, m - 1, d), pattern, { locale: ptBR });
-}
+import { formatDateOnly } from '../../lib/dateUtils';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
