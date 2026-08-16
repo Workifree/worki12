@@ -792,8 +792,8 @@ describe('PaymentRecordService.listForWorker', () => {
 // ---------------------------------------------------------------------------
 
 describe('PaymentRecordService.confirmReceiptByWorker', () => {
-  it('confirma com sucesso (worker_confirmed_at)', async () => {
-    routeFrom({ shift_payments: makeChain({ data: null, error: null }) })
+  it('confirma com sucesso (worker_confirmed_at) — UPDATE afetou 1 linha', async () => {
+    routeFrom({ shift_payments: makeChain({ data: [{ id: 'sp-1' }], error: null }) })
 
     const { PaymentRecordService } = await import('./paymentRecordService')
     const result = await PaymentRecordService.confirmReceiptByWorker('sp-1')
@@ -816,6 +816,18 @@ describe('PaymentRecordService.confirmReceiptByWorker', () => {
     expect(result.success).toBe(false)
     expect(result.error).toBeTruthy()
   })
+
+  // Classe "sucesso falso" (patterns.md — DELETE/UPDATE sob RLS negado silenciosamente):
+  // 0 linhas afetadas, SEM erro Postgres, nunca pode ser reportado como sucesso.
+  it('UPDATE negado pela RLS (0 linhas, sem erro): retorna success=false, nunca true', async () => {
+    routeFrom({ shift_payments: makeChain({ data: [], error: null }) })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.confirmReceiptByWorker('sp-de-outro-freela')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -823,8 +835,8 @@ describe('PaymentRecordService.confirmReceiptByWorker', () => {
 // ---------------------------------------------------------------------------
 
 describe('PaymentRecordService.voidPayment', () => {
-  it('estorna com sucesso (status=voided)', async () => {
-    routeFrom({ shift_payments: makeChain({ data: null, error: null }) })
+  it('estorna com sucesso (status=voided) — UPDATE afetou 1 linha', async () => {
+    routeFrom({ shift_payments: makeChain({ data: [{ id: 'sp-1' }], error: null }) })
 
     const { PaymentRecordService } = await import('./paymentRecordService')
     const result = await PaymentRecordService.voidPayment('sp-1', 'Valor informado errado')
@@ -839,6 +851,18 @@ describe('PaymentRecordService.voidPayment', () => {
 
     const { PaymentRecordService } = await import('./paymentRecordService')
     const result = await PaymentRecordService.voidPayment('sp-1', 'motivo')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  // Classe "sucesso falso": estorno negado em silêncio (0 linhas, sem erro) mostraria
+  // "estornado" com o marcador ainda ATIVO — e "Dispensar" ficaria travado sem explicação.
+  it('UPDATE negado pela RLS (0 linhas, sem erro): retorna success=false, nunca true', async () => {
+    routeFrom({ shift_payments: makeChain({ data: [], error: null }) })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.voidPayment('sp-de-outra-empresa', 'motivo')
 
     expect(result.success).toBe(false)
     expect(result.error).toBeTruthy()

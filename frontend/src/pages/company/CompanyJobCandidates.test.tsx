@@ -132,8 +132,13 @@ function setupMocksWithApps(apps: unknown[], jobData: Record<string, unknown> = 
 
   const appChain = buildChain({
     order: vi.fn().mockResolvedValue({ data: apps, error: null }),
+    // `.update({...}).eq('id', appId).select('id')` — `.select('id')` obrigatório (padrão
+    // `removeFromTeam`/patterns.md) em todo UPDATE guardado por RLS neste componente. Default
+    // resolve como sucesso (1 linha afetada); testes específicos sobrescrevem `appChain.update`
+    // quando precisam simular "0 linhas" (RLS negou em silêncio).
     update: vi.fn().mockReturnValue(buildChain({
-      eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockResolvedValue({ data: [{ id: 'app-default' }], error: null }),
     })),
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
   })
@@ -1033,6 +1038,65 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
   })
 })
 
+// ---------------------------------------------------------------------------
+// Revisão pré-piloto (QA final) — ordem chegada→saída EXIGIDA. Registrar/confirmar a saída
+// antes da chegada estar confirmada quebra `buildManualAttendanceTimestamp` (sem referência de
+// rollover) e `calculateWorkedHours` devolve null — o recibo perde as horas para sempre
+// (`shift_payments` é imutável).
+// ---------------------------------------------------------------------------
+
+// hired, NADA confirmado ainda — nem chegada nem saída.
+const APP_NOTHING_CONFIRMED = [
+  {
+    id: 'app-nada-confirmado',
+    job_id: 'job-123',
+    worker_id: 'worker-nada-confirmado',
+    status: 'hired',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-nada-confirmado', full_name: 'Igor Sem Chegada', avatar_url: null,
+      city: 'São Paulo', level: 1, rating_average: 5, reviews_count: 0, tags: [],
+    },
+    worker_checkin_at: null,
+    worker_checkout_at: null,
+    company_checkin_confirmed_at: null,
+    company_checkout_confirmed_at: null,
+  },
+]
+
+describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré-piloto)', () => {
+  it('esconde "Registrar Saída" e mostra estado neutro quando a chegada AINDA não foi confirmada', async () => {
+    setupMocksWithApps(APP_NOTHING_CONFIRMED)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Igor Sem Chegada')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Igor Sem Chegada').closest('[role="button"]') as HTMLElement
+    // Chegada ainda pendente — botão de presença disponível.
+    expect(within(card).getByRole('button', { name: /Confirmar Presença/i })).toBeInTheDocument()
+    // Saída NUNCA disponível antes da chegada confirmada — nem "Registrar" nem "Confirmar".
+    expect(within(card).queryByRole('button', { name: /Registrar Saída/i })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /Confirmar Saída/i })).not.toBeInTheDocument()
+    expect(within(card).getByText('Confirme a chegada primeiro')).toBeInTheDocument()
+  })
+
+  it('libera "Registrar Saída" assim que a chegada é confirmada', async () => {
+    setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    expect(within(card).getByRole('button', { name: /Registrar Saída/i })).toBeInTheDocument()
+    expect(within(card).queryByText('Confirme a chegada primeiro')).not.toBeInTheDocument()
+  })
+})
+
 describe('CompanyJobCandidates — Dispensar pós-turno (BLOQUEADOR 2)', () => {
   it('esconde "Dispensar" quando o freela já fez check-in (turno já foi cumprido)', async () => {
     const appAlreadyCheckedIn = [
@@ -1110,5 +1174,136 @@ describe('CompanyJobCandidates — Dispensar pós-turno (BLOQUEADOR 2)', () => {
     })
 
     expect(screen.getByText('Dispensar')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Classe "sucesso falso" (patterns.md — DELETE/UPDATE sob RLS negado silenciosamente) —
+// registro de pagamento (modo A) seguido da conclusão do turno. Sem `.select('id')` no UPDATE
+// `status → 'completed'`, um UPDATE negado pela RLS reportaria "concluído" com o turno ainda
+// preso em 'hired'/'in_progress' — pago, mas sem saída (dead-end).
+// ---------------------------------------------------------------------------
+
+const APP_READY_FOR_PAYMENT = [
+  {
+    id: 'app-pay-1',
+    job_id: 'job-123',
+    worker_id: 'worker-pay-1',
+    status: 'in_progress',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-pay-1', full_name: 'Rita Paga', avatar_url: null, city: 'São Paulo',
+      level: 1, rating_average: 5, reviews_count: 0, tags: [],
+    },
+    worker_checkin_at: new Date().toISOString(),
+    worker_checkout_at: new Date().toISOString(),
+    company_checkin_confirmed_at: new Date().toISOString(),
+    company_checkout_confirmed_at: new Date().toISOString(),
+  },
+]
+
+describe('CompanyJobCandidates — handleRecordPayment: status → completed após pagamento', () => {
+  function setupPaymentMocks() {
+    const mockAddToast = vi.fn()
+    vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
+    vi.mocked(useNavigate).mockReturnValue(vi.fn())
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'company-user-1' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+
+    const jobChain = buildChain({ single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }) })
+    const appChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: APP_READY_FOR_PAYMENT, error: null }),
+      // PaymentRecordService.recordExternalPayment valida o turno via
+      // .select(...).eq('id', applicationId).maybeSingle() — sinal real de conclusão.
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: 'app-pay-1',
+          job_id: 'job-123',
+          worker_id: 'worker-pay-1',
+          company_checkin_confirmed_at: new Date().toISOString(),
+          company_checkout_confirmed_at: new Date().toISOString(),
+        },
+        error: null,
+      }),
+    })
+    const companiesChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'company-1' }, error: null }),
+    })
+    const shiftPaymentsChain = buildChain({
+      // .insert({...}).select().single() precisa encadear — override para retornar a própria cadeia.
+      insert: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: 'sp-1', job_id: 'job-123', company_id: 'company-1', worker_id: 'worker-pay-1',
+          application_id: 'app-pay-1', source: 'cash', amount: 100, scheduled_for: null,
+          paid_at: new Date().toISOString(), recorded_by: 'company-user-1', worker_confirmed_at: null,
+          note: null, status: 'recorded', voided_at: null, void_reason: null, created_at: new Date().toISOString(),
+        },
+        error: null,
+      }),
+      order: vi.fn().mockResolvedValue({ data: [], error: null }), // listActivePaymentsByJob (sem marcador ativo ainda)
+    })
+    const escrowChain = buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return appChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'companies') return companiesChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'shift_payments') return shiftPaymentsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'escrow_transactions') return escrowChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    return { mockAddToast, appChain }
+  }
+
+  async function openAndSubmitPaymentModal() {
+    await waitFor(() => {
+      expect(screen.getByText('Rita Paga')).toBeInTheDocument()
+    })
+    const card = screen.getByText('Rita Paga').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByText('Registrar Pagamento'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Pagamento/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/Valor pago/i), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar Registro/i }))
+  }
+
+  it('sucesso: registra o pagamento e conclui o turno quando o UPDATE afeta 1 linha', async () => {
+    const { mockAddToast, appChain } = setupPaymentMocks()
+    // `.select('id')` no fim do UPDATE `status → 'completed'` — devolve a linha afetada.
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-pay-1' }], error: null }))
+
+    renderComponent()
+    await openAndSubmitPaymentModal()
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Pagamento registrado com sucesso!', 'success')
+    })
+    expect(mockAddToast).not.toHaveBeenCalledWith(expect.stringMatching(/erro ao concluir/), 'error')
+  })
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE de conclusão afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const { mockAddToast, appChain } = setupPaymentMocks()
+    // PostgREST 204 sem erro, mas 0 linhas casaram o USING — pagamento registrado, turno
+    // fica preso em 'in_progress' (dead-end: pago mas sem saída).
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [], error: null }))
+
+    renderComponent()
+    await openAndSubmitPaymentModal()
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        'Pagamento registrado, mas houve erro ao concluir o turno. Contate o suporte.',
+        'error',
+      )
+    })
+    // Nunca reporta sucesso quando o banco não mudou o status do turno.
+    expect(mockAddToast).not.toHaveBeenCalledWith('Pagamento registrado com sucesso!', 'success')
   })
 })

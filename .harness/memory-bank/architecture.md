@@ -111,9 +111,9 @@ WHEN (NEW.status='cancelled' AND OLD.status IN ('invited', 'hired', 'in_progress
 **Conhecimento reutilizável:** `auth.uid()` **funciona corretamente** dentro de `SECURITY DEFINER` (o DEFINER muda o ROLE de execução,
 não as claims do JWT que vivem em `request.jwt.claims`). Precedentes: `validate_application_update`, `enforce_shift_payment_immutability`.
 
-**Guarda em `dismissFromShift`:** não se pode dispensar um freela de um turno que já tem `shift_payments` ativo (`scheduled`/`recorded`),
-porque o UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` impediria registrar pagamento de um substituto.
-Empresa precisa estornar o pagamento antigo primeiro.
+**Guarda em `dismissFromShift`:** não se pode dispensar um freela que já tem `shift_payments` ativo (`scheduled`/`recorded`), 
+porque o UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` barra um novo marcador para o mesmo freela+turno.
+Empresa precisa estornar o pagamento antigo (voided) primeiro, ou dispensar outro freela.
 
 **Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
 `refundEscrow` se desejado. Cancelamento não toca `shift_payments` — empresa estorna em operação separada.
@@ -163,7 +163,7 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
 - **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by, worker_confirmed_at, voided_at, void_reason, note, created_at)`.
   Status: `scheduled | recorded | voided`. `scheduled_for` (data prevista) é material/imutável; `paid_at` é nullable (NULL em scheduled, setado na efetivação) e depois imutável.
-  UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` — garante 1 marcador ativo por turno.
+  UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` — garante 1 marcador ativo por (turno, freela). Turno com N freelas tem N marcadores, um por freela. ADR-20260816.
   RLS bilateral: empresa (registra/efetiva/cancela), worker (confirma recebimento em recorded). **NUNCA toca saldo** (auditoria, não liquidação).
 - **`escrow_transactions`** (estendida):
   - `kind`: `'prepaid'` (default) | `'postpaid'`
@@ -218,7 +218,7 @@ INSERT → recorded (direto legado) ──estornar──► voided
 - `scheduled_for date` — data prevista do pagamento (imutável; reagendar = void + novo). NULL em registros diretos (`recorded` sem agendamento prévio).
 - `paid_at` — agora **NULLABLE** (era NOT NULL). NULL enquanto `scheduled`; setado **UMA vez** na efetivação (`scheduled→recorded`) e depois imutável. Timestamps reais (nunca data futura disfarçada).
 
-**Dedupe:** UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` = **um marcador ativo por turno**, impedindo duas promessas ou promessa+pagamento em linhas separadas. N linhas `voided` permitidas (re-agendar/re-registrar).
+**Dedupe:** UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` = **um marcador ativo por (turno, freela)**, impedindo duas promessas ou promessa+pagamento **do mesmo freela** no mesmo turno. N linhas `voided` permitidas (re-agendar/re-registrar). Turno com N freelas tem N marcadores. ADR-20260816.
 
 **Trigger `enforce_shift_payment_immutability` reescrito:**
 - Material columns (job_id, company_id, worker_id, application_id, source, amount, recorded_by, note, created_at, **scheduled_for**) → imutáveis sempre.

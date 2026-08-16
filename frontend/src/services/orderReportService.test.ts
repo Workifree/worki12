@@ -187,7 +187,8 @@ describe('OrderReportService.getReport — derivação de status e período', ()
       abertas: 1,
       pagas: 1,
       conciliadas: 1,
-      valorTotal: 200 + 300 + 250,
+      valorPago: 300 + 250,
+      valorPrevisto: 200,
     })
   })
 
@@ -249,6 +250,24 @@ const JOBS_MULTI = [
     created_at: '2026-07-16T10:00:00Z',
     status: 'open',
   },
+  {
+    id: 'job-misto',
+    title: 'Evento Misto',
+    category: 'Garçom',
+    budget: 400,
+    start_date: '2026-07-22',
+    created_at: '2026-07-17T10:00:00Z',
+    status: 'in_progress',
+  },
+  {
+    id: 'job-sem-elenco',
+    title: 'Turno Sem Elenco',
+    category: null,
+    budget: 90,
+    start_date: '2026-07-23',
+    created_at: '2026-07-18T10:00:00Z',
+    status: 'open',
+  },
 ]
 
 const SHIFT_PAYMENTS_MULTI = [
@@ -274,18 +293,38 @@ const SHIFT_PAYMENTS_MULTI = [
     worker_confirmed_at: '2026-07-21T09:00:00Z',
     created_at: '2026-07-20T11:00:00Z',
   },
+  // job-misto: só a Carla tem marcador (paga). O Duda está contratado mas SEM marcador
+  // — é o caso central da correção: ele não pode sumir, tem que aparecer 'aberta'.
+  {
+    job_id: 'job-misto',
+    worker_id: 'worker-carla',
+    amount: 210,
+    source: 'external_pix',
+    status: 'recorded',
+    paid_at: '2026-07-22T18:00:00Z',
+    scheduled_for: null,
+    worker_confirmed_at: null,
+    created_at: '2026-07-22T10:00:00Z',
+  },
 ]
 
 const APPLICATIONS_MULTI = [
   { job_id: 'job-dois-freelas', worker_id: 'worker-ana', status: 'completed', invitation_response: 'accepted' },
   { job_id: 'job-dois-freelas', worker_id: 'worker-bia', status: 'completed', invitation_response: 'accepted' },
   { job_id: 'job-sem-pagamento', worker_id: 'worker-solo', status: 'hired', invitation_response: 'accepted' },
+  { job_id: 'job-misto', worker_id: 'worker-carla', status: 'completed', invitation_response: 'accepted' },
+  { job_id: 'job-misto', worker_id: 'worker-duda', status: 'hired', invitation_response: 'accepted' },
+  // Convite ainda não aceito não conta como contratado — não deve gerar linha.
+  { job_id: 'job-sem-elenco', worker_id: 'worker-convidado', status: 'invited', invitation_response: null },
 ]
 
 const WORKERS_MULTI = [
   { id: 'worker-ana', full_name: 'Ana Freela' },
   { id: 'worker-bia', full_name: 'Bia Freela' },
   { id: 'worker-solo', full_name: 'Freela Solo' },
+  { id: 'worker-carla', full_name: 'Carla Freela' },
+  { id: 'worker-duda', full_name: 'Duda Freela' },
+  { id: 'worker-convidado', full_name: 'Convidado Pendente' },
 ]
 
 describe('OrderReportService.getReport — granularidade (turno, freela) — ADR-20260816', () => {
@@ -300,7 +339,7 @@ describe('OrderReportService.getReport — granularidade (turno, freela) — ADR
 
     const report = await OrderReportService.getReport(PERIOD)
 
-    // Caso central: 1 turno + 2 freelas pagos = 2 linhas, ambas com jobId igual.
+    // 1 turno + 2 freelas pagos = 2 linhas, ambas com jobId igual.
     const duploRows = report.rows.filter((r) => r.jobId === 'job-dois-freelas')
     expect(duploRows).toHaveLength(2)
 
@@ -323,13 +362,44 @@ describe('OrderReportService.getReport — granularidade (turno, freela) — ADR
     expect(soloRows[0].status).toBe('aberta')
     expect(soloRows[0].amount).toBe(220) // fallback pro budget do job
 
-    // Sem dupla contagem nem subcontagem: total = 2 (duplo) + 1 (solo).
-    expect(report.rows).toHaveLength(3)
-    expect(report.summary.total).toBe(3)
-    expect(report.summary.pagas).toBe(1)
-    expect(report.summary.conciliadas).toBe(1)
-    expect(report.summary.abertas).toBe(1)
-    expect(report.summary.valorTotal).toBe(150 + 180 + 220)
+    // Turno sem candidatura contratada nem marcador (só convite pendente) — 1 linha,
+    // freela vazio, não some do relatório.
+    const semElencoRows = report.rows.filter((r) => r.jobId === 'job-sem-elenco')
+    expect(semElencoRows).toHaveLength(1)
+    expect(semElencoRows[0].workerId).toBeNull()
+    expect(semElencoRows[0].workerName).toBeNull()
+    expect(semElencoRows[0].status).toBe('aberta')
+    expect(semElencoRows[0].amount).toBe(90)
+
+    // CASO CENTRAL: turno com dois freelas, um pago (marcador) e um só contratado (sem
+    // marcador) — duas linhas, uma paga e uma aberta, com os nomes certos. O freela sem
+    // pagamento NÃO pode sumir do relatório (era o bug original).
+    const mistoRows = report.rows.filter((r) => r.jobId === 'job-misto')
+    expect(mistoRows).toHaveLength(2)
+
+    const carla = mistoRows.find((r) => r.workerName === 'Carla Freela')
+    const duda = mistoRows.find((r) => r.workerName === 'Duda Freela')
+    expect(carla).toBeDefined()
+    expect(duda).toBeDefined()
+    expect(carla?.workerId).toBe('worker-carla')
+    expect(carla?.status).toBe('paga')
+    expect(carla?.amount).toBe(210)
+    expect(carla?.source).toBe('external_pix')
+
+    expect(duda?.workerId).toBe('worker-duda')
+    expect(duda?.status).toBe('aberta')
+    expect(duda?.amount).toBe(400) // sem marcador -> valor previsto = job.budget
+    expect(duda?.source).toBeNull()
+    expect(duda?.paidAt).toBeNull()
+
+    // Sem dupla contagem nem subcontagem: total = 2 (duplo) + 1 (solo) + 1 (sem elenco) + 2 (misto).
+    expect(report.rows).toHaveLength(6)
+    expect(report.summary.total).toBe(6)
+    expect(report.summary.pagas).toBe(2) // ana + carla
+    expect(report.summary.conciliadas).toBe(1) // bia
+    expect(report.summary.abertas).toBe(3) // solo + sem-elenco + duda
+    expect(report.summary.valorPago).toBe(150 + 180 + 210)
+    expect(report.summary.valorPrevisto).toBe(220 + 90 + 400)
   })
 })
 
@@ -373,7 +443,7 @@ describe('toCSV', () => {
           status: 'aberta' as const,
         },
       ],
-      summary: { total: 1, abertas: 1, pagas: 0, conciliadas: 0, valorTotal: 100 },
+      summary: { total: 1, abertas: 1, pagas: 0, conciliadas: 0, valorPago: 0, valorPrevisto: 100 },
     }
 
     return import('./orderReportService').then(({ toCSV }) => {

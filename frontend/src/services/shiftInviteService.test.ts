@@ -285,6 +285,90 @@ describe('ShiftInviteService.cancelInvite', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ShiftInviteService.respondToInvite — o gesto que abre o turno (ALTO, revisão pré-piloto)
+// ---------------------------------------------------------------------------
+
+describe('ShiftInviteService.respondToInvite', () => {
+  it('worker responde ao convite (invited -> declined) e a resposta é gravada — UPDATE afetou 1 linha', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'worker-1' } }, error: null });
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'invited',
+        worker_id: 'worker-1',
+        job_id: 'job-1',
+        invited_by_company_at: '2026-08-10T00:00:00.000Z',
+        invitation_expires_at: null,
+      },
+      error: null,
+    });
+    // .select('id') no fim da cadeia de update — retorna a linha afetada (sucesso real).
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== 'applications') throw new Error(`tabela inesperada: ${table}`);
+      return { select: fetchChain.select, update: updateChain.update };
+    });
+
+    const result = await ShiftInviteService.respondToInvite('app-1', 'declined');
+
+    expect(result.success).toBe(true);
+    expect(updateChain.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'declined', invitation_response: 'declined' }),
+    );
+  });
+
+  // Classe "sucesso falso" (patterns.md — DELETE/UPDATE sob RLS negado silenciosamente),
+  // o sítio mais grave: é o ACEITE do convite de turno. Se a RLS negar em silêncio (0 linhas,
+  // sem erro Postgres), o freela não pode ver "convite aceito" — a empresa nunca saberia que
+  // ninguém foi contratado, só no dia do turno.
+  it('UPDATE negado pela RLS (0 linhas, sem erro) ao ACEITAR: retorna success=false, nunca mente "aceito"', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'worker-1' } }, error: null });
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'invited',
+        worker_id: 'worker-1',
+        job_id: 'job-1',
+        invited_by_company_at: '2026-08-10T00:00:00.000Z',
+        invitation_expires_at: null,
+      },
+      error: null,
+    });
+    // PostgREST 204 sem erro, mas 0 linhas casaram o USING (ex.: convite cancelado pela
+    // empresa entre o fetch e este UPDATE).
+    const updateChain = makeChain({ data: [], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== 'applications') throw new Error(`tabela inesperada: ${table}`);
+      return { select: fetchChain.select, update: updateChain.update };
+    });
+
+    const result = await ShiftInviteService.respondToInvite('app-1', 'accepted');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Não foi possível registrar sua resposta/);
+  });
+
+  it('rejeita transição quando o status atual não é invited', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'worker-1' } }, error: null });
+    const fetchChain = makeChain({
+      data: { id: 'app-1', status: 'hired', worker_id: 'worker-1', job_id: 'job-1' },
+      error: null,
+    });
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== 'applications') throw new Error(`tabela inesperada: ${table}`);
+      return { select: fetchChain.select };
+    });
+
+    const result = await ShiftInviteService.respondToInvite('app-1', 'accepted');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Transição inválida/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ShiftInviteService.dismissFromShift
 // ---------------------------------------------------------------------------
 

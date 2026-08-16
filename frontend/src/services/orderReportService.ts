@@ -1,13 +1,18 @@
 /**
  * OrderReportService — Relatório de Ordens da empresa.
  *
- * GRANULARIDADE (revisado — ver `.harness/memory-bank/decisions/ADR-20260816-marcador-
- * pagamento-por-freela.md`): "Ordem" = par (turno, freela), não mais "turno" sozinho. Um
- * turno com N freelas com marcador de pagamento ativo gera N linhas — cada uma com o
- * pagamento e o nome do freela correspondente. Só cola em "1 linha = 1 turno" quando o
- * turno NÃO tem nenhum marcador ativo: aí a linha usa o freela "primário" (candidatura
- * mais avançada) como hoje, para o turno não sumir do relatório enquanto ninguém foi
- * pago. "Nota"/comprovante = pagamento (shift_payments, modo A — pagamento externo
+ * GRANULARIDADE (ver `.harness/memory-bank/decisions/ADR-20260816-marcador-pagamento-
+ * por-freela.md`): "Ordem" = par (turno, freela), não mais "turno" sozinho. A linha é
+ * ancorada na UNIÃO de duas fontes, chaveada por `(job_id, worker_id)` para nunca
+ * duplicar:
+ *   - marcadores de pagamento ATIVOS (shift_payments, status IN scheduled/recorded);
+ *   - candidaturas CONTRATADAS (applications.status IN hired/in_progress/completed).
+ * Um freela contratado sem marcador ainda é passivo em aberto — precisa aparecer como
+ * 'aberta', não sumir do relatório só porque ainda não foi pago. Um freela com marcador
+ * usa os dados do pagamento independente do status da candidatura (o pagamento é a
+ * fonte mais forte). Só cai para "1 linha, freela vazio" quando o turno não tem NENHUM
+ * marcador E NENHUMA candidatura contratada (turno sem elenco nenhum) — sempre aparece,
+ * nunca some. "Nota"/comprovante = pagamento (shift_payments, modo A — pagamento externo
  * registrado). Ao registrar o pagamento a application do freela já vira 'completed' —
  * este relatório dá a visão consolidada (aberta/paga/conciliada) + export para o
  * financeiro/estoquista.
@@ -19,16 +24,28 @@
  *  - 'conciliada': shift_payment ATIVO com status='recorded' E worker_confirmed_at preenchido
  *    (o freela confirmou o recebimento).
  *  - 'paga': shift_payment ATIVO com status='recorded', mas o freela ainda não confirmou.
- *  - 'aberta': sem shift_payment 'recorded' para aquele freela (pode ter 'scheduled'
- *    pendente, ou nenhum marcador no turno inteiro).
+ *  - 'aberta': freela contratado sem shift_payment 'recorded' (pode ter 'scheduled'
+ *    pendente, ou nenhum marcador — passivo em aberto), OU a linha única de fallback de
+ *    um turno sem elenco nenhum.
  *
  * Valor da linha: amount do shift_payment ATIVO daquele freela (recorded, senão
- * scheduled); na ausência de QUALQUER marcador no turno, cai para jobs.budget
- * (estimativa do turno — a linha única de fallback).
+ * scheduled); na ausência de marcador para aquele freela (contratado mas ainda não
+ * pago, ou fallback de turno sem elenco), cai para jobs.budget — é uma ESTIMATIVA do
+ * turno inteiro, repetida em cada linha 'aberta' daquele turno (não há split por freela
+ * no dado disponível; ver `valorPrevisto` abaixo).
  *
  * `summary.total` conta LINHAS (pares turno+freela exibidos), não turnos distintos —
- * mesma base de `abertas`/`pagas`/`conciliadas`/`valorTotal` (todos somam sobre as
- * linhas, sem dupla contagem: cada marcador ativo entra em exatamente 1 linha).
+ * mesma base de `abertas`/`pagas`/`conciliadas` (todos somam sobre as linhas, sem
+ * dupla contagem: cada `(job_id, worker_id)` entra em exatamente 1 linha).
+ *
+ * `summary.valorPago` x `summary.valorPrevisto`: linhas 'aberta' carregam um valor
+ * ESTIMADO (jobs.budget), linhas 'paga'/'conciliada' carregam um valor REALIZADO
+ * (shift_payment.amount) — são naturezas diferentes de número e não devem ser somadas
+ * num único "Valor Total" (isso já foi o bug de origem: some-se ao juntar). Por isso o
+ * summary expõe os dois separados: `valorPago` = soma das linhas paga+conciliada (dinheiro
+ * que já saiu, registrado); `valorPrevisto` = soma das linhas 'aberta' (passivo/estimativa
+ * do que ainda falta pagar). A UI rotula os dois cards nomeando a natureza de cada um —
+ * nunca um único "Valor Total" que misturaria as duas.
  *
  * Data da ordem: jobs.start_date; se nulo, jobs.created_at (fallback — turnos antigos
  * podem não ter start_date preenchido).
@@ -42,6 +59,8 @@
  *    mudança de schema; `category` já existe em `jobs` mas ainda não está no Job
  *    global — mesma convenção já usada em financialBIService.ts).
  *  - Imports relativos (sem alias @/).
+ *  - Sem N+1: `applications` é buscado em lote (`.in('job_id', jobIds)`), mesmo padrão
+ *    já usado para `shift_payments` — o relatório varre um período inteiro de uma vez.
  *  - logError (nunca console.log).
  */
 
@@ -57,11 +76,12 @@ export type OrderStatus = 'aberta' | 'paga' | 'conciliada';
 export interface OrderRow {
   jobId: string;
   /**
-   * Identifica o freela desta linha (worker_id do shift_payment ATIVO, ou da candidatura
-   * primária quando o turno ainda não tem nenhum marcador). `null` só no caso-limite de
-   * turno sem marcador E sem candidatura nenhuma. Usado como parte da key de linha
-   * (`${jobId}:${workerId ?? 'none'}`) — um turno com N freelas pagos gera N `OrderRow`
-   * com o mesmo `jobId` e `workerId` distintos (ADR-20260816).
+   * Identifica o freela desta linha: worker_id do shift_payment ATIVO, ou da candidatura
+   * contratada (`hired`/`in_progress`/`completed`) quando não há marcador para ele.
+   * `null` só no caso-limite de turno sem marcador E sem candidatura contratada nenhuma
+   * (turno sem elenco). Usado como parte da key de linha (`${jobId}:${workerId ?? 'none'}`)
+   * — um turno com N freelas (pagos e/ou só contratados) gera N `OrderRow` com o mesmo
+   * `jobId` e `workerId` distintos, nunca duplicando o mesmo par (ADR-20260816).
    */
   workerId: string | null;
   /** ISO date ou date-only (YYYY-MM-DD) — start_date do turno, ou created_at como fallback. */
@@ -82,7 +102,10 @@ export interface OrderReportSummary {
   abertas: number;
   pagas: number;
   conciliadas: number;
-  valorTotal: number;
+  /** Soma das linhas 'paga' + 'conciliada' — valor REALIZADO (shift_payment.amount). */
+  valorPago: number;
+  /** Soma das linhas 'aberta' — valor ESTIMADO/passivo (jobs.budget, ainda não pago). */
+  valorPrevisto: number;
 }
 
 export interface OrderReport {
@@ -190,22 +213,12 @@ function formatDDMMYYYY(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: seleciona a application "primária" de um turno sem marcador de pagamento
-// (usada só para exibir o nome do freela quando ainda não há shift_payment).
+// Elenco contratado: status de application que conta como "freela em passivo" mesmo
+// sem marcador de pagamento (ADR-20260816). Convite pendente/recusado/candidatura ainda
+// não decidida NÃO contam — só quem de fato está/esteve escalado no turno.
 // ---------------------------------------------------------------------------
 
-const PRIMARY_STATUS_PRIORITY = ['completed', 'hired', 'in_progress'];
-
-function pickPrimaryApplication(apps: ApplicationRow[] | undefined): ApplicationRow | undefined {
-  if (!apps || apps.length === 0) return undefined;
-  for (const st of PRIMARY_STATUS_PRIORITY) {
-    const found = apps.find((a) => a.status === st);
-    if (found) return found;
-  }
-  const accepted = apps.find((a) => a.invitation_response === 'accepted');
-  if (accepted) return accepted;
-  return apps[0];
-}
+const CONTRACTED_STATUSES = new Set(['hired', 'in_progress', 'completed']);
 
 // ---------------------------------------------------------------------------
 // OrderReportService (exportado)
@@ -220,7 +233,7 @@ export const OrderReportService = {
   async getReport({ from, to, status }: GetReportParams): Promise<OrderReport> {
     const empty: OrderReport = {
       rows: [],
-      summary: { total: 0, abertas: 0, pagas: 0, conciliadas: 0, valorTotal: 0 },
+      summary: { total: 0, abertas: 0, pagas: 0, conciliadas: 0, valorPago: 0, valorPrevisto: 0 },
     };
 
     try {
@@ -335,9 +348,16 @@ export const OrderReportService = {
         }
       }
 
-      // 4. Montar as linhas do relatório — uma linha por (turno, freela) quando o turno
-      //    tem marcador(es) ativo(s); fallback de 1 linha (freela "primário" ou vazio)
-      //    quando o turno não tem nenhum marcador, para não sumir do relatório.
+      // 4. Montar as linhas do relatório — a chave de linha é a UNIÃO de marcadores
+      //    ativos ∪ candidaturas contratadas, por `(job_id, worker_id)` (ADR-20260816):
+      //     - freela com marcador → linha com os dados do pagamento;
+      //     - freela contratado (hired/in_progress/completed) SEM marcador → linha
+      //       'aberta' com o nome dele e o valor previsto (job.budget) — é o passivo
+      //       em aberto que o relatório existe para mostrar;
+      //     - turno sem marcador E sem contratado nenhum → 1 linha de fallback, freela
+      //       vazio, pra nunca sumir do relatório.
+      //    A união é por Set de worker_id: cada par (job_id, worker_id) entra em
+      //    exatamente 1 linha, nunca duplicando quem tem marcador E application.
       function buildRow(job: JobRow, payment: ShiftPaymentRow | undefined, workerId: string | null): OrderRow {
         let derivedStatus: OrderStatus = 'aberta';
         if (payment?.status === 'recorded') {
@@ -364,14 +384,22 @@ export const OrderReportService = {
 
       const allRows: OrderRow[] = periodJobs.flatMap((job) => {
         const jobPayments = paymentsByJob.get(job.id) ?? [];
+        const paymentByWorker = new Map<string, ShiftPaymentRow>();
+        for (const p of jobPayments) paymentByWorker.set(p.worker_id, p);
 
-        if (jobPayments.length === 0) {
-          const primaryApp = pickPrimaryApplication(appsByJob.get(job.id));
-          const workerId = primaryApp?.worker_id ?? null;
-          return [buildRow(job, undefined, workerId)];
+        const contractedWorkerIds = (appsByJob.get(job.id) ?? [])
+          .filter((a) => CONTRACTED_STATUSES.has(a.status))
+          .map((a) => a.worker_id);
+
+        // Set preserva ordem de 1ª ocorrência: primeiro os workers com marcador (já vêm
+        // ordenados por created_at ASC), depois quem só está contratado sem marcador.
+        const unionWorkerIds = new Set<string>([...paymentByWorker.keys(), ...contractedWorkerIds]);
+
+        if (unionWorkerIds.size === 0) {
+          return [buildRow(job, undefined, null)];
         }
 
-        return jobPayments.map((payment) => buildRow(job, payment, payment.worker_id));
+        return [...unionWorkerIds].map((workerId) => buildRow(job, paymentByWorker.get(workerId), workerId));
       });
 
       // Mais recente primeiro (turnos com N linhas mantêm a ordem estável de inserção
@@ -383,12 +411,20 @@ export const OrderReportService = {
         return parseDateFlexible(b.date).getTime() - parseDateFlexible(a.date).getTime();
       });
 
+      // valorPago x valorPrevisto são somados separadamente de propósito — misturar
+      // valor REALIZADO (pago/conciliada) com valor ESTIMADO (aberta = jobs.budget) num
+      // único total inflaria/mentiria a leitura do passivo (ver JSDoc do topo).
       const summary: OrderReportSummary = {
         total: allRows.length,
         abertas: allRows.filter((r) => r.status === 'aberta').length,
         pagas: allRows.filter((r) => r.status === 'paga').length,
         conciliadas: allRows.filter((r) => r.status === 'conciliada').length,
-        valorTotal: allRows.reduce((acc, r) => acc + r.amount, 0),
+        valorPago: allRows
+          .filter((r) => r.status === 'paga' || r.status === 'conciliada')
+          .reduce((acc, r) => acc + r.amount, 0),
+        valorPrevisto: allRows
+          .filter((r) => r.status === 'aberta')
+          .reduce((acc, r) => acc + r.amount, 0),
       };
 
       const rows =

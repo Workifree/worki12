@@ -275,18 +275,27 @@ export default function MyJobs() {
         }
     }, [jobs.history, reviewedJobIds, loading]);
 
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+    // RLS negado silenciosamente): sob RLS um UPDATE cuja linha não casa mais com a policy
+    // USING retorna 0 linhas sem erro (PostgREST 204). Sem checar `data`, a UI diria "check-in
+    // realizado" com o banco intocado.
     const handleCheckin = async (appId: string) => {
         setActionLoading(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({
                     worker_checkin_at: new Date().toISOString(),
                     status: 'in_progress'
                 })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível fazer check-in. Atualize a página e tente novamente.', 'error');
+                return;
+            }
             addToast('Check-in realizado com sucesso!', 'success');
             await fetchJobs();
         } catch (err) {
@@ -300,12 +309,17 @@ export default function MyJobs() {
     const handleCheckout = async (appId: string) => {
         setActionLoading(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ worker_checkout_at: new Date().toISOString() })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível fazer check-out. Atualize a página e tente novamente.', 'error');
+                return;
+            }
             await fetchJobs();
         } catch (err) {
             logError('Error checking out:', err);

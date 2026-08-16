@@ -259,8 +259,11 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+    // RLS negado silenciosamente): sem checar `data`, um UPDATE negado pela policy USING (0
+    // linhas, sem erro) reportaria "status atualizado" com o banco intocado.
     const handleUpdateStatus = async (appId: string, newStatus: string) => {
-        const { error } = await supabase.from('applications').update({ status: newStatus }).eq('id', appId);
+        const { data, error } = await supabase.from('applications').update({ status: newStatus }).eq('id', appId).select('id');
 
         if (error) {
             logError('CompanyJobCandidates: handleUpdateStatus', error);
@@ -269,6 +272,10 @@ export default function CompanyJobCandidates() {
             // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
             // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
             addToast(error.message || 'Erro ao atualizar status do freela.', 'error');
+            return;
+        }
+        if (!data || data.length === 0) {
+            addToast('Não foi possível atualizar o status deste freela. Atualize a página e tente novamente.', 'error');
             return;
         }
 
@@ -287,8 +294,11 @@ export default function CompanyJobCandidates() {
             setReleasing(false);
             return;
         }
-        const { error: updateError } = await supabase.from('applications').update({ status: 'completed' }).eq('id', app.id);
-        if (updateError) {
+        // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md) — ver
+        // `handleUpdateStatus` acima para o raciocínio completo.
+        const { data: updatedApp, error: updateError } = await supabase.from('applications').update({ status: 'completed' }).eq('id', app.id).select('id');
+        if (updateError || !updatedApp || updatedApp.length === 0) {
+            logError('CompanyJobCandidates: handleConfirmDelivery.updateStatus', updateError ?? new Error('0 linhas afetadas'));
             addToast('Pagamento liberado, mas houve erro ao atualizar status. Contate o suporte.', 'error');
             setReleasing(false);
             setConfirmDeliveryApp(null);
@@ -469,12 +479,17 @@ export default function CompanyJobCandidates() {
 
             // Registro OK — agora sim marcamos o turno como concluído. Falha aqui não
             // desfaz o registro (já é a fonte de verdade do pagamento); só avisamos.
-            const { error: updateError } = await supabase
+            // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE
+            // sob RLS negado silenciosamente): sem checar `data`, um UPDATE negado pela policy
+            // USING reportaria "concluído" com o turno ainda preso em 'hired'/'in_progress' —
+            // pago, mas sem saída (dead-end).
+            const { data: updatedApp, error: updateError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', paymentModalApp.id);
-            if (updateError) {
-                logError('CompanyJobCandidates: handleRecordPayment.updateStatus', updateError);
+                .eq('id', paymentModalApp.id)
+                .select('id');
+            if (updateError || !updatedApp || updatedApp.length === 0) {
+                logError('CompanyJobCandidates: handleRecordPayment.updateStatus', updateError ?? new Error('0 linhas afetadas'));
                 addToast('Pagamento registrado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
             } else {
                 addToast('Pagamento registrado com sucesso!', 'success');
@@ -525,12 +540,15 @@ export default function CompanyJobCandidates() {
                 return;
             }
 
-            const { error: updateError } = await supabase
+            // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — ver
+            // `handleRecordPayment` acima para o raciocínio completo).
+            const { data: updatedApp, error: updateError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', scheduleModalApp.id);
-            if (updateError) {
-                logError('CompanyJobCandidates: handleSchedulePayment.updateStatus', updateError);
+                .eq('id', scheduleModalApp.id)
+                .select('id');
+            if (updateError || !updatedApp || updatedApp.length === 0) {
+                logError('CompanyJobCandidates: handleSchedulePayment.updateStatus', updateError ?? new Error('0 linhas afetadas'));
                 addToast('Pagamento agendado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
             } else {
                 addToast('Pagamento agendado com sucesso!', 'success');
@@ -696,6 +714,14 @@ export default function CompanyJobCandidates() {
     };
 
     const handleConfirmCheckout = async (appId: string) => {
+        // Defesa em profundidade (a UI já esconde este gesto sem chegada confirmada — ver
+        // render acima): sem `company_checkin_confirmed_at`, `buildManualAttendanceTimestamp`
+        // não tem referência de rollover e as horas do recibo se perdem para sempre.
+        const target = candidates.find((c) => c.id === appId);
+        if (!target?.company_checkin_confirmed_at) {
+            addToast('Confirme a chegada deste freela antes de registrar a saída.', 'error');
+            return;
+        }
         setConfirmingCheckin(appId);
         try {
             const { data, error } = await supabase
@@ -726,6 +752,12 @@ export default function CompanyJobCandidates() {
     // PLANEJADO do turno (`work_start_time`/`work_end_time`), nunca com `now()`: é o melhor
     // palpite (é o que quase sempre aconteceu) e o gerente confirma ou ajusta.
     const openManualAttendanceModal = (app: Application, type: 'checkin' | 'checkout') => {
+        // Defesa em profundidade (a UI já esconde este gesto sem chegada confirmada — ver
+        // render acima): mesmo motivo de `handleConfirmCheckout`.
+        if (type === 'checkout' && !app.company_checkin_confirmed_at) {
+            addToast('Confirme a chegada deste freela antes de registrar a saída.', 'error');
+            return;
+        }
         const plannedTime = type === 'checkin' ? jobStartTime : jobEndTime;
         setManualAttendance({ app, type });
         setManualAttendanceTime(plannedTime ? plannedTime.slice(0, 5) : '');
@@ -1089,8 +1121,25 @@ export default function CompanyJobCandidates() {
                                                                 confirmar a saída mesmo se o freela não apertou "saída" no celular
                                                                 (turno acabou tarde da noite, sem sinal do app). Sem isso, o turno
                                                                 fica impagável para sempre. O rótulo distingue os dois casos para
-                                                                não sugerir que o freela marcou algo que não marcou. */}
-                                                            {!app.company_checkout_confirmed_at ? (
+                                                                não sugerir que o freela marcou algo que não marcou.
+
+                                                                Ordem chegada→saída EXIGIDA (revisão pré-piloto): registrar/confirmar
+                                                                a saída antes da chegada estar confirmada quebra
+                                                                `buildManualAttendanceTimestamp` (sem `company_checkin_confirmed_at`
+                                                                nem `worker_checkin_at` como referência, `refMinutes` fica null,
+                                                                `dayOffset` sempre 0 — em turno sem `work_start_time`, a saída pode
+                                                                gravar ANTES da chegada que só será registrada depois).
+                                                                `calculateWorkedHours` então devolve null e o recibo perde as horas
+                                                                para sempre (`shift_payments` é imutável). Falha segura, não mente —
+                                                                mas o único artefato de auditoria do modo A fica sem o dado. A
+                                                                cronologia real (ninguém sai antes de entrar) resolve na origem: só
+                                                                oferece "Registrar/Confirmar Saída" depois que a chegada estiver
+                                                                confirmada; antes disso, mostra um estado neutro explicando o motivo. */}
+                                                            {!app.company_checkin_confirmed_at ? (
+                                                                <span className="text-xs font-bold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                    <Square size={12} /> Confirme a chegada primeiro
+                                                                </span>
+                                                            ) : !app.company_checkout_confirmed_at ? (
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();

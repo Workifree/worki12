@@ -350,17 +350,44 @@ BEGIN
 END;
 $$;
 
--- UNIQUE parcial: 1 marcador ativo por turno (scheduled OU recorded)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_active
-    ON public.shift_payments (job_id)
+-- UNIQUE parcial: 1 marcador ativo por (turno, freela) — ADR-20260816
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_worker_active
+    ON public.shift_payments (job_id, worker_id)
     WHERE status IN ('scheduled', 'recorded');
 ```
 
 **Razão:** modo A (pagamento externo registrado) precisa de promessa com data (uso real: empresa paga freela em data futura, não na hora). 
 `scheduled` é **auditoria** (não move saldo, Article 8 intacto). `paid_at` deve ser **fato verdadeiro** (data real), nunca data futura disfarçada; 
 logo nullable até efetivação. Trigger libera SÓ a transição `scheduled→recorded` do `paid_at` (NULL→data real, uma vez) — garante imutabilidade pós-efetivação. 
-UNIQUE ativo barra 2 promessas OU promessa+pagamento em linhas distintas do mesmo turno; N linhas `voided` OK (reagendar). BI conta SÓ `recorded` 
-(promessa ≠ liquidação).
+
+O índice original assumia "1 freela por turno" (premissa não examinada, herdada de HALT sobre dimensão temporal). Achado do harness-evaluator: **um turno pode ter N freelas** 
+(painel pós-criação de `CompanyCreateJob` convida vários). O UNIQUE foi trocado de `(job_id)` para `(job_id, worker_id)` (ADR-20260816) — agora barram 2 promessas OU promessa+pagamento 
+**por freela do mesmo turno**, não por turno (granularidade volta a bater com `escrow_transactions`). N linhas `voided` OK (reagendar). BI conta SÓ `recorded` (promessa ≠ liquidação).
+
+## Ordem crítica: frontend + adaptação ANTES de alargamento de constraint (Onda 1 — Revisão Piloto)
+
+```
+PROBLEMA: constraint alarga o que o DB aceita (ex.: `UNIQUE(job_id)` → `UNIQUE(job_id, worker_id)`)
+→ múltiplas linhas casam com a mesma chave nova.
+
+Quatro leituras do client usavam `.maybeSingle()` com a premissa "≤1 resultado". Se aplicar a migration
+antes de adaptar o frontend, `.maybeSingle()` falha com PGRST116 (esperava 1, achou 2+), que o app trata
+como null — a UI fica CEGA para ambas as linhas (card oferece "Registrar" para payment que existe; recibo 
+diz "não encontrado" — PIOR que erro alto).
+
+SOLUÇÃO (dois passos):
+1. FRONTEND PRIMEIRO: adaptar o client para filtrar por nova dimensão da chave (ex.: `worker_id`).
+   Compatível com banco ATUAL (query por freela devolve ≤1 linha). Pode ir a produção sozinho.
+2. MIGRATION DEPOIS: criar novo índice ANTES de dropar o antigo (mesma transação); é um puro 
+   destravamento, sem exigir mudança adicional de client.
+
+Se o relógio do produto acabar entre os passos, o passo 1 converte erro silencioso em erro honesto
+("outro freela deste turno já tem pagamento ativo") com contorno operacional.
+
+Referência: ADR-20260816-marcador-pagamento-por-freela.md §Ordem de aplicação
+```
+
+**Razão:** toda mudança de constraint MAIS FROUXA precisa de adaptação de código primeiro. Reverso (aplicar schema antes de adaptar client) cria instante de vulnerabilidade onde dados válidos quebram queries antigas.
 
 ## DELETE/UPDATE sob RLS negado silenciosamente (Onda 1 — Revisão Piloto)
 

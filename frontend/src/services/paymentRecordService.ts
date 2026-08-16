@@ -228,9 +228,10 @@ export const PaymentRecordService = {
    * registro correspondente caso o INSERT falhe.
    *
    * Idempotência (decisão do HALT #5 — "1 registro por turno"): o UNIQUE parcial
-   * `(job_id) WHERE status='recorded'` no DB rejeita um segundo registro ativo para o
-   * mesmo turno com erro Postgres 23505 — tratado aqui como `alreadyRecorded: true`,
-   * nunca propagado como exceção.
+   * `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` (migration
+   * `20260816220000` — ADR-20260816-marcador-pagamento-por-freela) no DB rejeita um
+   * segundo registro ativo para o mesmo (turno, freela) com erro Postgres 23505 —
+   * tratado aqui como `alreadyRecorded: true`, nunca propagado como exceção.
    */
   async recordExternalPayment(
     params: RecordExternalPaymentParams,
@@ -311,8 +312,9 @@ export const PaymentRecordService = {
    * Reutiliza a MESMA validação defensiva de "turno concluído" de `recordExternalPayment`
    * (chegada e saída confirmadas pela empresa) — a promessa também exige lastro de trabalho.
    *
-   * Idempotência: o UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` rejeita
-   * um segundo marcador ATIVO para o mesmo turno (Postgres 23505) — tratado como `alreadyActive: true`.
+   * Idempotência: o UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')`
+   * (migration `20260816220000` — ADR-20260816-marcador-pagamento-por-freela) rejeita um segundo
+   * marcador ATIVO para o mesmo (turno, freela) (Postgres 23505) — tratado como `alreadyActive: true`.
    */
   async scheduleExternalPayment(
     params: ScheduleExternalPaymentParams,
@@ -620,14 +622,22 @@ export const PaymentRecordService = {
    */
   async confirmReceiptByWorker(paymentId: string): Promise<ConfirmReceiptResult> {
     try {
-      const { error } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+      // RLS negado silenciosamente): se a linha não casar com a policy USING (ex.: pagamento
+      // não pertence a este freela, ou já foi estornado), o PostgREST retorna 204 sem erro e
+      // 0 linhas afetadas. Sem checar `data`, o freela veria "confirmado" com o banco intocado.
+      const { data, error } = await supabase
         .from('shift_payments')
         .update({ worker_confirmed_at: new Date().toISOString() })
-        .eq('id', paymentId);
+        .eq('id', paymentId)
+        .select('id');
 
       if (error) {
         logError('paymentRecord.confirmReceiptByWorker', error);
         return { success: false, error: 'Não foi possível confirmar o recebimento.' };
+      }
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível confirmar este recebimento. Atualize a página e tente novamente.' };
       }
       return { success: true };
     } catch (err) {
@@ -643,18 +653,27 @@ export const PaymentRecordService = {
    */
   async voidPayment(paymentId: string, reason: string): Promise<VoidPaymentResult> {
     try {
-      const { error } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+      // RLS negado silenciosamente): sem checar `data`, um estorno negado pela policy USING
+      // (ex.: sessão não é mais a empresa dona) reportaria "estornado" com o marcador ainda
+      // ATIVO no banco — e "Dispensar" ficaria travado sem explicação nenhuma (guarda de
+      // `dismissFromShift` continuaria enxergando o marcador ativo que a UI já deu como sumido).
+      const { data, error } = await supabase
         .from('shift_payments')
         .update({
           status: 'voided',
           voided_at: new Date().toISOString(),
           void_reason: reason,
         })
-        .eq('id', paymentId);
+        .eq('id', paymentId)
+        .select('id');
 
       if (error) {
         logError('paymentRecord.voidPayment', error);
         return { success: false, error: 'Não foi possível estornar o registro.' };
+      }
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível estornar este registro. Atualize a página e tente novamente.' };
       }
       return { success: true };
     } catch (err) {

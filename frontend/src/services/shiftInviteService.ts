@@ -635,7 +635,13 @@ export const ShiftInviteService = {
       const newStatus: ApplicationStatus = response === 'accepted' ? 'hired' : 'declined';
       const now = new Date().toISOString();
 
-      const { error: updateErr } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+      // RLS negado silenciosamente): se a linha não casar mais com a policy USING no momento
+      // do UPDATE (ex.: convite cancelado pela empresa entre o fetch e esta chamada), o
+      // PostgREST retorna 204 sem erro e 0 linhas afetadas. Sem checar `data`, o freela veria
+      // "convite aceito" com o banco intocado — é justamente o gesto que abre o turno inteiro
+      // (o pior sítio para mentir: ninguém descobre até o dia do turno).
+      const { data: updated, error: updateErr } = await supabase
         .from('applications')
         .update({
           status: newStatus,
@@ -643,11 +649,19 @@ export const ShiftInviteService = {
           invitation_responded_at: now,
         })
         .eq('id', applicationId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .eq('status', 'invited')
+        .select('id');
 
       if (updateErr) {
         logError('shiftInvite.respondToInvite.update', updateErr);
         return { success: false, error: 'Erro ao registrar resposta.' };
+      }
+      if (!updated || updated.length === 0) {
+        return {
+          success: false,
+          error: 'Não foi possível registrar sua resposta a este convite. Atualize a página e tente novamente.',
+        };
       }
 
       // 4. Resolver o owner da empresa (necessário tanto para notificação de aceite quanto

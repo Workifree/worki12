@@ -125,6 +125,20 @@ function buildChain(overrides: Record<string, unknown> = {}) {
   return { ...chain, ...overrides }
 }
 
+// Cadeia "thenable" que aceita QUALQUER número de .eq()/.select() encadeados antes de resolver —
+// necessária para handleCheckin/handleCheckout, que fazem `.update(...).eq('id', appId).select('id')`
+// (o `buildChain` padrão não é "awaitable" por si só — resolve para o próprio objeto chain, não
+// para `{data, error}`, então testes que precisam simular uma resolução real usam isto).
+function chainableResolve(result: { data: unknown; error: unknown } = { data: null, error: null }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj: any = {}
+  obj.eq = vi.fn(() => obj)
+  obj.select = vi.fn(() => obj)
+  obj.then = (onFulfilled?: (v: typeof result) => unknown, onRejected?: (e: unknown) => unknown) =>
+    Promise.resolve(result).then(onFulfilled, onRejected)
+  return obj
+}
+
 function setupMocks(apps: ApplicationRow[] = [], conversationOverrides: Record<string, unknown> = {}) {
   const mockAddToast = vi.fn()
   const mockNavigate = vi.fn()
@@ -272,6 +286,125 @@ describe('MyJobs - Botao check-out', () => {
     // Check-out também não pode ficar disponível: o freela nunca chegou a fazer check-in
     // por conta própria, mas a etapa "chegada" já está fechada, então o botão de saída aparece.
     expect(screen.getByRole('button', { name: 'Check-out' })).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Classe "sucesso falso" (patterns.md — DELETE/UPDATE sob RLS negado silenciosamente) —
+// check-in/check-out do freela. Sem `.select('id')` no UPDATE, um UPDATE negado pela RLS
+// (0 linhas, sem erro) reportaria "check-in realizado"/prosseguiria silenciosamente com o
+// banco intocado.
+// ---------------------------------------------------------------------------
+
+// status='in_progress' (não 'hired') para cair de forma determinística na aba "Em Andamento"
+// (isInProgress = app.status === 'in_progress', sem depender de data/horário do turno).
+const APP_SCHEDULED_NO_CHECKIN: ApplicationRow = {
+  ...APP_IN_PROGRESS,
+  id: 'app-scheduled-1',
+  status: 'in_progress',
+  worker_checkin_at: null,
+  company_checkin_confirmed_at: null,
+}
+
+describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pode ser sucesso', () => {
+  it('check-in com sucesso: UPDATE afetou 1 linha', async () => {
+    const { mockAddToast } = setupMocks([APP_SCHEDULED_NO_CHECKIN])
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return buildChain({
+          order: vi.fn().mockResolvedValue({ data: [APP_SCHEDULED_NO_CHECKIN], error: null }),
+          update: vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-scheduled-1' }], error: null })),
+        }) as unknown as ReturnType<typeof supabase.from>
+      }
+      if (table === 'reviews') return buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    fireEvent.click(checkinButton)
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+    })
+  })
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE de check-in afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const { mockAddToast } = setupMocks([APP_SCHEDULED_NO_CHECKIN])
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return buildChain({
+          order: vi.fn().mockResolvedValue({ data: [APP_SCHEDULED_NO_CHECKIN], error: null }),
+          update: vi.fn().mockReturnValue(chainableResolve({ data: [], error: null })),
+        }) as unknown as ReturnType<typeof supabase.from>
+      }
+      if (table === 'reviews') return buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    fireEvent.click(checkinButton)
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        'Não foi possível fazer check-in. Atualize a página e tente novamente.',
+        'error',
+      )
+    })
+    expect(mockAddToast).not.toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+  })
+
+  it('check-out com sucesso: UPDATE afetou 1 linha', async () => {
+    setupMocks([APP_IN_PROGRESS])
+    const appsChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: [APP_IN_PROGRESS], error: null }),
+      update: vi.fn().mockReturnValue(chainableResolve({ data: [{ id: APP_IN_PROGRESS.id }], error: null })),
+    })
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') return appsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'reviews') return buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    fireEvent.click(checkoutButton)
+
+    await waitFor(() => {
+      expect(appsChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ worker_checkout_at: expect.any(String) }),
+      )
+    })
+  })
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE de check-out afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const { mockAddToast } = setupMocks([APP_IN_PROGRESS])
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return buildChain({
+          order: vi.fn().mockResolvedValue({ data: [APP_IN_PROGRESS], error: null }),
+          update: vi.fn().mockReturnValue(chainableResolve({ data: [], error: null })),
+        }) as unknown as ReturnType<typeof supabase.from>
+      }
+      if (table === 'reviews') return buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) }) as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    fireEvent.click(checkoutButton)
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        'Não foi possível fazer check-out. Atualize a página e tente novamente.',
+        'error',
+      )
+    })
   })
 })
 
