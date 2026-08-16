@@ -57,6 +57,86 @@ idêntica à testada, mas isso é inferência, não verificação. Vale um teste
 convidar um freela para um turno **sem** adicioná-lo ao elenco e confirmar que a empresa
 continua vendo o perfil dele.
 
+---
+
+# Segunda leva — RLS que nunca foi ligada (mesmo dia)
+
+## A descoberta que muda o método
+
+Rodando o advisor de segurança **depois** de aplicar a primeira leva, apareceu que
+`public.jobs` e `public.Conversation` tinham policies mas **RLS desligada** — policies que
+nunca foram avaliadas.
+
+Causa raiz, provada por contagem de policies pelo `harness-architect`: a migration
+`20260309000000_enable_rls_all_tables.sql` **nunca teve efeito em produção**. Ela cria 4
+policies em `jobs`; produção tinha 2, e são de outra migration. Alguém ligou RLS **à mão pelo
+dashboard**, tabela por tabela, e passou por `jobs` e `Conversation`. Duas migrations depois
+rodaram `FORCE ROW LEVEL SECURITY` — que **sem `ENABLE` é no-op**.
+
+**Consequência para o processo: o repositório de migrations não é a fonte da verdade do
+estado de produção. Só o catálogo é.** Toda revisão de segurança deve começar por um censo
+de `pg_class.relrowsecurity` + `has_table_privilege`, nunca por leitura de arquivo. Os
+reviewers desta sessão liam as policies nos arquivos e concluíam que a tabela estava
+protegida — inclusive afirmando por escrito que "a defesa real está no RLS" para
+`Conversation`.
+
+## Impacto do buraco de `jobs`
+
+`authenticated` tinha `UPDATE` e `DELETE` em **qualquer** turno de qualquer empresa. Como
+`PATCH /rest/v1/jobs` sem filtro atinge todas as linhas, um request tornava o atacante dono
+de toda a base. E `jobs.company_id` ancora **cinco** caminhos de autorização — entre eles a
+função `can_view_worker_profile`, aplicada horas antes: reescrever um turno dava acesso a
+CPF, data de nascimento, telefone e chave PIX de todo freela com candidatura.
+
+Aresta de Article 8 identificada e fechada junto: `jobs.budget` era gravável por terceiros e
+é o valor que `auto_reserve_escrow_on_hire` passa a `reserve_escrow` no fluxo pull legado.
+
+## Aplicado
+
+| Versão | O quê |
+|---|---|
+| `enable_rls_jobs` | RLS em `jobs` + 4 policies com ancoragem dupla. **SELECT mantido `USING (true)`** de propósito — o vetor é escrita, e apertar SELECT no mesmo passo mudaria em silêncio as policies de `applications`, `Conversation` e `Message`, que fazem subquery em `jobs`. Um passo, uma variável. |
+| `lockdown_legacy_prisma_tables` | `FreelancerReview`, `ClientReview`, `_FreelancerProfileToSkill`, `_JobToSkill`: RLS sem policy (deny-all) + `REVOKE` de `anon`/`authenticated`. As 4 estavam **vazias** e sem call site — não houve exposição real, mas tinham `anon` com `SELECT` **e `INSERT`**. Trancadas, não dropadas. |
+| `enable_rls_conversation_message` | RLS em `Conversation` + `REVOKE` de `anon` nas duas tabelas do chat + a policy de UPDATE que faltava em `Message`. |
+
+**Não** foram reaproveitadas as policies legadas de `jobs`: `"Company owner can manage jobs"`
+ancora só em `companies.owner_id`, e se algum registro tiver `owner_id` NULL (bug histórico
+cujo backfill pode não ter rodado — mesmo motivo) a empresa perderia os próprios turnos no
+instante em que a RLS ligasse. As novas usam ancoragem dupla.
+
+## O censo respondeu duas perguntas em aberto
+
+- **`Message` já tinha RLS ligada com 4 policies** — o pior cenário (conteúdo das mensagens
+  aberto a `anon`) **não se aplicava**. Só a metadata de `Conversation` estava exposta.
+- **`Message` não tinha policy de UPDATE**, com RLS ligada. Ou seja: o `read_at` gravado por
+  `Messages.tsx:56` afetava **0 linhas, em silêncio** — o recibo de leitura do chat já estava
+  quebrado em produção. A migration corrige.
+
+Mantidas de propósito as duas policies antigas de `Message`
+(`"Users can view/insert messages in their conversations"`): são permissivas e logicamente
+idênticas às novas, então servem de rede de segurança caso `can_access_conversation` tenha
+defeito. Limpeza pós-piloto.
+
+## Verificações executadas (produção, com `BEGIN`/`ROLLBACK`)
+
+| Verificação | Resultado |
+|---|---|
+| Empresa vê os próprios 13 turnos | 13 (igual ao baseline) |
+| Empresa edita os próprios turnos | 13 linhas afetadas |
+| **Freela tenta reescrever TODOS os turnos** | **0 linhas** (antes: 16) |
+| Freela participante vê a conversa | 1 |
+| Empresa participante vê a conversa | 1 |
+| Terceiro autenticado vê a conversa | 0 |
+| `anon` lê `Conversation` | `ERROR 42501: permission denied` |
+| Tabelas em `public` com RLS desligada | **nenhuma** |
+
+## Pendente — teste manual obrigatório
+
+**O Realtime da mensageria não é provável por SQL.** Ele passa a respeitar RLS a partir desta
+leva. Antes de considerar o chat liberado: abrir a conversa nos dois lados, enviar uma
+mensagem de cada, confirmar que aparece em tempo real e que o contador de não-lidas zera
+(este último exercita a policy de `read_at`, que **nunca funcionou** antes).
+
 ## Pendências pré-existentes (fora desta leva, NÃO corrigidas)
 
 O advisor reporta outros achados anteriores a este trabalho, entre eles um `ERROR`
