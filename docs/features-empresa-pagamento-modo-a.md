@@ -42,9 +42,9 @@ No modelo **Modo A**, você paga o freelancer **direto** — por PIX, dinheiro e
 
 ### Passo 1: Concluir o Turno
 
-1. Vá para o turno concluído na aba **"Vagas"** ou histórico
-2. Clique em **"Confirmar Conclusão"** (após checkout)
-3. A tela de conclusão abre
+1. Vá para **Meus Turnos**
+2. Clique no turno concluído (após freelancer fazer check-in e checkout)
+3. Você vê a seção "Presença e Pagamento"
 
 ### Passo 2: Preencher o Registro de Pagamento
 

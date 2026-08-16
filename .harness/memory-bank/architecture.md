@@ -86,31 +86,37 @@ trigger `auto_reserve_escrow_on_hire` pula a reserva no aceite de convite (ADR-2
 legado** (candidatura → hired) ainda reserva no aceite (modelo prepago original, inalterado). O pagamento do
 push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem depósito antecipado).
 
-## Cancelamento de turno pelo worker (Slice 5: notificação obrigatória)
+## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
-Worker pode cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`). A ação dispara automaticamente
-um trigger SECURITY DEFINER (`trg_notify_company_on_worker_cancel`) que insere uma notificação (type='status_change')
-para o **dono da empresa** — nenhum lado pode suprimir a notificação. **Landmark pattern:** notificação à contraparte
-que RLS não permite inserir direto (`applications` é worker-owned; company precisa saber via sistema automático, não
-query puxada).
+**Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).
 
-**Máquina de estados:** cancelamento é transição irreversível: `hired` → `cancelled`, `in_progress` → `cancelled`.
-Worker pode cancelar; empresa NÃO pode forçar cancelamento.
+**Agora (20260816150000):** tanto **worker** quanto **empresa** podem cancelar:
+- **Worker:** cancela convite/turno (`cancelApplication` em client) → empresa é notificada (título: "Turno cancelado pelo freela").
+- **Empresa:** desfaz convite (`cancelInvite` no `shiftInviteService`, estado `invited`) ou dispensa do turno (`dismissFromShift`,
+  estados `hired`/`in_progress`) → **freela é notificado** (título diferenciado: "Convite de turno cancelado" se era `invited`,
+  "Turno cancelado pela empresa" se era `hired`/`in_progress`).
+- **Ator desconhecido** (service_role, `delete-account`, cron): **ambos** são notificados com texto neutro
+  ("O turno foi cancelado"), sem atribuir culpa.
 
-**Trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path=''):**
+**Trigger `trg_notify_counterpart_on_application_cancel` (SECURITY DEFINER, search_path='', migração 20260816150000):**
+Substitui o antigo `trg_notify_company_on_worker_cancel` (20260714). Ramifica por `auth.uid()`:
 ```
 AFTER UPDATE ON applications
-WHEN (NEW.status='cancelled' AND OLD.status IN ('hired','in_progress'))
-→ INSERT INTO notifications: user_id = (SELECT company_id FROM jobs WHERE id=NEW.job_id),
-    type='status_change', title='Turno cancelado por freelancer', 
-    link='/company/candidatos?job_id=<job_id>'
+WHEN (NEW.status='cancelled' AND OLD.status IN ('invited', 'hired', 'in_progress'))
+→ Se auth.uid() = NEW.worker_id:     INSERT para empresa (link: '/company/jobs/<job_id>/candidates')
+→ Se auth.uid() = jobs.company_id:  INSERT para freela (link: '/my-jobs')
+→ Se auth.uid() IS NULL (ator desconhecido): INSERT para AMBOS
 ```
 
-**Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
-`refundEscrow` se desejado.
+**Conhecimento reutilizável:** `auth.uid()` **funciona corretamente** dentro de `SECURITY DEFINER` (o DEFINER muda o ROLE de execução,
+não as claims do JWT que vivem em `request.jwt.claims`). Precedentes: `validate_application_update`, `enforce_shift_payment_immutability`.
 
-**Fluxo complementar (Slice 1):** cancelamento não toca saldo; empresa se quiser devolver a reserva ao próprio saldo
-chama `refundEscrow(jobId, workerUserId, 'worker_cancelled')` (ADR-20260714-cancelamento-freela aguarda).
+**Guarda em `dismissFromShift`:** não se pode dispensar um freela de um turno que já tem `shift_payments` ativo (`scheduled`/`recorded`),
+porque o UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` impediria registrar pagamento de um substituto.
+Empresa precisa estornar o pagamento antigo primeiro.
+
+**Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
+`refundEscrow` se desejado. Cancelamento não toca `shift_payments` — empresa estorna em operação separada.
 
 ## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
 
@@ -256,6 +262,30 @@ Migração `20260816120000` substituiu `USING (true)` por `USING (public.can_vie
 (no perfil público da empresa) não conseguia resolver os nomes de freelas que avaliaram — sua policy impedia ler linhas de outros freelas.
 `get_profile_reviews` é SECURITY DEFINER e resolve nomes sem expor dados pessoais (mascaramento: "Carlos S." para terceiros, nome completo só para o dono do perfil).
 
+## Notificações de pagamento (Onda 1 — Revisão Piloto, modo A)
+
+O modo A (pagamento externo registrado) é **loop bilateral:** empresa declara pagamento em `shift_payments` e freela confirma recebimento.
+Antes, o side do freela nunca era avisado — faltava aviso de "pagamento foi registrado, confirme no recibo". Sem isso, o loop só fecha se freela
+abrir `/recebimentos` por conta própria.
+
+**Migração `20260816140000` — função `notify_worker_on_shift_payment()` (SECURITY DEFINER, search_path=''):**
+Dispara em 4 eventos distintos via 2 triggers (INSERT e UPDATE):
+
+| Evento | Transição | Título | Link | Mensagem |
+|---|---|---|---|---|
+| Agendamento | INSERT com status='scheduled' | "Pagamento agendado" | `/recibo/:job_id` | "agendou o pagamento de R$ X para DATA. Você não precisa fazer nada agora." |
+| Registro | INSERT com status='recorded' | "Pagamento registrado — confirme" | `/recibo/:job_id` | "registrou o pagamento de R$ X... Abra o recibo e confirme." |
+| Efetivação | UPDATE `scheduled→recorded` | "Pagamento efetivado — confirme" | `/recibo/:job_id` | "marcou como pago o valor de R$ X... Abra o recibo e confirme." |
+| Estorno | UPDATE `{scheduled\|recorded}→voided` | "Agendamento cancelado" / "Registro estornado" | `/recebimentos` | "cancelou o agendamento" / "estornou o registro"... |
+
+**Por que `/recebimentos` no estorno (não `/recibo/:job_id`):** A rota `getReceipt()` filtra por `status IN ('scheduled','recorded')`;
+uma linha `voided` devolveria tela vazia naquele link. Usar `/recebimentos` (lista de pagamentos históricos) oferece contexto útil.
+
+**Por que trigger (não INSERT no client):** A policy vigente permite empresa notificar worker com `team_connections.status='accepted'`,
+mas se o freela **sair do Elenco ou bloquear** a empresa depois do turno, o INSERT seria negado silenciosamente — exatamente para quem
+tem atrito e mais precisa da trilha. Trigger SECURITY DEFINER não passa por essa RLS, garantindo a notificação.
+**Landmark pattern:** notificação à contraparte = garantia do produto, não cortesia da UI — mesmo de `trg_notify_counterpart_on_application_cancel`.
+
 ## Rating bidirecional (Slice 1: confiança)
 
 Worker avalia company e vice-versa. Implementado via coluna `reviews.direction` ('worker' | 'company'):
@@ -274,6 +304,14 @@ Exibe: nome, logo, capa, setor, descrição, endereço, briefing padrão, avalia
 **Objetivo:** o freela consegue abrir o perfil da empresa a partir do convite pendente (`InviteTakeover`), da **Carteira de Clientes** (lista de empresas em `team_connections`),
 ou do cabeçalho do chat, **antes de aceitar** o convite — assimetria de confiança que equilibra o fluxo push.
 Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get_profile_reviews` com mascaramento de nomes de avaliadores).
+
+## Estado do banco de produção (Onda 1 — Revisão Piloto)
+
+As migrations da Onda 1 (revisão pré-piloto) foram aplicadas em produção (`vrklakcbkcsonarmhqhp`) no dia 16/08/2026.
+Ver `supabase/migrations/APLICACAO-2026-08-16.md` para: divergência de timestamp entre repositório e histórico do banco,
+verificações executadas contra dados reais, e lacunas declaradas (ramo de vínculo operacional não exercitado, funções legadas fora do escopo).
+
+Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 
 ## Dependências externas
 

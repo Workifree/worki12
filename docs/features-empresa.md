@@ -1,6 +1,44 @@
 # Guia da Empresa — Worki
 
-Bem-vindo ao Worki! Este guia mostra como usar a plataforma para gerenciar sua equipe de freelancers e contratar para turnos.
+Bem-vindo ao Worki! Este guia mostra como usar a plataforma para gerenciar sua equipe de freelancers, criar turnos e acompanhar operações diárias.
+
+---
+
+## Meus Turnos
+
+**"Meus Turnos"** é sua agenda operacional de turnos — você vê todos os seus turnos organizados por dia para facilitar planejamento e acompanhamento.
+
+### Visualizar Agenda
+
+1. Vá para **Meus Turnos**
+2. Você vê turnos agrupados por:
+   - **Hoje** — turnos de hoje
+   - **Amanhã** — turnos para amanhã
+   - **Esta Semana** — próximos 6 dias
+   - **Depois** — turnos futuros (7+ dias)
+   - **Sem Data** — turnos sem data definida
+   - **Anteriores** — turnos passados (recolhido por padrão)
+
+### O Que Mostra Cada Linha
+
+Cada turno mostra:
+- **Horário** (ex.: 08:00 – 18:00)
+- **Título/Função** do turno
+- **Freelancer** atrelado (nome, avatar, estado: Contratado / Aguardando resposta / Finalizado)
+- **Alerta âmbar** se o turno é de hoje ou amanhã E ainda não tem freelancer — "Sem freela"
+
+### Ações Rápidas
+
+Clique em um turno ou no menu ⋮ para:
+- **Presença e Pagamento** — confirmar chegada/saída do freelancer e registrar/agendar pagamento
+- **Ver Detalhes** — informações completas do turno
+- **Editar** — ajustar título, horário, valor, etc.
+- **Pausar / Reativar** — pausar convite ou reabrir para novo convite
+- **Excluir** — remover o turno
+
+### Convidar Freelancer
+
+Se o turno não tem freelancer atrelado, clique **"Convidar Freela"** diretamente no card. Você será redirecionado para a tela de Presença e Pagamento, onde pode convidar um freela do seu elenco.
 
 ---
 
@@ -47,8 +85,9 @@ Quando você cria um turno, pode convidar direto um freelancer da sua equipe sem
 
 ### Passo 1: Criar um turno
 
-1. Vá para **Vagas** (aba de empresa) → **"Nova Vaga"**
-2. Preencha (campos obrigatórios):
+1. Vá para **Meus Turnos**
+2. Clique **"Nova Vaga"** (botão azul/preto no topo)
+3. Preencha (campos obrigatórios):
    - **Título:** Ex. "Garçom - Turno Noturno"
    - **Função:** Ex. "Garçonete"
    - **Data e horário:** Data do turno, horário início–fim (datas no passado não são permitidas)
@@ -61,23 +100,97 @@ Quando você cria um turno, pode convidar direto um freelancer da sua equipe sem
 
 ### Passo 2: Convidar freelancer
 
-1. Turno criado → clique **"Convidar da Equipe"**
+Você tem duas formas de convidar:
+
+#### A. Ao criar o turno
+1. Turno criado → clique **"Convidar do Elenco"**
 2. Escolha um ou mais freelancers da sua equipe
 3. Clique **"Enviar Convites"**
+
+#### B. Direto do Meu Elenco
+1. Vá para **Meu Elenco**
+2. Clique no freelancer (abre card expandido)
+3. Botão **"Convidar para turno"** aparece na base
+4. Escolha um turno elegível (aberto, sem esse freelancer, data futura)
+5. Clique **"Convidar"**
 
 O freelancer recebe:
 - **Notificação no app** (com o sino)
 - **E-mail** com os detalhes
-- **WhatsApp** (em breve, v1.1)
 
 ### Passo 3: Acompanhar respostas
 
-Na página de detalhes do turno:
-- **✓ Aceito:** Freelancer confirmou. Ele está escalado.
+Na página **Presença e Pagamento** do turno:
+- **✓ Contratado:** Freelancer confirmou. Ele está escalado. Você vê chegada/saída e pode confirmar ou dispensar.
 - **✗ Recusado:** Slot reabre para convidar outro.
-- **⏳ Aguardando:** Convite ativo, esperando resposta.
+- **⏳ Aguardando resposta:** Convite ativo, esperando resposta.
 
 **Expiração:** Se o freelancer não responder em 48 horas, o convite expira e o slot reabre.
+
+### Passo 4: Gerenciar Convite Pendente
+
+Se o freelancer ainda não respondeu:
+- **Avisar no WhatsApp:** botão verde abre o WhatsApp com a mensagem pronta (turno, data, horário, valor)
+- **Cancelar Convite:** revoga o convite; o slot volta a ficar livre para convidar outro; freelancer é notificado
+
+### Passo 5: Gerenciar Freelancer Confirmado
+
+Após o freelancer aceitar:
+- **Confirmar Chegada / Saída:** registre horários quando o freelancer fizer check-in/checkout
+- **Dispensar do Turno:** se precisar remover o freelancer (ex.: faltou, não é mais necessário), clique "Dispensar" — exige confirmação explícita; freelancer é notificado
+  - ⚠️ Não é possível dispensar se já houve pagamento registrado ou agendado — é preciso estornar o pagamento antes
+- **Registrar / Agendar Pagamento:** página "Presença e Pagamento" (descrita abaixo)
+
+---
+
+## Presença e Pagamento
+
+Após o turno ser concluído, você gerencia chegada/saída do freelancer e registra ou agenda pagamento nesta tela unificada.
+
+### Acessar Presença e Pagamento
+
+1. Vá para **Meus Turnos**
+2. Clique no turno desejado (ou clique em seu nome no card)
+3. Ou clique **⋮ (menu)** → **"Presença e Pagamento"**
+
+### Confirmar Chegada
+
+1. Quando o freelancer chegar, ele faz check-in no app dele
+2. Você vê **"Aguardando confirmação"** → clique **"Confirmar Chegada"**
+3. Hora fica registrada (timestamp)
+
+### Confirmar Saída
+
+1. Quando terminar, freelancer faz checkout
+2. Você vê **"Aguardando confirmação"** → clique **"Confirmar Saída"**
+3. Hora fica registrada
+
+### Registrar Pagamento
+
+Após confirmar chegada E saída:
+
+1. Clique **"Registrar Pagamento"** ou **"Agendar Pagamento"**
+2. Preencha:
+   - **Valor:** quanto pagou
+   - **Fonte:** PIX, dinheiro ou outro
+   - **Data:** quando (ou data futura se agendando)
+   - **Observação (opcional):** ex. "PIX em 31/08"
+3. Chave PIX do freelancer vem pré-carregada — copie para pagar rápido
+4. Clique **"Confirmar"** → recibo gerado instantaneamente
+
+### Agendar Pagamento
+
+Mesmos passos acima, mas **"Agendar Pagamento"** permite marcar uma data futura. Gera um "Comprovante de Agendamento" que dá respaldo ao freelancer. Depois você marca como "Efetivado" quando de fato pagou.
+
+### Dispensar Freelancer
+
+Se o freelancer foi contratado mas precisa ser removido (ex.: faltou):
+
+1. Clique **"Dispensar"** no card
+2. Confirme a ação (é irreversível)
+3. Freelancer é notificado imediatamente
+
+⚠️ **Não é possível dispensar** se há pagamento já registrado ou agendado. Estorne o pagamento primeiro se precisar desfazer.
 
 ---
 

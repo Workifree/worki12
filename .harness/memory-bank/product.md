@@ -57,10 +57,25 @@ Foco em **piloto com primeiro cliente real, 100% modo A** (Onda 1 — Revisão P
 - **Modos B/C (depois do piloto):** Asaas carteira central + escrow atômico (RPCs) ou cartão on-file; reabríveis por gatilho de ADR-20260630.
 - **Assimetria de confiança:** freela pode abrir perfil público da empresa (`/empresa/:id`) antes de aceitar convite — prova social
   (avaliações de outros freelas) equilibra o fluxo unidirecional (empresa convida, não freela se candidata).
-- Check-in/checkout que cruza a meia-noite. **Check-in por QR foi removido inteiro** (scanner, parser, modal): nunca validou nada de fato
-  (aceitava qualquer conteúdo QR; o rótulo "(GPS)" era falso — pedia localização e descartava o resultado). Confirmação de presença hoje: worker faz check-in + empresa confirma manualmente na tela do turno.
+
+### Operação diária da empresa — "Presença e Pagamento"
+
+Empresa acessa turno do dia → vê quem trabalha amanhã (agenda por dia) → **gesto de desfazer:** cancela convite ainda pendente ou dispensa freela
+já contratado → **aviso via WhatsApp:** clica botão e abre `wa.me` com a normalização de telefone (DDI 55 + dígitos, sem mascara) e mensagem pronta
+(nome da empresa, título do turno, data/horário, local, valor, link para o app).
+
+Check-in/checkout que cruza a meia-noite. **Check-in por QR foi removido inteiro** (scanner, parser, modal): nunca validou nada de fato
+(aceitava qualquer conteúdo QR; o rótulo "(GPS)" era falso — pedia localização e descartava o resultado). Confirmação de presença hoje: worker faz check-in + empresa confirma manualmente na tela do turno.
+
+Recibo do modo A exibe: chegada (check-in), saída (check-out), horas, valor, status de pagamento. Freela confirma recebimento bilateral no `/recibo/:jobId`.
+
 - Notificações, deploy (Vercel: `worki-opal.vercel.app`), Termos/Privacidade, SEO (`PageMeta`).
 - Qualidade: subir cobertura de testes (Vitest + Playwright E2E), limpar warnings de lint, remover superfície de modelo antigo (páginas `/company/financeiro`, `/wallet`, `DepositModal`, etc.).
+
+### Engajamento do freela
+
+Freela consegue **iniciar conversa** com empresa (`/messages` já suporta). Além disso, passa a receber **notificações de pagamento** (agendamento → registro → efetivação/estorno)
+— o loop bilateral do modo A agora avisa. Recibo centralizado em `/recebimentos` (antes `/wallet`) exibe histórico de pagamentos com status e ações (confirmar, verificar comprovante).
 
 ## Restrições estratégicas
 

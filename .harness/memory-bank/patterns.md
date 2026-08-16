@@ -395,51 +395,69 @@ return { success: true };
 em toda operação destrutiva guardada por RLS. Exemplo real: `teamConnectionService.removeFromTeam()` (migração `20260816000000`)
 impede DELETE de linhas `status='blocked'` bloqueadas pelo worker — precisa de `.select()` para saber se foi negado.
 
-## Mock que codifica bug como comportamento (mudança de policy requer mudança de teste)
+## WhatsApp como canal de notificação sem backend (aviso manual de convite)
 
-```tsx
-// ✗ RISCO — mock legado que NÃO conhece a policy
-// Antes da migração 20260816120000, a policy de SELECT em workers era USING (true)
-// O teste mockava isso:
-vi.mock('../lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      select: () => Promise.resolve({
-        data: [{ id: worker1, name: 'Carlos', phone: '11999', pix_key: '123456' }],
-        error: null
-      })
-    })
+```ts
+// shiftInviteService.ts — helpers puros de normalização e montagem de mensagem
+export function normalizePhoneForWhatsApp(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  
+  // Já veio com DDI 55 (12 = DDD + 8 dígitos + 55; 13 = DDD + 9 dígitos + 55)
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+    return digits;
   }
-}));
-
-// Após a policy mudar para USING (can_view_worker_profile(id)), a realidade é:
-// - worker1 vendo a PRÓPRIA linha: data = [{ id, name, phone, pix_key }] ✓ OK
-// - worker2 vendo worker1 SEM vínculo: data = [] (linha filtrada pela policy) — ✓ Segurança
-// - mas o mock continua devolvendo dados, mascarando a regressão.
-
-// ✓ CORRETO — mock refletir a policy atual
-vi.mock('../lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      select: vi.fn((fields) => {
-        const viewer = getCurrentUser(); // contexto do teste
-        const isViewer = viewer.id === worker1;
-        const hasVinculo = checkTeamConnection(viewer, worker1); // lógica da policy
-        
-        if (isViewer || hasVinculo) {
-          return Promise.resolve({
-            data: [{ id: worker1, name: 'Carlos', phone: '11999', pix_key: '123456' }],
-            error: null
-          });
-        } else {
-          return Promise.resolve({ data: [], error: null }); // policy filtrou
-        }
-      })
-    })
+  
+  // Número local sem DDI (10 = fixo, 11 = celular)
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
   }
-}));
+  
+  return null; // Formato inválido — nunca cria `wa.me/undefined`
+}
+
+export function buildShiftInviteWhatsAppMessage(params: {
+  companyName: string;
+  jobTitle: string;
+  dateLabel?: string | null;  // Pré-formatado (ex.: "16/08/2026")
+  timeLabel?: string | null;  // Pré-formatado (ex.: "08:00 às 17:00")
+  location?: string | null;
+  amount?: number | null;      // Em BRL
+  appUrl: string;             // Link deep-linkado para o app
+}): string {
+  // Linhas compostas, filtro de nulls, join com \n
+  const lines = [
+    `Oi! Aqui é ${params.companyName || 'a empresa'} pelo Worki.`,
+    `Te convidei para o turno "${params.jobTitle}"${params.dateLabel ? `, ${params.dateLabel}` : ''}${params.timeLabel ? ` (${params.timeLabel})` : ''}.`,
+    params.location ? `Local: ${params.location}` : null,
+    typeof params.amount === 'number' && params.amount > 0
+      ? `Valor: R$ ${params.amount.toFixed(2).replace('.', ',')}`
+      : null,
+    '',
+    `Dá uma olhada e responde no app: ${params.appUrl}`,
+  ].filter((line): line is string => line !== null);
+  
+  return lines.join('\n');
+}
+
+// Uso em CompanyJobCandidates.tsx:
+const phone = normalizePhoneForWhatsApp(worker.phone);
+if (phone) {
+  const message = buildShiftInviteWhatsAppMessage({
+    companyName: companyName,
+    jobTitle: job.title,
+    dateLabel: formatDate(job.start_date),
+    timeLabel: `${job.start_time} às ${job.end_time}`,
+    location: job.location,
+    amount: job.budget,
+    appUrl: `${APP_URL}/my-jobs?invite=${application.id}`,
+  });
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+}
 ```
 
-**Razão:** teste que mocka a camada de dados (Supabase) sem refletir a lógica de RLS pode codificar o bug como comportamento esperado.
-Quando a policy muda (ex.: `20260816120000` restringe SELECT), o mock continua mentindo, escondendo regressão. Padrão: o mock deve
-refletir a policy de fato — se não couber no mock, considerar teste de integração com Supabase real ou snapshot de `can_view_worker_profile`.
+**Razão:** convite push só existe dentro do app (notificação do navegador não sobrevive à aba fechada). Sem push/SMS nativo, o telefone cadastrado é o único
+canal fora do app que a empresa tem à mão. Funções puras (sem I/O) — testáveis isoladas. Normalização de DDI é essencial: formato brasileiro mascarado
+("(11) 99999-9999") vira "5511999999999"; invalido retorna `null` evitando links quebrados (`wa.me/undefined`). Mensagem pré-formatada (data, hora, valor, link do app)
+oferece experiência profissional no WhatsApp — não é genérica ("você recebeu um convite"), mas contextualizada (turno, dia, valor, localização).

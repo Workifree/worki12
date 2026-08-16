@@ -57,18 +57,33 @@ Quando você convida alguém, aparece com status:
 Cada card de freelancer mostra:
 - Foto/inícial, nome e função principal
 - Nota média (⭐) e número de turnos completados
+- **Histórico com você:** quantos turnos fez com sua empresa e quando foi o último
 - **Chave PIX** com botão de copiar (útil para pagar rápido)
 
 Você pode **clicar em qualquer lugar do card** para abrir o perfil completo do freelancer — veja especialidades, histórico, avaliações que ele recebeu de outras empresas.
 
 ### Convidar para Turnos
 
-Após o freelancer estar **"Aceito"** no elenco:
+Você tem duas formas de convidar após o freelancer estar **"Aceito"** no elenco:
 
-1. Quando você cria um novo turno, em vez de deixar aberto no feed, escolha **"Convidar do meu elenco"**
+#### Forma 1: Ao Criar Turno
+1. Quando você cria um novo turno, em vez de deixar aberto no feed, escolha **"Convidar da Equipe"**
 2. Selecione os freelancers
 3. Eles recebem convite direto (app + e-mail)
-4. Aceita ou recusa (recusar é neutro — não afeta reputação)
+
+#### Forma 2: Direto do Elenco (NOVO)
+1. Na lista **Meu Elenco**, encontre o freelancer
+2. Clique no card para expandir
+3. Botão **"Convidar para turno"** aparece na base
+4. Escolha um turno elegível:
+   - Status: aberto ou pausado
+   - Sem esse freelancer já atrelado
+   - Data futura (ou sem data)
+5. Clique **"Convidar"**
+
+**Resposta do Freelancer:**
+- Aceita → entra como "Contratado"
+- Recusa → slot reabre (recusar é neutro — não afeta reputação)
 
 ### Remover Alguém do Elenco
 

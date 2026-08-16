@@ -71,7 +71,6 @@ Se não responder em 48 horas, o convite expira automaticamente.
 ### Abas disponíveis
 
 - **Convites:** Novos turnos convidados (visto acima)
-- **Candidaturas:** Turnos que você se candidatou
 - **Em Andamento:** Turnos que você já começou
 - **Agendados:** Turnos confirmados para o futuro
 - **Histórico:** Todos os turnos que você trabalhou
@@ -84,6 +83,16 @@ Se não responder em 48 horas, o convite expira automaticamente.
 - Valor
 - Local
 - Seu status (pendente, confirmado, concluído)
+
+### Comunicar com Empresa
+
+Em turnos **Em Andamento** ou **Agendados**, você pode:
+
+1. Clique **"Falar com a empresa"**
+2. Abre conversa direta (mesma conversa se empresa já abriu do lado dela)
+3. Você pode avisar atrasos, dúvidas, datas, etc. em tempo real
+
+**Útil para:** "Vou atrasar 20 minutos", "Qual é o código de entrada?", etc.
 
 ---
 
@@ -129,9 +138,13 @@ Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Meus 
 
 - Empresa que te contratou
 - Nome do turno (função, data e local)
+- **Chegada:** hora real que você fez check-in
+- **Saída:** hora real que você fez checkout
+- **Total de horas trabalhadas:** automaticamente calculado (funciona mesmo para turnos que cruzam meia-noite)
 - **Valor pago** em reais
 - Método de pagamento (PIX, dinheiro, etc.)
 - Data do pagamento
+- Se agendado: data prevista de pagamento
 
 ### Confirmar Recebimento
 

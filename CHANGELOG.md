@@ -10,6 +10,47 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Revisão Pré-Piloto (Onda 3) — 2026-08-16
+
+**Agenda de Turnos por Dia (Empresa):**
+- "Meus Turnos" agora é uma agenda organizada por dia: Hoje, Amanhã, Esta Semana, Depois, Sem Data, Anteriores
+- Cada linha mostra horário, função, freela (com avatar/estado) — sem necessidade de clicar
+- Turno sem freela em Hoje ou Amanhã fica destacado em âmbar com alerta "Sem freela"
+- Seção "Anteriores" permanece recolhida por padrão (operação não vive no passado)
+
+**Gerenciamento de Convites e Recursos Humanos (Empresa):**
+- **"Cancelar Convite":** quando convite está pendente, empresa pode cancelá-lo; freela é notificado
+- **"Dispensar do Turno":** quando freela já está confirmado, empresa pode dispensá-lo; requer confirmação explícita
+- Ambas as ações não são possíveis se houver pagamento já registrado/agendado para o turno (é preciso estornar antes)
+
+**Notificação via WhatsApp (Empresa):**
+- Botão **"Avisar no WhatsApp"** aparece ao lado de convites pendentes (se freela tem telefone cadastrado)
+- Abre o WhatsApp com mensagem pronta: turno, data, horário, local e valor
+- Serve para resgatar convite que pode expirar sem o freela abrir o app
+
+**Convidar Diretamente do Elenco (Empresa):**
+- Card de cada freela em "Meu Elenco" agora tem botão **"Convidar para turno"** na base
+- Abre modal para escolher um turno elegível (aberto/pausado, sem esse freela, data futura)
+- Dispara convite direto sem sair da tela de elenco
+
+**Histórico do Freela por Empresa (Empresa):**
+- Card de freela em "Meu Elenco" agora mostra quantos turnos ele já fez com você e quando foi o último
+
+**Comunicação com Empresa (Freelancer):**
+- Botão **"Falar com a empresa"** aparece em turnos em andamento e agendados
+- Permite freelancer iniciar conversa sem esperar empresa abrir a conversa
+- Mesma conversa em ambos os lados; se empresa já abriu, freelancer vê histórico
+
+**Recibo Melhorado (Freelancer e Empresa):**
+- Recibo agora mostra **Chegada** (hora real do check-in), **Saída** (hora real do checkout) e **Total de horas trabalhadas**
+- Funciona mesmo para turnos que cruzam a meia-noite (cálculo automático)
+- Se check-in/checkout não foram registrados, aquela linha é omitida (não inventa dados)
+
+**Unificação de Nome de Tela (Empresa):**
+- Tela de "Confirmação de Presença" agora é consistentemente chamada **"Presença e Pagamento"** em todos os pontos de acesso
+
+### Adicionado
+
 #### Revisão Pré-Piloto (Onda 1) — 2026-08-16
 
 **Chave PIX na Plataforma:**
