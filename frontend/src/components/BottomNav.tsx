@@ -21,6 +21,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
         { icon: Users, label: 'Elenco', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar', path: '/company/create' },
         { icon: Briefcase, label: 'Turnos', path: '/company/jobs' },
+        { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: User, label: 'Perfil', path: '/company/profile' },
     ];
 

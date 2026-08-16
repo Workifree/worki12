@@ -66,6 +66,11 @@ Canais de convite: **link** (token via URL `/convite/:token`), **telefone** (Wor
 Após aceitação da equipe, convites de turno seguintes (push via `applications.status='invited'`) não re-pedem handshake
 — lista fechada. Política de INSERT em `applications` garante que só membros aceitos podem ser convidados.
 
+**Guarda de consentimento no DELETE (migração `20260816000000`):** A política UPDATE já impedia a empresa de mudar `status='blocked'`,
+mas DELETE não tinha a mesma proteção — a empresa podia deletar a linha bloqueada e reconvidar, anulando o veto do freela.
+A policy `tc_delete_company` passou a exigir `(status <> 'blocked' OR blocked_by = auth.uid())`: apenas a pessoa que gravou o bloqueio
+pode deletá-lo. Veto do freela é indelével para a empresa; bloqueio feito pela própria empresa pode ser removido (evita auto-trancamento).
+
 ## Convite push de turno (Slice 1: operação freelancer)
 
 Novo fluxo coexistente com pull (candidatura):
@@ -145,6 +150,9 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 
 ### Estrutura de dados
 
+- **`workers.pix_key`** (coluna existente, agora central no modo A): chave PIX do freela (CPF/CNPJ/e-mail/telefone/aleatória), coletada no onboarding
+  (`WorkerOnboarding` R1.1) e normalizada (`normalizePixKeyForStorage` em `lib/validation.ts`). Exibida para empresa com `team_connections` aceita/pendente (R1.2, R1.3) 
+  e no modal de "Registrar Pagamento" (R1.4). **Jamais** exposta a quem não tem vínculo (policy de SELECT em `workers` bloqueia).
 - **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
 - **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by, worker_confirmed_at, voided_at, void_reason, note, created_at)`.
@@ -232,6 +240,22 @@ Ao criar um turno, pré-preenche o campo Briefing; empresa ajusta/incrementa por
 - **JWT:** `asaas-webhook` e `admin-data` fazem deploy `--no-verify-jwt` (webhook não traz JWT Supabase;
   admin-data tem checagem própria). As demais validam o JWT do gateway.
 
+### SELECT em `workers` restrito por vínculo (Onda 1 — Revisão Piloto)
+
+Migração `20260816120000` substituiu `USING (true)` por `USING (public.can_view_worker_profile(id))`. A tabela `workers` carrega dado sensível
+(CPF, telefone, PIX, data de nascimento) — **qualquer conta autenticada podia varrer a base inteira**. A nova policy restringe a leitura a três branches:
+
+1. **Self:** o próprio freela lê a própria linha (Profile, Dashboard, onboarding, Sidebar, etc.). Mantém `select('*')` funcionando.
+2. **Vínculo de elenco:** empresa com `team_connections` status `'pending'` ou `'accepted'` com este freela. `'blocked'` (veto do freela) **NÃO** concede leitura.
+3. **Vínculo operacional:** empresa que tem `applications` do freela em um turno dela (pull OU push — ambos criam linha). Cobre CompanyJobCandidates, relatório de ordens, BI financeiro, recibos históricos.
+
+**Efeito colateral:** DELETE/UPDATE sob RLS que não casa com USING retorna 0 linhas sem erro, não EXCEPTION. O padrão
+`removeFromTeam(workerId)` em `teamConnectionService` exige `.select('id')` (sem `maybeSingle()`) e checa `!data || data.length === 0` para distinguir "removido com sucesso" de "negado por RLS".
+
+**RPC de leitura `get_profile_reviews(reviewed_id, direction)` (migração `20260816130000`):** com a política nova, um freela lendo reviews de uma empresa
+(no perfil público da empresa) não conseguia resolver os nomes de freelas que avaliaram — sua policy impedia ler linhas de outros freelas.
+`get_profile_reviews` é SECURITY DEFINER e resolve nomes sem expor dados pessoais (mascaramento: "Carlos S." para terceiros, nome completo só para o dono do perfil).
+
 ## Rating bidirecional (Slice 1: confiança)
 
 Worker avalia company e vice-versa. Implementado via coluna `reviews.direction` ('worker' | 'company'):
@@ -242,6 +266,14 @@ Antes de Slice 1, ambos os reviews iam para a mesma tabela; inferencialmente "o 
 empresa, mas sem explicitação. Slice 1 torna direction mandatório e consultável. Trigger `set_review_direction()` (BEFORE INSERT)
 auto-preenche direction pela presença do `reviewed_id` em companies/workers, mantendo compatibilidade com clients que não enviam
 direction. Backfill resolveu reviews legados (≥2 migrations para worker e company ratings).
+
+## Perfil público da empresa (Onda 1 — Revisão Piloto)
+
+Nova rota **`/empresa/:id`** (`pages/CompanyPublicProfile.tsx`) sob `<MainLayout>` (papel worker), fora de `/company/*`.
+Exibe: nome, logo, capa, setor, descrição, endereço, briefing padrão, avaliações recebidas de freelas (via `components/ProfileReviews` com `reviewerRole="worker"`).
+**Objetivo:** o freela consegue abrir o perfil da empresa a partir do convite pendente (`InviteTakeover`), da **Carteira de Clientes** (lista de empresas em `team_connections`),
+ou do cabeçalho do chat, **antes de aceitar** o convite — assimetria de confiança que equilibra o fluxo push.
+Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get_profile_reviews` com mascaramento de nomes de avaliadores).
 
 ## Camada de inteligência financeira (Slice 3: operação)
 

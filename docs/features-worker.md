@@ -107,25 +107,39 @@ Ambos veem as avaliações mútuas — isso constrói confiança e reputação.
 
 ---
 
-## Ganhos e Carteira
+## Recibos de Pagamento
 
-### Ver ganhos
+Depois que a empresa registra um pagamento, você recebe uma **notificação** e pode acessar o **recibo de pagamento** — um comprovante bilateral que confirma o valor, data e método de pagamento.
 
-1. Vá para **Meu Perfil**
-2. Clique em **"Carteira"** ou **"Ganhos"**
-3. Veja:
-   - **Saldo disponível:** Pronto para sacar
-   - **Transações:** Histórico de depósitos/saques
-   - **Ganhos do mês:** Total acumulado
+### Acessar o Recibo
 
-### Sacar
+1. Você recebe uma notificação (sino) quando a empresa registra o pagamento
+2. Clique na notificação para abrir o recibo
+3. Ou procure em **"Meus Jobs"** → turno concluído → botão **"Ver Recibo"**
 
-Você pode sacar seu dinheiro quando quiser via **PIX** (dependendo do seu banco). Confira as taxas antes de confirmar.
+### O Recibo Mostra
+
+- Empresa que te contratou
+- Nome do turno (função, data e local)
+- **Valor pago** em reais
+- Método de pagamento (PIX, dinheiro, etc.)
+- Data do pagamento
+
+### Confirmar Recebimento
+
+Se você já recebeu o pagamento, pode confirmar no recibo:
+
+1. Abra o recibo
+2. Clique em **"Confirmar que recebi"**
+3. Seu timestamp é registrado — agora ambas as partes (você e a empresa) veem comprovação bilateral
+
+Confirmar é recomendado para deixar claro que o turno foi totalmente resolvido, mas não é obrigatório.
 
 ---
 
 ## Próximos Passos
 
-- **Completar perfil:** Adicione uma foto, função principal e descrição — empresas veem isso
+- **Completar perfil:** Adicione uma foto, função principal, descrição **e sua chave PIX** — empresas veem sua chave para pagarem você mais rápido
+- **Carteira de Clientes:** Explore empresas que você já trabalha ou adicione novas
 - **Notificações:** Ative notificações para não perder convites
 - **Suporte:** Dúvidas? Entre em contato via chat no app

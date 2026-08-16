@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2, FileText, HelpCircle } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -87,7 +87,6 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
-        { icon: TrendingDown, label: 'Financeiro', path: '/company/financeiro' },
         { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];

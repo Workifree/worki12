@@ -379,8 +379,84 @@ logo nullable até efetivação. Trigger libera SÓ a transição `scheduled→r
 UNIQUE ativo barra 2 promessas OU promessa+pagamento em linhas distintas do mesmo turno; N linhas `voided` OK (reagendar). BI conta SÓ `recorded` 
 (promessa ≠ liquidação).
 
----
+## DELETE/UPDATE sob RLS negado silenciosamente (Onda 1 — Revisão Piloto)
 
-## Padrões a serem extraídos
+```tsx
+// ✗ ERRADO — assume que DELETE sempre remove
+const result = await supabase
+  .from('team_connections')
+  .delete()
+  .eq('worker_id', workerId)
+  .eq('company_id', companyId);
+// Se a policy USING bloqueia a linha, retorna 0 sem erro (não é EXCEPTION).
+// A UI mente: "removido" quando na verdade foi "negado por RLS".
 
-> Conforme novas tasks consolidam padrões, popular aqui via `harness-memory-updater` ou edição direta.
+// ✓ CORRETO — .select() para distinguir "negado" de "sucesso"
+const { data, error } = await supabase
+  .from('team_connections')
+  .delete()
+  .eq('worker_id', workerId)
+  .eq('company_id', companyId)
+  .select('id');  // ← obrigatório (SEM maybeSingle())
+
+if (!data || data.length === 0) {
+  // RLS bloqueou (linha nenhuma casou o USING) — não há erro, só 0 linhas afetadas
+  return { success: false, error: 'Não foi possível remover este freela: ele encerrou a conexão com a sua empresa.' };
+}
+
+// Realmente removido
+return { success: true };
+```
+
+**Razão:** DELETE/UPDATE sob RLS que não casa com a cláusula USING retorna PostgREST status 204 (sem erro). Padrão obrigatório
+em toda operação destrutiva guardada por RLS. Exemplo real: `teamConnectionService.removeFromTeam()` (migração `20260816000000`)
+impede DELETE de linhas `status='blocked'` bloqueadas pelo worker — precisa de `.select()` para saber se foi negado.
+
+## Mock que codifica bug como comportamento (mudança de policy requer mudança de teste)
+
+```tsx
+// ✗ RISCO — mock legado que NÃO conhece a policy
+// Antes da migração 20260816120000, a policy de SELECT em workers era USING (true)
+// O teste mockava isso:
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    from: () => ({
+      select: () => Promise.resolve({
+        data: [{ id: worker1, name: 'Carlos', phone: '11999', pix_key: '123456' }],
+        error: null
+      })
+    })
+  }
+}));
+
+// Após a policy mudar para USING (can_view_worker_profile(id)), a realidade é:
+// - worker1 vendo a PRÓPRIA linha: data = [{ id, name, phone, pix_key }] ✓ OK
+// - worker2 vendo worker1 SEM vínculo: data = [] (linha filtrada pela policy) — ✓ Segurança
+// - mas o mock continua devolvendo dados, mascarando a regressão.
+
+// ✓ CORRETO — mock refletir a policy atual
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    from: () => ({
+      select: vi.fn((fields) => {
+        const viewer = getCurrentUser(); // contexto do teste
+        const isViewer = viewer.id === worker1;
+        const hasVinculo = checkTeamConnection(viewer, worker1); // lógica da policy
+        
+        if (isViewer || hasVinculo) {
+          return Promise.resolve({
+            data: [{ id: worker1, name: 'Carlos', phone: '11999', pix_key: '123456' }],
+            error: null
+          });
+        } else {
+          return Promise.resolve({ data: [], error: null }); // policy filtrou
+        }
+      })
+    })
+  }
+}));
+```
+
+**Razão:** teste que mocka a camada de dados (Supabase) sem refletir a lógica de RLS pode codificar o bug como comportamento esperado.
+Quando a policy muda (ex.: `20260816120000` restringe SELECT), o mock continua mentindo, escondendo regressão. Padrão: o mock deve
+refletir a policy de fato — se não couber no mock, considerar teste de integração com Supabase real ou snapshot de `can_view_worker_profile`.

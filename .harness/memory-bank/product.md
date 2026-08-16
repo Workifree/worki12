@@ -50,12 +50,17 @@ no roteamento (`ProtectedRoute`) e no banco (RLS).
 
 ## Direção atual (MVP — 2026)
 
-Foco em **lançar o MVP com fluxo de contrato + operação confiável**:
-- **Modo A (default piloto):** Pagamento externo registrado (PIX/dinheiro) com recibo e confirmação bilateral (`paymentRecordService`, `ReceiptView`).
-- **Modos B/C (opt-in/expansão):** Asaas carteira central + escrow atômico (RPCs) ou cartão on-file; reabríveis por gatilho de ADR-20260630.
-- Check-in/checkout que cruza a meia-noite, CORS das funções Asaas para origens locais.
+Foco em **piloto com primeiro cliente real, 100% modo A** (Onda 1 — Revisão Piloto):
+- **Modo A (ÚNICO no piloto):** Empresa monta **Elenco** (equipe permanente via `team_connections`), convida freela pro turno (push),
+  **confere presença** via check-in/checkout, **paga por fora** (PIX/dinheiro) e **registra no Worki** (recibo bilateral via `shift_payments`).
+  Nenhum dinheiro passa pela plataforma. Fluxo fechado, linear, sem escrow/depósito/cartão.
+- **Modos B/C (depois do piloto):** Asaas carteira central + escrow atômico (RPCs) ou cartão on-file; reabríveis por gatilho de ADR-20260630.
+- **Assimetria de confiança:** freela pode abrir perfil público da empresa (`/empresa/:id`) antes de aceitar convite — prova social
+  (avaliações de outros freelas) equilibra o fluxo unidirecional (empresa convida, não freela se candidata).
+- Check-in/checkout que cruza a meia-noite. **Check-in por QR foi removido inteiro** (scanner, parser, modal): nunca validou nada de fato
+  (aceitava qualquer conteúdo QR; o rótulo "(GPS)" era falso — pedia localização e descartava o resultado). Confirmação de presença hoje: worker faz check-in + empresa confirma manualmente na tela do turno.
 - Notificações, deploy (Vercel: `worki-opal.vercel.app`), Termos/Privacidade, SEO (`PageMeta`).
-- Qualidade: subir cobertura de testes (Vitest + Playwright E2E), limpar warnings de lint.
+- Qualidade: subir cobertura de testes (Vitest + Playwright E2E), limpar warnings de lint, remover superfície de modelo antigo (páginas `/company/financeiro`, `/wallet`, `DepositModal`, etc.).
 
 ## Restrições estratégicas
 

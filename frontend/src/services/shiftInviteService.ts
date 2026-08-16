@@ -118,7 +118,6 @@ async function dispatchAuthorizePayment(
           message:
             `A autorização do pagamento para o turno falhou: ${errMsg}. ` +
             'Verifique o método de pagamento cadastrado para garantir que o freela receba.',
-          link: '/company/wallet',
         });
       } catch (notifErr) {
         logError('shiftInvite.authorizePayment.notif', notifErr);

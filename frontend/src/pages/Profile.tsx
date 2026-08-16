@@ -639,23 +639,6 @@ export default function Profile() {
                         </div>
                     </div>
 
-                    {/* Payments */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-black uppercase flex items-center gap-2">
-                                <CreditCard size={20} /> Recebimento
-                            </h3>
-                        </div>
-                        <p className="text-sm text-gray-500 mb-4">Gerencie seus ganhos e saques na sua carteira.</p>
-
-                        <button
-                            onClick={() => navigate('/wallet')}
-                            className="w-full bg-black text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-all flex justify-center items-center gap-2"
-                        >
-                            Ir para Carteira
-                        </button>
-                    </div>
-
                     {/* Contact Info */}
                     <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
                         <h3 className="text-lg font-black uppercase mb-4">Contato</h3>

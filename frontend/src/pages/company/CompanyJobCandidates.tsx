@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
-import { SpendLimitService } from '../../services/spendLimitService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger';
@@ -323,22 +322,6 @@ export default function CompanyJobCandidates() {
                 addToast(result.error || 'Não foi possível registrar o pagamento.', 'error');
                 return;
             }
-
-            // Registro OK — avaliar o alerta de teto de gasto (R12) com a MESMA fonte
-            // unificada (escrow ∪ marcador externo) que o dashboard financeiro usa,
-            // senão o alerta fica cego ao modo A (não há releaseEscrow para disparar isso).
-            // Best-effort, fire-and-forget: nunca bloqueia nem falha o registro do pagamento
-            // (espelha walletService.releaseOrCaptureEscrow.spendAlert).
-            void (async () => {
-                try {
-                    const { data: { user: authUser } } = await supabase.auth.getUser();
-                    if (authUser) {
-                        await SpendLimitService.evaluateSpendAlert(authUser.id);
-                    }
-                } catch (alertErr) {
-                    logError('CompanyJobCandidates: handleRecordPayment.spendAlert', alertErr);
-                }
-            })();
 
             // Registro OK — agora sim marcamos o turno como concluído. Falha aqui não
             // desfaz o registro (já é a fonte de verdade do pagamento); só avisamos.

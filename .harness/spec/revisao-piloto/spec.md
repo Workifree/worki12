@@ -18,7 +18,8 @@ Gates atuais: `build` ✅ · `lint` ✅ (0 erros) · `vitest` ✅ 247 testes.
   (`walletService`, migrations) — some apenas a **superfície de UI**. Reabertura é opt-in
   por gatilho do ADR-20260630.
 - A página **Financeiro** (`/company/financeiro`) sai.
-- Check-in por QR passa a **validar de verdade**; o rótulo falso "(GPS)" sai.
+- Check-in por QR e rótulo "(GPS)" foram **REMOVIDOS** (decisão revisada durante a Onda 1 —
+  ver R7 abaixo). A intenção original era validar o QR de verdade; optou-se por remover.
 
 ## Requirements
 
@@ -67,8 +68,15 @@ anulando o veto do freela. Migration com `USING (... AND status <> 'blocked')`.
 ### R7 — Check-in QR/GPS não verifica nada
 `parseCheckinQr` faz fallback para o próprio turno (qualquer QR confirma) e o "Check-in (GPS)"
 pede a posição e **descarta** o resultado.
-- R7.1 QR da empresa passa a codificar o `application_id`; o leitor só aceita match exato.
-- R7.2 Remover o rótulo "(GPS)" e a chamada de geolocalização que não persiste nada.
+**RESOLVIDO POR REMOÇÃO, não por validação** (decisão revisada na Onda 1, pendente de
+confirmação humana). O que foi feito:
+- R7.1 ~~QR passa a validar por match exato~~ → **QR de check-in removido dos DOIS lados**:
+  scanner/parser/modal em `MyJobs.tsx` (freela) e botão "QR Chegada" + `QRCodeSVG` em
+  `CompanyJobCandidates.tsx` (empresa). Não existe mais leitor de check-in no app.
+- R7.2 Rótulo "(GPS)" e a chamada de geolocalização removidos.
+- Confirmação de presença hoje: check-in do freela + confirmação manual da empresa na tela do turno.
+- O QR de **identidade do freela** (`Profile.tsx` → `CompanyTeam.tsx`, para adicionar ao elenco)
+  é outro fluxo e **permanece**.
 
 ### R8 — Criar Turno sem validação
 Passos 1 e 2 de `CompanyCreateJob` não validam: dá pra criar turno sem título, função, data

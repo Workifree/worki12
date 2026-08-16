@@ -10,6 +10,49 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Revisão Pré-Piloto (Onda 1) — 2026-08-16
+
+**Chave PIX na Plataforma:**
+- Freelancer informa sua chave PIX (CPF/CNPJ/e-mail/telefone) durante o onboarding
+- Chave é exibida no perfil do freelancer (com botão de copiar)
+- Empresa vê a chave PIX em "Meu Elenco" (card do freelancer)
+- Ao registrar pagamento, chave PIX vem pré-carregada
+
+**Novo Perfil Público da Empresa:**
+- Freelancer pode abrir perfil completo de qualquer empresa antes de aceitar convite
+- Mostra: nome, logo, capa, setor, descrição, endereço, briefing padrão
+- Inclui avaliações de outros freelancers que já trabalharam lá
+- Acessível de: convite pendente, Carteira de Clientes, chat, tela cheia de convite
+
+**Cards de Elenco Clicáveis:**
+- Cards de freelancer em "Meu Elenco" (empresa) agora abrem o perfil completo ao clicar
+- Botões de compartilhar e remover continuam funcionando normalmente
+
+**Validação na Criação de Turno:**
+- Campos obrigatórios (título, função, descrição, valor, data e horário) são validados antes de confirmar
+- Data no passado é bloqueada
+
+**Confirmação de Presença Simplificada:**
+- QR de check-in e verificação por GPS foram removidos (nenhum verificava de fato)
+- Confirmação de presença agora: freelancer faz check-in no app + empresa confirma manualmente na tela do turno
+- Rótulo "(GPS)" removido (a geolocalização era solicitada e descartada)
+- O QR de **identidade do freelancer** (usado para adicionar ao elenco) permanece ativo
+
+**Limpeza de Interface:**
+- Sino da empresa ramifica por papel: navega para `/company/notifications` em vez de tela de erro
+- Botão "Mensagem" em perfil de freelancer agora funciona
+- Ícones decorativos (lupa/funil) removidos de dashboards
+- "Dica Pro" com dados inventados foi corrigida/removida
+
+**Remoção de Superfície de Modelo Antigo:**
+- Página "Painel Financeiro" (`/company/financeiro`) removida
+- Seção "Carteira da Empresa" (`/company/wallet`) removida — substituída por histórico de pagamentos
+- Modais de depósito e cartão de crédito removidos
+- Página "Meu Saldo" (worker) removida (modo A não movimenta saldo na plataforma)
+- Código morto removido: `Analytics.tsx`, `CreateJob.tsx`, `Placeholder.tsx`, `WorkerDashboard.tsx`
+
+### Adicionado
+
 #### Cancelamento de Turno Agendado (2026-07-14)
 
 **Freelancer:**

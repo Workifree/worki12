@@ -52,6 +52,15 @@ Quando você convida alguém, aparece com status:
 | **Não respondeu (expirado)** | Passaram 48h; o convite expirou; você pode convidar outro |
 | **Bloqueado** | O freelancer saiu ou bloqueou você |
 
+### Visualizar Elenco Confirmado
+
+Cada card de freelancer mostra:
+- Foto/inícial, nome e função principal
+- Nota média (⭐) e número de turnos completados
+- **Chave PIX** com botão de copiar (útil para pagar rápido)
+
+Você pode **clicar em qualquer lugar do card** para abrir o perfil completo do freelancer — veja especialidades, histórico, avaliações que ele recebeu de outras empresas.
+
 ### Convidar para Turnos
 
 Após o freelancer estar **"Aceito"** no elenco:
@@ -84,6 +93,8 @@ Após o freelancer estar **"Aceito"** no elenco:
 2. Clique em **"Minhas Lojas"** ou **"Carteira de Clientes"**
 3. Você vê todas as empresas conectadas
 
+Cada card de empresa mostra nome, logo e avaliação. Clique para abrir o perfil completo — veja endereço, briefing padrão da empresa, e avaliações de outros freelancers.
+
 ### Aceitar Convite de Empresa
 
 Empresas te adicionam de 3 formas (mencionadas acima). Quando um convite chega:
@@ -94,6 +105,8 @@ Empresas te adicionam de 3 formas (mencionadas acima). Quando um convite chega:
 2. Clique em **"Ver Convite"**
 3. Vê dados da empresa (nome, logo, avaliação)
 4. Botões: **"Aceitar"** ou **"Recusar"**
+
+**Antes de aceitar:** clique no nome da empresa para abrir seu perfil público — veja endereço, setor, briefing padrão, avaliações de outros freelancers que já trabalharam lá.
 
 #### Pelo Link (Por E-mail/WhatsApp/SMS)
 
@@ -189,9 +202,9 @@ R: **Sim!** Você pode trabalhar com quantas quiser — é como ter clientes dif
 
 R: Você é removido do "Carteira de Clientes" dela e não vê mais convites.
 
-### P: Como companho meus ganhos por empresa?
+### P: Como acompanho meus ganhos por empresa?
 
-R: Na **Carteira** (seu saldo), você vê histórico de ganhos por turno. Se quiser detalhe por empresa, é no histórico de "Meus Jobs".
+R: Em **"Meus Jobs"**, veja o histórico de turnos concluídos e os recibos de pagamento. Clique em cada empresa para filtrar e ver quantas vezes trabalhou com ela.
 
 ### P: Vejo convites com prazo (48h)?
 

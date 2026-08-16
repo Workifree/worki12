@@ -19,13 +19,10 @@ const Login = lazy(() => import('./pages/Login'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const CompanyOnboarding = lazy(() => import('./pages/company/CompanyOnboarding'));
 const WorkerOnboarding = lazy(() => import('./pages/worker/WorkerOnboarding'));
-const WorkerDashboard = lazy(() => import('./pages/worker/WorkerDashboard'));
 const CompanyDashboard = lazy(() => import('./pages/company/CompanyDashboard'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Profile = lazy(() => import('./pages/Profile'));
-// const Analytics = lazy(() => import('./pages/Analytics'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
-const Wallet = lazy(() => import('./pages/Wallet'));
 const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 const CompanyPublicProfile = lazy(() => import('./pages/CompanyPublicProfile'));
 
@@ -36,9 +33,7 @@ const CompanyProfile = lazy(() => import('./pages/company/CompanyProfile'));
 const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails'));
 const CompanyJobCandidates = lazy(() => import('./pages/company/CompanyJobCandidates'));
 const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
-const CompanyWallet = lazy(() => import('./pages/company/CompanyWallet'));
 const CompanyTeam = lazy(() => import('./pages/company/CompanyTeam'));
-const CompanyFinancial = lazy(() => import('./pages/company/CompanyFinancial'));
 const CompanyOrdersReport = lazy(() => import('./pages/company/CompanyOrdersReport'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -160,14 +155,11 @@ function App() {
                     <Route path="/" element={<MainLayout />}>
                       <Route path="dashboard" element={<Dashboard />} />
                       <Route path="my-jobs" element={<MyJobs />} />
-                      {/* <Route path="analytics" element={<Analytics />} /> */}
-                      <Route path="wallet" element={<Wallet />} />
                       <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />
                       <Route path="notifications" element={<Notifications />} />
-                      <Route path="worker/dashboard" element={<WorkerDashboard />} />
                     </Route>
 
                     {/* Company Layout Routes */}
@@ -181,9 +173,7 @@ function App() {
                       <Route path="worker/:id" element={<WorkerPublicProfile />} />
                       <Route path="profile" element={<CompanyProfile />} />
                       <Route path="messages" element={<CompanyMessages />} />
-                      <Route path="wallet" element={<CompanyWallet />} />
                       <Route path="team" element={<CompanyTeam />} />
-                      <Route path="financeiro" element={<CompanyFinancial />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="notifications" element={<Notifications />} />
                     </Route>
