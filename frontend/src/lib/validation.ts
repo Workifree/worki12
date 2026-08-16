@@ -72,6 +72,21 @@ export interface PasswordStrength {
     score: number;
 }
 
+/** Tipo de chave PIX — usado por qualquer tela que colete/edite a chave (onboarding, perfil). */
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
+
+/**
+ * Normaliza a chave PIX ANTES de persistir — digitos apenas para CPF/CNPJ/telefone (e o que
+ * o app do banco espera ao colar); e-mail e chave aleatoria vao como digitados (so trim). A
+ * mascara de exibicao no input (pontos/tracos/parenteses) e so visual, nunca deve ir pro banco.
+ */
+export function normalizePixKeyForStorage(type: PixKeyType, value: string): string {
+    if (type === 'cpf' || type === 'cnpj' || type === 'telefone') {
+        return value.replace(/\D/g, '');
+    }
+    return value.trim();
+}
+
 /** Avalia forca da senha */
 export function getPasswordStrength(pw: string): PasswordStrength {
     let score = 0;

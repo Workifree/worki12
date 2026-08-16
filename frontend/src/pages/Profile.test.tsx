@@ -11,6 +11,7 @@ vi.mock('../lib/supabase', () => ({
       updateUser: vi.fn().mockResolvedValue({ error: null }),
     },
     from: vi.fn(),
+    rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
     functions: {
       invoke: vi.fn(),
     },
@@ -42,6 +43,12 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
 vi.mock('../lib/validation', () => ({
   getPasswordStrength: () => ({ label: 'Forte', color: 'bg-green-500', width: 'w-full', score: 4 }),
+  EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  validateCPFOrCNPJ: (doc: string) => {
+    const clean = doc.replace(/\D/g, '')
+    return clean.length === 11 || clean.length === 14
+  },
+  formatCpfCnpj: (value: string) => value,
 }))
 
 import { supabase } from '../lib/supabase'

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, TrendingUp, Search, Filter, Bell, AlertTriangle, RefreshCw, PlayCircle } from 'lucide-react';
+import { Briefcase, TrendingUp, Bell, AlertTriangle, RefreshCw, PlayCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useQuery } from '@tanstack/react-query';
@@ -272,14 +272,6 @@ export default function CompanyDashboard() {
                         <h2 className="text-xl font-black uppercase flex items-center gap-2">
                             <Briefcase size={20} /> Turnos Recentes
                         </h2>
-                        <div className="flex gap-2">
-                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors border-2 border-transparent hover:border-black">
-                                <Search size={18} />
-                            </button>
-                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors border-2 border-transparent hover:border-black">
-                                <Filter size={18} />
-                            </button>
-                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -370,7 +362,7 @@ export default function CompanyDashboard() {
 
                     <div className="bg-blue-600 text-white border-2 border-black rounded-xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         <h3 className="font-black uppercase text-lg mb-2">Dica Pro</h3>
-                        <p className="text-sm opacity-90 mb-4">Empresas com perfis completos engajam 3x mais freelas qualificados.</p>
+                        <p className="text-sm opacity-90 mb-4">Freelas veem seu perfil antes de aceitar o convite. Endereço e briefing padrão preenchidos aceleram a resposta.</p>
                         <button onClick={() => navigate('/company/profile')} className="bg-white text-black w-full py-2 rounded-lg font-bold uppercase text-xs hover:bg-gray-100 transition-colors">
                             Completar Perfil
                         </button>

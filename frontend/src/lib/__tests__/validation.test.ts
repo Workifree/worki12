@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateCPF, validateCNPJ, validateCPFOrCNPJ, formatCpfCnpj, validateEmail, getPasswordStrength } from '../validation'
+import { validateCPF, validateCNPJ, validateCPFOrCNPJ, formatCpfCnpj, validateEmail, getPasswordStrength, normalizePixKeyForStorage } from '../validation'
 
 describe('validateCPF', () => {
     it('aceita CPF valido (52998224725)', () => {
@@ -161,6 +161,39 @@ describe('validateEmail', () => {
 
     it('rejeita string vazia', () => {
         expect(validateEmail('')).toBe(false)
+    })
+})
+
+describe('normalizePixKeyForStorage', () => {
+    it('remove mascara de CPF antes de persistir', () => {
+        expect(normalizePixKeyForStorage('cpf', '529.982.247-25')).toBe('52998224725')
+    })
+
+    it('remove mascara de CNPJ antes de persistir', () => {
+        expect(normalizePixKeyForStorage('cnpj', '11.222.333/0001-81')).toBe('11222333000181')
+    })
+
+    it('remove mascara de telefone antes de persistir', () => {
+        expect(normalizePixKeyForStorage('telefone', '(11) 99999-9999')).toBe('11999999999')
+    })
+
+    it('mantem e-mail como digitado (so trim)', () => {
+        expect(normalizePixKeyForStorage('email', '  user@example.com  ')).toBe('user@example.com')
+    })
+
+    it('mantem chave aleatoria (UUID) como digitada (so trim)', () => {
+        expect(normalizePixKeyForStorage('aleatoria', '  a1b2c3d4-e5f6-7890-abcd-ef1234567890  ')).toBe('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+    })
+
+    it('e idempotente: aplicar duas vezes no valor ja normalizado nao muda o resultado', () => {
+        const once = normalizePixKeyForStorage('cpf', '529.982.247-25')
+        const twice = normalizePixKeyForStorage('cpf', once)
+        expect(twice).toBe(once)
+    })
+
+    it('valor ja sem mascara passa direto (idempotencia entre tipos)', () => {
+        expect(normalizePixKeyForStorage('telefone', '11999999999')).toBe('11999999999')
+        expect(normalizePixKeyForStorage('email', 'user@example.com')).toBe('user@example.com')
     })
 })
 

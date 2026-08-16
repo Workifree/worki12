@@ -1,30 +1,30 @@
-import { ArrowLeft, Mail, MessageCircle, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Mail, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const faqs = [
     {
+        q: 'Como monto meu elenco e convido para um turno?',
+        a: 'Em Meu Elenco você adiciona freelas de confiança à sua lista (por QR, Worki ID ou link de perfil). Depois de aceito, ele passa a fazer parte do elenco: ao criar um turno, você convida diretamente quem já está lá, sem precisar abrir vaga pública nem esperar candidaturas.',
+    },
+    {
+        q: 'Como o freela aceita ou recusa um convite de turno?',
+        a: 'O freela recebe o convite no app e escolhe aceitar ou recusar. Se aceitar, o turno é confirmado e ele aparece em "Meus Turnos". Se recusar, o convite simplesmente fica em aberto para você chamar outra pessoa do elenco — recusar não afeta a reputação nem a nota do freela.',
+    },
+    {
+        q: 'Como funciona a chegada e a saída no turno?',
+        a: 'No dia do turno, o freela faz check-in ao chegar e check-out ao sair, direto pelo app. A empresa confere a presença e confirma a conclusão do turno quando o trabalho termina.',
+    },
+    {
         q: 'Como funciona o pagamento?',
-        a: 'A empresa deposita o valor na carteira, que fica em escrow ate o trabalho ser concluido. Apos a confirmacao, o valor e liberado para o worker.',
+        a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Worki. Depois de pagar, a empresa registra o pagamento no app, e o Worki emite um recibo para os dois lados como comprovante.',
     },
     {
-        q: 'Qual a taxa cobrada?',
-        a: 'Empresas: 8% de taxa Worki + R$ 4,00 do operador financeiro, cobrados no deposito. O saldo creditado ja e o valor liquido, e ao contratar o valor debitado e exatamente o orcamento do job. Workers: 5% de taxa Worki + R$ 3,00 do operador financeiro, cobrados no saque via PIX.',
+        q: 'O que é o recibo e a confirmação de recebimento?',
+        a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela é notificado e pode confirmar que recebeu o pagamento, o que fecha o ciclo do turno com um comprovante para ambos os lados.',
     },
     {
-        q: 'Como faco para sacar meu saldo?',
-        a: 'Acesse sua carteira, clique em "Sacar via PIX", informe sua chave PIX e o valor. O saque e processado em ate 24h.',
-    },
-    {
-        q: 'Como funciona o check-in e check-out?',
-        a: 'No dia do trabalho, o worker faz check-in ao chegar e check-out ao sair. A empresa confirma e o pagamento e liberado automaticamente.',
-    },
-    {
-        q: 'Posso cancelar uma candidatura?',
-        a: 'Sim, voce pode cancelar uma candidatura a qualquer momento antes de ser contratado acessando "Meus Jobs".',
-    },
-    {
-        q: 'O que acontece se a empresa nao confirmar o trabalho?',
-        a: 'Se a empresa nao confirmar em ate 48h apos o check-out, o sistema libera o pagamento automaticamente.',
+        q: 'Como saio do elenco de uma empresa, ou como a empresa remove alguém?',
+        a: 'O freela pode sair do elenco de uma empresa a qualquer momento pela Carteira de Clientes, encerrando a conexão. A empresa também pode remover um freela do elenco pela tela Meu Elenco. Em ambos os casos, isso não afeta turnos já combinados nem o histórico de avaliações.',
     },
 ];
 
@@ -38,7 +38,7 @@ export default function Help() {
                     <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-200 rounded-lg">
                         <ArrowLeft size={20} />
                     </button>
-                    <HelpCircle size={28} className="text-green-600" />
+                    <HelpCircle size={28} className="text-black" />
                     <h1 className="text-3xl font-black uppercase">Ajuda</h1>
                 </div>
 
@@ -59,29 +59,17 @@ export default function Help() {
                 <div className="bg-white border-2 border-black rounded-2xl p-6">
                     <h2 className="text-xl font-black uppercase mb-4">Contato</h2>
                     <p className="text-gray-600 text-sm mb-4">
-                        Nao encontrou o que procurava? Entre em contato com nosso suporte.
+                        Não encontrou o que procurava? Entre em contato com nosso suporte.
                     </p>
                     <div className="space-y-3">
                         <a
                             href="mailto:suporte@worki.com.br"
                             className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
                         >
-                            <Mail size={20} className="text-green-600" />
+                            <Mail size={20} className="text-gray-600" />
                             <div>
                                 <p className="font-bold text-sm">Email</p>
                                 <p className="text-gray-500 text-xs">suporte@worki.com.br</p>
-                            </div>
-                        </a>
-                        <a
-                            href="https://wa.me/5511999999999"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
-                        >
-                            <MessageCircle size={20} className="text-green-600" />
-                            <div>
-                                <p className="font-bold text-sm">WhatsApp</p>
-                                <p className="text-gray-500 text-xs">Atendimento de seg a sex, 9h as 18h</p>
                             </div>
                         </a>
                     </div>

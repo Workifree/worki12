@@ -77,6 +77,7 @@ export interface Job {
   views?: number;
   company_id?: string;
   company?: {
+    id?: string;
     name: string;
     logo_url?: string;
     rating_average?: number;

@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check, Loader2 } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../../lib/logger'
+import { useToast } from '../../contexts/ToastContext';
+import { TeamConnectionService } from '../../services/teamConnectionService';
+import type { TeamConnectionStatus } from '../../types';
 
 export default function WorkerPublicProfile() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { addToast } = useToast();
     interface WorkerProfileData {
         id: string;
         full_name: string;
@@ -28,6 +32,8 @@ export default function WorkerPublicProfile() {
         joined_at?: string;
         photo_url?: string;
         completed_jobs?: number;
+        phone?: string;
+        pix_key?: string;
     }
 
     interface ReviewData {
@@ -49,6 +55,20 @@ export default function WorkerPublicProfile() {
     const [reviews, setReviews] = useState<ReviewData[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    // R1.2: application entre ESTA empresa e este freela — habilita o botão "Mensagem"
+    // (a Conversation é amarrada a um application_uuid; sem application, não há para onde criar).
+    const [applicationId, setApplicationId] = useState<string | null>(null);
+    const [chatLoading, setChatLoading] = useState(false);
+    const [phoneCopied, setPhoneCopied] = useState(false);
+    const [pixCopied, setPixCopied] = useState(false);
+    // R1 (visibilidade): telefone/PIX só aparecem se a empresa tiver conexão 'accepted' com
+    // este freela — defesa em profundidade, já que a RLS de `workers` hoje é `USING (true)`
+    // (achado do harness-security-reviewer; gate de fechamento é do architect). Guardamos o
+    // status inteiro (não só um booleano) pra diferenciar "sem vínculo" de "convite pendente"
+    // na copy (F-06) — esta tela também é alcançável do `PendingCard`, onde o freela JÁ foi
+    // adicionado e só falta aceitar.
+    const [connectionStatus, setConnectionStatus] = useState<TeamConnectionStatus | null>(null);
+    const hasTeamConnection = connectionStatus === 'accepted';
 
     useEffect(() => {
         if (id) {
@@ -63,14 +83,27 @@ export default function WorkerPublicProfile() {
 
     const fetchProfile = async () => {
         try {
-            // Fetch Profile
+            // Fetch Profile — .maybeSingle() (não .single()): desde a migration
+            // 20260816120000_workers_select_by_relationship.sql a policy de SELECT em `workers`
+            // é escopada por vínculo (dono, ou empresa com team_connections/applications já
+            // existentes). Um freela genuinamente sem vínculo com esta empresa faz a linha
+            // "sumir" pela RLS (sem erro, sem dado) — .single() transformaria isso em
+            // PGRST116 e caía na tela de erro genérica; .maybeSingle() deixa a gente
+            // renderizar o estado explícito abaixo.
             const { data: profileData, error: profileError } = await supabase
                 .from('workers')
-                .select('id, full_name, bio, city, level, xp, completed_jobs_count, recommendation_score, rating_average, reviews_count, tags, created_at, avatar_url')
+                .select('id, full_name, bio, city, level, xp, completed_jobs_count, recommendation_score, rating_average, reviews_count, tags, created_at, avatar_url, phone, pix_key')
                 .eq('id', id)
-                .single();
+                .maybeSingle();
 
             if (profileError) throw profileError;
+
+            if (!profileData) {
+                // Sem erro, mas sem linha: worker inexistente OU oculto pela RLS de vínculo.
+                // Mesma mensagem para os dois casos de propósito — não vazamos se o id existe.
+                setProfile(null);
+                return;
+            }
 
             // Map fields for UI consistency
             const mappedProfile = {
@@ -119,10 +152,82 @@ export default function WorkerPublicProfile() {
                 .limit(5);
             setHistory(historyData || []);
 
+            // R1.2/R10: application entre a empresa autenticada e este freela — sem isso o
+            // botão "Mensagem" não tem para onde criar a Conversation (amarrada a application_uuid).
+            // R1 (visibilidade): resolvido na MESMA passada — `companies.id === owner_id === auth.uid()`
+            // neste schema (confirmado em CompanyOnboarding/CompanyCreateJob), então não precisamos de
+            // uma query extra em `companies` só para achar o company_id antes de checar o vínculo.
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user && id) {
+                // getConnectionStatus (não isWorkerInTeam) — mesma query única de antes, mas
+                // devolve o status inteiro pra diferenciar "sem vínculo" de "pending" na copy (F-06).
+                const [appsResult, status] = await Promise.all([
+                    supabase
+                        .from('applications')
+                        .select('id, jobs!inner(company_id)')
+                        .eq('worker_id', id)
+                        .eq('jobs.company_id', user.id)
+                        .order('created_at', { ascending: false })
+                        .limit(1),
+                    TeamConnectionService.getConnectionStatus(user.id, id),
+                ]);
+                const apps = appsResult.data;
+                if (apps && apps.length > 0) setApplicationId(apps[0].id as string);
+                setConnectionStatus(status);
+            }
+
         } catch (error) {
             logError('Erro ao carregar perfil do worker:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // R10: liga o botão "Mensagem" — reusa a mesma lógica de handleChat do
+    // CompanyJobCandidates (procura Conversation por application_uuid, cria se não existir).
+    const handleChat = async () => {
+        if (!applicationId) return;
+        setChatLoading(true);
+        try {
+            const { data: existingConvs } = await supabase
+                .from('Conversation')
+                .select('id')
+                .eq('application_uuid', applicationId)
+                .limit(1);
+
+            if (existingConvs && existingConvs.length > 0) {
+                navigate(`/company/messages?conversation=${existingConvs[0].id}`);
+            } else {
+                const newConvId = crypto.randomUUID();
+                const { error } = await supabase
+                    .from('Conversation')
+                    .insert({ id: newConvId, application_uuid: applicationId, islocked: false });
+
+                if (error) throw error;
+                navigate(`/company/messages?conversation=${newConvId}`);
+            }
+        } catch (error) {
+            logError('WorkerPublicProfile.handleChat', error);
+            addToast('Erro ao iniciar conversa.', 'error');
+        } finally {
+            setChatLoading(false);
+        }
+    };
+
+    // R1.2: copiar telefone/chave PIX — mesmo padrão de handleCopyWorkiId (pages/Profile.tsx).
+    const handleCopy = async (value: string, kind: 'phone' | 'pix') => {
+        try {
+            await navigator.clipboard.writeText(value);
+            if (kind === 'phone') {
+                setPhoneCopied(true);
+                setTimeout(() => setPhoneCopied(false), 2500);
+            } else {
+                setPixCopied(true);
+                setTimeout(() => setPixCopied(false), 2500);
+            }
+            addToast(kind === 'phone' ? 'Telefone copiado!' : 'Chave PIX copiada!', 'success');
+        } catch {
+            addToast('Não foi possível copiar.', 'error');
         }
     };
 
@@ -140,7 +245,11 @@ export default function WorkerPublicProfile() {
             </div>
         </div>
     );
-    if (!profile) return <div className="p-8 text-center text-gray-400 font-bold">Perfil não encontrado.</div>;
+    if (!profile) return (
+        <div className="p-8 text-center text-gray-400 font-bold">
+            Perfil indisponível — este freela não faz parte do seu elenco.
+        </div>
+    );
 
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -173,8 +282,13 @@ export default function WorkerPublicProfile() {
 
                     {/* Actions */}
                     <div className="flex justify-end pt-4 gap-4">
-                        <button className="px-6 py-2 border-2 border-black rounded-xl font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-2">
-                            <MessageSquare size={18} /> Mensagem
+                        <button
+                            onClick={() => void handleChat()}
+                            disabled={!applicationId || chatLoading}
+                            title={applicationId ? undefined : 'Ainda não há um turno/candidatura entre sua empresa e este freela.'}
+                            className="px-6 py-2 border-2 border-black rounded-xl font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+                        >
+                            {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageSquare size={18} />} Mensagem
                         </button>
 
                     </div>
@@ -226,6 +340,54 @@ export default function WorkerPublicProfile() {
                             </div>
                         </div>
                     )}
+
+                    {/* R1.2: Contato e pagamento — o piloto roda no modo A (pagamento por fora,
+                        registrado no Worki), então a empresa precisa do telefone e da chave PIX
+                        do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
+                        empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
+                    <div className="mt-8 bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
+                        <h3 className="font-bold uppercase text-gray-400 text-sm mb-3">Contato e pagamento</h3>
+                        {hasTeamConnection ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                                    <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
+                                        <Phone size={16} className="flex-shrink-0 text-gray-400" />
+                                        <span className="truncate">{profile.phone || 'Telefone não informado'}</span>
+                                    </span>
+                                    {profile.phone && (
+                                        <button
+                                            onClick={() => handleCopy(profile.phone as string, 'phone')}
+                                            aria-label="Copiar telefone"
+                                            className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                        >
+                                            {phoneCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                                    <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
+                                        <Wallet size={16} className="flex-shrink-0 text-gray-400" />
+                                        <span className="truncate">{profile.pix_key || 'Chave PIX não informada'}</span>
+                                    </span>
+                                    {profile.pix_key && (
+                                        <button
+                                            onClick={() => handleCopy(profile.pix_key as string, 'pix')}
+                                            aria-label="Copiar chave PIX"
+                                            className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                        >
+                                            {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-sm font-bold text-gray-500 bg-white p-3 rounded-lg border border-gray-200">
+                                {connectionStatus === 'pending'
+                                    ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
+                                    : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
 

@@ -142,6 +142,26 @@ export default function CompanyCreateJob() {
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
 
+    // Data mínima do input (hoje, em horário local — evita off-by-one de fuso
+    // que `toISOString()` (UTC) causaria perto da meia-noite em BRT).
+    const todayLocalDate = () => {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
+    const canProceed = () => {
+        switch (step) {
+            case 1: return !!(formData.title.trim() && formData.category);
+            case 2: return !!formData.description.trim();
+            case 3: return !!(parseFloat(formData.budget) > 0 && formData.start_date && formData.start_date >= todayLocalDate() && formData.work_start_time && formData.work_end_time);
+            default: return true;
+        }
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
@@ -319,13 +339,13 @@ export default function CompanyCreateJob() {
                                 <DollarSign size={20} /> Valor & Cronograma
                             </h2>
 
-                            {/* Aviso postpago */}
+                            {/* Aviso sobre como o pagamento funciona no piloto (modo A) */}
                             {!isEditing && (
                                 <div className="p-4 rounded-xl border-2 bg-blue-50 border-blue-200 flex items-start gap-3">
                                     <DollarSign size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <span className="text-xs font-black uppercase text-blue-700 block mb-1">Pagamento postpago</span>
-                                        <p className="text-xs text-blue-600 font-bold">Nenhum depósito antecipado. O freela é pago na conclusão do turno (Slice 2).</p>
+                                        <span className="text-xs font-black uppercase text-blue-700 block mb-1">Como funciona o pagamento</span>
+                                        <p className="text-xs text-blue-600 font-bold">Você combina e paga o freela direto (PIX ou dinheiro). Depois do turno, registre o pagamento aqui e o Worki emite o recibo pros dois lados.</p>
                                     </div>
                                 </div>
                             )}
@@ -374,6 +394,7 @@ export default function CompanyCreateJob() {
                                         <input
                                             type="date"
                                             aria-label="Data de início"
+                                            min={todayLocalDate()}
                                             className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl py-3 pl-10 pr-4 font-bold transition-all"
                                             value={formData.start_date}
                                             onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
@@ -462,8 +483,8 @@ export default function CompanyCreateJob() {
 
                         <button
                             onClick={step === 3 ? handleSubmit : handleNext}
-                            disabled={loading}
-                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50"
+                            disabled={loading || !canProceed()}
+                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Criar Turno') : 'Próximo'}
                             {!loading && step < 3 && <ChevronRight size={20} />}

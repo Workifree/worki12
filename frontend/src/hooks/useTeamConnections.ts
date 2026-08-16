@@ -108,6 +108,12 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     async (workerId: string, source: TeamConnectionSource): Promise<boolean> => {
       const result = await TeamConnectionService.addToTeam(workerId, source);
 
+      if (result.alreadyExists && result.blocked) {
+        // O freela bloqueou a empresa — a guarda de consentimento na policy de DELETE
+        // (migration 20260816000000) impede reabrir essa conexão por aqui.
+        addToast('Não é possível adicionar este freela agora.', 'error');
+        return false;
+      }
       if (result.alreadyExists) {
         addToast('Este freela já está no seu elenco.', 'info');
         return true;

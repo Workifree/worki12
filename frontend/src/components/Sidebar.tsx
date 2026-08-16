@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2, FileText } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2, FileText, HelpCircle } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -165,6 +165,14 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
                     {loggingOut ? 'Saindo...' : 'Sair'}
                 </button>
+
+                <NavLink
+                    to="/ajuda"
+                    className="flex items-center justify-center gap-1.5 w-full py-1 text-[11px] font-bold uppercase text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                    <HelpCircle size={12} />
+                    Ajuda
+                </NavLink>
             </div>
         </aside>
     );

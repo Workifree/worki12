@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff, Trash2, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff, Trash2, AlertTriangle, Wallet, Copy } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useToast } from '../../contexts/ToastContext';
@@ -43,7 +44,9 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
+  const navigate = useNavigate();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [pixCopied, setPixCopied] = useState(false);
 
   // Link transitivo: já tenho esse freela no elenco → posso repassar o link
   // dele pra outra empresa se conectar, sem pedir de novo ao freela.
@@ -59,8 +62,31 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
     }
   };
 
+  // R1.3: chave PIX do freela — para a empresa pagar por fora (modo A) sem sair do app.
+  const handleCopyPix = async () => {
+    if (!worker.pix_key) return;
+    try {
+      await navigator.clipboard.writeText(worker.pix_key);
+      setPixCopied(true);
+      addToast('Chave PIX copiada!', 'success');
+      setTimeout(() => setPixCopied(false), 2500);
+    } catch {
+      addToast('Não foi possível copiar a chave PIX.', 'error');
+    }
+  };
+
+  // R5: card clicável → abre o perfil do freela. Botões internos usam
+  // e.stopPropagation() para não disparar a navegação do card.
+  const goToProfile = () => navigate(`/company/worker/${worker.id}`);
+
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={goToProfile}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
+      className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
+    >
       {/* Avatar */}
       <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
         {avatarUrl ? (
@@ -95,6 +121,27 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
             </span>
           )}
         </div>
+
+        {/* R1.3: chave PIX — bloco destacado com botão de copiar, pra empresa pagar por fora */}
+        {worker.pix_key && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center justify-between gap-2 mt-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 max-w-sm"
+          >
+            <span className="flex items-center gap-2 text-xs font-bold text-gray-600 min-w-0">
+              <Wallet size={14} className="flex-shrink-0 text-gray-400" />
+              <span className="truncate">{worker.pix_key}</span>
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); void handleCopyPix(); }}
+              aria-label={`Copiar chave PIX de ${worker.full_name}`}
+              title="Copiar chave PIX"
+              className="p-1 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+            >
+              {pixCopied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Status badge + repassar link + remover */}
@@ -104,7 +151,7 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
         </span>
         <div className="flex items-center gap-1">
           <button
-            onClick={handleShareLink}
+            onClick={(e) => { e.stopPropagation(); void handleShareLink(); }}
             aria-label={`Repassar link do freela ${worker.full_name}`}
             title="Repassar link deste freela para outra empresa"
             className="p-1.5 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
@@ -112,7 +159,7 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
             {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
           </button>
           <button
-            onClick={() => onRemove(member)}
+            onClick={(e) => { e.stopPropagation(); onRemove(member); }}
             aria-label={`Remover freela ${worker.full_name} do elenco`}
             title="Remover este freela do seu elenco"
             className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -136,9 +183,20 @@ interface PendingCardProps {
 function PendingCard({ connection }: PendingCardProps) {
   const workerData = connection.worker;
   const name = workerData?.full_name ?? 'Freela';
+  const navigate = useNavigate();
+  const workerId = connection.worker_id;
+
+  // R5: também clicável — abre o perfil do freela ainda pendente de aceite.
+  const goToProfile = () => navigate(`/company/worker/${workerId}`);
 
   return (
-    <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-4 flex items-center gap-3">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={goToProfile}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
+      className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:border-black transition-colors"
+    >
       <div className="w-10 h-10 rounded-xl bg-gray-200 border-2 border-gray-300 flex items-center justify-center font-black text-gray-500">
         {name[0]?.toUpperCase() ?? '?'}
       </div>
@@ -444,7 +502,7 @@ function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
           <div className="space-y-4">
             <p className="text-sm font-bold text-gray-600">
               Digite o <span className="font-black">ID do worker</span> (Worki ID) para adicionar diretamente.
-              Busca por telefone disponível na v1.1.
+              Peça o Worki ID ao freela (Perfil dele → "Meu QR de Identidade" → "Copiar Worki ID").
             </p>
             <div className="space-y-2">
               <label htmlFor="phone-input" className="text-xs font-bold uppercase tracking-wide">
@@ -468,7 +526,7 @@ function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
               {loading ? 'Enviando...' : 'Enviar Convite'}
             </button>
             <p className="text-xs text-gray-400">
-              Busca por CPF/telefone disponível na v1.1. Por enquanto, peça o Worki ID ao freela.
+              Ainda não é possível buscar por CPF ou telefone — peça o Worki ID ao freela.
             </p>
           </div>
         )}

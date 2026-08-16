@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useWorkerStores } from '../hooks/useTeamConnections';
@@ -20,11 +21,13 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
   const { company, connection } = store;
   const name = company.name ?? 'Empresa';
   const { addToast } = useToast();
+  const navigate = useNavigate();
   const [linkCopied, setLinkCopied] = useState(false);
 
   // Link transitivo: já sou conectado a essa empresa → posso repassar o link
   // dela pra outro freela se conectar, sem precisar pedir à empresa.
-  const handleShareLink = async () => {
+  const handleShareLink = async (e: MouseEvent) => {
+    e.stopPropagation();
     // `connection.company_id` é a FK garantida (não-nula); `company.id` no
     // embed é opcional no tipo (CompanyProfile.id?), então preferimos a FK.
     const { url } = TeamConnectionService.generateInviteToken(connection.company_id);
@@ -38,8 +41,16 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
     }
   };
 
+  const handleOpenProfile = () => navigate(`/empresa/${connection.company_id}`);
+
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpenProfile}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenProfile(); } }}
+      className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all cursor-pointer"
+    >
       {/* Logo */}
       <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
         {company.logo_url ? (
@@ -83,7 +94,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
           {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
         </button>
         <button
-          onClick={() => onLeave(connection.id)}
+          onClick={(e) => { e.stopPropagation(); onLeave(connection.id); }}
           disabled={leaving}
           aria-label={`Sair do cliente ${name}`}
           title="Sair / bloquear cliente"

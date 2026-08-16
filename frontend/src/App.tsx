@@ -27,6 +27,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
+const CompanyPublicProfile = lazy(() => import('./pages/CompanyPublicProfile'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
@@ -162,6 +163,7 @@ function App() {
                       {/* <Route path="analytics" element={<Analytics />} /> */}
                       <Route path="wallet" element={<Wallet />} />
                       <Route path="carteira" element={<CarteiraClientes />} />
+                      <Route path="empresa/:id" element={<CompanyPublicProfile />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />
                       <Route path="notifications" element={<Notifications />} />

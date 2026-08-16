@@ -7,8 +7,7 @@ import { SpendLimitService } from '../../services/spendLimitService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, QrCode } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
@@ -84,6 +83,8 @@ export default function CompanyJobCandidates() {
     const [paymentNote, setPaymentNote] = useState('');
     const [recordingPayment, setRecordingPayment] = useState(false);
     const [paymentRecorded, setPaymentRecorded] = useState(false);
+    // R1.4: copiar a chave PIX do freela direto dos modais de pagamento (modo A).
+    const [pixCopied, setPixCopied] = useState(false);
 
     // Modal "Agendar pagamento" (modo A — ADR-20260712, promessa com data prevista)
     const [scheduleModalApp, setScheduleModalApp] = useState<Application | null>(null);
@@ -102,8 +103,6 @@ export default function CompanyJobCandidates() {
     const [reopenLoading, setReopenLoading] = useState(false);
     // "Convidar Freela" — vaga criada sem nenhum freela atrelado (mesmo picker, sem convite anterior).
     const [invitePickerOpen, setInvitePickerOpen] = useState(false);
-    // Modal "QR Code de Chegada" para o freela escanear no local
-    const [qrModalApp, setQrModalApp] = useState<Application | null>(null);
 
     const { addToast } = useToast();
     // Reaproveita o hook do fluxo de convite (mesmo usado em CompanyCreateJob) para disparar
@@ -131,11 +130,13 @@ export default function CompanyJobCandidates() {
             setJobBudget(job.budget ?? 0);
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
+            // Minimização de dado (LGPD, harness-security-reviewer): traz só as colunas que esta
+            // tela de fato consome — NÃO `worker:workers(*)`, que trazia cpf/birth_date sem uso.
             const { data, error } = await supabase
                 .from('applications')
                 .select(`
                     *,
-                    worker:workers(*),
+                    worker:workers(id, full_name, avatar_url, primary_role, rating_average, reviews_count, city, tags, level, phone, pix_key),
                     worker_checkin_at,
                     worker_checkout_at,
                     company_checkin_confirmed_at,
@@ -523,6 +524,19 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // R1.4: copiar a chave PIX do freela — mostrada nos modais "Registrar Pagamento" e
+    // "Agendar Pagamento" (modo A: a empresa paga por fora e precisa da chave à mão).
+    const handleCopyPix = async (pixKey: string) => {
+        try {
+            await navigator.clipboard.writeText(pixKey);
+            setPixCopied(true);
+            addToast('Chave PIX copiada!', 'success');
+            setTimeout(() => setPixCopied(false), 2500);
+        } catch {
+            addToast('Não foi possível copiar a chave PIX.', 'error');
+        }
+    };
+
     const handleConfirmCheckin = async (appId: string) => {
         setConfirmingCheckin(appId);
         try {
@@ -536,7 +550,6 @@ export default function CompanyJobCandidates() {
 
             if (error) throw error;
             addToast('Chegada confirmada!', 'success');
-            setQrModalApp(null);
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
@@ -814,17 +827,6 @@ export default function CompanyJobCandidates() {
 
                                                     {(app.status === 'hired' || app.status === 'in_progress') && (
                                                         <>
-                                                            {/* QR Code Chegada */}
-                                                            {!app.company_checkin_confirmed_at && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); setQrModalApp(app); }}
-                                                                    className="p-1.5 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-black uppercase hover:bg-gray-100 transition-colors flex items-center gap-1.5 shadow-sm"
-                                                                    title="Exibir QR Code para o freela escanear no local"
-                                                                >
-                                                                    <QrCode size={14} /> QR Chegada
-                                                                </button>
-                                                            )}
-
                                                             {/* Show check-in status */}
                                                             {!app.company_checkin_confirmed_at ? (
                                                                 <button
@@ -1089,6 +1091,24 @@ export default function CompanyJobCandidates() {
                                     </div>
                                 </div>
 
+                                {paymentModalApp.worker?.pix_key && (
+                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
+                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
+                                            <Wallet size={16} className="flex-shrink-0" />
+                                            <span className="truncate">{paymentModalApp.worker.pix_key}</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyPix(paymentModalApp.worker!.pix_key as string)}
+                                            aria-label="Copiar chave PIX do freela"
+                                            title="Copiar chave PIX"
+                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
+                                        >
+                                            {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                )}
+
                                 <div className="mb-4">
                                     <label htmlFor="payment-amount" className="block text-sm font-bold uppercase mb-2">
                                         Valor pago (R$)
@@ -1214,6 +1234,24 @@ export default function CompanyJobCandidates() {
                                         ))}
                                     </div>
                                 </div>
+
+                                {scheduleModalApp.worker?.pix_key && (
+                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
+                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
+                                            <Wallet size={16} className="flex-shrink-0" />
+                                            <span className="truncate">{scheduleModalApp.worker.pix_key}</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyPix(scheduleModalApp.worker!.pix_key as string)}
+                                            aria-label="Copiar chave PIX do freela"
+                                            title="Copiar chave PIX"
+                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
+                                        >
+                                            {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="mb-4">
                                     <label htmlFor="schedule-amount" className="block text-sm font-bold uppercase mb-2">
@@ -1377,67 +1415,6 @@ export default function CompanyJobCandidates() {
                 </div>
             )}
 
-            {/* QR Code Check-in Modal */}
-            {qrModalApp && (
-                <div
-                    className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
-                    onClick={(e) => { if (e.target === e.currentTarget) setQrModalApp(null); }}
-                >
-                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-center">
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-2">
-                                <QrCode size={20} className="text-primary" />
-                                <h3 className="text-xl font-black uppercase tracking-tight">QR de Chegada</h3>
-                            </div>
-                            <button
-                                onClick={() => setQrModalApp(null)}
-                                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <p className="text-xs font-bold text-gray-500 mb-4">
-                            Mostre este código para <span className="text-black font-black">{qrModalApp.worker?.full_name}</span> escanear no local de trabalho.
-                        </p>
-
-                        <div className="flex justify-center mb-4">
-                            <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
-                                <QRCodeSVG
-                                    value={`worki:checkin:${id}:${qrModalApp.id}`}
-                                    size={200}
-                                    level="M"
-                                    includeMargin={false}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-4 text-left">
-                            <p className="text-[10px] font-black uppercase text-gray-400">Turno</p>
-                            <p className="text-xs font-bold text-black truncate">{jobTitle}</p>
-                            <p className="text-[10px] font-black uppercase text-gray-400 mt-1">Freela</p>
-                            <p className="text-xs font-bold text-black">{qrModalApp.worker?.full_name}</p>
-                        </div>
-
-                        <div className="flex flex-col gap-2">
-                            <button
-                                onClick={() => handleConfirmCheckin(qrModalApp.id)}
-                                disabled={confirmingCheckin === qrModalApp.id}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-                            >
-                                {confirmingCheckin === qrModalApp.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-                                Confirmar Presença Manualmente
-                            </button>
-                            <button
-                                onClick={() => setQrModalApp(null)}
-                                className="w-full bg-gray-100 hover:bg-gray-200 text-black py-2.5 rounded-xl font-black uppercase text-xs transition-colors"
-                            >
-                                Fechar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

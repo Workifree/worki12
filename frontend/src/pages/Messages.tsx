@@ -12,6 +12,7 @@ interface ConversationItem {
     id: string;
     application_uuid: string;
     job_title: string;
+    company_id?: string;
     company_name: string;
     company_logo?: string;
     last_message?: string;
@@ -103,6 +104,7 @@ export default function Messages() {
                         job:jobs (
                             title,
                             company:companies (
+                                id,
                                 name,
                                 logo_url
                             )
@@ -130,6 +132,7 @@ export default function Messages() {
                     job: {
                         title: string;
                         company: {
+                            id: string;
                             name: string;
                             logo_url: string | null;
                         } | null;
@@ -167,6 +170,7 @@ export default function Messages() {
                 id: c.id,
                 application_uuid: c.application_uuid,
                 job_title: c.application?.job?.title || 'Turno',
+                company_id: c.application?.job?.company?.id,
                 company_name: c.application?.job?.company?.name || 'Empresa',
                 company_logo: c.application?.job?.company?.logo_url ?? undefined,
                 status: c.application?.status || 'pending',
@@ -423,8 +427,19 @@ export default function Messages() {
                                         <Briefcase size={20} className="text-gray-400" />
                                     )}
                                 </div>
-                                <div className="flex-1">
-                                    <h4 className="font-bold">{selectedConversation.company_name}</h4>
+                                <div className="flex-1 min-w-0">
+                                    {selectedConversation.company_id ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
+                                            className="font-bold hover:text-primary transition-colors truncate text-left"
+                                            aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
+                                        >
+                                            {selectedConversation.company_name}
+                                        </button>
+                                    ) : (
+                                        <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
+                                    )}
                                     <p className="text-xs text-gray-500">{selectedConversation.job_title}</p>
                                 </div>
                                 <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${getStatusColor(selectedConversation.status)}`}>

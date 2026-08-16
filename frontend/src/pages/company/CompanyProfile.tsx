@@ -625,14 +625,19 @@ export default function CompanyProfile() {
                     Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
                 </p>
                 {isEditing ? (
-                    <textarea
-                        name="default_briefing"
-                        value={company.default_briefing || ''}
-                        onChange={handleChange}
-                        aria-label="Briefing padrão do negócio"
-                        className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
-                        placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
-                    />
+                    <>
+                        <textarea
+                            name="default_briefing"
+                            value={company.default_briefing || ''}
+                            onChange={handleChange}
+                            aria-label="Briefing padrão do negócio"
+                            className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
+                            placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
+                        />
+                        <p className="text-xs font-bold text-yellow-700 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                            Visível para qualquer freela que abrir o perfil da sua empresa — não inclua senhas nem dados internos.
+                        </p>
+                    </>
                 ) : (
                     <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
