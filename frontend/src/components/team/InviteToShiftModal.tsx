@@ -4,6 +4,7 @@ import { X, Loader2, Send, CalendarX2, PlusCircle } from 'lucide-react';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import { todayLocalDate } from '../../lib/dateUtils';
 import type { TeamMember } from '../../types';
 import { formatHistoryDate } from './utils';
 
@@ -11,20 +12,12 @@ import { formatHistoryDate } from './utils';
 // Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
 // escolhe um turno elegível (open/paused, sem esse freela já atrelado, data
 // futura ou sem data) e dispara o convite via useCompanyInvites.
+//
+// Data de hoje em horário LOCAL (`todayLocalDate()`, `lib/dateUtils.ts`) — evita
+// off-by-one de fuso que `toISOString()` (UTC) causaria à noite em BRT (das 21h
+// às 23:59, `todayStr` UTC já vira amanhã e descartaria o turno de hoje como
+// "passado").
 // ---------------------------------------------------------------------------
-
-// Data de hoje em horário LOCAL — evita off-by-one de fuso que `toISOString()`
-// (UTC) causaria à noite em BRT (das 21h às 23:59, `todayStr` UTC já vira
-// amanhã e descartaria o turno de hoje como "passado"). Mesmo padrão de
-// `todayLocalDate()` em `CompanyCreateJob.tsx` — duplicado aqui até existir um
-// helper compartilhado em `lib/`.
-function todayLocalDate(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 interface EligibleJob {
   id: string;

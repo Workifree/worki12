@@ -74,7 +74,15 @@ function chainableResolve(result: { data: unknown; error: unknown } = { data: nu
   return obj
 }
 
-const JOB_DATA = { title: 'Garcom para Evento' }
+// start_date/work_start_time/work_end_time fixos — usados pelo pré-preenchimento do modal de
+// horário manual (revisão pré-piloto, QA 1) e pelos testes de rollover de dia (turno que vira
+// a noite: entra 18h, sai 02h do dia seguinte).
+const JOB_DATA = {
+  title: 'Garcom para Evento',
+  start_date: '2026-03-05',
+  work_start_time: '18:00:00',
+  work_end_time: '02:00:00',
+}
 
 // Application with in_progress status and all checkins confirmed — for delivery modal tests
 const APP_IN_PROGRESS = [
@@ -103,7 +111,7 @@ const APP_IN_PROGRESS = [
 ]
 
 
-function setupMocksWithApps(apps: unknown[]) {
+function setupMocksWithApps(apps: unknown[], jobData: Record<string, unknown> = JOB_DATA) {
   const mockAddToast = vi.fn()
   const mockRemoveToast = vi.fn()
   vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: mockRemoveToast })
@@ -119,7 +127,7 @@ function setupMocksWithApps(apps: unknown[]) {
   })
 
   const jobChain = buildChain({
-    single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }),
+    single: vi.fn().mockResolvedValue({ data: jobData, error: null }),
   })
 
   const appChain = buildChain({
@@ -658,6 +666,13 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
 
     fireEvent.click(checkoutButton)
 
+    // Freela não marcou saída — a empresa precisa informar o horário real (não é mais um
+    // clique direto que grava `now()`): abre o modal de horário manual.
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
+
     await waitFor(() => {
       expect(appChain.update).toHaveBeenCalledWith(
         expect.objectContaining({ company_checkout_confirmed_at: expect.any(String) })
@@ -687,6 +702,11 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
 
     await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
+
+    await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Não foi possível confirmar a saída deste freela.', 'error')
     })
   })
@@ -701,6 +721,194 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
 
     const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
     expect(within(card).getByRole('button', { name: /Confirmar Saída/i })).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Revisão pré-piloto (QA final) — item 1: o recibo mostrava horas erradas quando a empresa
+// registrava a saída sozinha, porque o handler gravava `new Date().toISOString()` (o momento
+// do CLIQUE do gerente), não o horário real do turno. `shift_payments`/o registro de presença
+// são imutáveis depois de gravados — o erro virava definitivo no recibo.
+//
+// Timestamps de chegada FIXOS (construídos via `new Date(ano, mês, dia, h, min)`, nunca
+// `new Date()` do momento do teste) para o cálculo de rollover de dia ser 100% determinístico,
+// independente de quando/onde o teste roda.
+// ---------------------------------------------------------------------------
+
+// 05/03/2026 18:10 — construído no MESMO frame local que o código usa internamente
+// (`new Date(y, m-1, d, h, min)`), então a comparação de horas não depende do fuso da máquina
+// que roda o teste.
+const FIXED_CHECKIN_LOCAL = new Date(2026, 2, 5, 18, 10, 0, 0)
+
+// in_progress, freela marcou a CHEGADA (bar abriu 18h10) mas foi embora sem apertar "saída"
+// no app — o bar fecha às 02h e o gerente só confirma na manhã seguinte. Cenário do relatório.
+const APP_OVERNIGHT_NO_CHECKOUT_MARK = [
+  {
+    id: 'app-overnight',
+    job_id: 'job-123',
+    worker_id: 'worker-overnight',
+    status: 'in_progress',
+    cover_letter: '',
+    created_at: '2026-03-01T10:00:00Z',
+    worker: {
+      id: 'worker-overnight',
+      full_name: 'Zeca Fechou o Bar',
+      avatar_url: null,
+      city: 'São Paulo',
+      level: 2,
+      rating_average: 4.7,
+      reviews_count: 5,
+      tags: [],
+    },
+    worker_checkin_at: FIXED_CHECKIN_LOCAL.toISOString(),
+    worker_checkout_at: null,
+    company_checkin_confirmed_at: FIXED_CHECKIN_LOCAL.toISOString(),
+    company_checkout_confirmed_at: null,
+  },
+]
+
+describe('CompanyJobCandidates — horário manual de chegada/saída não pode mentir (revisão pré-piloto)', () => {
+  it('pré-preenche o modal de saída com o horário PLANEJADO do turno (work_end_time), nunca com "agora"', async () => {
+    setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+    })
+    const timeInput = screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement
+    // work_end_time do turno é 02:00 — nunca a hora do clique do gerente.
+    expect(timeInput.value).toBe('02:00')
+  })
+
+  it('turno que vira a noite: saída "02:00" cai no dia SEGUINTE ao início do turno, produzindo o número certo de horas', async () => {
+    const { appChain } = setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK)
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-overnight' }], error: null }))
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
+
+    await waitFor(() => {
+      expect(appChain.update).toHaveBeenCalled()
+    })
+    const updatePayload = (appChain.update as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0] as Record<string, unknown>
+    // Não inventa worker_checkout_at — só o campo que a empresa confirmou (`validate_application_update`
+    // no banco rejeitaria a empresa alterando os campos do freela de qualquer forma).
+    expect(updatePayload).not.toHaveProperty('worker_checkout_at')
+
+    const saved = new Date(updatePayload.company_checkout_confirmed_at as string)
+    // Chegada foi 05/03 às 18h10; a saída informada (02:00) é "menor" que esse horário-do-dia
+    // -> pertence ao dia SEGUINTE (06/03). Sem esse ajuste, o timestamp ficaria com a data do
+    // turno (05/03) e o ReceiptView calcularia horas negativas/erradas ("menos 16 horas").
+    expect(saved.getFullYear()).toBe(2026)
+    expect(saved.getMonth()).toBe(2) // março, 0-indexed
+    expect(saved.getDate()).toBe(6)
+    expect(saved.getHours()).toBe(2)
+    expect(saved.getMinutes()).toBe(0)
+
+    // Confere as horas resultantes como o ReceiptView calcularia: checkin 18:10 (05/03) ->
+    // checkout 02:00 (06/03) = 7h50 trabalhadas — nunca "menos 16 horas".
+    const workedMinutes = (saved.getTime() - FIXED_CHECKIN_LOCAL.getTime()) / 60000
+    expect(workedMinutes).toBe(7 * 60 + 50)
+  })
+
+  it('quando o freela JÁ marcou a saída no app, o botão confirma direto — sem abrir o modal de horário', async () => {
+    const { appChain } = setupMocksWithApps(APP_CHECKED_OUT_BY_WORKER)
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-checked-out' }], error: null }))
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Confirmar Saída/i }))
+
+    expect(screen.queryByRole('heading', { name: /Registrar Saída/i })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(appChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ company_checkout_confirmed_at: expect.any(String) })
+      )
+    })
+  })
+
+  it('badge de chegada distingue "Chegada OK" (freela marcou) de "Chegada registrada pela empresa" (só a empresa confirmou) — espelha o tratamento já existente da saída', async () => {
+    const appCompanyOnlyCheckin = [
+      {
+        ...APP_OVERNIGHT_NO_CHECKOUT_MARK[0],
+        id: 'app-checkin-empresa',
+        worker_id: 'worker-checkin-empresa',
+        worker: { ...APP_OVERNIGHT_NO_CHECKOUT_MARK[0].worker, full_name: 'Lia Confirmada Pela Empresa' },
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: FIXED_CHECKIN_LOCAL.toISOString(),
+      },
+    ]
+    setupMocksWithApps(appCompanyOnlyCheckin)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Lia Confirmada Pela Empresa')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Lia Confirmada Pela Empresa').closest('[role="button"]') as HTMLElement
+    expect(within(card).getByText('Chegada registrada pela empresa')).toBeInTheDocument()
+    expect(within(card).queryByText('Chegada OK')).not.toBeInTheDocument()
+  })
+
+  it('turno sem work_end_time cadastrado (legado): modal abre com o campo vazio e "Confirmar" fica desabilitado até a empresa informar um horário', async () => {
+    const jobWithoutTimes = { title: 'Turno legado sem horário planejado', start_date: '2026-03-05' }
+    setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK, jobWithoutTimes)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+    })
+    const timeInput = screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement
+    // Sem `work_end_time` no job, não inventa um horário — o campo fica vazio.
+    expect(timeInput.value).toBe('')
+    expect(screen.getByRole('button', { name: /^Confirmar$/i })).toBeDisabled()
+
+    // A empresa informa o horário real manualmente — aí sim o botão libera.
+    fireEvent.change(timeInput, { target: { value: '02:00' } })
+    expect(screen.getByRole('button', { name: /^Confirmar$/i })).not.toBeDisabled()
+  })
+
+  it('chegada com marcação do PRÓPRIO freela mostra "Chegada OK" (sem regressão)', async () => {
+    setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    expect(within(card).getByText('Chegada OK')).toBeInTheDocument()
+    expect(within(card).queryByText('Chegada registrada pela empresa')).not.toBeInTheDocument()
   })
 })
 

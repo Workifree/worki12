@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { todayLocalDate } from '../../lib/dateUtils';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import type { TeamMember } from '../../types';
@@ -141,16 +142,6 @@ export default function CompanyCreateJob() {
 
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
-
-    // Data mínima do input (hoje, em horário local — evita off-by-one de fuso
-    // que `toISOString()` (UTC) causaria perto da meia-noite em BRT).
-    const todayLocalDate = () => {
-        const d = new Date();
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-    };
 
     // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
     const canProceed = () => {

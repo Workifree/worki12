@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupJobsByDay } from './CompanyJobs'
+import { groupJobsByDay } from '../../lib/jobScheduling'
 
 // Referência fixa (NUNCA `new Date()` real — vira o teste dependente do relógio do ambiente):
 // sábado, 2026-08-16. Todo o teste é relativo a essa data, não à data de execução do CI.

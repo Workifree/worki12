@@ -22,7 +22,6 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
   // permissão) ao abrir o modal. QR fica como tab opt-in, só monta o
   // scanner quando o usuário clica na aba QR.
   const [method, setMethod] = useState<AddMethod>('phone');
-  const [phone, setPhone] = useState('');
   const [workerId, setWorkerId] = useState('');
   const [linkInput, setLinkInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -200,8 +199,8 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
               <input
                 id="phone-input"
                 type="text"
-                value={phone}
-                onChange={(e) => { setPhone(e.target.value); setWorkerId(e.target.value); }}
+                value={workerId}
+                onChange={(e) => setWorkerId(e.target.value)}
                 placeholder="Cole o ID do freela aqui"
                 className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
               />

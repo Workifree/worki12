@@ -163,7 +163,8 @@ export default function CompanyOrdersReport() {
           <FileText size={32} strokeWidth={3} /> Relatório de Ordens
         </h1>
         <p className="text-gray-500 text-sm">
-          Visão consolidada dos turnos (ordens) e seus pagamentos — export pro financeiro/estoquista.
+          Visão consolidada dos turnos e seus pagamentos — um turno com mais de um freela
+          vira uma ordem por freela — export pro financeiro/estoquista.
         </p>
       </header>
 
@@ -266,8 +267,11 @@ export default function CompanyOrdersReport() {
 
       {/* Resumo */}
       {summary && (
+        // `summary.total` conta ORDENS (linhas turno+freela), não turnos distintos — um
+        // turno com 2 freelas pagos soma 2 aqui. Rótulo "Ordens" em vez de "Total" pra não
+        // sugerir contagem de turnos (orderReportService.ts — JSDoc do topo).
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 print:grid-cols-5">
-          <SummaryCard label="Total" value={String(summary.total)} />
+          <SummaryCard label="Ordens" value={String(summary.total)} />
           <SummaryCard label="Abertas" value={String(summary.abertas)} className="text-yellow-700" />
           <SummaryCard label="Pagas" value={String(summary.pagas)} className="text-blue-700" />
           <SummaryCard label="Conciliadas" value={String(summary.conciliadas)} className="text-primary" />
@@ -301,7 +305,7 @@ export default function CompanyOrdersReport() {
           {/* Mobile: cards */}
           <div className="flex flex-col gap-3 md:hidden print:hidden">
             {rows.map((row) => (
-              <OrderCard key={row.jobId} row={row} />
+              <OrderCard key={`${row.jobId}:${row.workerId ?? 'none'}`} row={row} />
             ))}
           </div>
 
@@ -321,7 +325,7 @@ export default function CompanyOrdersReport() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.jobId} className="border-b border-gray-200 last:border-0">
+                  <tr key={`${row.jobId}:${row.workerId ?? 'none'}`} className="border-b border-gray-200 last:border-0">
                     <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
                     <td className="px-4 py-3 font-medium">{row.category ?? row.title}</td>
                     <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>

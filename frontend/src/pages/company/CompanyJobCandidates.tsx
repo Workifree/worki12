@@ -74,6 +74,53 @@ function todayLocalDate(): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * Monta o timestamp ISO absoluto do fallback manual de chegada/saída — quando a EMPRESA
+ * confirma um horário que o freela não marcou no app (bar fecha às 02h, gerente só registra
+ * às 09h da manhã seguinte: gravar `now()` faria o recibo mentir "Saída 09:00" e ~13h
+ * trabalhadas, para sempre — `shift_payments`/o registro de presença não são editáveis depois).
+ *
+ * Base: data do turno (`jobStartDate`, YYYY-MM-DD) + horário HH:MM informado no modal (nunca
+ * `now()`). Turno que vira a noite (ex.: entra 18h, sai 02h) tem a SAÍDA no dia seguinte ao
+ * `start_date` — se o horário informado for "menor" que a referência de entrada, soma 1 dia.
+ * Sem isso, `ReceiptView` (que calcula horas por subtração de timestamps absolutos) sairia
+ * com "menos 16 horas" em vez de 8.
+ *
+ * Referência de entrada para decidir o rollover da SAÍDA, em ordem de confiança: a chegada já
+ * registrada de fato (do freela, ou já confirmada pela empresa nesta mesma tela) quando
+ * existir; senão o horário PLANEJADO do turno (`work_start_time`). Chegada nunca rola de dia
+ * (é sempre a data do turno).
+ */
+function buildManualAttendanceTimestamp(
+    app: Application,
+    jobStartDate: string,
+    jobStartTime: string | null,
+    type: 'checkin' | 'checkout',
+    timeHHmm: string,
+): string | null {
+    if (!jobStartDate || !timeHHmm) return null;
+    const [y, m, d] = jobStartDate.split('-').map(Number);
+    const [h, min] = timeHHmm.split(':').map(Number);
+    if (![y, m, d, h, min].every(Number.isFinite)) return null;
+
+    let dayOffset = 0;
+    if (type === 'checkout') {
+        const checkinIso = app.worker_checkin_at ?? app.company_checkin_confirmed_at ?? null;
+        let refMinutes: number | null = null;
+        if (checkinIso) {
+            const ref = new Date(checkinIso);
+            refMinutes = ref.getHours() * 60 + ref.getMinutes();
+        } else if (jobStartTime) {
+            const [startH, startM] = jobStartTime.slice(0, 5).split(':').map(Number);
+            if (Number.isFinite(startH) && Number.isFinite(startM)) refMinutes = startH * 60 + startM;
+        }
+        if (refMinutes !== null && (h * 60 + min) < refMinutes) dayOffset = 1;
+    }
+
+    const date = new Date(y, m - 1, d + dayOffset, h, min, 0, 0);
+    return date.toISOString();
+}
+
 // Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
 // é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
 // contradiz o pagamento opcional (modo A, ADR-20260630). Religar na Fase 2 = flip para true.
@@ -92,6 +139,11 @@ export default function CompanyJobCandidates() {
     const [comment, setComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [confirmingCheckin, setConfirmingCheckin] = useState<string | null>(null);
+    // Fallback manual de chegada/saída — só quando o freela NÃO marcou (worker_checkin_at/
+    // worker_checkout_at ausente). Pede o horário real em vez de gravar o momento do clique.
+    const [manualAttendance, setManualAttendance] = useState<{ app: Application; type: 'checkin' | 'checkout' } | null>(null);
+    const [manualAttendanceTime, setManualAttendanceTime] = useState('');
+    const [confirmingManualAttendance, setConfirmingManualAttendance] = useState(false);
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
     const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
@@ -699,6 +751,62 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // Abre o modal de horário manual — usado quando o freela NÃO marcou a chegada/saída no
+    // app (o botão vira "Confirmar Presença"/"Registrar Saída"). Pré-preenche com o horário
+    // PLANEJADO do turno (`work_start_time`/`work_end_time`), nunca com `now()`: é o melhor
+    // palpite (é o que quase sempre aconteceu) e o gerente confirma ou ajusta.
+    const openManualAttendanceModal = (app: Application, type: 'checkin' | 'checkout') => {
+        const plannedTime = type === 'checkin' ? jobStartTime : jobEndTime;
+        setManualAttendance({ app, type });
+        setManualAttendanceTime(plannedTime ? plannedTime.slice(0, 5) : '');
+    };
+
+    const closeManualAttendanceModal = () => {
+        setManualAttendance(null);
+        setManualAttendanceTime('');
+    };
+
+    // Grava o horário REAL informado pela empresa (não `now()`) em `company_checkin_confirmed_at`
+    // ou `company_checkout_confirmed_at` — nunca nos campos do freela (`worker_*`), que o
+    // trigger `validate_application_update` rejeita a empresa alterar.
+    const handleConfirmManualAttendance = async () => {
+        if (!manualAttendance || !manualAttendanceTime) return;
+        const { app, type } = manualAttendance;
+        const timestamp = buildManualAttendanceTimestamp(app, jobStartDate, jobStartTime, type, manualAttendanceTime);
+        if (!timestamp) {
+            addToast('Informe um horário válido.', 'error');
+            return;
+        }
+        setConfirmingManualAttendance(true);
+        try {
+            const updatePayload = type === 'checkin'
+                ? { company_checkin_confirmed_at: timestamp, status: 'in_progress' }
+                : { company_checkout_confirmed_at: timestamp };
+            const { data, error } = await supabase
+                .from('applications')
+                .update(updatePayload)
+                .eq('id', app.id)
+                .select('id');
+
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast(
+                    type === 'checkin' ? 'Não foi possível confirmar a chegada deste freela.' : 'Não foi possível confirmar a saída deste freela.',
+                    'error'
+                );
+                return;
+            }
+            addToast(type === 'checkin' ? 'Chegada confirmada!' : 'Saída confirmada!', 'success');
+            closeManualAttendanceModal();
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleConfirmManualAttendance', error);
+            addToast('Erro ao confirmar horário.', 'error');
+        } finally {
+            setConfirmingManualAttendance(false);
+        }
+    };
+
     const computeSteps = (app: Application) => {
         const checkinComplete = !!(app.worker_checkin_at && app.company_checkin_confirmed_at);
         const checkinActive = !!(app.worker_checkin_at && !app.company_checkin_confirmed_at);
@@ -989,7 +1097,14 @@ export default function CompanyJobCandidates() {
                                                             {/* Show check-in status */}
                                                             {!app.company_checkin_confirmed_at ? (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleConfirmCheckin(app.id); }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (app.worker_checkin_at) {
+                                                                            handleConfirmCheckin(app.id);
+                                                                        } else {
+                                                                            openManualAttendanceModal(app, 'checkin');
+                                                                        }
+                                                                    }}
                                                                     disabled={confirmingCheckin === app.id}
                                                                     className="p-1.5 px-3 bg-green-600 text-white rounded-lg text-xs font-black uppercase hover:bg-green-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
                                                                 >
@@ -998,7 +1113,8 @@ export default function CompanyJobCandidates() {
                                                                 </button>
                                                             ) : (
                                                                 <span className="text-xs font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                    <CheckCircle size={13} /> Chegada OK
+                                                                    <CheckCircle size={13} />
+                                                                    {app.worker_checkin_at ? 'Chegada OK' : 'Chegada registrada pela empresa'}
                                                                 </span>
                                                             )}
 
@@ -1009,7 +1125,14 @@ export default function CompanyJobCandidates() {
                                                                 não sugerir que o freela marcou algo que não marcou. */}
                                                             {!app.company_checkout_confirmed_at ? (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleConfirmCheckout(app.id); }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (app.worker_checkout_at) {
+                                                                            handleConfirmCheckout(app.id);
+                                                                        } else {
+                                                                            openManualAttendanceModal(app, 'checkout');
+                                                                        }
+                                                                    }}
                                                                     disabled={confirmingCheckin === app.id}
                                                                     className="p-1 px-3 bg-purple-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-purple-600 transition-colors flex items-center gap-1 disabled:opacity-50"
                                                                 >
@@ -1234,6 +1357,58 @@ export default function CompanyJobCandidates() {
                                 className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {releasing ? <><Loader2 size={16} className="animate-spin" /> Processando...</> : 'Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de horário manual — chegada/saída sem marcação do freela no app. O recibo é o
+                único artefato de auditoria do modo A: não pode gravar o momento do clique da
+                empresa (ex.: gerente registrando às 09h da manhã seguinte um turno que fechou
+                às 02h) como se fosse o horário real. Pré-preenchido com o horário PLANEJADO do
+                turno; o gerente confirma ou ajusta. */}
+            {manualAttendance && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-1">
+                            {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
+                        </h2>
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-5">
+                            {manualAttendance.app.worker?.full_name || 'Este freela'} não marcou {manualAttendance.type === 'checkin' ? 'a chegada' : 'a saída'} no app
+                        </p>
+
+                        <div className="mb-6">
+                            <label htmlFor="manual-attendance-time" className="block text-sm font-bold uppercase mb-2">
+                                Horário real de {manualAttendance.type === 'checkin' ? 'chegada' : 'saída'}
+                            </label>
+                            <input
+                                id="manual-attendance-time"
+                                type="time"
+                                value={manualAttendanceTime}
+                                onChange={(e) => setManualAttendanceTime(e.target.value)}
+                                className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                            />
+                            <p className="text-xs font-medium text-gray-500 mt-2">
+                                Pré-preenchido com o horário planejado do turno. Ajuste para o horário real, se
+                                foi diferente — este dado vai para o recibo do freela.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={closeManualAttendanceModal}
+                                disabled={confirmingManualAttendance}
+                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmManualAttendance}
+                                disabled={confirmingManualAttendance || !manualAttendanceTime}
+                                className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {confirmingManualAttendance ? <><Loader2 size={16} className="animate-spin" /> Confirmando...</> : 'Confirmar'}
                             </button>
                         </div>
                     </div>

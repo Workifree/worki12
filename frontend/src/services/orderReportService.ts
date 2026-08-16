@@ -1,22 +1,34 @@
 /**
- * OrderReportService — Relatório de Ordens (turnos) da empresa.
+ * OrderReportService — Relatório de Ordens da empresa.
  *
- * "Ordem" = turno (jobs). "Nota"/comprovante = pagamento (shift_payments, modo A —
- * pagamento externo registrado). Ao registrar o pagamento o turno já vira 'completed'
- * e some das listas de turnos ativos — este relatório dá a visão consolidada
- * (aberta/paga/conciliada) + export para o financeiro/estoquista.
+ * GRANULARIDADE (revisado — ver `.harness/memory-bank/decisions/ADR-20260816-marcador-
+ * pagamento-por-freela.md`): "Ordem" = par (turno, freela), não mais "turno" sozinho. Um
+ * turno com N freelas com marcador de pagamento ativo gera N linhas — cada uma com o
+ * pagamento e o nome do freela correspondente. Só cola em "1 linha = 1 turno" quando o
+ * turno NÃO tem nenhum marcador ativo: aí a linha usa o freela "primário" (candidatura
+ * mais avançada) como hoje, para o turno não sumir do relatório enquanto ninguém foi
+ * pago. "Nota"/comprovante = pagamento (shift_payments, modo A — pagamento externo
+ * registrado). Ao registrar o pagamento a application do freela já vira 'completed' —
+ * este relatório dá a visão consolidada (aberta/paga/conciliada) + export para o
+ * financeiro/estoquista.
  *
  * SOMENTE LEITURA — não cria/altera nenhuma linha, não move saldo, sem RPC (fora do
  * escopo do Article 8; este service nem toca `wallets`/`escrow_transactions`).
  *
- * Status derivado por ordem (turno):
+ * Status derivado por linha (turno, freela):
  *  - 'conciliada': shift_payment ATIVO com status='recorded' E worker_confirmed_at preenchido
  *    (o freela confirmou o recebimento).
  *  - 'paga': shift_payment ATIVO com status='recorded', mas o freela ainda não confirmou.
- *  - 'aberta': sem shift_payment 'recorded' (pode ter 'scheduled' pendente, ou nenhum).
+ *  - 'aberta': sem shift_payment 'recorded' para aquele freela (pode ter 'scheduled'
+ *    pendente, ou nenhum marcador no turno inteiro).
  *
- * Valor da linha: amount do shift_payment ATIVO (recorded, senão scheduled); na ausência
- * de qualquer marcador, cai para jobs.budget (estimativa do turno).
+ * Valor da linha: amount do shift_payment ATIVO daquele freela (recorded, senão
+ * scheduled); na ausência de QUALQUER marcador no turno, cai para jobs.budget
+ * (estimativa do turno — a linha única de fallback).
+ *
+ * `summary.total` conta LINHAS (pares turno+freela exibidos), não turnos distintos —
+ * mesma base de `abertas`/`pagas`/`conciliadas`/`valorTotal` (todos somam sobre as
+ * linhas, sem dupla contagem: cada marcador ativo entra em exatamente 1 linha).
  *
  * Data da ordem: jobs.start_date; se nulo, jobs.created_at (fallback — turnos antigos
  * podem não ter start_date preenchido).
@@ -44,6 +56,14 @@ export type OrderStatus = 'aberta' | 'paga' | 'conciliada';
 
 export interface OrderRow {
   jobId: string;
+  /**
+   * Identifica o freela desta linha (worker_id do shift_payment ATIVO, ou da candidatura
+   * primária quando o turno ainda não tem nenhum marcador). `null` só no caso-limite de
+   * turno sem marcador E sem candidatura nenhuma. Usado como parte da key de linha
+   * (`${jobId}:${workerId ?? 'none'}`) — um turno com N freelas pagos gera N `OrderRow`
+   * com o mesmo `jobId` e `workerId` distintos (ADR-20260816).
+   */
+  workerId: string | null;
   /** ISO date ou date-only (YYYY-MM-DD) — start_date do turno, ou created_at como fallback. */
   date: string | null;
   title: string;
@@ -102,6 +122,8 @@ interface ShiftPaymentRow {
   paid_at: string | null;
   scheduled_for: string | null;
   worker_confirmed_at: string | null;
+  /** Só usado para ordenar deterministicamente as linhas de um mesmo turno (mais antigo primeiro). */
+  created_at: string | null;
 }
 
 interface ApplicationRow {
@@ -191,9 +213,9 @@ function pickPrimaryApplication(apps: ApplicationRow[] | undefined): Application
 
 export const OrderReportService = {
   /**
-   * Busca o relatório de ordens (turnos) da empresa autenticada no período informado.
-   * `summary` sempre reflete o PERÍODO COMPLETO (todos os status); `rows` reflete o
-   * filtro de status quando informado (a tabela e o CSV usam `rows`).
+   * Busca o relatório de ordens (pares turno+freela) da empresa autenticada no período
+   * informado. `summary` sempre reflete o PERÍODO COMPLETO (todos os status); `rows`
+   * reflete o filtro de status quando informado (a tabela e o CSV usam `rows`).
    */
   async getReport({ from, to, status }: GetReportParams): Promise<OrderReport> {
     const empty: OrderReport = {
@@ -235,13 +257,21 @@ export const OrderReportService = {
       const jobIds = periodJobs.map((j) => j.id);
 
       // 2. Marcadores de pagamento ATIVOS (scheduled ou recorded — voided é ignorado)
-      //    e candidaturas/convites dos turnos do período, em paralelo.
+      //    e candidaturas/convites dos turnos do período, em paralelo. Query própria
+      //    (não `PaymentRecordService.listActivePaymentsByJob`, que é por UM job_id — usá-la
+      //    aqui significaria 1 chamada por turno do período = N+1 varrendo um mês inteiro).
+      //    Uma única query `.in('job_id', jobIds)` cobre todos os turnos do período de
+      //    uma vez. ADR-20260816 permite até 1 linha ativa POR (job_id, worker_id), então
+      //    um turno pode trazer N linhas aqui (uma por freela pago/agendado).
       const [paymentsResult, appsResult] = await Promise.all([
         supabase
           .from('shift_payments')
-          .select('job_id, worker_id, amount, source, status, paid_at, scheduled_for, worker_confirmed_at')
+          .select(
+            'job_id, worker_id, amount, source, status, paid_at, scheduled_for, worker_confirmed_at, created_at',
+          )
           .in('job_id', jobIds)
-          .in('status', ['scheduled', 'recorded']),
+          .in('status', ['scheduled', 'recorded'])
+          .order('created_at', { ascending: true }),
         supabase
           .from('applications')
           .select('job_id, worker_id, status, invitation_response')
@@ -258,15 +288,22 @@ export const OrderReportService = {
       const payments = (paymentsResult.data ?? []) as ShiftPaymentRow[];
       const applications = (appsResult.data ?? []) as ApplicationRow[];
 
-      // O UNIQUE parcial (job_id) WHERE status IN ('scheduled','recorded') garante no
-      // máximo 1 linha ativa por turno — mas se por algum motivo vier mais de uma,
-      // 'recorded' tem precedência sobre 'scheduled'.
-      const paymentByJob = new Map<string, ShiftPaymentRow>();
+      // ADR-20260816: o UNIQUE parcial agora é (job_id, worker_id) WHERE status IN
+      // ('scheduled','recorded') — no máximo 1 linha ativa POR FREELA, mas um turno pode
+      // ter N linhas (uma por freela). Agrupamos por job_id preservando TODAS as linhas
+      // (nada é colapsado); dentro de um mesmo (job_id, worker_id) — que não deveria
+      // repetir sob o índice atual, mas fica defensivo como o resto do service — 'recorded'
+      // tem precedência sobre 'scheduled'.
+      const paymentsByJob = new Map<string, ShiftPaymentRow[]>();
       for (const p of payments) {
-        const existing = paymentByJob.get(p.job_id);
-        if (!existing || (existing.status === 'scheduled' && p.status === 'recorded')) {
-          paymentByJob.set(p.job_id, p);
+        const list = paymentsByJob.get(p.job_id) ?? [];
+        const dupIdx = list.findIndex((existing) => existing.worker_id === p.worker_id);
+        if (dupIdx === -1) {
+          list.push(p);
+        } else if (list[dupIdx].status === 'scheduled' && p.status === 'recorded') {
+          list[dupIdx] = p;
         }
+        paymentsByJob.set(p.job_id, list);
       }
 
       const appsByJob = new Map<string, ApplicationRow[]>();
@@ -298,12 +335,10 @@ export const OrderReportService = {
         }
       }
 
-      // 4. Montar as linhas do relatório.
-      const allRows: OrderRow[] = periodJobs.map((job) => {
-        const payment = paymentByJob.get(job.id);
-        const primaryApp = payment ? undefined : pickPrimaryApplication(appsByJob.get(job.id));
-        const workerId = payment?.worker_id ?? primaryApp?.worker_id ?? null;
-
+      // 4. Montar as linhas do relatório — uma linha por (turno, freela) quando o turno
+      //    tem marcador(es) ativo(s); fallback de 1 linha (freela "primário" ou vazio)
+      //    quando o turno não tem nenhum marcador, para não sumir do relatório.
+      function buildRow(job: JobRow, payment: ShiftPaymentRow | undefined, workerId: string | null): OrderRow {
         let derivedStatus: OrderStatus = 'aberta';
         if (payment?.status === 'recorded') {
           derivedStatus = payment.worker_confirmed_at ? 'conciliada' : 'paga';
@@ -315,6 +350,7 @@ export const OrderReportService = {
 
         return {
           jobId: job.id,
+          workerId,
           date: job.start_date ?? job.created_at ?? null,
           title: job.title,
           category: job.category ?? null,
@@ -324,9 +360,22 @@ export const OrderReportService = {
           paidAt,
           status: derivedStatus,
         };
+      }
+
+      const allRows: OrderRow[] = periodJobs.flatMap((job) => {
+        const jobPayments = paymentsByJob.get(job.id) ?? [];
+
+        if (jobPayments.length === 0) {
+          const primaryApp = pickPrimaryApplication(appsByJob.get(job.id));
+          const workerId = primaryApp?.worker_id ?? null;
+          return [buildRow(job, undefined, workerId)];
+        }
+
+        return jobPayments.map((payment) => buildRow(job, payment, payment.worker_id));
       });
 
-      // Mais recente primeiro.
+      // Mais recente primeiro (turnos com N linhas mantêm a ordem estável de inserção
+      // entre si — sort é estável e as linhas já chegam ordenadas por created_at ASC).
       allRows.sort((a, b) => {
         if (!a.date && !b.date) return 0;
         if (!a.date) return 1;

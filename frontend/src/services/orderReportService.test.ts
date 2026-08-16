@@ -15,6 +15,7 @@ function makeChain(result: { data: any; error: any }) {
     eq: vi.fn(() => chain),
     neq: vi.fn(() => chain),
     in: vi.fn(() => chain),
+    order: vi.fn(() => chain),
     then: promise.then.bind(promise),
     catch: promise.catch.bind(promise),
   }
@@ -99,6 +100,7 @@ const SHIFT_PAYMENTS_ROWS = [
     paid_at: '2026-07-11T18:00:00Z',
     scheduled_for: null,
     worker_confirmed_at: null,
+    created_at: '2026-07-11T10:00:00Z',
   },
   {
     job_id: 'job-conciliada',
@@ -109,6 +111,7 @@ const SHIFT_PAYMENTS_ROWS = [
     paid_at: '2026-07-12T18:00:00Z',
     scheduled_for: null,
     worker_confirmed_at: '2026-07-13T09:00:00Z',
+    created_at: '2026-07-12T10:00:00Z',
   },
 ]
 
@@ -164,17 +167,20 @@ describe('OrderReportService.getReport — derivação de status e período', ()
     expect(aberta?.status).toBe('aberta')
     expect(aberta?.amount).toBe(200) // fallback pro budget do job
     expect(aberta?.workerName).toBe('Freela Aberta')
+    expect(aberta?.workerId).toBe('worker-aberta')
     expect(aberta?.source).toBeNull()
 
     const paga = report.rows.find((r) => r.jobId === 'job-paga')
     expect(paga?.status).toBe('paga')
     expect(paga?.amount).toBe(300)
+    expect(paga?.workerId).toBe('worker-paga')
     expect(paga?.source).toBe('external_pix')
     expect(paga?.paidAt).toBe('2026-07-11T18:00:00Z')
 
     const conciliada = report.rows.find((r) => r.jobId === 'job-conciliada')
     expect(conciliada?.status).toBe('conciliada')
     expect(conciliada?.workerName).toBe('Freela Conciliada')
+    expect(conciliada?.workerId).toBe('worker-conciliada')
 
     expect(report.summary).toEqual({
       total: 3,
@@ -218,6 +224,115 @@ describe('OrderReportService.getReport — derivação de status e período', ()
   })
 })
 
+// ---------------------------------------------------------------------------
+// ADR-20260816 — marcador de pagamento por (turno, freela): um turno com N
+// freelas pagos vira N linhas; turno sem NENHUM marcador continua com 1 linha
+// (fallback pro freela "primário"), pra não sumir do relatório.
+// ---------------------------------------------------------------------------
+
+const JOBS_MULTI = [
+  {
+    id: 'job-dois-freelas',
+    title: 'Evento Duplo',
+    category: 'Garçom',
+    budget: 500,
+    start_date: '2026-07-20',
+    created_at: '2026-07-15T10:00:00Z',
+    status: 'completed',
+  },
+  {
+    id: 'job-sem-pagamento',
+    title: 'Turno Solo',
+    category: 'Cozinheiro',
+    budget: 220,
+    start_date: '2026-07-21',
+    created_at: '2026-07-16T10:00:00Z',
+    status: 'open',
+  },
+]
+
+const SHIFT_PAYMENTS_MULTI = [
+  {
+    job_id: 'job-dois-freelas',
+    worker_id: 'worker-ana',
+    amount: 150,
+    source: 'external_pix',
+    status: 'recorded',
+    paid_at: '2026-07-20T18:00:00Z',
+    scheduled_for: null,
+    worker_confirmed_at: null,
+    created_at: '2026-07-20T10:00:00Z',
+  },
+  {
+    job_id: 'job-dois-freelas',
+    worker_id: 'worker-bia',
+    amount: 180,
+    source: 'cash',
+    status: 'recorded',
+    paid_at: '2026-07-20T19:00:00Z',
+    scheduled_for: null,
+    worker_confirmed_at: '2026-07-21T09:00:00Z',
+    created_at: '2026-07-20T11:00:00Z',
+  },
+]
+
+const APPLICATIONS_MULTI = [
+  { job_id: 'job-dois-freelas', worker_id: 'worker-ana', status: 'completed', invitation_response: 'accepted' },
+  { job_id: 'job-dois-freelas', worker_id: 'worker-bia', status: 'completed', invitation_response: 'accepted' },
+  { job_id: 'job-sem-pagamento', worker_id: 'worker-solo', status: 'hired', invitation_response: 'accepted' },
+]
+
+const WORKERS_MULTI = [
+  { id: 'worker-ana', full_name: 'Ana Freela' },
+  { id: 'worker-bia', full_name: 'Bia Freela' },
+  { id: 'worker-solo', full_name: 'Freela Solo' },
+]
+
+describe('OrderReportService.getReport — granularidade (turno, freela) — ADR-20260816', () => {
+  it('turno com dois freelas pagos vira duas linhas com nome/valor certos e o total somando as duas; turno sem pagamento continua presente com 1 linha', async () => {
+    routeFrom({
+      jobs: makeChain({ data: JOBS_MULTI, error: null }),
+      shift_payments: makeChain({ data: SHIFT_PAYMENTS_MULTI, error: null }),
+      applications: makeChain({ data: APPLICATIONS_MULTI, error: null }),
+      workers: makeChain({ data: WORKERS_MULTI, error: null }),
+    })
+    const { OrderReportService } = await import('./orderReportService')
+
+    const report = await OrderReportService.getReport(PERIOD)
+
+    // Caso central: 1 turno + 2 freelas pagos = 2 linhas, ambas com jobId igual.
+    const duploRows = report.rows.filter((r) => r.jobId === 'job-dois-freelas')
+    expect(duploRows).toHaveLength(2)
+
+    const ana = duploRows.find((r) => r.workerName === 'Ana Freela')
+    const bia = duploRows.find((r) => r.workerName === 'Bia Freela')
+    expect(ana).toBeDefined()
+    expect(bia).toBeDefined()
+    expect(ana?.workerId).toBe('worker-ana')
+    expect(bia?.workerId).toBe('worker-bia')
+    expect(ana?.amount).toBe(150)
+    expect(bia?.amount).toBe(180)
+    expect(ana?.status).toBe('paga') // recorded, sem worker_confirmed_at
+    expect(bia?.status).toBe('conciliada') // recorded + worker_confirmed_at
+
+    // Turno sem NENHUM marcador de pagamento continua com 1 linha (não some).
+    const soloRows = report.rows.filter((r) => r.jobId === 'job-sem-pagamento')
+    expect(soloRows).toHaveLength(1)
+    expect(soloRows[0].workerName).toBe('Freela Solo')
+    expect(soloRows[0].workerId).toBe('worker-solo')
+    expect(soloRows[0].status).toBe('aberta')
+    expect(soloRows[0].amount).toBe(220) // fallback pro budget do job
+
+    // Sem dupla contagem nem subcontagem: total = 2 (duplo) + 1 (solo).
+    expect(report.rows).toHaveLength(3)
+    expect(report.summary.total).toBe(3)
+    expect(report.summary.pagas).toBe(1)
+    expect(report.summary.conciliadas).toBe(1)
+    expect(report.summary.abertas).toBe(1)
+    expect(report.summary.valorTotal).toBe(150 + 180 + 220)
+  })
+})
+
 describe('toCSV', () => {
   it('gera CSV pt-BR com ";" e cabeçalho esperado, usando category como Função (fallback title)', async () => {
     mockAllTables()
@@ -247,6 +362,7 @@ describe('toCSV', () => {
       rows: [
         {
           jobId: 'job-x',
+          workerId: 'worker-x',
           date: '2026-07-10',
           title: 'Turno; especial "raro"',
           category: null,
