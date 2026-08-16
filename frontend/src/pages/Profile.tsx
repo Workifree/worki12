@@ -1,15 +1,51 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { getPasswordStrength } from '../lib/validation';
+import { getPasswordStrength, validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../lib/validation';
 import { logError } from '../lib/logger';
 import { QRCodeSVG } from 'qrcode.react';
 import { TeamConnectionService } from '../services/teamConnectionService';
+
+// Tipo de chave PIX — não persistido (a coluna `workers.pix_key` guarda só o valor,
+// mesmo padrão do `WorkerOnboarding`). Serve só para escolher a máscara/validação
+// certa ao editar; o tipo "adivinhado" na carga inicial é só um ponto de partida.
+// `PixKeyType` e `normalizePixKeyForStorage` vêm de lib/validation (fonte única, sem
+// duplicar entre Profile e WorkerOnboarding).
+
+const PIX_KEY_LABELS: Record<PixKeyType, string> = {
+    cpf: 'CPF',
+    cnpj: 'CNPJ',
+    email: 'E-mail',
+    telefone: 'Telefone',
+    aleatoria: 'Aleatória',
+};
+
+const PIX_KEY_PLACEHOLDERS: Record<PixKeyType, string> = {
+    cpf: '000.000.000-00',
+    cnpj: '00.000.000/0000-00',
+    email: 'seuemail@exemplo.com',
+    telefone: '(00) 00000-0000',
+    aleatoria: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+};
+
+const PIX_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Melhor palpite de tipo a partir do valor já salvo (o tipo não é persistido). */
+function guessPixKeyType(value: string): PixKeyType {
+    if (!value) return 'cpf';
+    if (PIX_UUID_RE.test(value)) return 'aleatoria';
+    if (EMAIL_REGEX.test(value)) return 'email';
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 14) return 'cnpj';
+    if (digits.length === 11) return 'cpf';
+    if (digits.length >= 10) return 'telefone';
+    return 'cpf';
+}
 
 interface WorkerProfile {
     id: string;
@@ -71,6 +107,9 @@ export default function Profile() {
         primary_role: '',
         roles: '' // comma separated string for editing
     });
+
+    // Tipo de chave PIX selecionado na edição — não persistido, só orienta máscara/validação.
+    const [pixKeyType, setPixKeyType] = useState<PixKeyType>('cpf');
 
     // Track initial form data for dirty detection
     const initialFormDataRef = useRef<FormData>({
@@ -182,6 +221,7 @@ export default function Profile() {
                 };
                 setFormData(loadedFormData);
                 initialFormDataRef.current = loadedFormData;
+                setPixKeyType(guessPixKeyType(loadedFormData.pix_key));
                 setStats({
                     completedJobs: data.completed_jobs_count || 0,
                     totalEarnings: data.earnings_total || 0,
@@ -259,12 +299,18 @@ export default function Profile() {
             if (type === 'avatar') updates.avatar_url = publicUrl;
             else updates.cover_url = publicUrl;
 
-            const { error: updateError } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+            // sem isso, um UPDATE negado devolveria 204 sem erro e a UI afirmaria sucesso.
+            const { data: updateData, error: updateError } = await supabase
                 .from('workers')
                 .update(updates)
-                .eq('id', profile.id);
+                .eq('id', profile.id)
+                .select('id');
 
             if (updateError) throw updateError;
+            if (!updateData || updateData.length === 0) {
+                throw new Error('Não foi possível salvar a imagem: verifique se você ainda tem permissão para editar este perfil.');
+            }
 
             setProfile({ ...profile, ...updates } as WorkerProfile);
             addToast(`${type === 'avatar' ? 'Foto de perfil' : 'Capa'} atualizada!`, 'success');
@@ -280,8 +326,48 @@ export default function Profile() {
         }
     };
 
+    // Formata a chave PIX conforme o tipo escolhido — mesmas máscaras do WorkerOnboarding.
+    const formatPixKey = (type: PixKeyType, value: string) => {
+        if (type === 'cpf' || type === 'cnpj') return formatCpfCnpj(value);
+        if (type === 'telefone') {
+            const digits = value.replace(/\D/g, '').slice(0, 11);
+            if (digits.length <= 10) return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+            return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+        }
+        return value;
+    };
+
+    // Valida a chave PIX conforme o tipo — reusa lib/validation, mesmo padrão do WorkerOnboarding.
+    const isValidPixKey = () => {
+        const key = formData.pix_key.trim();
+        if (!key) return true; // campo opcional na edição — vazio é permitido (freela ainda não configurou)
+        switch (pixKeyType) {
+            case 'cpf':
+                return key.replace(/\D/g, '').length === 11 && validateCPFOrCNPJ(key);
+            case 'cnpj':
+                return key.replace(/\D/g, '').length === 14 && validateCPFOrCNPJ(key);
+            case 'email':
+                return EMAIL_REGEX.test(key);
+            case 'telefone':
+                return key.replace(/\D/g, '').length >= 10;
+            case 'aleatoria':
+                return PIX_UUID_RE.test(key);
+            default:
+                return false;
+        }
+    };
+
     const handleSave = async () => {
         if (!profile) return;
+        // Só valida a chave PIX se o freela de fato mexeu nela nesta edição. Um valor legado
+        // (ex.: telefone salvo antes de existir o campo de tipo) pode não bater com o tipo
+        // "adivinhado" por guessPixKeyType — sem essa guarda, isso travaria o salvamento do
+        // resto do perfil (bio, foto, etc.) mesmo quando o freela nunca tocou no PIX.
+        const pixKeyTouched = formData.pix_key !== initialFormDataRef.current.pix_key;
+        if (pixKeyTouched && !isValidPixKey()) {
+            addToast(`Chave PIX inválida para o tipo "${PIX_KEY_LABELS[pixKeyType]}". Corrija antes de salvar.`, 'error');
+            return;
+        }
         try {
             setLoading(true);
             const rolesArray = formData.roles.split(',').map(r => r.trim()).filter(r => r.length > 0);
@@ -291,18 +377,24 @@ export default function Profile() {
                 city: formData.city,
                 phone: formData.phone,
                 bio: formData.bio,
-                pix_key: formData.pix_key,
+                pix_key: normalizePixKeyForStorage(pixKeyType, formData.pix_key),
                 primary_role: formData.primary_role,
                 roles: rolesArray,
                 updated_at: new Date()
             };
 
-            const { error } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+            // "Perfil atualizado com sucesso!" não pode mentir quando a RLS negou o UPDATE.
+            const { data, error } = await supabase
                 .from('workers')
                 .update(updates)
-                .eq('id', profile.id);
+                .eq('id', profile.id)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
+            }
 
             setProfile({ ...profile, ...updates });
             initialFormDataRef.current = { ...formData };
@@ -559,22 +651,21 @@ export default function Profile() {
                         </div>
                     </div>
 
-                    {/* Payments */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-black uppercase flex items-center gap-2">
-                                <CreditCard size={20} /> Recebimento
-                            </h3>
-                        </div>
-                        <p className="text-sm text-gray-500 mb-4">Gerencie seus ganhos e saques na sua carteira.</p>
-
-                        <button
-                            onClick={() => navigate('/wallet')}
-                            className="w-full bg-black text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-all flex justify-center items-center gap-2"
-                        >
-                            Ir para Carteira
-                        </button>
-                    </div>
+                    {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                    <button
+                        type="button"
+                        onClick={() => navigate('/recebimentos')}
+                        className="w-full bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all flex items-center justify-between gap-3 text-left"
+                    >
+                        <span className="flex items-center gap-3">
+                            <Receipt size={22} className="text-primary flex-shrink-0" />
+                            <span>
+                                <span className="block text-sm font-black uppercase">Meus Recebimentos</span>
+                                <span className="block text-xs font-bold text-gray-400">Pagamentos registrados pelas empresas</span>
+                            </span>
+                        </span>
+                        <ChevronRight size={20} className="text-gray-300 flex-shrink-0" />
+                    </button>
 
                     {/* Contact Info */}
                     <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
@@ -598,6 +689,55 @@ export default function Profile() {
                         </div>
                     </div>
 
+                    {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
+                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
+                        <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
+                            <CreditCard size={20} /> Chave PIX
+                        </h3>
+                        {isEditing ? (
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase mb-1 text-gray-400">Tipo de Chave</label>
+                                    <select
+                                        value={pixKeyType}
+                                        onChange={(e) => {
+                                            const nextType = e.target.value as PixKeyType;
+                                            setPixKeyType(nextType);
+                                            // Preserva o valor digitado — é o gesto de correção (ex.: CPF errado -> Telefone
+                                            // com o número já digitado), só reaplica a máscara do tipo novo.
+                                            setFormData({ ...formData, pix_key: formatPixKey(nextType, formData.pix_key) });
+                                        }}
+                                        aria-label="Tipo de chave PIX"
+                                        className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
+                                    >
+                                        {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
+                                            <option key={type} value={type}>{PIX_KEY_LABELS[type]}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase mb-1 text-gray-400">Chave</label>
+                                    <input
+                                        type="text"
+                                        value={formData.pix_key}
+                                        onChange={(e) => setFormData({ ...formData, pix_key: formatPixKey(pixKeyType, e.target.value) })}
+                                        aria-label="Chave PIX"
+                                        className={`w-full bg-gray-50 border-2 focus:border-black rounded-xl p-3 font-bold outline-none transition-all ${formData.pix_key.trim() && !isValidPixKey() ? 'border-red-400' : 'border-transparent'}`}
+                                        placeholder={PIX_KEY_PLACEHOLDERS[pixKeyType]}
+                                    />
+                                    {formData.pix_key.trim() && !isValidPixKey() && (
+                                        <p className="text-xs text-red-500 font-bold mt-1">Chave inválida para o tipo selecionado.</p>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-400">
+                                    É assim que as empresas vão te pagar por fora do Worki (PIX).
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-sm font-bold text-gray-600">{profile.pix_key || 'Não informada'}</p>
+                        )}
+                    </div>
+
                 </div>
 
                 {/* Right Column: Roles, Bio, Reviews */}
@@ -616,14 +756,14 @@ export default function Profile() {
                                         type="text"
                                         value={formData.primary_role}
                                         onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
-                                        placeholder="Função Principal (ex: Bartender)"
+                                        placeholder="Função Principal (ex: Garçom, Barista, Bartender, Cozinheiro)"
                                         aria-label="Funcao principal"
                                         className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none"
                                     />
                                     <textarea
                                         value={formData.roles}
                                         onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
-                                        placeholder="Outras habilidades (separe por vírgula)"
+                                        placeholder="Outras habilidades (ex: Atendente, Barista, Caixa, Cumim)"
                                         aria-label="Especialidades"
                                         className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-20"
                                     />
@@ -651,7 +791,7 @@ export default function Profile() {
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                                     aria-label="Sobre voce"
                                     className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-32"
-                                    placeholder="Conte um pouco sobre sua experiência..."
+                                    placeholder="Conte um pouco sobre sua experiência em salão, bar, cafeteria ou cozinha..."
                                 />
                             ) : (
                                 <p className="text-gray-600 font-medium leading-relaxed">
@@ -861,10 +1001,6 @@ export default function Profile() {
                         <li className="flex items-start gap-2">
                             <span className="font-black text-red-500 mt-0.5">•</span>
                             Turnos e convites ativos serão cancelados
-                        </li>
-                        <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">•</span>
-                            Seu saldo restante na carteira será perdido
                         </li>
                     </ul>
                     <label className="block text-sm font-bold mb-2">

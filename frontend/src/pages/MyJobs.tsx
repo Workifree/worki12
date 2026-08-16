@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -15,9 +15,15 @@ import type { ReviewDirection } from '../types';
 
 type Step = { label: string; status: 'complete' | 'active' | 'pending' }
 
-function computeWorkerSteps(job: JobApplication): Step[] {
-    const checkinDone = !!job.worker_checkin_at;
-    const checkoutDone = !!job.worker_checkout_at;
+// Exportado para teste direto da lógica pura (evita duplicar/driftar como aconteceu em
+// CompanyJobCandidates → JobLifecycleStepper.test.tsx). A empresa pode registrar chegada/saída
+// unilateralmente (freela não mexeu no app) — por isso "feito" considera os DOIS lados, nunca
+// só `worker_*`, senão o freela vê um CTA ativo (e um stepper contraditório) para uma etapa que
+// a empresa já fechou.
+// eslint-disable-next-line react-refresh/only-export-components -- função pura reaproveitada pelo teste (evita novo arquivo fora do escopo desta mudança)
+export function computeWorkerSteps(job: JobApplication): Step[] {
+    const checkinDone = !!(job.worker_checkin_at || job.company_checkin_confirmed_at);
+    const checkoutDone = !!(job.worker_checkout_at || job.company_checkout_confirmed_at);
     const companyConfirmed = !!job.company_checkout_confirmed_at;
 
     return [
@@ -44,7 +50,7 @@ function computeWorkerSteps(job: JobApplication): Step[] {
     ];
 }
 
-interface JobApplication {
+export interface JobApplication {
     id: string;
     job_id: string;
     status: string;
@@ -64,6 +70,7 @@ interface JobApplication {
     worker_checkout_at: string | null;
     company_checkin_confirmed_at: string | null;
     company_checkout_confirmed_at: string | null;
+    created_at?: string;
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
@@ -98,6 +105,9 @@ export default function MyJobs() {
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
     const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
+    // "Falar com a empresa" — o gesto simétrico do freela (empresa já tinha o ícone de chat
+    // na tela de presença). id da application sendo processada (loading do botão).
+    const [chattingId, setChattingId] = useState<string | null>(null);
     // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
@@ -181,27 +191,30 @@ export default function MyJobs() {
                 } | null;
             }
 
-            (data as unknown as ApplicationRow[]).forEach((app) => {
+            (data as unknown as ApplicationRow[] || []).forEach((app) => {
+                if (!app.job) return;
+
                 const application: JobApplication = {
                     id: app.id,
-                    job_id: app.job?.id || '',
+                    job_id: app.job.id,
                     status: app.status,
-                    title: app.job?.title || 'Turno',
-                    company_id: app.job?.company?.id || '',
-                    company_name: app.job?.company?.name || 'Empresa Confidencial',
-                    company_logo: app.job?.company?.logo_url ?? null,
-                    pay: app.job?.budget || 0,
-                    date: app.job?.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
-                    raw_date: app.job?.start_date ?? null,
-                    time: app.job?.work_start_time || 'Horário a definir',
-                    end_time: app.job?.work_end_time || null,
-                    location: app.job?.location || 'Local a definir',
-                    month: app.job?.start_date ? new Date(app.job.start_date).toLocaleString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '') : 'MES',
-                    day: app.job?.start_date ? new Date(app.job.start_date).getDate() : '00',
+                    title: app.job.title,
+                    company_id: app.job.company?.id || '',
+                    company_name: app.job.company?.name || 'Empresa Confidencial',
+                    company_logo: app.job.company?.logo_url ?? null,
+                    pay: app.job.budget || 0,
+                    date: app.job.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
+                    raw_date: app.job.start_date ?? null,
+                    time: app.job.work_start_time || 'Horário a definir',
+                    end_time: app.job.work_end_time || null,
+                    location: app.job.location || 'Local a definir',
+                    month: app.job.start_date ? new Date(app.job.start_date).toLocaleString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '') : 'MES',
+                    day: app.job.start_date ? new Date(app.job.start_date).getDate() : '00',
                     worker_checkin_at: app.worker_checkin_at,
                     worker_checkout_at: app.worker_checkout_at,
                     company_checkin_confirmed_at: app.company_checkin_confirmed_at,
-                    company_checkout_confirmed_at: app.company_checkout_confirmed_at
+                    company_checkout_confirmed_at: app.company_checkout_confirmed_at,
+                    created_at: app.created_at
                 };
 
                 const isJobToday = application.raw_date && isToday(parseISO(application.raw_date));
@@ -262,18 +275,28 @@ export default function MyJobs() {
         }
     }, [jobs.history, reviewedJobIds, loading]);
 
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+    // RLS negado silenciosamente): sob RLS um UPDATE cuja linha não casa mais com a policy
+    // USING retorna 0 linhas sem erro (PostgREST 204). Sem checar `data`, a UI diria "check-in
+    // realizado" com o banco intocado.
     const handleCheckin = async (appId: string) => {
         setActionLoading(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({
                     worker_checkin_at: new Date().toISOString(),
                     status: 'in_progress'
                 })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível fazer check-in. Atualize a página e tente novamente.', 'error');
+                return;
+            }
+            addToast('Check-in realizado com sucesso!', 'success');
             await fetchJobs();
         } catch (err) {
             logError('Error checking in:', err);
@@ -286,12 +309,17 @@ export default function MyJobs() {
     const handleCheckout = async (appId: string) => {
         setActionLoading(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ worker_checkout_at: new Date().toISOString() })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível fazer check-out. Atualize a página e tente novamente.', 'error');
+                return;
+            }
             await fetchJobs();
         } catch (err) {
             logError('Error checking out:', err);
@@ -302,17 +330,26 @@ export default function MyJobs() {
     };
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
-    // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel).
+    // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
+    // trigger só dispara se a linha realmente mudou. Sob RLS um UPDATE que não casa com o
+    // USING retorna 0 linhas sem erro (PostgREST 204) — sem `.select()` a UI mentiria "a
+    // empresa foi avisada" quando ninguém foi avisado (padrão obrigatório, patterns.md).
     const handleCancelShift = async () => {
         if (!cancelJob) return;
         setCancelLoading(true);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ status: 'cancelled' })
-                .eq('id', cancelJob.id);
+                .eq('id', cancelJob.id)
+                .select('id');
 
             if (error) throw error;
+
+            if (!data || data.length === 0) {
+                addToast('Não foi possível cancelar este turno. Atualize a página e tente novamente.', 'error');
+                return;
+            }
 
             setCancelJob(null);
             addToast('Turno cancelado. A empresa foi avisada.', 'success');
@@ -322,6 +359,37 @@ export default function MyJobs() {
             addToast('Erro ao cancelar turno. Tente novamente.', 'error');
         } finally {
             setCancelLoading(false);
+        }
+    };
+
+    // Gesto simétrico ao handleChat da empresa (CompanyJobCandidates): procura Conversation
+    // por application_uuid (job.id AQUI é o id da application, não da vaga), cria se não existir.
+    // Sem isso o freela não tem como puxar conversa se a empresa nunca abriu o chat do turno.
+    const handleChat = async (job: JobApplication) => {
+        setChattingId(job.id);
+        try {
+            const { data: existingConvs } = await supabase
+                .from('Conversation')
+                .select('id')
+                .eq('application_uuid', job.id)
+                .limit(1);
+
+            if (existingConvs && existingConvs.length > 0) {
+                navigate(`/messages?conversation=${existingConvs[0].id}`);
+            } else {
+                const newConvId = crypto.randomUUID();
+                const { error } = await supabase
+                    .from('Conversation')
+                    .insert({ id: newConvId, application_uuid: job.id, islocked: false });
+
+                if (error) throw error;
+                navigate(`/messages?conversation=${newConvId}`);
+            }
+        } catch (err) {
+            logError('MyJobs: handleChat', err);
+            addToast('Erro ao iniciar conversa.', 'error');
+        } finally {
+            setChattingId(null);
         }
     };
 
@@ -449,8 +517,10 @@ export default function MyJobs() {
 
                         {!invitesLoading && pendingInvites.map((invite) => {
                             const job = invite.job;
-                            const companyName = (job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
-                            const companyLogo = (job?.company as { logo_url?: string | null } | undefined)?.logo_url ?? null;
+                            const companyInfo = job?.company;
+                            const companyName = companyInfo?.name ?? 'Empresa';
+                            const companyLogo = companyInfo?.logo_url ?? null;
+                            const companyId = companyInfo?.id;
                             const jobTitle = job?.title ?? 'Turno';
                             const budget = job?.budget ?? 0;
                             const startDate = job?.start_date
@@ -465,20 +535,28 @@ export default function MyJobs() {
                                 <div key={invite.id} className="bg-white border-2 border-black rounded-2xl p-6 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
                                     {/* Empresa */}
                                     <div className="flex items-center gap-3 mb-4">
-                                        <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                                            {companyLogo ? (
-                                                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    <Building2 size={20} className="text-gray-400" />
-                                                </div>
-                                            )}
+                                        <div
+                                            role={companyId ? 'button' : undefined}
+                                            tabIndex={companyId ? 0 : undefined}
+                                            onClick={companyId ? () => navigate(`/empresa/${companyId}`) : undefined}
+                                            onKeyDown={companyId ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/empresa/${companyId}`); } } : undefined}
+                                            className={`flex items-center gap-3 flex-1 min-w-0 ${companyId ? 'cursor-pointer' : ''}`}
+                                        >
+                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                {companyLogo ? (
+                                                    <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center">
+                                                        <Building2 size={20} className="text-gray-400" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold uppercase text-gray-400">Convite de</p>
+                                                <p className={`font-black uppercase truncate ${companyId ? 'hover:text-primary transition-colors' : ''}`}>{companyName}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-xs font-bold uppercase text-gray-400">Convite de</p>
-                                            <p className="font-black uppercase">{companyName}</p>
-                                        </div>
-                                        <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
+                                        <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200 flex-shrink-0">
                                             Novo convite
                                         </span>
                                     </div>
@@ -586,22 +664,33 @@ export default function MyJobs() {
                         </div>
                         <div className="flex flex-col gap-3 mt-3">
                             <div className="flex flex-col gap-3 min-w-[200px]">
-                                {!job.worker_checkin_at ? (
+                                {/* A empresa pode registrar chegada/saída sem o freela tocar no app
+                                    (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
+                                    `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
+                                    ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
+                                    o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
+                                    quando presente, mesmo em turno já pago). */}
+                                {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
                                     <button
                                         onClick={() => handleCheckin(job.id)}
                                         disabled={actionLoading === job.id}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm shadow-sm"
                                     >
                                         {actionLoading === job.id ? (
-                                            <Loader2 className="animate-spin" size={20} />
+                                            <Loader2 className="animate-spin" size={18} />
                                         ) : (
-                                            <><Play size={20} /> Check-in</>
+                                            <><Play size={18} /> Check-in</>
                                         )}
                                     </button>
-                                ) : (
+                                ) : job.worker_checkin_at ? (
                                     <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                                         <CheckCircle2 size={16} />
                                         Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
+                                    </div>
+                                ) : (
+                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                                        <CheckCircle2 size={16} />
+                                        Empresa registrou sua chegada
                                     </div>
                                 )}
 
@@ -615,7 +704,7 @@ export default function MyJobs() {
                                     </div>
                                 )}
 
-                                {job.worker_checkin_at && !job.worker_checkout_at && (
+                                {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
                                     <button
                                         onClick={() => handleCheckout(job.id)}
                                         disabled={actionLoading === job.id}
@@ -635,6 +724,23 @@ export default function MyJobs() {
                                         Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
                                     </div>
                                 )}
+
+                                {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
+                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                                        <CheckCircle2 size={16} />
+                                        Empresa registrou sua saída
+                                    </div>
+                                )}
+
+                                {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
+                                <button
+                                    onClick={() => handleChat(job)}
+                                    disabled={chattingId === job.id}
+                                    className="bg-white hover:bg-black text-black hover:text-white border-2 border-black px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm"
+                                >
+                                    {chattingId === job.id ? <Loader2 className="animate-spin" size={18} /> : <MessageCircle size={18} />}
+                                    Falar com a empresa
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -673,6 +779,14 @@ export default function MyJobs() {
                             </div>
                             <div className="flex flex-col items-end gap-2">
                                 <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
+                                <button
+                                    onClick={() => handleChat(job)}
+                                    disabled={chattingId === job.id}
+                                    className="text-xs font-black text-black hover:text-white hover:bg-black uppercase px-3 py-2 rounded-xl border-2 border-black transition-colors flex items-center gap-1 min-h-[44px] disabled:opacity-50"
+                                >
+                                    {chattingId === job.id ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+                                    Falar com a empresa
+                                </button>
                                 <button
                                     onClick={() => setCancelJob(job)}
                                     className="text-xs font-black text-red-600 hover:text-white hover:bg-red-500 uppercase px-3 py-2 rounded-xl border-2 border-red-200 hover:border-red-500 transition-colors flex items-center gap-1 min-h-[44px]"

@@ -30,7 +30,7 @@ import { logError } from '../lib/logger';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
 
-type PageState = 'loading' | 'success' | 'already_exists' | 'error';
+type PageState = 'loading' | 'success' | 'already_exists' | 'blocked' | 'error';
 type InviteDirection = 'company' | 'worker';
 
 interface PageData {
@@ -92,6 +92,13 @@ export default function InviteAccept() {
         }
 
         if (result.alreadyExists) {
+          // O freela vetou a empresa (status 'blocked') — o veto continua íntegro no banco
+          // (policy de DELETE guardada); aqui só não podemos afirmar sucesso nem revelar que
+          // houve bloqueio. Mesma copy neutra do hook (useTeamConnections.addWorker).
+          if (result.blocked) {
+            setPage({ state: 'blocked' });
+            return;
+          }
           setPage({ state: 'already_exists' });
           return;
         }
@@ -187,6 +194,28 @@ export default function InviteAccept() {
             <button
               onClick={() => navigate(redirectTo)}
               className="w-full bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+            >
+              {redirectLabel}
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        )}
+
+        {/* Bloqueado — não afirma sucesso, mas também não revela que houve veto do freela */}
+        {page.state === 'blocked' && (
+          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 text-center">
+            <div className="w-16 h-16 bg-gray-50 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <XCircle size={32} className="text-gray-400" />
+            </div>
+            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
+              Não Foi Possível Concluir
+            </h1>
+            <p className="text-gray-600 font-bold mb-8">
+              Não é possível adicionar este freela agora.
+            </p>
+            <button
+              onClick={() => navigate(redirectTo)}
+              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
             >
               {redirectLabel}
               <ArrowRight size={18} />

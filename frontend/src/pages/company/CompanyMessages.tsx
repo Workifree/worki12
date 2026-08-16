@@ -180,12 +180,18 @@ export default function CompanyMessages() {
             c.id === conversationId ? { ...c, unread_count: 0 } : c
         ));
 
-        await supabase
+        // read_at é baixo risco de UX (sem toast), mas merece log — não é hipotético:
+        // `Message` já teve RLS ligada sem policy de UPDATE nesta revisão (patterns.md).
+        const { error } = await supabase
             .from('Message')
             .update({ read_at: new Date().toISOString() })
             .eq('conversationid', conversationId)
             .neq('senderid', userId)
-            .is('read_at', null);
+            .is('read_at', null)
+            .select('id');
+        if (error) {
+            logError('CompanyMessages.markAsRead', error);
+        }
     };
 
     // Load data on mount and refresh

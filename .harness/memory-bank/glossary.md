@@ -29,8 +29,7 @@ worker. Tabela `escrow_transactions` (job_id, application_id, amount, status: `r
 **Reserve / Release / Refund** — Operações de escrow, sempre atômicas (RPCs `reserve_escrow`,
 `release_escrow`, `refund_escrow`). Reserve trava saldo da empresa; release credita o worker; refund devolve à empresa.
 
-**Depósito (deposit)** — Top-up da carteira da empresa via Asaas (PIX/Boleto/Cartão). Frontend `DepositModal`
-→ `asaas-deposit`; confirmação chega por `asaas-webhook` → RPC `credit_deposit`.
+**⚠️ Depósito (deposit) — REMOVIDO (piloto)** — Antes da Onda 2 do piloto, era top-up da carteira da empresa via Asaas (PIX/Boleto/Cartão) para prefundir escrow. Edge function `asaas-deposit` + RPC `credit_deposit`. No piloto (Onda 2), modo A é pagamento externo registrado, sem dinheiro na plataforma.
 
 **Saque (withdraw)** — Worker transfere saldo para conta/PIX própria via `asaas-withdraw` (transferência da
 conta master). Taxa de plataforma de 5%.
@@ -113,29 +112,13 @@ Prepago usa `'reserved' | 'released' | 'refunded'` (sem authorized/captured).
 Possibilita rating bidirecional: worker avalia company (→direction='company'); company avalia worker (→direction='worker').
 Triggers de rating (`update_worker_rating_on_review`, `update_company_rating_on_review`) atualizam a tabela correta.
 
-**Teto de gasto / Spend limit** — Limite mensal de gasto que a empresa configura (tabela `company_spend_limits`). Quando o gasto
-acumulado (via escrow liberado/capturado) cruza 80%/90%/100% do teto, alerta in-app é disparo (NUNCA bloqueia contratação).
-Configuração por empresa/período, escopo (v1: '' = empresa inteira).
+**⚠️ Teto de gasto / Spend limit — REMOVIDO (piloto)** — Antes da Onda 2, era limite mensal em `company_spend_limits`. Alerta in-app via `spendLimitService`. Reabertura: opt-in por gatilho do ADR-20260630.
 
-**BI (Business Intelligence)** — Indicadores derivados do gasto de uma empresa em um período, computados por queries direto em
-`escrow_transactions` (sem materializar em tabela): BI-1 gasto acumulado; BI-2 gasto+horas por freela; BI-3 ratio custo/hora e
-custo-%-faturamento; BI-4 custo de no-show estimado (heurística); BI-5 flag de concentração de horas/dias por freela (risco
-de vínculo trabalhista).
+**⚠️ BI (Business Intelligence) — REMOVIDO (piloto)** — Página `/company/financeiro` e services `financialBIService`/`spendLimitService` foram removidos na Onda 2. Indicadores derivados (BI-1 a BI-5) estão documentados em `patterns.md` como histórico. Reabertura: opt-in futuro.
 
-**Ratio custo-%-faturamento** — Métrica de ouro para operação de serviços (ex: food service): custo de pessoal como % do
-faturamento total. Requer que a empresa declare o faturamento mensal bruto (tabela `company_monthly_revenue`, input manual).
-Cálculo: (gasto acumulado / faturamento declarado) × 100. NULL se não informado → exibir CTA "Informar faturamento".
+**⚠️ company_monthly_revenue — REMOVIDO (piloto)** — Antes: tabela com faturamento declarado pela empresa (input para BI-3). Não toca saldo (Article 8). Reabertura: opt-in futuro se BI-3 for reaberto.
 
-**company_monthly_revenue** — Tabela com faturamento mensal declarado pela empresa. Campos: `company_id, year_month (DATE dia 1),
-amount`. Upsert por (company_id, year_month). Input manual pela empresa; RLS por owner. Sem saldo/RPC de saldo.
-
-**Flag de concentração / Concentração de vínculo** — Sinalizador em BI-5 quando um freela trabalha AMBOS:
-horas totais >= 150h E dias distintos >= 20 dias no período. Indica risco potencial de vínculo trabalhista (CLT).
-Limiares são constantes de produto no service, não no DB (CONCENTRATION_HOURS_THRESHOLD, CONCENTRATION_DAYS_THRESHOLD).
-
-**Idempotência de alerta (Slice 3)** — Alerta de teto usa link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`
-como chave de idempotência. SELECT-before-INSERT verifica se já existe notificação com este link no user_id (company owner).
-Se existe, skip; caso contrário, insere. Protege contra duplicação se avaliação roda multiplas vezes no período.
+**⚠️ Idempotência de alerta (Slice 3) — REMOVIDO (piloto)** — Padrão histórico em `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`. Alerta de teto não existe mais na Onda 2.
 
 **Modo A / Pagamento externo registrado (Slice 3)** — Default do piloto (ADR-20260630). Empresa paga worker direto
 (PIX/dinheiro, fora do Worki); o Worki registra o pagamento em `shift_payments` (marcador de auditoria, SEM mover saldo).
@@ -174,3 +157,5 @@ real de "XP não sobe") = foi removido.
 
 **Briefing padrão** — Campo `companies.default_briefing` (text). Empresa cadastra UMA vez (ex.: "calça jeans, boa apresentação, barba feita"). 
 Ao criar turno, pré-preenche a descrição; empresa ajusta/incrementa por turno (ex.: "camisa verde"). Operacional, NÃO toca saldo.
+
+**Meus Recebimentos** — Página do worker (`/recebimentos`, `MeusRecebimentos.tsx`) que exibe todos os `shift_payments` registrados pela empresa (modo A — pagamento externo). Agrupa por status: `scheduled` (promessas), `recorded` sem confirmação do worker, `recorded` confirmado, `voided`. **NÃO exibe saldo** (Article 8) — é histórico de auditoria/comprovantes. Rota substitui a antiga `/wallet` (removida). **Limitação:** sem notificação push quando empresa registra novo pagamento — worker descobre ao abrir a página.

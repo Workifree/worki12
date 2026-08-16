@@ -42,9 +42,9 @@ No modelo **Modo A**, você paga o freelancer **direto** — por PIX, dinheiro e
 
 ### Passo 1: Concluir o Turno
 
-1. Vá para o turno concluído na aba **"Vagas"** ou histórico
-2. Clique em **"Confirmar Conclusão"** (após checkout)
-3. A tela de conclusão abre
+1. Vá para **Meus Turnos**
+2. Clique no turno concluído (após freelancer fazer check-in e checkout)
+3. Você vê a seção "Presença e Pagamento"
 
 ### Passo 2: Preencher o Registro de Pagamento
 
@@ -52,7 +52,10 @@ Após confirmar a conclusão, você vê:
 
 **"Registrar Pagamento — Pagamento feito por fora do Worki"**
 
+Você verá a **chave PIX do freelancer pré-carregada** (se ele informou durante o cadastro).
+
 Preencha:
+- **Chave PIX:** Já vem preenchida com a chave do freelancer — copie para pagar rápido
 - **Fonte de pagamento:** Escolha uma:
   - PIX (recomendado — mais rápido)
   - Dinheiro em espécie
@@ -67,12 +70,9 @@ Preencha:
 2. O recibo é criado instantaneamente
 3. Você e o freelancer podem acessar no app
 
-### Passo 4: Acompanhar no BI
+### Passo 4: Histórico de Pagamentos
 
-O pagamento **automaticamente aparece no seu Painel Financeiro** (`/company/financeiro`):
-- **Gasto do mês** — inclui este pagamento
-- **Gasto por freelancer** — credita o valor a este freelancer
-- **Alertas de teto** — se você atingir 80%, 90% ou 100% do teto, recebe alerta (inclui pagamentos por fora)
+O pagamento é registrado no histórico do turno e pode ser acessado a qualquer momento em **"Meus Turnos"** ou **"Histórico"**. Você e o freelancer veem o recibo a qualquer momento.
 
 ---
 
@@ -80,9 +80,9 @@ O pagamento **automaticamente aparece no seu Painel Financeiro** (`/company/fina
 
 ### Acessar o Recibo
 
-1. Vá para **"Meus Jobs"**
-2. Localize o turno concluído
-3. Clique em **"Ver Recibo"**
+1. Vá para **"Meus Recebimentos"** (menu inferior)
+2. Localize o pagamento registrado pela empresa
+3. Clique nele para abrir o **recibo**
 
 ### O Recibo Mostra
 
@@ -132,10 +132,6 @@ R: Daí entra a confirmação bilateral. Se você pagou por PIX, há comprovaç�
 ### P: Posso editar o recibo depois de criado?
 
 R: **Não.** O recibo é imutável uma vez criado — garante que ninguém mude o histórico. Se errou algo, você pode criar um novo registro (correção) ou entrar em contato com o suporte.
-
-### P: O pagamento conta no Painel Financeiro?
-
-R: **Sim!** Totalmente. Seu gasto mensal, alertas de teto e BI de horas/custo incluem pagamentos por fora automaticamente.
 
 ### P: Qual é a taxa do Worki no Modo A?
 

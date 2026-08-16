@@ -12,66 +12,62 @@ export default function Terms() {
         </button>
         <h1 className="text-3xl font-bold mb-6">Termos de Uso</h1>
         <div className="bg-white rounded-xl border-2 border-black p-8 space-y-4 text-sm leading-relaxed">
-          <p className="text-gray-600">Ultima atualizacao: Marco de 2026</p>
+          <p className="text-gray-600">Última atualização: 16 de agosto de 2026</p>
 
-          <h2 className="text-xl font-bold mt-6">1. Aceitacao dos Termos</h2>
-          <p>Ao acessar e usar a plataforma Worki ("Plataforma"), voce concorda integralmente com estes Termos de Uso. Se nao concordar com qualquer clausula, nao utilize a Plataforma. A Worki reserva-se o direito de atualizar estes Termos a qualquer momento, notificando os usuarios por email ou pela propria Plataforma.</p>
+          <h2 className="text-xl font-bold mt-6">1. Aceitação dos Termos</h2>
+          <p>Ao acessar e usar a plataforma Worki ("Plataforma"), você concorda integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize a Plataforma. A Worki reserva-se o direito de atualizar estes Termos a qualquer momento, notificando os usuários por e-mail ou pela própria Plataforma.</p>
 
-          <h2 className="text-xl font-bold mt-6">2. Descricao do Servico</h2>
-          <p>Worki e uma plataforma digital que conecta empresas ("Contratantes") a trabalhadores freelancers ("Workers") para prestacao de servicos temporarios. A Worki atua exclusivamente como intermediaria tecnologica, facilitando a conexao, gestao de vagas e processamento de pagamentos entre as partes.</p>
+          <h2 className="text-xl font-bold mt-6">2. Descrição do Serviço</h2>
+          <p>Worki é uma plataforma digital que conecta empresas ("Contratantes") a trabalhadores freelancers ("Workers") para prestação de serviços temporários (turnos avulsos/diárias). A Worki atua como intermediária tecnológica, facilitando a conexão entre as partes, a publicação e gestão de vagas e turnos, o convite direto de freelancers já conhecidos da Contratante, e o acompanhamento do turno (chegada, saída e conclusão). O pagamento pelo serviço prestado é combinado e realizado diretamente entre Contratante e Worker — veja a Seção 4.</p>
 
           <h2 className="text-xl font-bold mt-6">3. Cadastro e Conta</h2>
-          <p>Para utilizar a Plataforma, e necessario criar uma conta com informacoes verdadeiras, completas e atualizadas. O usuario e responsavel por manter a confidencialidade de suas credenciais de acesso e por todas as atividades realizadas em sua conta. A Worki pode suspender ou encerrar contas que violem estes Termos ou forneçam informacoes falsas.</p>
+          <p>Para utilizar a Plataforma, é necessário criar uma conta com informações verdadeiras, completas e atualizadas. O usuário é responsável por manter a confidencialidade de suas credenciais de acesso e por todas as atividades realizadas em sua conta. A Worki pode suspender ou encerrar contas que violem estes Termos ou forneçam informações falsas.</p>
 
-          <h2 className="text-xl font-bold mt-6">4. Sistema de Pagamento e Escrow</h2>
-          <p>Os pagamentos sao processados exclusivamente pela Plataforma, utilizando o sistema de escrow (custodia):</p>
+          <h2 className="text-xl font-bold mt-6">4. Pagamento entre Contratante e Worker</h2>
+          <p>Neste piloto, o pagamento pelo serviço prestado é combinado e realizado diretamente entre a Contratante e o Worker, por fora da Plataforma:</p>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Deposito:</strong> A Contratante deposita o valor do servico na carteira da Plataforma via PIX antes de publicar a vaga ou contratar o Worker.</li>
-            <li><strong>Reserva (Escrow):</strong> Ao contratar um Worker, o valor e reservado em custodia e nao pode ser utilizado pela Contratante para outros fins.</li>
-            <li><strong>Liberacao:</strong> Apos a confirmacao da conclusao do servico (check-out do Worker e confirmacao da Contratante), o valor e liberado para a carteira do Worker.</li>
-            <li><strong>Saque:</strong> O Worker pode sacar o saldo disponivel via PIX a qualquer momento.</li>
+            <li><strong>Combinação e pagamento direto:</strong> Contratante e Worker combinam entre si a forma de pagamento (PIX ou dinheiro) e o pagamento é feito diretamente de um para o outro. A Worki disponibiliza a chave PIX cadastrada pelo Worker para facilitar essa combinação.</li>
+            <li><strong>Nenhuma custódia pela Worki:</strong> nenhum valor é depositado, retido ou repassado pela Plataforma. A Worki não é instituição de pagamento nem intermediária financeira nesse fluxo, e não é responsável pela liquidação do pagamento entre as partes.</li>
+            <li><strong>Registro e recibo:</strong> após o pagamento, a Contratante pode registrar na Plataforma que o pagamento foi realizado (valor, forma e data). A Worki emite um recibo com esses dados, disponível para as duas partes, e o Worker pode confirmar o recebimento diretamente no recibo. Esse registro tem caráter declaratório — serve como histórico e comprovante entre as partes, mas <strong>não é documento fiscal</strong>, e a Worki não verifica de forma independente se o pagamento de fato ocorreu.</li>
+            <li><strong>Responsabilidade pelo pagamento:</strong> o valor, a forma e o prazo de pagamento são de responsabilidade exclusiva da Contratante. A Worki não garante, não antecipa e não se responsabiliza por qualquer valor devido ao Worker.</li>
           </ul>
+          <p className="mt-2">Neste piloto, nenhum dinheiro passa pela Worki: a Plataforma não custodia, não intermedeia e não liquida o pagamento entre Contratante e Worker.</p>
 
           <h2 className="text-xl font-bold mt-6">5. Taxas</h2>
-          <p>A Worki cobra as seguintes taxas para manter a plataforma segura e funcional:</p>
-          <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Para Empresas (no deposito):</strong> Taxa de servico Worki de <strong>8% (oito por cento)</strong> sobre o valor depositado, mais uma taxa fixa de <strong>R$ 4,00</strong> cobrada pelo operador financeiro para processamento do pagamento. As taxas sao cobradas no momento do deposito, e o saldo creditado ja e o valor liquido. Ao contratar, o valor debitado e exatamente o orcamento do job, sem custos extras.</li>
-            <li><strong>Para Workers (no saque):</strong> Taxa de servico Worki de <strong>5% (cinco por cento)</strong> sobre o valor do saque, mais uma taxa fixa de <strong>R$ 3,00</strong> cobrada pelo operador financeiro para transferencia via PIX. O saldo na plataforma e o valor bruto ganho nos jobs.</li>
-          </ul>
-          <p className="mt-2">A Worki reserva-se o direito de alterar as taxas, notificando os usuarios com antecedencia minima de 30 dias.</p>
+          <p>No piloto atual, a Worki <strong>não cobra nenhuma taxa</strong> sobre o pagamento combinado entre Contratante e Worker: o uso da Plataforma para publicar vagas, convidar freelancers, gerenciar turnos e registrar pagamentos é gratuito. A Worki reserva-se o direito de introduzir cobranças no futuro, notificando os usuários com antecedência mínima de 30 dias.</p>
 
-          <h2 className="text-xl font-bold mt-6">6. Cancelamentos e Reembolsos</h2>
+          <h2 className="text-xl font-bold mt-6">6. Cancelamentos</h2>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>Antes da contratacao:</strong> Vagas podem ser canceladas livremente. Se houver valor reservado em escrow, sera integralmente devolvido a carteira da Contratante.</li>
-            <li><strong>Apos a contratacao:</strong> Cancelamentos serao analisados caso a caso. Se o Worker nao compareceu ou nao realizou o servico, o escrow pode ser reembolsado a Contratante.</li>
-            <li><strong>No-show do Worker:</strong> Se o Worker nao realizar check-in, a Contratante pode solicitar cancelamento com reembolso integral do escrow.</li>
+            <li><strong>Antes da contratação:</strong> vagas e convites de turno podem ser cancelados livremente pela Contratante, e o Worker pode recusar um convite sem custo e sem prejuízo à sua avaliação.</li>
+            <li><strong>Após a contratação:</strong> o Worker pode cancelar um turno já aceito diretamente pelo aplicativo; a Contratante é notificada automaticamente para poder se reorganizar.</li>
+            <li><strong>Pagamento e não comparecimento:</strong> como o valor do turno é combinado e pago diretamente entre Contratante e Worker, fora da Plataforma, a Worki não retém nem devolve valores. Se uma das partes não comparecer ao turno combinado, o ajuste — inclusive quanto ao pagamento — é resolvido diretamente entre Contratante e Worker.</li>
           </ul>
 
           <h2 className="text-xl font-bold mt-6">7. Disputas</h2>
-          <p>Em caso de disputas entre Contratante e Worker quanto a conclusao ou qualidade do servico, a Worki atuara como mediadora. As partes devem apresentar evidencias relevantes. A decisao da Worki sobre a liberacao ou reembolso do escrow sera final e vinculante para ambas as partes dentro da Plataforma. Nenhuma parte abre mao do direito de buscar reparacao judicial.</p>
+          <p>Em caso de desacordo entre Contratante e Worker sobre a conclusão, a qualidade do serviço prestado ou o pagamento combinado, a resolução é entre as próprias partes — como a Worki não custodia nem intermedeia o valor do pagamento neste piloto, ela não tem poder de decisão sobre ele. A Worki pode apurar denúncias de uso indevido da Plataforma (perfis falsos, fraude, comportamento abusivo) e tomar medidas administrativas sobre a conta envolvida, mas isso não substitui a resolução do desacordo financeiro entre as partes. Nenhuma parte abre mão do direito de buscar reparação judicial.</p>
 
-          <h2 className="text-xl font-bold mt-6">8. Responsabilidades e Limitacoes</h2>
+          <h2 className="text-xl font-bold mt-6">8. Responsabilidades e Limitações</h2>
           <ul className="list-disc pl-6 space-y-2">
-            <li>A Worki <strong>nao e parte</strong> na relacao de trabalho entre Contratantes e Workers. Nao ha vinculo empregaticio entre as partes ou com a Plataforma.</li>
-            <li>Cada parte e responsavel pelo cumprimento de suas obrigacoes legais, tributarias e previdenciarias.</li>
-            <li>A Worki nao garante a qualidade, pontualidade ou resultado dos servicos prestados.</li>
-            <li>A Worki nao se responsabiliza por danos indiretos, lucros cessantes ou perdas decorrentes do uso da Plataforma.</li>
+            <li>A Worki <strong>não é parte</strong> na relação de trabalho entre Contratantes e Workers. Não há vínculo empregatício entre as partes ou com a Plataforma.</li>
+            <li>Cada parte é responsável pelo cumprimento de suas obrigações legais, tributárias e previdenciárias, incluindo as relativas ao pagamento combinado entre elas.</li>
+            <li>A Worki não garante a qualidade, pontualidade ou resultado dos serviços prestados, nem o pagamento combinado entre as partes.</li>
+            <li>A Worki não se responsabiliza por danos indiretos, lucros cessantes ou perdas decorrentes do uso da Plataforma.</li>
           </ul>
 
           <h2 className="text-xl font-bold mt-6">9. Propriedade Intelectual</h2>
-          <p>Todo o conteudo da Plataforma (marca, logotipo, interface, codigo-fonte) e propriedade da Worki. O uso nao autorizado constitui violacao de direitos autorais e de propriedade intelectual.</p>
+          <p>Todo o conteúdo da Plataforma (marca, logotipo, interface, código-fonte) é propriedade da Worki. O uso não autorizado constitui violação de direitos autorais e de propriedade intelectual.</p>
 
-          <h2 className="text-xl font-bold mt-6">10. Protecao de Dados (LGPD)</h2>
-          <p>O tratamento de dados pessoais pela Worki esta em conformidade com a Lei Geral de Protecao de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-green-600 font-bold underline">Politica de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
+          <h2 className="text-xl font-bold mt-6">10. Proteção de Dados (LGPD)</h2>
+          <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-green-600 font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
 
-          <h2 className="text-xl font-bold mt-6">11. Suspensao e Encerramento</h2>
-          <p>A Worki pode suspender ou encerrar o acesso de usuarios que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais. Em caso de encerramento, saldos em carteira serao devolvidos conforme aplicavel.</p>
+          <h2 className="text-xl font-bold mt-6">11. Suspensão e Encerramento</h2>
+          <p>A Worki pode suspender ou encerrar o acesso de usuários que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais.</p>
 
-          <h2 className="text-xl font-bold mt-6">12. Foro e Legislacao</h2>
-          <p>Estes Termos sao regidos pelas leis da Republica Federativa do Brasil. Fica eleito o foro da comarca de Sao Paulo/SP para dirimir quaisquer controversias.</p>
+          <h2 className="text-xl font-bold mt-6">12. Foro e Legislação</h2>
+          <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de São Paulo/SP para dirimir quaisquer controvérsias.</p>
 
           <h2 className="text-xl font-bold mt-6">13. Contato</h2>
-          <p>Para duvidas sobre estes Termos: <a href="mailto:contato@worki.com.br" className="text-green-600 font-bold">contato@worki.com.br</a></p>
+          <p>Para dúvidas sobre estes Termos: <a href="mailto:contato@worki.com.br" className="text-green-600 font-bold">contato@worki.com.br</a></p>
         </div>
       </div>
     </div>

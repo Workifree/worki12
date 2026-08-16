@@ -71,7 +71,6 @@ Se não responder em 48 horas, o convite expira automaticamente.
 ### Abas disponíveis
 
 - **Convites:** Novos turnos convidados (visto acima)
-- **Candidaturas:** Turnos que você se candidatou
 - **Em Andamento:** Turnos que você já começou
 - **Agendados:** Turnos confirmados para o futuro
 - **Histórico:** Todos os turnos que você trabalhou
@@ -84,6 +83,16 @@ Se não responder em 48 horas, o convite expira automaticamente.
 - Valor
 - Local
 - Seu status (pendente, confirmado, concluído)
+
+### Comunicar com Empresa
+
+Em turnos **Em Andamento** ou **Agendados**, você pode:
+
+1. Clique **"Falar com a empresa"**
+2. Abre conversa direta (mesma conversa se empresa já abriu do lado dela)
+3. Você pode avisar atrasos, dúvidas, datas, etc. em tempo real
+
+**Útil para:** "Vou atrasar 20 minutos", "Qual é o código de entrada?", etc.
 
 ---
 
@@ -107,25 +116,51 @@ Ambos veem as avaliações mútuas — isso constrói confiança e reputação.
 
 ---
 
-## Ganhos e Carteira
+## Meus Recebimentos
 
-### Ver ganhos
+Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Meus Recebimentos"** — uma tela dedicada onde você acompanha todos os pagamentos.
 
-1. Vá para **Meu Perfil**
-2. Clique em **"Carteira"** ou **"Ganhos"**
-3. Veja:
-   - **Saldo disponível:** Pronto para sacar
-   - **Transações:** Histórico de depósitos/saques
-   - **Ganhos do mês:** Total acumulado
+### Acessar Meus Recebimentos
 
-### Sacar
+1. No menu inferior (BottomNav), clique em **"Receb."** (Meus Recebimentos)
+2. Você vê todos os pagamentos registrados separados por status:
+   - **Agendados:** A empresa prometeu pagar em uma data futura
+   - **Aguardam confirmação:** A empresa registrou que pagou — confirme que recebeu
+   - **Recebidos:** Você confirmou o recebimento
+   - **Cancelados:** Pagamentos que foram estornados
 
-Você pode sacar seu dinheiro quando quiser via **PIX** (dependendo do seu banco). Confira as taxas antes de confirmar.
+### Acessar o Recibo
+
+1. Clique em qualquer item em **"Meus Recebimentos"**
+2. Abre o **recibo** — o comprovante bilateral do pagamento
+
+### O Recibo Mostra
+
+- Empresa que te contratou
+- Nome do turno (função, data e local)
+- **Chegada:** hora real que você fez check-in
+- **Saída:** hora real que você fez checkout
+- **Total de horas trabalhadas:** automaticamente calculado (funciona mesmo para turnos que cruzam meia-noite)
+- **Valor pago** em reais
+- Método de pagamento (PIX, dinheiro, etc.)
+- Data do pagamento
+- Se agendado: data prevista de pagamento
+
+### Confirmar Recebimento
+
+Se você já recebeu o pagamento, pode confirmar no recibo:
+
+1. Abra o recibo
+2. Clique em **"Confirmar que recebi"**
+3. Seu timestamp é registrado — agora ambas as partes (você e a empresa) veem comprovação bilateral
+
+Confirmar é recomendado para deixar claro que o turno foi totalmente resolvido, mas não é obrigatório.
 
 ---
 
 ## Próximos Passos
 
-- **Completar perfil:** Adicione uma foto, função principal e descrição — empresas veem isso
+- **Completar perfil:** Adicione uma foto, função principal, descrição **e sua chave PIX** — empresas veem sua chave para pagarem você mais rápido
+- **Carteira de Clientes:** Explore empresas que você já trabalha ou adicione novas
 - **Notificações:** Ative notificações para não perder convites
 - **Suporte:** Dúvidas? Entre em contato via chat no app

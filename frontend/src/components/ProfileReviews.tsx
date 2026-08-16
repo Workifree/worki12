@@ -16,17 +16,34 @@ interface ReviewRow {
 
 /**
  * Lista as avaliações RECEBIDAS por um perfil (com estrelas + comentário).
- * `reviewerRole` = quem ESCREVEU a avaliação (define de qual tabela buscar o nome
- * e qual `direction` filtrar):
+ * `reviewerRole` = quem ESCREVEU a avaliação (define qual `direction` filtrar):
  *   - reviewerRole='company' → avaliações de EMPRESAS sobre um FREELA (direction='worker')
  *   - reviewerRole='worker'  → avaliações de FREELAS sobre uma EMPRESA (direction='company')
+ *
+ * Autoria resolvida via RPC `get_profile_reviews(p_reviewed_id, p_direction)`
+ * (migration 20260816130000_profile_reviews_reader.sql) — substitui as antigas duas queries
+ * (`reviews` + `.from('workers'|'companies').in('id', reviewerIds)`), que paravam de resolver
+ * nome sob a policy de `workers` quando quem olha é um terceiro (ex.: freela vendo o perfil
+ * público de OUTRA empresa) e degradavam em silêncio para "Freela"/"Empresa" genérico. A RPC
+ * deriva os avaliadores da própria `reviews` (não recebe lista de ids do caller — evita virar
+ * oráculo de enumeração de nomes) e mascara o nome do avaliador para terceiros.
  */
 export default function ProfileReviews({
     reviewedId,
     reviewerRole,
+    title,
 }: {
     reviewedId: string;
     reviewerRole: 'company' | 'worker';
+    /**
+     * Título explícito do bloco. Opcional — sem ele, cai no comportamento histórico
+     * ("Avaliações sobre você" / "Avaliações sobre sua empresa"), que só faz sentido
+     * quando quem vê é o DONO do perfil (self-view em Profile.tsx/CompanyProfile.tsx).
+     * Em perfis públicos vistos por terceiros (ex.: CompanyPublicProfile.tsx), sempre
+     * passe um título explícito — o fallback fica falso ("sua empresa" para um freela
+     * que não tem empresa nenhuma).
+     */
+    title?: string;
 }) {
     const [reviews, setReviews] = useState<ReviewRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -34,38 +51,34 @@ export default function ProfileReviews({
     useEffect(() => {
         let active = true;
         const direction = reviewerRole === 'company' ? 'worker' : 'company';
-        const table = reviewerRole === 'company' ? 'companies' : 'workers';
-        const nameField = reviewerRole === 'company' ? 'name' : 'full_name';
 
         void (async () => {
             if (!reviewedId) { setLoading(false); return; }
             setLoading(true);
             try {
-                const { data, error } = await supabase
-                    .from('reviews')
-                    .select('id, rating, comment, created_at, reviewer_id')
-                    .eq('reviewed_id', reviewedId)
-                    .eq('direction', direction)
-                    .order('created_at', { ascending: false });
+                const { data, error } = await supabase.rpc('get_profile_reviews', {
+                    p_reviewed_id: reviewedId,
+                    p_direction: direction,
+                });
                 if (error) throw error;
 
-                const rows = (data ?? []) as Omit<ReviewRow, 'reviewer_name'>[];
-                const reviewerIds = [...new Set(rows.map(r => r.reviewer_id).filter(Boolean))];
-                const nameMap = new Map<string, string>();
-                if (reviewerIds.length > 0) {
-                    const { data: names } = await supabase
-                        .from(table)
-                        .select(`id, ${nameField}`)
-                        .in('id', reviewerIds);
-                    (names ?? []).forEach((n: Record<string, unknown>) => {
-                        nameMap.set(n.id as string, (n[nameField] as string) || '');
-                    });
-                }
+                const rows = (data ?? []) as {
+                    review_id: string;
+                    rating: number;
+                    comment: string | null;
+                    created_at: string;
+                    reviewer_id: string;
+                    reviewer_name: string | null;
+                }[];
 
                 if (!active) return;
                 setReviews(rows.map(r => ({
-                    ...r,
-                    reviewer_name: nameMap.get(r.reviewer_id) || (reviewerRole === 'company' ? 'Empresa' : 'Freela'),
+                    id: r.review_id,
+                    rating: Number(r.rating) || 0,
+                    comment: r.comment,
+                    created_at: r.created_at,
+                    reviewer_id: r.reviewer_id,
+                    reviewer_name: r.reviewer_name?.trim() || (reviewerRole === 'company' ? 'Empresa' : 'Freela'),
                 })));
             } catch (error) {
                 logError('ProfileReviews', error);
@@ -79,7 +92,7 @@ export default function ProfileReviews({
     return (
         <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
             <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                <MessageSquareQuote size={20} /> Avaliações sobre {reviewerRole === 'company' ? 'você' : 'sua empresa'}
+                <MessageSquareQuote size={20} /> {title ?? `Avaliações sobre ${reviewerRole === 'company' ? 'você' : 'sua empresa'}`}
             </h3>
 
             {loading ? (

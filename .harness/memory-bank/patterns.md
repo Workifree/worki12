@@ -217,43 +217,26 @@ export const PaymentMethodService = {
 `invokeFunction`. Leituras usam `supabase` direto. Sem React Query (Article 5 — inconsistência). Service exporta
 objeto com métodos; no frontend chamar via `services/api.ts invokeFunction()` + error handling centralizado em `lib/logger.ts`.
 
-## Idempotência de alerta via link estável + SELECT-before-INSERT (Slice 3)
+## ⚠️ Idempotência de alerta via link estável + SELECT-before-INSERT (Slice 3 — REMOVIDO, piloto)
 
+**HISTÓRICO:** Padrão da Slice 3 (camada BI com `spendLimitService`). Alerta de teto de gasto via `/company/financeiro` foi removido na Onda 2 do piloto. 
+Services `spendLimitService` e `financialBIService` não existem mais. Reabertura: opt-in futuro por gatilho do ADR-20260630.
+
+**Padrão permanente — Idempotência de notificação via link único (post-removível):**
+Se uma notificação usa um `link` estável como chave de idempotência (ex.: `/company/worker/:id` para novo membro da equipe), o padrão SELECT-before-INSERT permanece válido:
 ```ts
-// Service: spendLimitService.evaluateSpendAlert
-async evaluateSpendAlert(companyId: string, now: Date = new Date()): Promise<void> {
-  // 1. Computar gasto e comparar com teto
-  const spend = await computeAccumulatedSpend(companyId, now);
-  const highestCrossed = determineHighestThreshold(spend, limit); // null | number | 'OVER'
-  if (!highestCrossed) return;
+// SELECT-before-INSERT: verificar se já existe notificação com este link
+const { data: existing } = await supabase
+  .from('notifications')
+  .select('id')
+  .eq('user_id', userId)
+  .eq('link', stableLink)
+  .limit(1)
+  .maybeSingle();
 
-  // 2. Construir chave de idempotência (link estável por período/threshold)
-  const alertLink = `/company/financeiro?alert=${companyId}:${yyyymm(now)}:${highestCrossed}`;
-
-  // 3. SELECT-before-INSERT: verificar se já existe
-  const { data: existing } = await supabase
-    .from('notifications')
-    .select('id')
-    .eq('user_id', ownerId)
-    .eq('link', alertLink)
-    .limit(1)
-    .maybeSingle();
-  
-  if (existing) return; // Idempotência: alerta já enviado
-
-  // 4. Inserir notificação (novo — policy 20260623000200 destrava INSERT para authenticated)
-  await supabase.from('notifications').insert({
-    user_id: ownerId,
-    type: 'payment',
-    title, message, link: alertLink,
-  });
-}
+if (existing) return; // Idempotência: notificação já enviada
 ```
-
-**Razão:** alerta pode rodar múltiplas vezes no período (retry, cron, etc.). Link estável (companyId:YYYYMM:threshold) como chave de idempotência
-garante que o mesmo alerta NÃO é gravado em dobro. SELECT-before-INSERT cai em race condition? Não: notifications INSERT é rápido
-e o pior caso (dois alerts chegam simultâneos) expõe 2 notificações idênticas por 1 segundo — UX aceitável em alerta (não dinheiro).
-Policy `WITH CHECK (auth.uid() = user_id)` (nova 20260623000200) destrava INSERT do client (spendLimitService roda com role authenticated, owner inserindo para si).
+Policy `WITH CHECK (auth.uid() = user_id)` destrava INSERT do client (usuário inserindo notificação para si — usado em operações best-effort).
 
 ## Agregados do worker via função idempotente SECURITY DEFINER (Slice 4)
 
@@ -367,20 +350,141 @@ BEGIN
 END;
 $$;
 
--- UNIQUE parcial: 1 marcador ativo por turno (scheduled OU recorded)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_active
-    ON public.shift_payments (job_id)
+-- UNIQUE parcial: 1 marcador ativo por (turno, freela) — ADR-20260816
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_worker_active
+    ON public.shift_payments (job_id, worker_id)
     WHERE status IN ('scheduled', 'recorded');
 ```
 
 **Razão:** modo A (pagamento externo registrado) precisa de promessa com data (uso real: empresa paga freela em data futura, não na hora). 
 `scheduled` é **auditoria** (não move saldo, Article 8 intacto). `paid_at` deve ser **fato verdadeiro** (data real), nunca data futura disfarçada; 
 logo nullable até efetivação. Trigger libera SÓ a transição `scheduled→recorded` do `paid_at` (NULL→data real, uma vez) — garante imutabilidade pós-efetivação. 
-UNIQUE ativo barra 2 promessas OU promessa+pagamento em linhas distintas do mesmo turno; N linhas `voided` OK (reagendar). BI conta SÓ `recorded` 
-(promessa ≠ liquidação).
 
----
+O índice original assumia "1 freela por turno" (premissa não examinada, herdada de HALT sobre dimensão temporal). Achado do harness-evaluator: **um turno pode ter N freelas** 
+(painel pós-criação de `CompanyCreateJob` convida vários). O UNIQUE foi trocado de `(job_id)` para `(job_id, worker_id)` (ADR-20260816) — agora barram 2 promessas OU promessa+pagamento 
+**por freela do mesmo turno**, não por turno (granularidade volta a bater com `escrow_transactions`). N linhas `voided` OK (reagendar). BI conta SÓ `recorded` (promessa ≠ liquidação).
 
-## Padrões a serem extraídos
+## Ordem crítica: frontend + adaptação ANTES de alargamento de constraint (Onda 1 — Revisão Piloto)
 
-> Conforme novas tasks consolidam padrões, popular aqui via `harness-memory-updater` ou edição direta.
+```
+PROBLEMA: constraint alarga o que o DB aceita (ex.: `UNIQUE(job_id)` → `UNIQUE(job_id, worker_id)`)
+→ múltiplas linhas casam com a mesma chave nova.
+
+Quatro leituras do client usavam `.maybeSingle()` com a premissa "≤1 resultado". Se aplicar a migration
+antes de adaptar o frontend, `.maybeSingle()` falha com PGRST116 (esperava 1, achou 2+), que o app trata
+como null — a UI fica CEGA para ambas as linhas (card oferece "Registrar" para payment que existe; recibo 
+diz "não encontrado" — PIOR que erro alto).
+
+SOLUÇÃO (dois passos):
+1. FRONTEND PRIMEIRO: adaptar o client para filtrar por nova dimensão da chave (ex.: `worker_id`).
+   Compatível com banco ATUAL (query por freela devolve ≤1 linha). Pode ir a produção sozinho.
+2. MIGRATION DEPOIS: criar novo índice ANTES de dropar o antigo (mesma transação); é um puro 
+   destravamento, sem exigir mudança adicional de client.
+
+Se o relógio do produto acabar entre os passos, o passo 1 converte erro silencioso em erro honesto
+("outro freela deste turno já tem pagamento ativo") com contorno operacional.
+
+Referência: ADR-20260816-marcador-pagamento-por-freela.md §Ordem de aplicação
+```
+
+**Razão:** toda mudança de constraint MAIS FROUXA precisa de adaptação de código primeiro. Reverso (aplicar schema antes de adaptar client) cria instante de vulnerabilidade onde dados válidos quebram queries antigas.
+
+## DELETE/UPDATE sob RLS negado silenciosamente (Onda 1 — Revisão Piloto)
+
+```tsx
+// ✗ ERRADO — assume que DELETE sempre remove
+const result = await supabase
+  .from('team_connections')
+  .delete()
+  .eq('worker_id', workerId)
+  .eq('company_id', companyId);
+// Se a policy USING bloqueia a linha, retorna 0 sem erro (não é EXCEPTION).
+// A UI mente: "removido" quando na verdade foi "negado por RLS".
+
+// ✓ CORRETO — .select() para distinguir "negado" de "sucesso"
+const { data, error } = await supabase
+  .from('team_connections')
+  .delete()
+  .eq('worker_id', workerId)
+  .eq('company_id', companyId)
+  .select('id');  // ← obrigatório (SEM maybeSingle())
+
+if (!data || data.length === 0) {
+  // RLS bloqueou (linha nenhuma casou o USING) — não há erro, só 0 linhas afetadas
+  return { success: false, error: 'Não foi possível remover este freela: ele encerrou a conexão com a sua empresa.' };
+}
+
+// Realmente removido
+return { success: true };
+```
+
+**Razão:** DELETE/UPDATE sob RLS que não casa com a cláusula USING retorna PostgREST status 204 (sem erro). Padrão obrigatório
+em toda operação destrutiva guardada por RLS. Exemplo real: `teamConnectionService.removeFromTeam()` (migração `20260816000000`)
+impede DELETE de linhas `status='blocked'` bloqueadas pelo worker — precisa de `.select()` para saber se foi negado.
+
+## WhatsApp como canal de notificação sem backend (aviso manual de convite)
+
+```ts
+// shiftInviteService.ts — helpers puros de normalização e montagem de mensagem
+export function normalizePhoneForWhatsApp(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  
+  // Já veio com DDI 55 (12 = DDD + 8 dígitos + 55; 13 = DDD + 9 dígitos + 55)
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+    return digits;
+  }
+  
+  // Número local sem DDI (10 = fixo, 11 = celular)
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  
+  return null; // Formato inválido — nunca cria `wa.me/undefined`
+}
+
+export function buildShiftInviteWhatsAppMessage(params: {
+  companyName: string;
+  jobTitle: string;
+  dateLabel?: string | null;  // Pré-formatado (ex.: "16/08/2026")
+  timeLabel?: string | null;  // Pré-formatado (ex.: "08:00 às 17:00")
+  location?: string | null;
+  amount?: number | null;      // Em BRL
+  appUrl: string;             // Link deep-linkado para o app
+}): string {
+  // Linhas compostas, filtro de nulls, join com \n
+  const lines = [
+    `Oi! Aqui é ${params.companyName || 'a empresa'} pelo Worki.`,
+    `Te convidei para o turno "${params.jobTitle}"${params.dateLabel ? `, ${params.dateLabel}` : ''}${params.timeLabel ? ` (${params.timeLabel})` : ''}.`,
+    params.location ? `Local: ${params.location}` : null,
+    typeof params.amount === 'number' && params.amount > 0
+      ? `Valor: R$ ${params.amount.toFixed(2).replace('.', ',')}`
+      : null,
+    '',
+    `Dá uma olhada e responde no app: ${params.appUrl}`,
+  ].filter((line): line is string => line !== null);
+  
+  return lines.join('\n');
+}
+
+// Uso em CompanyJobCandidates.tsx:
+const phone = normalizePhoneForWhatsApp(worker.phone);
+if (phone) {
+  const message = buildShiftInviteWhatsAppMessage({
+    companyName: companyName,
+    jobTitle: job.title,
+    dateLabel: formatDate(job.start_date),
+    timeLabel: `${job.start_time} às ${job.end_time}`,
+    location: job.location,
+    amount: job.budget,
+    appUrl: `${APP_URL}/my-jobs?invite=${application.id}`,
+  });
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+}
+```
+
+**Razão:** convite push só existe dentro do app (notificação do navegador não sobrevive à aba fechada). Sem push/SMS nativo, o telefone cadastrado é o único
+canal fora do app que a empresa tem à mão. Funções puras (sem I/O) — testáveis isoladas. Normalização de DDI é essencial: formato brasileiro mascarado
+("(11) 99999-9999") vira "5511999999999"; invalido retorna `null` evitando links quebrados (`wa.me/undefined`). Mensagem pré-formatada (data, hora, valor, link do app)
+oferece experiência profissional no WhatsApp — não é genérica ("você recebeu um convite"), mas contextualizada (turno, dia, valor, localização).

@@ -10,12 +10,12 @@ Gerencie sua equipe de freelancers, crie turnos e contrate com confiança.
 
 **Comece aqui:**
 1. Leia [Guia da Empresa](./features-empresa.md) — passo a passo para usar a plataforma
-2. Consulte [Resumo das Mudanças (Slice 1)](./slice-1-overview.md) — o que é novo
 
 **Tópicos principais:**
-- Minha Equipe — adicionar freelancers por link ou Worki ID
-- Criar e convidar para turno (novo: campo Briefing)
-- Acompanhar respostas dos freelancers
+- Minha Equipe (Elenco) — adicionar freelancers por link, QR ou Worki ID
+- Visualizar perfil de freelancer — veja especialidades, histórico e avaliações
+- Criar e convidar para turno — com campo Briefing pré-preenchido
+- Registrar Pagamento — pague direto (PIX/dinheiro) e gere recibo
 - Avaliar freelancers após o trabalho
 
 ---
@@ -26,28 +26,23 @@ Encontre oportunidades, responda convites de empresas e ganhe com flexibilidade.
 
 **Comece aqui:**
 1. Leia [Guia do Freelancer](./features-worker.md) — como funciona tudo
-2. Consulte [Resumo das Mudanças (Slice 1)](./slice-1-overview.md) — novidades
 
 **Tópicos principais:**
-- Seu QR de Identidade — compartilhe com empresas que você trabalha
-- Aba "Convites" — responda aos convites de turno
-- Aceitar convite por link — entre na equipe de uma empresa
+- Configurar Chave PIX — para a empresa pagar você rápido via PIX
+- Meus Recebimentos — acompanhe todos os pagamentos registrados pelas empresas
+- Carteira de Clientes — veja empresas que você trabalha regularmente
+- Perfil Público da Empresa — conheça a empresa antes de aceitar convite
+- Aba "Convites" em Meus Jobs — responda aos convites de turno
+- Recibos de Pagamento — acesse e confirme comprovantes bilaterais
 - Avaliar empresas após o trabalho
 
 ---
 
-## Próximas Fases
+## Futuros Aprimoramentos
 
-### Slice 2 (Em Desenvolvimento)
-- Pagamento postpago (cobra ao fim do turno, não depósito antecipado)
-- Escrow automático (valor reservado até conclusão)
-- WhatsApp para notificações
-- Check-in/out por QR
-
-### Versão 1.1
-- QR Scanner (empresa aponta câmera pro QR do freelancer)
-- Busca de freelancers por telefone/CPF
-- Histórico importado (MOMMA → Worki)
+**Em Planejamento:**
+- Notificações via WhatsApp
+- Novas opções de pagamento (cartão de crédito postpago — Modo B/C)
 
 ### Fase 2
 - BI financeiro (gasto, horas, tendência)

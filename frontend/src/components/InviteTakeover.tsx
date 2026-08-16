@@ -16,7 +16,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, MapPin } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, MapPin, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useNotifications } from '../contexts/NotificationContext';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
@@ -54,6 +55,7 @@ function maybeNotifyBrowser(title: string, body: string): void {
 }
 
 export default function InviteTakeover() {
+  const navigate = useNavigate();
   const { pendingInvites, loading, respondingId, respond, refresh } = useWorkerInvites();
   const { notifications } = useNotifications();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -88,8 +90,10 @@ export default function InviteTakeover() {
   if (loading || !visibleInvite) return null;
 
   const job = visibleInvite.job;
-  const companyName = (job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
-  const companyLogo = (job?.company as { logo_url?: string | null } | undefined)?.logo_url ?? null;
+  const companyInfo = job?.company;
+  const companyName = companyInfo?.name ?? 'Empresa';
+  const companyLogo = companyInfo?.logo_url ?? null;
+  const companyId = companyInfo?.id;
   const jobTitle = job?.title ?? 'Turno';
   const budget = job?.budget ?? 0;
   const startDate = job?.start_date
@@ -113,6 +117,14 @@ export default function InviteTakeover() {
     await respond(visibleInvite.id, response);
   };
 
+  // Convite continua pendente após a navegação — só dispensamos o overlay (não respondemos).
+  // Ele reaparece na próxima verificação enquanto o convite seguir 'invited'.
+  const handleViewCompany = () => {
+    if (!companyId) return;
+    dismiss();
+    navigate(`/empresa/${companyId}`);
+  };
+
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -134,21 +146,47 @@ export default function InviteTakeover() {
           Convite de turno
         </span>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-            {companyLogo ? (
-              <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Building2 size={22} className="text-gray-400" />
-              </div>
-            )}
+        {companyId ? (
+          <button
+            type="button"
+            onClick={handleViewCompany}
+            className="flex items-center gap-3 mb-4 w-full text-left group"
+            aria-label={`Ver perfil da empresa ${companyName}`}
+          >
+            <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+              {companyLogo ? (
+                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Building2 size={22} className="text-gray-400" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase text-gray-400">Empresa</p>
+              <p className="font-black uppercase truncate group-hover:text-primary transition-colors">{companyName}</p>
+            </div>
+            <span className="flex items-center gap-1 text-xs font-black uppercase text-primary flex-shrink-0">
+              Ver perfil <ChevronRight size={16} />
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+              {companyLogo ? (
+                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Building2 size={22} className="text-gray-400" />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase text-gray-400">Empresa</p>
+              <p className="font-black uppercase">{companyName}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-bold uppercase text-gray-400">Empresa</p>
-            <p className="font-black uppercase">{companyName}</p>
-          </div>
-        </div>
+        )}
 
         <h2 id="invite-takeover-title" className="font-black text-2xl uppercase mb-3">
           {jobTitle}

@@ -33,6 +33,13 @@ export interface CreateConnectionResult {
   error?: string;
   /** true quando a conexão já existia (idempotência de convite de equipe) */
   alreadyExists?: boolean;
+  /**
+   * true quando a conexão já existia e está `blocked` (freela vetou a empresa).
+   * Distinto de `alreadyExists` puro — a UI não deve dizer "já está no elenco"
+   * quando na verdade o freela bloqueou (a migration de guarda de DELETE impede
+   * a empresa de reabrir isso sozinha).
+   */
+  blocked?: boolean;
 }
 
 export interface UpdateConnectionResult {
@@ -125,6 +132,7 @@ export const TeamConnectionService = {
         return {
           connection: existing as TeamConnection,
           alreadyExists: true,
+          blocked: (existing as TeamConnection).status === 'blocked',
         };
       }
 
@@ -143,6 +151,14 @@ export const TeamConnectionService = {
         // Corrida: insert concorrente pode ter criado antes de nós (race condition)
         if (error.code === '23505') {
           return { connection: null, alreadyExists: true };
+        }
+        // FK violation (worker_id não existe em `workers`) — desde a migration
+        // 20260816120000_workers_select_by_relationship.sql a policy de SELECT em `workers`
+        // é escopada por vínculo, então não dá mais pra pré-checar a existência do worker
+        // antes de ter conexão; a FK do INSERT em team_connections é quem sinaliza worker
+        // inexistente/token malformado agora.
+        if (error.code === '23503') {
+          return { connection: null, error: 'Link de contato inválido ou expirado.' };
         }
         logError('teamConnection.addToTeam.insert', error);
         return { connection: null, error: 'Não foi possível adicionar o freela à equipe.' };
@@ -251,25 +267,19 @@ export const TeamConnectionService = {
    *
    * Se a sessão ativa não for de uma empresa, `addToTeam` retorna o erro de
    * `getAuthenticatedCompanyId()` (ex.: "Perfil de empresa não encontrado.").
+   *
+   * NÃO pré-checa a existência do worker em `workers` — desde a migration
+   * 20260816120000_workers_select_by_relationship.sql a policy de SELECT em `workers` é
+   * escopada por vínculo (worker dono, ou empresa com `team_connections`/`applications`
+   * já existentes). Antes de qualquer conexão existir, esse pré-check sempre retornaria
+   * "não encontrado" mesmo para um link válido. A FK `team_connections.worker_id
+   * REFERENCES workers(id)` já garante a integridade no INSERT (`addToTeam` trata
+   * `error.code === '23503'` como "Link de contato inválido ou expirado.").
    */
   async addWorkerToTeamByToken(token: string): Promise<CreateConnectionResult> {
     const workerId = this.resolveWorkerInviteToken(token);
     if (!workerId) {
       return { connection: null, error: 'Link de contato inválido ou expirado.' };
-    }
-
-    const { data: worker, error: workerErr } = await supabase
-      .from('workers')
-      .select('id')
-      .eq('id', workerId)
-      .maybeSingle();
-
-    if (workerErr) {
-      logError('teamConnection.addWorkerToTeamByToken.check', workerErr);
-      return { connection: null, error: 'Erro ao verificar o freela do link.' };
-    }
-    if (!worker) {
-      return { connection: null, error: 'Freela do link não encontrado.' };
     }
 
     return this.addToTeam(workerId, 'link');
@@ -356,18 +366,26 @@ export const TeamConnectionService = {
         };
       }
 
-      const { error } = await supabase
+      // .select('id') obrigatório (patterns.md): sob RLS um UPDATE que não casa com o
+      // USING retorna 0 linhas sem erro (PostgREST 204) — sem isso a UI diria "aceito"
+      // mesmo quando a conexão mudou de estado entre o fetch acima e este UPDATE.
+      const { data, error } = await supabase
         .from('team_connections')
         .update({
           status: 'accepted' as TeamConnectionStatus,
           accepted_at: new Date().toISOString(),
         })
         .eq('id', connectionId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .select('id');
 
       if (error) {
         logError('teamConnection.acceptConnection.update', error);
         return { success: false, error: 'Erro ao aceitar conexão.' };
+      }
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível aceitar: esta conexão não está mais disponível.' };
       }
 
       return { success: true };
@@ -409,18 +427,26 @@ export const TeamConnectionService = {
         return { success: true }; // já bloqueada — idempotente
       }
 
-      const { error } = await supabase
+      // .select('id') obrigatório (patterns.md): este é o VETO do freela — se o UPDATE for
+      // negado pelo RLS (0 linhas, sem erro/204) e a UI disser "sucesso" mesmo assim, o
+      // freela acredita ter saído da equipe/bloqueado a empresa quando na verdade não saiu.
+      const { data, error } = await supabase
         .from('team_connections')
         .update({
           status: 'blocked' as TeamConnectionStatus,
           blocked_by: user.id,
         })
         .eq('id', connectionId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .select('id');
 
       if (error) {
         logError('teamConnection.blockConnection.update', error);
         return { success: false, error: 'Erro ao bloquear conexão.' };
+      }
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível bloquear: tente novamente ou atualize a página.' };
       }
 
       return { success: true };
@@ -458,7 +484,9 @@ export const TeamConnectionService = {
             rating_average,
             reviews_count,
             completed_jobs_count,
-            city
+            city,
+            phone,
+            pix_key
           )
         `,
         )
@@ -639,23 +667,79 @@ export const TeamConnectionService = {
   // -------------------------------------------------------------------------
 
   /**
+   * Retorna o status da conexão empresa↔worker ('pending' | 'accepted' | 'blocked'), ou `null`
+   * se não existir conexão nenhuma. Uma única query — quem precisar só do booleano "está no
+   * elenco" usa `isWorkerInTeam`; quem precisar diferenciar "sem vínculo" de "convite pendente"
+   * (ex.: copy de `WorkerPublicProfile`) usa este método direto, sem query extra em cascata.
+   */
+  async getConnectionStatus(
+    companyId: string,
+    workerId: string,
+  ): Promise<TeamConnectionStatus | null> {
+    const { data, error } = await supabase
+      .from('team_connections')
+      .select('status')
+      .eq('company_id', companyId)
+      .eq('worker_id', workerId)
+      .maybeSingle();
+
+    if (error) {
+      logError('teamConnection.getConnectionStatus', error);
+      return null;
+    }
+
+    return (data?.status as TeamConnectionStatus | undefined) ?? null;
+  },
+
+  /**
    * Retorna true se o worker for conexão 'accepted' da empresa.
    * Usado antes de criar um convite de turno (R5/ADR-001).
    */
   async isWorkerInTeam(companyId: string, workerId: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('team_connections')
-      .select('id')
-      .eq('company_id', companyId)
-      .eq('worker_id', workerId)
-      .eq('status', 'accepted')
-      .maybeSingle();
+    const status = await this.getConnectionStatus(companyId, workerId);
+    return status === 'accepted';
+  },
 
-    if (error) {
-      logError('teamConnection.isWorkerInTeam', error);
-      return false;
+  /**
+   * Remove um worker da equipe da empresa autenticada (apaga conexão em team_connections).
+   *
+   * A migration `20260816000000_team_connections_delete_guard_blocked.sql` adicionou uma
+   * guarda de consentimento na policy de DELETE: a empresa não pode mais apagar uma conexão
+   * que o FREELA bloqueou (`status='blocked' AND blocked_by <> auth.uid()`). Em RLS, uma linha
+   * fora do `USING` não gera erro — o DELETE simplesmente afeta 0 linhas e o PostgREST devolve
+   * 204. Por isso o `.select('id')` abaixo: sem ele não dá pra distinguir "removeu de fato" de
+   * "RLS negou silenciosamente", e a UI mostraria "Freela removido do elenco." sem ter
+   * removido nada.
+   */
+  async removeFromTeam(workerId: string): Promise<UpdateConnectionResult> {
+    try {
+      const companyId = await getAuthenticatedCompanyId();
+      const { data, error } = await supabase
+        .from('team_connections')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('worker_id', workerId)
+        .select('id');
+
+      if (error) {
+        logError('teamConnection.removeFromTeam', error);
+        return { success: false, error: 'Erro ao remover freela do elenco.' };
+      }
+
+      if (!data || data.length === 0) {
+        return {
+          success: false,
+          error: 'Não foi possível remover este freela: ele encerrou a conexão com a sua empresa.',
+        };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('teamConnection.removeFromTeam', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro inesperado ao remover freela.',
+      };
     }
-
-    return !!data;
   },
 };

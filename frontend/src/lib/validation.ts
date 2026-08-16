@@ -2,10 +2,11 @@
  * Funcoes de validacao reutilizaveis para CPF, CNPJ, email e forca de senha.
  */
 
-/** Valida CPF (somente digitos, 11 chars) */
+/** Valida CPF (aceita com ou sem formatacao, 11 digitos) */
 export function validateCPF(cpf: string): boolean {
-    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-    const d = cpf.split('').map(Number);
+    const clean = cpf.replace(/\D/g, '');
+    if (clean.length !== 11 || /^(\d)\1{10}$/.test(clean)) return false;
+    const d = clean.split('').map(Number);
     let s = 0;
     for (let i = 0; i < 9; i++) s += d[i] * (10 - i);
     let r = (s * 10) % 11; if (r === 10) r = 0;
@@ -16,7 +17,7 @@ export function validateCPF(cpf: string): boolean {
     return r === d[10];
 }
 
-/** Valida CNPJ (aceita com ou sem formatacao) */
+/** Valida CNPJ (aceita com ou sem formatacao, 14 digitos) */
 export function validateCNPJ(cnpj: string): boolean {
     const clean = cnpj.replace(/\D/g, '');
     if (clean.length !== 14 || /^(\d)\1{13}$/.test(clean)) return false;
@@ -33,6 +34,30 @@ export function validateCNPJ(cnpj: string): boolean {
     return (r < 2 ? 0 : 11 - r) === d[13];
 }
 
+/** Valida CPF (11 digitos) ou CNPJ (14 digitos) */
+export function validateCPFOrCNPJ(doc: string): boolean {
+    const clean = doc.replace(/\D/g, '');
+    if (clean.length === 11) return validateCPF(clean);
+    if (clean.length === 14) return validateCNPJ(clean);
+    return false;
+}
+
+/** Aplica mascara dinamica de CPF (ate 11 digitos) ou CNPJ (ate 14 digitos) */
+export function formatCpfCnpj(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 11) {
+        return digits
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    return digits
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Valida formato de email */
@@ -45,6 +70,21 @@ export interface PasswordStrength {
     color: string;
     width: string;
     score: number;
+}
+
+/** Tipo de chave PIX — usado por qualquer tela que colete/edite a chave (onboarding, perfil). */
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
+
+/**
+ * Normaliza a chave PIX ANTES de persistir — digitos apenas para CPF/CNPJ/telefone (e o que
+ * o app do banco espera ao colar); e-mail e chave aleatoria vao como digitados (so trim). A
+ * mascara de exibicao no input (pontos/tracos/parenteses) e so visual, nunca deve ir pro banco.
+ */
+export function normalizePixKeyForStorage(type: PixKeyType, value: string): string {
+    if (type === 'cpf' || type === 'cnpj' || type === 'telefone') {
+        return value.replace(/\D/g, '');
+    }
+    return value.trim();
 }
 
 /** Avalia forca da senha */

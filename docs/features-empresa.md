@@ -1,6 +1,44 @@
 # Guia da Empresa — Worki
 
-Bem-vindo ao Worki! Este guia mostra como usar a plataforma para gerenciar sua equipe de freelancers e contratar para turnos.
+Bem-vindo ao Worki! Este guia mostra como usar a plataforma para gerenciar sua equipe de freelancers, criar turnos e acompanhar operações diárias.
+
+---
+
+## Meus Turnos
+
+**"Meus Turnos"** é sua agenda operacional de turnos — você vê todos os seus turnos organizados por dia para facilitar planejamento e acompanhamento.
+
+### Visualizar Agenda
+
+1. Vá para **Meus Turnos**
+2. Você vê turnos agrupados por:
+   - **Hoje** — turnos de hoje
+   - **Amanhã** — turnos para amanhã
+   - **Esta Semana** — próximos 6 dias
+   - **Depois** — turnos futuros (7+ dias)
+   - **Sem Data** — turnos sem data definida
+   - **Anteriores** — turnos passados (recolhido por padrão)
+
+### O Que Mostra Cada Linha
+
+Cada turno mostra:
+- **Horário** (ex.: 08:00 – 18:00)
+- **Título/Função** do turno
+- **Freelancer** atrelado (nome, avatar, estado: Contratado / Aguardando resposta / Finalizado)
+- **Alerta âmbar** se o turno é de hoje ou amanhã E ainda não tem freelancer — "Sem freela"
+
+### Ações Rápidas
+
+Clique em um turno ou no menu ⋮ para:
+- **Presença e Pagamento** — confirmar chegada/saída do freelancer e registrar/agendar pagamento
+- **Ver Detalhes** — informações completas do turno
+- **Editar** — ajustar título, horário, valor, etc.
+- **Pausar / Reativar** — pausar convite ou reabrir para novo convite
+- **Excluir** — remover o turno
+
+### Convidar Freelancer
+
+Se o turno não tem freelancer atrelado, clique **"Convidar Freela"** diretamente no card. Você será redirecionado para a tela de Presença e Pagamento, onde pode convidar um freela do seu elenco.
 
 ---
 
@@ -26,7 +64,12 @@ Você tem duas formas principais de adicionar freelancers:
 4. Cole o ID e envie o convite
 5. Ele receberá uma notificação e poderá aceitar
 
-**QR Scanner (v1.1):** Futuramente, você poderá escanear o código QR do perfil do freelancer com a câmera do seu celular.
+#### 3. QR Scanner
+1. Vá para **Minha Equipe**
+2. Clique em **"Adicionar Freela"** → aba **"QR"**
+3. Aponte a câmera para o código QR do perfil do freelancer
+4. O app reconhece e convida instantaneamente
+5. Freelancer aceita o convite → entra na sua equipe
 
 ### Visão de Minha Equipe
 
@@ -42,37 +85,112 @@ Quando você cria um turno, pode convidar direto um freelancer da sua equipe sem
 
 ### Passo 1: Criar um turno
 
-1. Vá para **Vagas** (aba de empresa) → **"Nova Vaga"**
-2. Preencha:
+1. Vá para **Meus Turnos**
+2. Clique **"Nova Vaga"** (botão azul/preto no topo)
+3. Preencha (campos obrigatórios):
    - **Título:** Ex. "Garçom - Turno Noturno"
    - **Função:** Ex. "Garçonete"
-   - **Data e horário:** Data do turno, horário início–fim
+   - **Data e horário:** Data do turno, horário início–fim (datas no passado não são permitidas)
    - **Valor:** Quanto você vai pagar (em reais)
    - **Local:** Endereço onde o turno acontece
-   - **Briefing:** (Novo!) Regras, dress code, cardápio, procedimentos. O freelancer vê isso quando recebe o convite.
-   - **Descrição:** Detalhes adicionais
+   - **Descrição:** Detalhes sobre o trabalho
+   - **Briefing:** Regras, dress code, procedimentos. O freelancer vê isso quando recebe o convite (pré-preenchido com seu briefing padrão, se configurado).
 
 3. Clique **"Criar Turno"**
 
 ### Passo 2: Convidar freelancer
 
-1. Turno criado → clique **"Convidar da Equipe"**
+Você tem duas formas de convidar:
+
+#### A. Ao criar o turno
+1. Turno criado → clique **"Convidar do Elenco"**
 2. Escolha um ou mais freelancers da sua equipe
 3. Clique **"Enviar Convites"**
+
+#### B. Direto do Meu Elenco
+1. Vá para **Meu Elenco**
+2. Clique no freelancer (abre card expandido)
+3. Botão **"Convidar para turno"** aparece na base
+4. Escolha um turno elegível (aberto, sem esse freelancer, data futura)
+5. Clique **"Convidar"**
 
 O freelancer recebe:
 - **Notificação no app** (com o sino)
 - **E-mail** com os detalhes
-- **WhatsApp** (em breve, v1.1)
 
 ### Passo 3: Acompanhar respostas
 
-Na página de detalhes do turno:
-- **✓ Aceito:** Freelancer confirmou. Ele está escalado.
+Na página **Presença e Pagamento** do turno:
+- **✓ Contratado:** Freelancer confirmou. Ele está escalado. Você vê chegada/saída e pode confirmar ou dispensar.
 - **✗ Recusado:** Slot reabre para convidar outro.
-- **⏳ Aguardando:** Convite ativo, esperando resposta.
+- **⏳ Aguardando resposta:** Convite ativo, esperando resposta.
 
 **Expiração:** Se o freelancer não responder em 48 horas, o convite expira e o slot reabre.
+
+### Passo 4: Gerenciar Convite Pendente
+
+Se o freelancer ainda não respondeu:
+- **Avisar no WhatsApp:** botão verde abre o WhatsApp com a mensagem pronta (turno, data, horário, valor)
+- **Cancelar Convite:** revoga o convite; o slot volta a ficar livre para convidar outro; freelancer é notificado
+
+### Passo 5: Gerenciar Freelancer Confirmado
+
+Após o freelancer aceitar:
+- **Confirmar Chegada / Saída:** registre horários quando o freelancer fizer check-in/checkout
+- **Dispensar do Turno:** se precisar remover o freelancer (ex.: faltou, não é mais necessário), clique "Dispensar" — exige confirmação explícita; freelancer é notificado
+  - ⚠️ Não é possível dispensar se já houve pagamento registrado ou agendado — é preciso estornar o pagamento antes
+- **Registrar / Agendar Pagamento:** página "Presença e Pagamento" (descrita abaixo)
+
+---
+
+## Presença e Pagamento
+
+Após o turno ser concluído, você gerencia chegada/saída do freelancer e registra ou agenda pagamento nesta tela unificada.
+
+### Acessar Presença e Pagamento
+
+1. Vá para **Meus Turnos**
+2. Clique no turno desejado (ou clique em seu nome no card)
+3. Ou clique **⋮ (menu)** → **"Presença e Pagamento"**
+
+### Confirmar Chegada
+
+1. Quando o freelancer chegar, ele faz check-in no app dele
+2. Você vê **"Aguardando confirmação"** → clique **"Confirmar Chegada"**
+3. Hora fica registrada (timestamp)
+
+### Confirmar Saída
+
+1. Quando terminar, freelancer faz checkout
+2. Você vê **"Aguardando confirmação"** → clique **"Confirmar Saída"**
+3. Hora fica registrada
+
+### Registrar Pagamento
+
+Após confirmar chegada E saída:
+
+1. Clique **"Registrar Pagamento"** ou **"Agendar Pagamento"**
+2. Preencha:
+   - **Valor:** quanto pagou
+   - **Fonte:** PIX, dinheiro ou outro
+   - **Data:** quando (ou data futura se agendando)
+   - **Observação (opcional):** ex. "PIX em 31/08"
+3. Chave PIX do freelancer vem pré-carregada — copie para pagar rápido
+4. Clique **"Confirmar"** → recibo gerado instantaneamente
+
+### Agendar Pagamento
+
+Mesmos passos acima, mas **"Agendar Pagamento"** permite marcar uma data futura. Gera um "Comprovante de Agendamento" que dá respaldo ao freelancer. Depois você marca como "Efetivado" quando de fato pagou.
+
+### Dispensar Freelancer
+
+Se o freelancer foi contratado mas precisa ser removido (ex.: faltou):
+
+1. Clique **"Dispensar"** no card
+2. Confirme a ação (é irreversível)
+3. Freelancer é notificado imediatamente
+
+⚠️ **Não é possível dispensar** se há pagamento já registrado ou agendado. Estorne o pagamento primeiro se precisar desfazer.
 
 ---
 
@@ -87,115 +205,8 @@ A avaliação ajuda ambos a construir reputação. **Recusar um convite não afe
 
 ---
 
-## Cartão de Crédito — Pagamento Postpago
-
-O Worki oferece agora **pagamento postpago**: você não precisa fazer depósito antecipado. Em vez disso, cadastra um cartão de crédito uma única vez. Quando o turno é concluído, **o Worki cobra automaticamente seu cartão e paga o freela** no mesmo instante.
-
-### Como cadastrar seu cartão
-
-1. Vá para **Carteira da Empresa** (no menu lateral)
-2. Procure pela seção **"Cartões de Crédito"**
-3. Clique em **"Adicionar"**
-4. Preencha:
-   - **Dados do cartão:** número, validade (mês/ano) e CVV
-   - **Nome do titular:** Quem é o dono do cartão
-   - **Dados pessoais:** nome completo, e-mail, CPF ou CNPJ, CEP, número do endereço e telefone
-5. Clique **"Salvar"**
-
-**Segurança:** O número do seu cartão (PAN) **não fica armazenado** no Worki. Ele é enviado diretamente para o gateway de pagamento (Asaas) e criptografado. O Worki só guarda informações públicas (bandeira, últimos 4 dígitos).
-
-### O que acontece na conclusão do turno
-
-1. Você (empresa) confirma a conclusão do turno no app
-2. O Worki autoriza uma cobrança no seu cartão pelo valor do turno
-3. Se a autorização passar:
-   - Seu cartão é debitado
-   - O freelancer recebe o valor na carteira dele **instantaneamente**
-4. Se a autorização falhar:
-   - Você recebe um aviso no app indicando que o pagamento foi recusado
-   - O turno **fica pendente de pagamento** — você pode tentar novamente ou usar outro método
-
-**Aviso importante:** Se o cartão for recusado repetidas vezes, o freelancer não receberá o pagamento. Certifique-se de manter um cartão válido cadastrado e com saldo disponível.
-
----
-
-## Painel Financeiro — Inteligência de Gastos
-
-O **Painel Financeiro** (`/company/financeiro`) ajuda você a controlar e entender seus gastos com freelancers. Acesse pelo menu lateral em **Financeiro** ou clique no card **"Painel Financeiro"** na sua Carteira.
-
-### Teto de Gasto Mensal
-
-Defina um limite de gasto com freelancers a cada mês:
-
-1. Clique em **"Configurar"** (ou **"Editar"** se já tiver um teto)
-2. Informe o valor em reais
-3. Você receberá **alertas in-app** quando atingir:
-   - **80%** do teto (atenção)
-   - **90%** do teto (último aviso)
-   - **100%** do teto (limite atingido)
-   
-**Em breve:** notificações via WhatsApp quando o teto está próximo de ser ultrapassado.
-
-### Faturamento do Mês
-
-Informe o faturamento bruto do seu negócio naquele mês:
-
-1. Clique em **"Informar"** (ou **"Atualizar"** se já tiver declarado)
-2. Informe o total de receita gerada
-3. Com o faturamento declarado, você destravaará o indicador **"Custo % Faturamento"**
-
-Esse valor é usado **apenas para seu cálculo interno** e não é compartilhado externamente.
-
-### Indicadores de Custo
-
-Três métricas ajudam você a medir a saúde financeira da operação:
-
-- **Custo Total:** Soma de todos os pagamentos aos freelancers no período
-- **Custo / Hora:** Média de quanto você paga por hora de trabalho
-- **Custo % Faturamento:** Percentual de custo de freelas sobre o faturamento declarado (desbloqueado quando você informa o faturamento)
-
-### Gasto por Freelancer
-
-Veja quanto você gastou com cada freelancer no mês:
-
-- **Ranking:** Freelancers listados do maior para o menor gasto
-- **Horas de trabalho:** Total de horas com aquele freela
-- **Quantidade de turnos:** Quantos turnos/vagas ele executou
-- **Fonte das horas:** Marcação especial se as horas foram calculadas automaticamente ou informadas manualmente
-- **Valor total:** Quanto você pagou no período
-
-Clique em **"Ver mais"** para expandir a lista completa.
-
-### Custo de No-Show
-
-Mostra os turnos que foram **aceitos mas não executados** (no-show):
-
-- **No-shows estimados:** Quantos turnos o freelancer aceitou mas não fez checkout
-- **Custo de oportunidade:** Quanto você deixou de ganhar com esses turnos
-
-**Nota:** É uma estimativa baseada em convites aceitos sem checkout. Se o sistema evoluir com uma coluna explícita de no-show, a precisão será maior.
-
-### Alerta de Concentração de Horas
-
-Protege você de risco trabalhista avaliando se um freelancer tem muitas horas/dias:
-
-- **Bandeira vermelha:** Quando um freela ultrapassa **150 horas** E **20 dias distintos** no mês
-- **Aviso:** "Risco de vínculo trabalhista detectado"
-
-Se um freela chegar nesse limite, **avalie com seu departamento jurídico** se há risco de caracterizar vínculo de emprego (CLT).
-
-### Filtro por Período
-
-Selecione qual mês você quer analisar:
-- **Mês atual** (padrão)
-- **Mês anterior**
-
-Os indicadores e alertas se atualizam conforme o período selecionado.
-
----
-
 ## Próximos Passos
 
-- **Carteira da Empresa** → Cadastre um cartão de crédito para pagar turnos
-- **Painel Financeiro** → Controle gastos, defina tetos e monitore concentração de freelas
+- **Meu Elenco** → Monte sua equipe de freelancers de confiança
+- **Meus Turnos** → Acompanhe turnos em andamento e histórico
 - **Suporte** → Dúvidas? Entre em contato via chat no app

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import NotificationBell from '../NotificationBell'
 
 const mockNavigate = vi.fn()
@@ -20,6 +20,7 @@ let mockNotifications: Array<{
   link?: string
 }> = []
 let mockUnreadCount = 0
+let mockUserType: string | undefined = undefined
 
 vi.mock('../../contexts/NotificationContext', () => ({
   useNotifications: () => ({
@@ -30,11 +31,18 @@ vi.mock('../../contexts/NotificationContext', () => ({
   }),
 }))
 
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: mockUserType === undefined ? null : { user_metadata: { user_type: mockUserType } },
+  }),
+}))
+
 describe('NotificationBell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNotifications = []
     mockUnreadCount = 0
+    mockUserType = undefined
   })
 
   it('renderiza icone de sino', () => {
@@ -93,5 +101,25 @@ describe('NotificationBell', () => {
     render(<NotificationBell />)
 
     expect(screen.getByText('9+')).toBeInTheDocument()
+  })
+
+  it('navega para /notifications ao clicar em "Ver todas" quando usuario e freela', () => {
+    mockUserType = 'freelancer'
+
+    render(<NotificationBell />)
+    fireEvent.click(screen.getByLabelText('Notifications'))
+    fireEvent.click(screen.getByText('Ver todas as notificações'))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/notifications')
+  })
+
+  it('navega para /company/notifications ao clicar em "Ver todas" quando usuario e empresa', () => {
+    mockUserType = 'hire'
+
+    render(<NotificationBell />)
+    fireEvent.click(screen.getByLabelText('Notifications'))
+    fireEvent.click(screen.getByText('Ver todas as notificações'))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/company/notifications')
   })
 })

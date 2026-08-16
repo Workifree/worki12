@@ -1,7 +1,7 @@
 # Design System — Worki (neo-brutalista, extraído do código)
 
-> Fonte da verdade visual do app. Extraído de telas/componentes canônicos: `JobCard`, `DepositModal`,
-> `Sidebar`, `ProtectedRoute`. Config de tokens: `frontend/tailwind.config.js`. Globais: `frontend/src/index.css`.
+> Fonte da verdade visual do app. Extraído de telas/componentes canônicos: `JobCard`, modais em
+> `CompanyJobCandidates.tsx`, `Sidebar`, `ProtectedRoute`. Config de tokens: `frontend/tailwind.config.js`. Globais: `frontend/src/index.css`.
 
 ## Identidade
 
@@ -38,7 +38,7 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
      </div>
    </div>
    ```
-   Referência: `DepositModal.tsx`.
+   Referência canônica: modal "Registrar Pagamento" em `pages/company/CompanyJobCandidates.tsx` (linhas ~1048-1190).
 
 4. **Tipografia:**
    - Título de página: `text-4xl font-black` (ou `text-3xl`), frequentemente `uppercase`.
@@ -112,7 +112,7 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 | Componente | Path | Para quê |
 |---|---|---|
 | `JobCard` | `frontend/src/components/JobCard.tsx` | card brutalista (variantes feed/search), referência de hover/sombra |
-| `DepositModal` | `frontend/src/components/DepositModal.tsx` | padrão de modal + tabs + breakdown de taxas |
+| Modal "Registrar Pagamento" | `frontend/src/pages/company/CompanyJobCandidates.tsx` (linhas ~1048-1190) | padrão de modal neo-brutalista com formulário |
 | `Sidebar` | `frontend/src/components/Sidebar.tsx` | navegação desktop + badge de verificação |
 | `BottomNav` | `frontend/src/components/BottomNav.tsx` | navegação mobile |
 | `EscrowStatusBadge` | `frontend/src/components/EscrowStatusBadge.tsx` | status de escrow padronizado |

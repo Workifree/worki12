@@ -123,16 +123,21 @@ export default function CompanyProfile() {
 
             // Tenta salvar com o briefing padrão; se a coluna ainda não foi migrada no
             // banco, refaz sem ela (deploy do frontend nunca quebra a edição do perfil).
-            let { error } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio).
+            let { data, error } = await supabase
                 .from('companies')
                 .update({ ...basePayload, default_briefing: company.default_briefing })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id');
 
             if (error && /default_briefing/i.test(error.message || '')) {
-                ({ error } = await supabase.from('companies').update(basePayload).eq('id', userId));
+                ({ data, error } = await supabase.from('companies').update(basePayload).eq('id', userId).select('id'));
             }
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
+            }
             initialCompanyRef.current = { ...company };
             addToast('Perfil atualizado com sucesso!', 'success');
             setIsEditing(false);
@@ -215,13 +220,18 @@ export default function CompanyProfile() {
             const field = type === 'logo' ? 'logo_url' : 'cover_url';
             setCompany(prev => ({ ...prev, [field]: publicUrl }));
 
-            // Save to DB immediately to persist
-            const { error: dbError } = await supabase
+            // Save to DB immediately to persist — .select('id') obrigatório (patterns.md —
+            // UPDATE sob RLS negado em silêncio).
+            const { data: dbData, error: dbError } = await supabase
                 .from('companies')
                 .update({ [field]: publicUrl })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id');
 
             if (dbError) throw dbError;
+            if (!dbData || dbData.length === 0) {
+                throw new Error('Não foi possível salvar a imagem: verifique se você ainda tem permissão para editar este perfil.');
+            }
 
             addToast(`${type === 'logo' ? 'Logo' : 'Capa'} atualizada com sucesso!`, 'success');
 
@@ -490,7 +500,7 @@ export default function CompanyProfile() {
                                             onChange={handleChange}
                                             aria-label="Setor"
                                             className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
-                                            placeholder="Ex: Tecnologia"
+                                            placeholder="Ex: Bar & Restaurante, Cafeteria, Eventos, Hotelaria"
                                         />
                                     ) : (
                                         <p className="text-lg font-medium text-gray-700">{company.industry || '—'}</p>
@@ -507,7 +517,7 @@ export default function CompanyProfile() {
                                             onChange={handleChange}
                                             aria-label="Descricao da empresa"
                                             className="w-full font-medium text-gray-700 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all min-h-[140px] resize-none"
-                                            placeholder="Conte sobre sua empresa..."
+                                            placeholder="Conte sobre sua operação, ambiente e estilo de atendimento..."
                                         />
                                     ) : (
                                         <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap">{company.description || 'Nenhuma descrição informada.'}</p>
@@ -625,14 +635,19 @@ export default function CompanyProfile() {
                     Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
                 </p>
                 {isEditing ? (
-                    <textarea
-                        name="default_briefing"
-                        value={company.default_briefing || ''}
-                        onChange={handleChange}
-                        aria-label="Briefing padrão do negócio"
-                        className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
-                        placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
-                    />
+                    <>
+                        <textarea
+                            name="default_briefing"
+                            value={company.default_briefing || ''}
+                            onChange={handleChange}
+                            aria-label="Briefing padrão do negócio"
+                            className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
+                            placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
+                        />
+                        <p className="text-xs font-bold text-yellow-700 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                            Visível para qualquer freela que abrir o perfil da sua empresa — não inclua senhas nem dados internos.
+                        </p>
+                    </>
                 ) : (
                     <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}

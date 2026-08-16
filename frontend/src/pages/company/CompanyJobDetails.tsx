@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Calendar, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { formatDateOnly } from '../../lib/dateUtils';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -25,6 +26,7 @@ export default function CompanyJobDetails() {
         scope: string;
         status: string;
         created_at: string;
+        start_date?: string | null;
         views?: number;
         work_start_time?: string;
         work_end_time?: string;
@@ -94,27 +96,55 @@ export default function CompanyJobDetails() {
     };
 
     const handleStatusChange = async (newStatus: string) => {
-        const { error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', id);
-        if (!error) fetchJobDetails();
+        // .select('id') obrigatório (patterns.md — DELETE/UPDATE sob RLS negado em silêncio):
+        // sem isso, um UPDATE negado pela RLS de `jobs` (ligada nesta revisão) devolve 204 sem
+        // erro e a UI ficaria presa mostrando o status antigo, sem avisar a empresa do motivo.
+        const { data, error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', id).select('id');
+        if (error) {
+            logError('CompanyJobDetails.handleStatusChange', error);
+            addToast('Não foi possível atualizar o turno. Tente novamente.', 'error');
+        } else if (!data || data.length === 0) {
+            addToast('Não foi possível atualizar o turno: verifique se você ainda tem permissão sobre ele.', 'error');
+        } else {
+            fetchJobDetails();
+        }
         setOpenMenu(false);
     };
 
     const handleDelete = async () => {
         if (!id) return;
 
-        // 1. Cancel hired workers' applications
-        await supabase.from('applications').update({ status: 'cancelled' }).eq('job_id', id).in('status', ['hired', 'in_progress']);
+        // 1. Cancel hired workers' applications — efeito colateral em LOTE: 0 linhas é
+        // legítimo (turno sem ninguém contratado), não é erro. Usa o retorno só para
+        // informar quantos freelas foram de fato notificados.
+        const { data: cancelledApps, error: cancelError } = await supabase
+            .from('applications')
+            .update({ status: 'cancelled' })
+            .eq('job_id', id)
+            .in('status', ['hired', 'in_progress'])
+            .select('id');
+        if (cancelError) {
+            logError('CompanyJobDetails.handleDelete.cancelApplications', cancelError);
+        }
+        const cancelledCount = cancelledApps?.length ?? 0;
 
         // 2. First refund any pending escrow back to the company wallet
         await WalletService.refundEscrow(id, 'Dinheiro retornado do escrow - turno deletado');
 
-        // 3. Then mark the job as deleted
-        const { error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', id);
-        if (!error) {
-            addToast('Turno excluído com sucesso.', 'success');
+        // 3. Then mark the job as deleted — gesto explícito com toast de sucesso: precisa
+        // de `.select('id')` para não afirmar "excluído" quando a RLS negou em silêncio.
+        const { data: deletedJob, error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', id).select('id');
+        if (!error && deletedJob && deletedJob.length > 0) {
+            addToast(
+                cancelledCount > 0
+                    ? `Turno excluído com sucesso. ${cancelledCount} freela${cancelledCount > 1 ? 's' : ''} notificado${cancelledCount > 1 ? 's' : ''}.`
+                    : 'Turno excluído com sucesso.',
+                'success'
+            );
             navigate('/company/jobs');
         } else {
-            addToast('Erro ao excluir turno.', 'error');
+            if (error) logError('CompanyJobDetails.handleDelete.deleteJob', error);
+            addToast('Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.', 'error');
         }
         setShowDeleteConfirm(false);
     };
@@ -141,7 +171,7 @@ export default function CompanyJobDetails() {
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                     <h3 className="text-xl font-black uppercase mb-2">Excluir Turno</h3>
-                    <p className="text-sm text-gray-600 mb-6">Tem certeza? O escrow será reembolsado e workers contratados serão notificados.</p>
+                    <p className="text-sm text-gray-600 mb-6">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
                     <div className="flex gap-3">
                         <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-bold uppercase text-sm hover:bg-gray-50">Cancelar</button>
                         <button onClick={handleDelete} className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white font-bold uppercase text-sm hover:bg-red-700">Excluir</button>
@@ -201,10 +231,12 @@ export default function CompanyJobDetails() {
                                 {job.status === 'open' ? 'Turno Ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
                             </span>
                             <h1 className="text-3xl font-black uppercase tracking-tight mb-2">{job.title}</h1>
-                            <div className="flex items-center gap-4 text-sm font-bold text-gray-500">
+                            <div className="flex items-center gap-4 text-sm font-bold text-gray-500 flex-wrap">
                                 <span className="flex items-center gap-1"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
-                                <span className="flex items-center gap-1"><MapPin size={16} /> Presencial</span>
-                                <span className="flex items-center gap-1"><Clock size={16} /> {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
+                                <span className="flex items-center gap-1 capitalize text-black">
+                                    <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
+                                </span>
+                                <span className="flex items-center gap-1"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
                             </div>
                         </div>
                         <div className="text-right">
@@ -230,7 +262,7 @@ export default function CompanyJobDetails() {
                                     <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Clock size={20} /> Horário</h3>
                                     <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-100 inline-block">
                                         <p className="font-bold">
-                                            {job.work_start_time} - {job.work_end_time}
+                                            {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
                                             {job.has_lunch && <span className="text-gray-400 ml-2">(1h almoço)</span>}
                                         </p>
                                     </div>

@@ -88,8 +88,7 @@ export function paymentReceivedEmail(workerName: string, amount: string, jobTitl
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
                 <h1 style="color:#00A651">Pagamento Recebido!</h1>
                 <p>Ola ${w}, voce recebeu <strong>R$ ${a}</strong> pelo turno <strong>${j}</strong>.</p>
-                <p>O valor ja esta disponivel na sua carteira. Voce pode sacar via PIX a qualquer momento.</p>
-                <a href="${APP_URL}/wallet" style="display:inline-block;background:#00A651;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:16px">Ver Carteira</a>
+                <a href="${APP_URL}/recebimentos" style="display:inline-block;background:#00A651;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:16px">Ver Meus Recebimentos</a>
                 <p style="color:#999;margin-top:24px;font-size:12px">Worki - Sua operação de freelas</p>
             </div>
         `,
@@ -105,8 +104,7 @@ export function depositConfirmedEmail(companyName: string, amount: string): Emai
         html: `
             <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
                 <h1 style="color:#2563EB">Deposito Confirmado!</h1>
-                <p>Ola ${c}, seu deposito de <strong>R$ ${a}</strong> foi confirmado e ja esta disponivel na sua carteira.</p>
-                <a href="${APP_URL}/company/wallet" style="display:inline-block;background:#2563EB;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:16px">Ver Carteira</a>
+                <p>Ola ${c}, seu deposito de <strong>R$ ${a}</strong> foi confirmado.</p>
                 <p style="color:#999;margin-top:24px;font-size:12px">Worki - Sua operação de freelas</p>
             </div>
         `,

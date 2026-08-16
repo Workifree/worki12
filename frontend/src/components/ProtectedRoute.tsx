@@ -145,7 +145,7 @@ export default function ProtectedRoute() {
     if (user && !roleRedirect) {
         const userType = user.user_metadata?.user_type;
         const pathname = location.pathname;
-        const workerOnlyPaths = ['/dashboard', '/my-jobs', '/carteira', '/wallet', '/messages', '/profile', '/notifications'];
+        const workerOnlyPaths = ['/dashboard', '/my-jobs', '/carteira', '/messages', '/profile', '/notifications', '/empresa', '/recebimentos'];
 
         if (userType === 'work' && pathname.startsWith('/company/')) {
             addToast('Você não tem permissão para acessar esta página.', 'error');

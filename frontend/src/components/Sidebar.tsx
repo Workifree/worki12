@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Wallet, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, TrendingDown, Contact, Inbox, Loader2, FileText } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -77,7 +77,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Home, label: 'Início', path: '/dashboard' },
         { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
-        { icon: Wallet, label: 'Carteira', path: '/wallet' },
+        { icon: Receipt, label: 'Meus Recebimentos', path: '/recebimentos' },
         { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];
@@ -88,8 +88,6 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
-        { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
-        { icon: TrendingDown, label: 'Financeiro', path: '/company/financeiro' },
         { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];
@@ -167,6 +165,14 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
                     {loggingOut ? 'Saindo...' : 'Sair'}
                 </button>
+
+                <NavLink
+                    to="/ajuda"
+                    className="flex items-center justify-center gap-1.5 w-full py-1 text-[11px] font-bold uppercase text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                    <HelpCircle size={12} />
+                    Ajuda
+                </NavLink>
             </div>
         </aside>
     );

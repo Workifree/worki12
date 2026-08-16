@@ -2,12 +2,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, Check, Info, MessageSquare, CreditCard, AlertCircle } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 
 export default function NotificationBell({ className = "" }: { className?: string }) {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+    const { user } = useAuth();
+    const userType = user?.user_metadata?.user_type as string | undefined;
+    const notificationsPath = userType === 'hire' ? '/company/notifications' : '/notifications';
     const [isOpen, setIsOpen] = useState(false);
     // O painel é renderizado num portal com posição `fixed` ancorada no sino —
     // assim ele escapa do `overflow-hidden` do menu lateral (Sidebar), que antes
@@ -149,7 +153,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                     </div>
                     <div className="border-t border-gray-100 p-3 text-center">
                         <button
-                            onClick={() => { setIsOpen(false); navigate('/notifications'); }}
+                            onClick={() => { setIsOpen(false); navigate(notificationsPath); }}
                             className="text-sm font-bold text-primary hover:underline"
                         >
                             Ver todas as notificações

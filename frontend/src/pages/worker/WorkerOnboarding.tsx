@@ -7,6 +7,25 @@ import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import PageMeta from '../../components/PageMeta';
 import { logError } from '../../lib/logger'
+import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
+
+const PIX_KEY_LABELS: Record<PixKeyType, string> = {
+    cpf: 'CPF',
+    cnpj: 'CNPJ',
+    email: 'E-mail',
+    telefone: 'Telefone',
+    aleatoria: 'Aleatória',
+};
+
+const PIX_KEY_PLACEHOLDERS: Record<PixKeyType, string> = {
+    cpf: '000.000.000-00',
+    cnpj: '00.000.000/0000-00',
+    email: 'seuemail@exemplo.com',
+    telefone: '(00) 00000-0000',
+    aleatoria: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function WorkerOnboarding() {
     const navigate = useNavigate();
@@ -25,6 +44,8 @@ export default function WorkerOnboarding() {
         city: '',
         cpf: '',
         birthDate: '',
+        pixKeyType: 'cpf' as PixKeyType,
+        pixKey: '',
         roles: [] as string[],
         experienceYears: '',
         bio: '',
@@ -33,8 +54,9 @@ export default function WorkerOnboarding() {
     });
 
     const rolesList = [
-        'Garçom', 'Cozinheiro', 'Barman', 'Atendente',
-        'Limpeza', 'Recepcionista', 'Promotor', 'Entregador', 'Segurança'
+        'Garçom', 'Atendente', 'Barista', 'Bartender', 'Cozinheiro',
+        'Auxiliar de Cozinha', 'Cumim', 'Recepcionista', 'Caixa',
+        'Copeiro', 'Limpeza / Steward', 'Segurança'
     ];
 
     const availabilityOptions = [
@@ -105,9 +127,37 @@ export default function WorkerOnboarding() {
         return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
     };
 
+    // Formata a chave PIX conforme o tipo escolhido (reusa as mascaras ja existentes).
+    const formatPixKey = (type: PixKeyType, value: string) => {
+        if (type === 'cpf' || type === 'cnpj') return formatCpfCnpj(value);
+        if (type === 'telefone') return formatPhone(value);
+        return value;
+    };
+
+    // Valida a chave PIX conforme o tipo — reusa lib/validation (validateCPFOrCNPJ, EMAIL_REGEX),
+    // sem reescrever validacao nova.
+    const isValidPixKey = () => {
+        const key = formData.pixKey.trim();
+        if (!key) return false;
+        switch (formData.pixKeyType) {
+            case 'cpf':
+                return key.replace(/\D/g, '').length === 11 && validateCPFOrCNPJ(key);
+            case 'cnpj':
+                return key.replace(/\D/g, '').length === 14 && validateCPFOrCNPJ(key);
+            case 'email':
+                return EMAIL_REGEX.test(key);
+            case 'telefone':
+                return key.replace(/\D/g, '').length >= 10;
+            case 'aleatoria':
+                return UUID_RE.test(key);
+            default:
+                return false;
+        }
+    };
+
     const canProceed = () => {
         switch (step) {
-            case 1: return formData.fullName && formData.phone && formData.cpf.replace(/\D/g, '').length === 11 && formData.birthDate && formData.city;
+            case 1: return !!(formData.fullName && formData.phone && formData.cpf.replace(/\D/g, '').length === 11 && formData.birthDate && formData.city && isValidPixKey());
             case 2: return formData.roles.length > 0 && formData.experienceYears;
             case 3: return formData.availability.length > 0 && tosAccepted;
             default: return true;
@@ -137,6 +187,7 @@ export default function WorkerOnboarding() {
                     city: formData.city,
                     cpf: formData.cpf.replace(/\D/g, ''),
                     birth_date: formData.birthDate,
+                    pix_key: normalizePixKeyForStorage(formData.pixKeyType, formData.pixKey),
                     roles: formData.roles,
                     experience_years: formData.experienceYears,
                     bio: formData.bio,
@@ -283,6 +334,37 @@ export default function WorkerOnboarding() {
                                             />
                                         </div>
                                     </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase mb-1">Tipo de Chave PIX *</label>
+                                            <select
+                                                required
+                                                value={formData.pixKeyType}
+                                                onChange={e => setFormData({ ...formData, pixKeyType: e.target.value as PixKeyType, pixKey: '' })}
+                                                aria-label="Tipo de chave PIX"
+                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
+                                            >
+                                                {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
+                                                    <option key={type} value={type}>{PIX_KEY_LABELS[type]}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase mb-1">Chave PIX *</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={formData.pixKey}
+                                                onChange={e => setFormData({ ...formData, pixKey: formatPixKey(formData.pixKeyType, e.target.value) })}
+                                                aria-label="Chave PIX"
+                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
+                                                placeholder={PIX_KEY_PLACEHOLDERS[formData.pixKeyType]}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        É assim que a empresa vai te pagar por fora do Worki (PIX). Escolha o tipo e informe a chave correspondente.
+                                    </p>
                                 </div>
                             </div>
                         )}

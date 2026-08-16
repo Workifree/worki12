@@ -12,6 +12,7 @@ interface ConversationItem {
     id: string;
     application_uuid: string;
     job_title: string;
+    company_id?: string;
     company_name: string;
     company_logo?: string;
     last_message?: string;
@@ -52,12 +53,18 @@ export default function Messages() {
             c.id === conversationId ? { ...c, unread_count: 0 } : c
         ));
 
-        await supabase
+        // read_at é baixo risco de UX (sem toast), mas merece log — não é hipotético:
+        // `Message` já teve RLS ligada sem policy de UPDATE nesta revisão (patterns.md).
+        const { error: msgError } = await supabase
             .from('Message')
             .update({ read_at: new Date().toISOString() })
             .eq('conversationid', conversationId)
             .neq('senderid', userId)
-            .is('read_at', null);
+            .is('read_at', null)
+            .select('id');
+        if (msgError) {
+            logError('Messages.markAsRead.Message', msgError);
+        }
 
         // Também limpa as notificações de mensagem do usuário (sino) — best-effort,
         // não deve quebrar o fluxo de leitura da conversa se falhar.
@@ -67,7 +74,8 @@ export default function Messages() {
                 .update({ read_at: new Date().toISOString() })
                 .eq('user_id', userId)
                 .eq('type', 'message')
-                .is('read_at', null);
+                .is('read_at', null)
+                .select('id');
             if (notifError) {
                 logError('Messages.markAsRead.notifications', notifError);
             }
@@ -103,6 +111,7 @@ export default function Messages() {
                         job:jobs (
                             title,
                             company:companies (
+                                id,
                                 name,
                                 logo_url
                             )
@@ -130,6 +139,7 @@ export default function Messages() {
                     job: {
                         title: string;
                         company: {
+                            id: string;
                             name: string;
                             logo_url: string | null;
                         } | null;
@@ -167,6 +177,7 @@ export default function Messages() {
                 id: c.id,
                 application_uuid: c.application_uuid,
                 job_title: c.application?.job?.title || 'Turno',
+                company_id: c.application?.job?.company?.id,
                 company_name: c.application?.job?.company?.name || 'Empresa',
                 company_logo: c.application?.job?.company?.logo_url ?? undefined,
                 status: c.application?.status || 'pending',
@@ -423,8 +434,19 @@ export default function Messages() {
                                         <Briefcase size={20} className="text-gray-400" />
                                     )}
                                 </div>
-                                <div className="flex-1">
-                                    <h4 className="font-bold">{selectedConversation.company_name}</h4>
+                                <div className="flex-1 min-w-0">
+                                    {selectedConversation.company_id ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
+                                            className="font-bold hover:text-primary transition-colors truncate text-left"
+                                            aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
+                                        >
+                                            {selectedConversation.company_name}
+                                        </button>
+                                    ) : (
+                                        <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
+                                    )}
                                     <p className="text-xs text-gray-500">{selectedConversation.job_title}</p>
                                 </div>
                                 <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${getStatusColor(selectedConversation.status)}`}>

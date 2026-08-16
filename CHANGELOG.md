@@ -10,6 +10,96 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Revisão Pré-Piloto (Onda 3) — 2026-08-16
+
+**Agenda de Turnos por Dia (Empresa):**
+- "Meus Turnos" agora é uma agenda organizada por dia: Hoje, Amanhã, Esta Semana, Depois, Sem Data, Anteriores
+- Cada linha mostra horário, função, freela (com avatar/estado) — sem necessidade de clicar
+- Turno sem freela em Hoje ou Amanhã fica destacado em âmbar com alerta "Sem freela"
+- Seção "Anteriores" permanece recolhida por padrão (operação não vive no passado)
+
+**Gerenciamento de Convites e Recursos Humanos (Empresa):**
+- **"Cancelar Convite":** quando convite está pendente, empresa pode cancelá-lo; freela é notificado
+- **"Dispensar do Turno":** quando freela já está confirmado, empresa pode dispensá-lo; requer confirmação explícita
+- Ambas as ações não são possíveis se houver pagamento já registrado/agendado para o turno (é preciso estornar antes)
+
+**Notificação via WhatsApp (Empresa):**
+- Botão **"Avisar no WhatsApp"** aparece ao lado de convites pendentes (se freela tem telefone cadastrado)
+- Abre o WhatsApp com mensagem pronta: turno, data, horário, local e valor
+- Serve para resgatar convite que pode expirar sem o freela abrir o app
+
+**Convidar Diretamente do Elenco (Empresa):**
+- Card de cada freela em "Meu Elenco" agora tem botão **"Convidar para turno"** na base
+- Abre modal para escolher um turno elegível (aberto/pausado, sem esse freela, data futura)
+- Dispara convite direto sem sair da tela de elenco
+
+**Histórico do Freela por Empresa (Empresa):**
+- Card de freela em "Meu Elenco" agora mostra quantos turnos ele já fez com você e quando foi o último
+
+**Comunicação com Empresa (Freelancer):**
+- Botão **"Falar com a empresa"** aparece em turnos em andamento e agendados
+- Permite freelancer iniciar conversa sem esperar empresa abrir a conversa
+- Mesma conversa em ambos os lados; se empresa já abriu, freelancer vê histórico
+
+**Recibo Melhorado (Freelancer e Empresa):**
+- Recibo agora mostra **Chegada** (hora real do check-in), **Saída** (hora real do checkout) e **Total de horas trabalhadas**
+- Funciona mesmo para turnos que cruzam a meia-noite (cálculo automático)
+- Se check-in/checkout não foram registrados, aquela linha é omitida (não inventa dados)
+
+**Unificação de Nome de Tela (Empresa):**
+- Tela de "Confirmação de Presença" agora é consistentemente chamada **"Presença e Pagamento"** em todos os pontos de acesso
+
+### Adicionado
+
+#### Revisão Pré-Piloto (Onda 1) — 2026-08-16
+
+**Chave PIX na Plataforma:**
+- Freelancer informa sua chave PIX (CPF/CNPJ/e-mail/telefone) durante o onboarding
+- Chave é exibida no perfil do freelancer (com botão de copiar)
+- Empresa vê a chave PIX em "Meu Elenco" (card do freelancer)
+- Ao registrar pagamento, chave PIX vem pré-carregada
+
+**Novo Perfil Público da Empresa:**
+- Freelancer pode abrir perfil completo de qualquer empresa antes de aceitar convite
+- Mostra: nome, logo, capa, setor, descrição, endereço, briefing padrão
+- Inclui avaliações de outros freelancers que já trabalharam lá
+- Acessível de: convite pendente, Carteira de Clientes, chat, tela cheia de convite
+
+**Cards de Elenco Clicáveis:**
+- Cards de freelancer em "Meu Elenco" (empresa) agora abrem o perfil completo ao clicar
+- Botões de compartilhar e remover continuam funcionando normalmente
+
+**Validação na Criação de Turno:**
+- Campos obrigatórios (título, função, descrição, valor, data e horário) são validados antes de confirmar
+- Data no passado é bloqueada
+
+**Confirmação de Presença Simplificada:**
+- QR de check-in e verificação por GPS foram removidos (nenhum verificava de fato)
+- Confirmação de presença agora: freelancer faz check-in no app + empresa confirma manualmente na tela do turno
+- Rótulo "(GPS)" removido (a geolocalização era solicitada e descartada)
+- O QR de **identidade do freelancer** (usado para adicionar ao elenco) permanece ativo
+
+**Limpeza de Interface:**
+- Sino da empresa ramifica por papel: navega para `/company/notifications` em vez de tela de erro
+- Botão "Mensagem" em perfil de freelancer agora funciona
+- Ícones decorativos (lupa/funil) removidos de dashboards
+- "Dica Pro" com dados inventados foi corrigida/removida
+
+**Remoção de Superfície de Modelo Antigo (Modos B/C — Postpago):**
+- Seção "Carteira da Empresa" (`/company/wallet`) removida
+- Modais de depósito e cartão de crédito removidos (Modo B/C não está no piloto)
+- Página "Painel Financeiro" (`/company/financeiro`) removida
+- Página "Meu Saldo" (worker) removida — substituída por [**Meus Recebimentos**](#meus-recebimentos-pagamento-externo-modo-a)
+- Código morto removido: `Analytics.tsx`, `CreateJob.tsx`, `Placeholder.tsx`, `WorkerDashboard.tsx`
+
+**Meus Recebimentos (Pagamento Externo — Modo A):**
+- Nova página `/recebimentos` acessível pelo menu inferior (BottomNav)
+- Freelancer acompanha todos os pagamentos registrados pelas empresas em uma única tela
+- Categorias: agendados (promessa), aguardando confirmação, recebidos, cancelados
+- Cada item abre o recibo bilateral completo para conferência e confirmação
+
+### Adicionado
+
 #### Cancelamento de Turno Agendado (2026-07-14)
 
 **Freelancer:**
@@ -70,51 +160,51 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 - Visualização de recibos de pagamentos registrados
 - Confirmação de recebimento (gera valor comprovado no recibo bilateral)
 
-#### Slice 1 — Loop Relacional (MVP)
+#### Meu Elenco e Convites de Turno (Novo Fluxo de Contratação)
 
 **Empresa:**
-- Página "Minha Equipe" (`/company/team`) — adicionar freelancers por link de convite ou Worki ID
-- Campo "Briefing" ao criar turno (regras, dress code, procedimentos visíveis no convite)
-- Convite direto de turno para freelancers da equipe
-- Acompanhamento de respostas (aceito/recusado/aguardando/expirado)
+- Página "Minha Equipe" (`/company/team`) — construir e gerenciar sua equipe de freelancers
+  - Adicionar por: link de convite, Worki ID ou **QR Scanner** (câmera)
+  - Ver status: confirmados, aguardando resposta, bloqueados
+- Campo "Briefing" ao criar turno (regras, dress code, procedimentos)
+- Convite direto de turno para freelancers da equipe (sem abrir no feed)
+- Acompanhamento de respostas (aceito, recusado, aguardando, expirado)
 
 **Freelancer:**
-- Aba "Convites" em "Meus Jobs" — receber e responder convites de turno
-- Campo QR de identidade no perfil (`/profile` → ícone QR) — código único para empresas adicionar
-- Página de aceite de convite por link (`/convite/:token`)
+- Aba "Convites" em "Meus Turnos" — receber e responder convites de turno
+- Código QR de identidade no perfil (empresas podem escanear para adicionar)
+- Link de aceite de convite por e-mail/WhatsApp/SMS
 - Resposta neutra a convites (recusar não afeta reputação)
 
 **Ambos:**
-- Avaliação bidirecional pós-turno (empresa → freelancer; freelancer → empresa)
-- Direção explícita em avaliações (quem avalia quem)
+- Avaliação bidirecional pós-turno (empresa avalia freelancer; freelancer avalia empresa)
+- Histórico completo de avaliações nos perfis públicos
 
-#### Slice 2 — Pagamento Postpago (modelo Uber)
+### FUTURO — Não lançado no piloto
+
+#### Slice 2 — Pagamento Postpago (modelo Uber — Futuro)
+
+Recursos planejados para expansão futura:
 
 **Empresa:**
-- Cadastro de cartão de crédito na Carteira da Empresa (`/company/wallet`)
+- Cadastro de cartão de crédito na Carteira da Empresa
 - Seção "Cartões de Crédito" com interface de adicionar/gerenciar cartões
-- Modal de cadastro de cartão com validação de dados (número, validade, CVV, CPF/CNPJ, CEP, telefone)
-- Cartão tokenizado no Asaas (número do cartão não é armazenado no Worki)
 - Modelo de pagamento postpago: **sem depósito antecipado**
 - Na conclusão do turno, o cartão é automaticamente debitado
-- Aviso in-app quando a autorização do cartão falha
-- Turno fica pendente de pagamento até que o cartão seja aceito
 
-#### Slice 3 — Inteligência Financeira (BI da Empresa)
+#### Slice 3 — Inteligência Financeira (BI da Empresa — Futuro)
+
+Recursos planejados para expansão futura:
 
 **Empresa:**
-- Página "Painel Financeiro" (`/company/financeiro`) — acessível pelo menu Sidebar e card na Carteira
-- **Teto de gasto mensal:** configurar limite, barra de progresso colorida (80%/90%/100%), alertas in-app
-- **Faturamento do mês:** CTA para informar, destrava indicador de custo % faturamento
-- **Indicadores de custo:** custo total, custo/hora, custo % faturamento
-- **Gasto por freelancer:** ranking com horas, turnos, fonte das horas (estimada/mista/checada), valor total
-- **Custo de no-show (estimativa):** contagem de turnos aceitos sem checkout, custo de oportunidade
-- **Alerta de concentração:** flag quando freela ultrapassa 150h E 20 dias distintos (risco de vínculo trabalhista)
-- **Seletor de período:** análise por mês atual ou mês anterior
+- Painel Financeiro com análise detalhada de gasto
+- **Teto de gasto mensal** com alertas
+- **Faturamento do mês** e indicadores de custo
+- **Gasto por freelancer** e tendências
+- **Alerta de concentração** para risco de vínculo trabalhista
 
 ### Alterado
 
-- Fluxo de criação de turno: freelancers da equipe em vez de candidatos anônimos no feed
-- Modelo de convite: aceite/recusa substituem candidatura automática em vagas
-- Modelo de pagamento: postpago (cartão on-file) é agora a opção padrão; pré-pago (depósito) permanece funcional
-- Card "Painel Financeiro" adicionado na Carteira da Empresa como atalho para Financeiro
+- **Fluxo de criação de turno:** Freelancers da sua equipe em vez de candidatos anônimos no feed
+- **Modelo de convite:** Aceitar/recusar convites em vez de candidatura automática em vagas abertas
+- **Modelo de pagamento (Piloto):** Pagamento Externo (Modo A — PIX/dinheiro direto) é o padrão; registrado e confirmado no app

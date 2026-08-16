@@ -47,7 +47,7 @@ Browser (SPA React 19)
 | `pages/`, `pages/company/`, `pages/worker/` | Telas de rota por papel. Lógica de tela + fetch direto. |
 | `components/` | UI reutilizável cross-papel (cards, modais, navegação, guards). |
 | `contexts/` | Estado global de sessão, notificações, toasts. |
-| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `paymentRecordService` (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `financialBIService` (BI unificado: escrow + shift_payments), `spendLimitService` (teto de gasto + alerta), `analytics`, `api` (edge functions). |
+| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `paymentRecordService` (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `analytics`, `api` (edge functions). |
 | `lib/` | Config e utilitários: `supabase` (client), `gamification`, `validation`, `logger`. |
 | `types/` | Contrato de tipos do domínio (à mão — fonte da verdade). |
 | `supabase/functions/` | Operações privilegiadas (Asaas, admin, notificações) — Deno + service_role. |
@@ -66,6 +66,11 @@ Canais de convite: **link** (token via URL `/convite/:token`), **telefone** (Wor
 Após aceitação da equipe, convites de turno seguintes (push via `applications.status='invited'`) não re-pedem handshake
 — lista fechada. Política de INSERT em `applications` garante que só membros aceitos podem ser convidados.
 
+**Guarda de consentimento no DELETE (migração `20260816000000`):** A política UPDATE já impedia a empresa de mudar `status='blocked'`,
+mas DELETE não tinha a mesma proteção — a empresa podia deletar a linha bloqueada e reconvidar, anulando o veto do freela.
+A policy `tc_delete_company` passou a exigir `(status <> 'blocked' OR blocked_by = auth.uid())`: apenas a pessoa que gravou o bloqueio
+pode deletá-lo. Veto do freela é indelével para a empresa; bloqueio feito pela própria empresa pode ser removido (evita auto-trancamento).
+
 ## Convite push de turno (Slice 1: operação freelancer)
 
 Novo fluxo coexistente com pull (candidatura):
@@ -81,31 +86,37 @@ trigger `auto_reserve_escrow_on_hire` pula a reserva no aceite de convite (ADR-2
 legado** (candidatura → hired) ainda reserva no aceite (modelo prepago original, inalterado). O pagamento do
 push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem depósito antecipado).
 
-## Cancelamento de turno pelo worker (Slice 5: notificação obrigatória)
+## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
-Worker pode cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`). A ação dispara automaticamente
-um trigger SECURITY DEFINER (`trg_notify_company_on_worker_cancel`) que insere uma notificação (type='status_change')
-para o **dono da empresa** — nenhum lado pode suprimir a notificação. **Landmark pattern:** notificação à contraparte
-que RLS não permite inserir direto (`applications` é worker-owned; company precisa saber via sistema automático, não
-query puxada).
+**Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).
 
-**Máquina de estados:** cancelamento é transição irreversível: `hired` → `cancelled`, `in_progress` → `cancelled`.
-Worker pode cancelar; empresa NÃO pode forçar cancelamento.
+**Agora (20260816150000):** tanto **worker** quanto **empresa** podem cancelar:
+- **Worker:** cancela convite/turno (`cancelApplication` em client) → empresa é notificada (título: "Turno cancelado pelo freela").
+- **Empresa:** desfaz convite (`cancelInvite` no `shiftInviteService`, estado `invited`) ou dispensa do turno (`dismissFromShift`,
+  estados `hired`/`in_progress`) → **freela é notificado** (título diferenciado: "Convite de turno cancelado" se era `invited`,
+  "Turno cancelado pela empresa" se era `hired`/`in_progress`).
+- **Ator desconhecido** (service_role, `delete-account`, cron): **ambos** são notificados com texto neutro
+  ("O turno foi cancelado"), sem atribuir culpa.
 
-**Trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path=''):**
+**Trigger `trg_notify_counterpart_on_application_cancel` (SECURITY DEFINER, search_path='', migração 20260816150000):**
+Substitui o antigo `trg_notify_company_on_worker_cancel` (20260714). Ramifica por `auth.uid()`:
 ```
 AFTER UPDATE ON applications
-WHEN (NEW.status='cancelled' AND OLD.status IN ('hired','in_progress'))
-→ INSERT INTO notifications: user_id = (SELECT company_id FROM jobs WHERE id=NEW.job_id),
-    type='status_change', title='Turno cancelado por freelancer', 
-    link='/company/candidatos?job_id=<job_id>'
+WHEN (NEW.status='cancelled' AND OLD.status IN ('invited', 'hired', 'in_progress'))
+→ Se auth.uid() = NEW.worker_id:     INSERT para empresa (link: '/company/jobs/<job_id>/candidates')
+→ Se auth.uid() = jobs.company_id:  INSERT para freela (link: '/my-jobs')
+→ Se auth.uid() IS NULL (ator desconhecido): INSERT para AMBOS
 ```
 
-**Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
-`refundEscrow` se desejado.
+**Conhecimento reutilizável:** `auth.uid()` **funciona corretamente** dentro de `SECURITY DEFINER` (o DEFINER muda o ROLE de execução,
+não as claims do JWT que vivem em `request.jwt.claims`). Precedentes: `validate_application_update`, `enforce_shift_payment_immutability`.
 
-**Fluxo complementar (Slice 1):** cancelamento não toca saldo; empresa se quiser devolver a reserva ao próprio saldo
-chama `refundEscrow(jobId, workerUserId, 'worker_cancelled')` (ADR-20260714-cancelamento-freela aguarda).
+**Guarda em `dismissFromShift`:** não se pode dispensar um freela que já tem `shift_payments` ativo (`scheduled`/`recorded`), 
+porque o UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` barra um novo marcador para o mesmo freela+turno.
+Empresa precisa estornar o pagamento antigo (voided) primeiro, ou dispensar outro freela.
+
+**Princípio:** saldo intacto (Article 8) — refund de escrow (Slice 1 prepago) é manual, disparado por empresa via
+`refundEscrow` se desejado. Cancelamento não toca `shift_payments` — empresa estorna em operação separada.
 
 ## Modelo de pagamento (carteira central + escrow + postpago Slice 2)
 
@@ -145,11 +156,14 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 
 ### Estrutura de dados
 
+- **`workers.pix_key`** (coluna existente, agora central no modo A): chave PIX do freela (CPF/CNPJ/e-mail/telefone/aleatória), coletada no onboarding
+  (`WorkerOnboarding` R1.1) e normalizada (`normalizePixKeyForStorage` em `lib/validation.ts`). Exibida para empresa com `team_connections` aceita/pendente (R1.2, R1.3) 
+  e no modal de "Registrar Pagamento" (R1.4). **Jamais** exposta a quem não tem vínculo (policy de SELECT em `workers` bloqueia).
 - **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
 - **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by, worker_confirmed_at, voided_at, void_reason, note, created_at)`.
   Status: `scheduled | recorded | voided`. `scheduled_for` (data prevista) é material/imutável; `paid_at` é nullable (NULL em scheduled, setado na efetivação) e depois imutável.
-  UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` — garante 1 marcador ativo por turno.
+  UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` — garante 1 marcador ativo por (turno, freela). Turno com N freelas tem N marcadores, um por freela. ADR-20260816.
   RLS bilateral: empresa (registra/efetiva/cancela), worker (confirma recebimento em recorded). **NUNCA toca saldo** (auditoria, não liquidação).
 - **`escrow_transactions`** (estendida):
   - `kind`: `'prepaid'` (default) | `'postpaid'`
@@ -204,7 +218,7 @@ INSERT → recorded (direto legado) ──estornar──► voided
 - `scheduled_for date` — data prevista do pagamento (imutável; reagendar = void + novo). NULL em registros diretos (`recorded` sem agendamento prévio).
 - `paid_at` — agora **NULLABLE** (era NOT NULL). NULL enquanto `scheduled`; setado **UMA vez** na efetivação (`scheduled→recorded`) e depois imutável. Timestamps reais (nunca data futura disfarçada).
 
-**Dedupe:** UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` = **um marcador ativo por turno**, impedindo duas promessas ou promessa+pagamento em linhas separadas. N linhas `voided` permitidas (re-agendar/re-registrar).
+**Dedupe:** UNIQUE parcial `(job_id, worker_id) WHERE status IN ('scheduled','recorded')` = **um marcador ativo por (turno, freela)**, impedindo duas promessas ou promessa+pagamento **do mesmo freela** no mesmo turno. N linhas `voided` permitidas (re-agendar/re-registrar). Turno com N freelas tem N marcadores. ADR-20260816.
 
 **Trigger `enforce_shift_payment_immutability` reescrito:**
 - Material columns (job_id, company_id, worker_id, application_id, source, amount, recorded_by, note, created_at, **scheduled_for**) → imutáveis sempre.
@@ -232,6 +246,46 @@ Ao criar um turno, pré-preenche o campo Briefing; empresa ajusta/incrementa por
 - **JWT:** `asaas-webhook` e `admin-data` fazem deploy `--no-verify-jwt` (webhook não traz JWT Supabase;
   admin-data tem checagem própria). As demais validam o JWT do gateway.
 
+### SELECT em `workers` restrito por vínculo (Onda 1 — Revisão Piloto)
+
+Migração `20260816120000` substituiu `USING (true)` por `USING (public.can_view_worker_profile(id))`. A tabela `workers` carrega dado sensível
+(CPF, telefone, PIX, data de nascimento) — **qualquer conta autenticada podia varrer a base inteira**. A nova policy restringe a leitura a três branches:
+
+1. **Self:** o próprio freela lê a própria linha (Profile, Dashboard, onboarding, Sidebar, etc.). Mantém `select('*')` funcionando.
+2. **Vínculo de elenco:** empresa com `team_connections` status `'pending'` ou `'accepted'` com este freela. `'blocked'` (veto do freela) **NÃO** concede leitura.
+3. **Vínculo operacional:** empresa que tem `applications` do freela em um turno dela (pull OU push — ambos criam linha). Cobre CompanyJobCandidates, relatório de ordens, BI financeiro, recibos históricos.
+
+**Efeito colateral:** DELETE/UPDATE sob RLS que não casa com USING retorna 0 linhas sem erro, não EXCEPTION. O padrão
+`removeFromTeam(workerId)` em `teamConnectionService` exige `.select('id')` (sem `maybeSingle()`) e checa `!data || data.length === 0` para distinguir "removido com sucesso" de "negado por RLS".
+
+**RPC de leitura `get_profile_reviews(reviewed_id, direction)` (migração `20260816130000`):** com a política nova, um freela lendo reviews de uma empresa
+(no perfil público da empresa) não conseguia resolver os nomes de freelas que avaliaram — sua policy impedia ler linhas de outros freelas.
+`get_profile_reviews` é SECURITY DEFINER e resolve nomes sem expor dados pessoais (mascaramento: "Carlos S." para terceiros, nome completo só para o dono do perfil).
+
+## Notificações de pagamento (Onda 1 — Revisão Piloto, modo A)
+
+O modo A (pagamento externo registrado) é **loop bilateral:** empresa declara pagamento em `shift_payments` e freela confirma recebimento.
+Antes, o side do freela nunca era avisado — faltava aviso de "pagamento foi registrado, confirme no recibo". Sem isso, o loop só fecha se freela
+abrir `/recebimentos` por conta própria.
+
+**Migração `20260816140000` — função `notify_worker_on_shift_payment()` (SECURITY DEFINER, search_path=''):**
+Dispara em 4 eventos distintos via 2 triggers (INSERT e UPDATE):
+
+| Evento | Transição | Título | Link | Mensagem |
+|---|---|---|---|---|
+| Agendamento | INSERT com status='scheduled' | "Pagamento agendado" | `/recibo/:job_id` | "agendou o pagamento de R$ X para DATA. Você não precisa fazer nada agora." |
+| Registro | INSERT com status='recorded' | "Pagamento registrado — confirme" | `/recibo/:job_id` | "registrou o pagamento de R$ X... Abra o recibo e confirme." |
+| Efetivação | UPDATE `scheduled→recorded` | "Pagamento efetivado — confirme" | `/recibo/:job_id` | "marcou como pago o valor de R$ X... Abra o recibo e confirme." |
+| Estorno | UPDATE `{scheduled\|recorded}→voided` | "Agendamento cancelado" / "Registro estornado" | `/recebimentos` | "cancelou o agendamento" / "estornou o registro"... |
+
+**Por que `/recebimentos` no estorno (não `/recibo/:job_id`):** A rota `getReceipt()` filtra por `status IN ('scheduled','recorded')`;
+uma linha `voided` devolveria tela vazia naquele link. Usar `/recebimentos` (lista de pagamentos históricos) oferece contexto útil.
+
+**Por que trigger (não INSERT no client):** A policy vigente permite empresa notificar worker com `team_connections.status='accepted'`,
+mas se o freela **sair do Elenco ou bloquear** a empresa depois do turno, o INSERT seria negado silenciosamente — exatamente para quem
+tem atrito e mais precisa da trilha. Trigger SECURITY DEFINER não passa por essa RLS, garantindo a notificação.
+**Landmark pattern:** notificação à contraparte = garantia do produto, não cortesia da UI — mesmo de `trg_notify_counterpart_on_application_cancel`.
+
 ## Rating bidirecional (Slice 1: confiança)
 
 Worker avalia company e vice-versa. Implementado via coluna `reviews.direction` ('worker' | 'company'):
@@ -243,39 +297,21 @@ empresa, mas sem explicitação. Slice 1 torna direction mandatório e consultá
 auto-preenche direction pela presença do `reviewed_id` em companies/workers, mantendo compatibilidade com clients que não enviam
 direction. Backfill resolveu reviews legados (≥2 migrations para worker e company ratings).
 
-## Camada de inteligência financeira (Slice 3: operação)
+## Perfil público da empresa (Onda 1 — Revisão Piloto)
 
-Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show estimado e concentração de horas (risco de vínculo).
+Nova rota **`/empresa/:id`** (`pages/CompanyPublicProfile.tsx`) sob `<MainLayout>` (papel worker), fora de `/company/*`.
+Exibe: nome, logo, capa, setor, descrição, endereço, briefing padrão, avaliações recebidas de freelas (via `components/ProfileReviews` com `reviewerRole="worker"`).
+**Objetivo:** o freela consegue abrir o perfil da empresa a partir do convite pendente (`InviteTakeover`), da **Carteira de Clientes** (lista de empresas em `team_connections`),
+ou do cabeçalho do chat, **antes de aceitar** o convite — assimetria de confiança que equilibra o fluxo push.
+Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get_profile_reviews` com mascaramento de nomes de avaliadores).
 
-**Tabelas novas:**
-- **`company_spend_limits`** — teto de gasto mensal por empresa (scope='' = empresa inteira em v1). Campos: `amount`, `alert_thresholds` (default [80,90,100]), `financial_contact_email/phone`. RLS por owner. Não toca saldo (Article 8).
-- **`company_monthly_revenue`** — faturamento mensal declarado pela empresa (input para custo-%-faturamento). Campo: `amount`, `year_month` (DATE ancorada no dia 1). RLS por owner.
+## Estado do banco de produção (Onda 1 — Revisão Piloto)
 
-**Policy adicional:**
-- **`notifications` INSERT** — nova policy `WITH CHECK (auth.uid() = user_id)` (migration 20260623000200) destrava a inserção de alerta in-app pelo cliente (spendLimitService.evaluateSpendAlert).
+As migrations da Onda 1 (revisão pré-piloto) foram aplicadas em produção (`vrklakcbkcsonarmhqhp`) no dia 16/08/2026.
+Ver `supabase/migrations/APLICACAO-2026-08-16.md` para: divergência de timestamp entre repositório e histórico do banco,
+verificações executadas contra dados reais, e lacunas declaradas (ramo de vínculo operacional não exercitado, funções legadas fora do escopo).
 
-**Fluxo de alerta (R12):**
-1. Empresa configura teto em `company_spend_limits` (RLS permite owner criar/editar).
-2. Alerta é **best-effort, post-pagamento:** após releaseEscrow bem-sucedido, chama `spendLimitService.evaluateSpendAlert` (não bloqueia).
-3. Service computa gasto acumulado (BI-1) via query direto em `escrow_transactions` (não materializado), compara com teto.
-4. Se cruzou limiar (80/90/100 ou OVER), insere notificação idempotente em `notifications` com link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`.
-5. Idempotência: SELECT-before-INSERT verifica link existente antes de inserir.
-6. Notificação chega em tempo real via Realtime (NotificationContext).
-7. WhatsApp = Slice 4 (pendente).
-
-**BI (Business Intelligence) — unificado: escrow + shift_payments, sem views:**
-- **BI-1: Gasto acumulado** — UNION de (escrow released/captured) + (shift_payments recorded), dedupe por job_id (escrow precede).
-- **BI-2: Gasto + horas por freela** — agrupado por worker_id, fonte unificada. Horas reais se checkout_at/checkin_at existem; fallback jobs.estimated_hours.
-- **BI-3: Ratio custo/hora + custo-%-faturamento** — custo/horas; custo/faturamento declarado (null se não informado).
-- **BI-4: Custo de no-show estimado** — heurística v1, rotulado como estimativa (application com status='hired'/invitation_response='accepted', turno passou, sem checkout e sem registro de pagamento).
-- **BI-5: Flag de concentração de horas/dias** — worker flagged se >= 150h AND >= 20 dias (constantes de produto em service, não DB). Sinaliza risco de vínculo trabalhista.
-
-**Services:**
-- **`financialBIService`** — queries paralelas (getAccumulatedSpend, getSpendByWorker, getCostRatio, getNoShowCost, getConcentrationFlags), método `getAllBI` reutiliza. Unifica escrow + shift_payments. Sem React Query (Article 5).
-- **`spendLimitService`** — CRUD de teto + revenue, `evaluateSpendAlert(companyId, now?)` idempotente (fora da RPC, best-effort). Delega a `financialBIService` para gasto unificado. Alerta dispara após qualquer registro de gasto (captura/liberação OU shift_payment).
-
-**UI:**
-- Nova página `pages/company/CompanyFinancial` (`/company/financeiro`) com cards de BI, alertas, input de faturamento, config de teto.
+Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 
 ## Dependências externas
 

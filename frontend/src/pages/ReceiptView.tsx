@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
+import { formatDateOnly } from '../lib/dateUtils';
 import { useToast } from '../contexts/ToastContext';
 import PageMeta from '../components/PageMeta';
-import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2, LogIn, LogOut } from 'lucide-react';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 
@@ -17,37 +18,76 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
+/** Origem do horário exibido: marcação do próprio freela no app, ou confirmação manual da empresa. */
+type AttendanceSource = 'worker' | 'company';
+
 /**
- * Formata uma data "date-only" (ex.: `job.start_date`, ou `payment.paid_at` quando gravado
- * a partir de um `<input type="date">` — ver CompanyJobCandidates `paymentPaidAt`) como data
- * LOCAL, sem shift de fuso.
- *
- * `new Date("YYYY-MM-DD")` é interpretado pelo JS como meia-noite UTC; `date-fns format`
- * formata em fuso local. Em BRT (UTC-3) isso recua a data em 1 dia (ex.: 01/07 vira 30/06).
- * Mesmo padrão já usado em `components/JobCard.tsx` (fix do off-by-one em `start_date`).
- * Só ajusta a EXIBIÇÃO — não altera como o dado é gravado.
+ * Chegada/saída do turno. Prioriza a marcação do freela (`worker_checkin_at`/`worker_checkout_at`);
+ * quando ausente, cai para a confirmação manual da empresa (`company_checkin_confirmed_at`/
+ * `company_checkout_confirmed_at`) — caminho mais provável quando o freela não usa o app. O recibo
+ * é documento de conferência: não pode omitir o horário, mas também não pode apresentar um dado
+ * confirmado pela empresa como se fosse marcação do freela — por isso a origem é rastreada.
  */
-function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
-    const dateStr = isoOrDateOnly.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return format(date, pattern, { locale: ptBR });
+interface ShiftAttendance {
+    checkin: string | null;
+    checkinSource: AttendanceSource | null;
+    checkout: string | null;
+    checkoutSource: AttendanceSource | null;
+}
+
+/**
+ * Total de horas trabalhadas entre chegada e saída REGISTRADAS (timestamps completos, com
+ * data — não só hora-do-dia). Turno que cruza a meia-noite (ex.: 18h10 às 01h00) é resolvido
+ * automaticamente pela subtração de datas absolutas: como cada timestamp já carrega sua
+ * própria data, checkout "no dia seguinte" não precisa do hack "+24h" usado em `calculateHours`
+ * (CompanyCreateJob.tsx), que só é necessário para strings de hora soltas sem data.
+ *
+ * Retorna `null` se checkin/checkout ausentes ou se checkout <= checkin (dado inconsistente —
+ * melhor omitir a linha do recibo do que exibir um total errado/negativo).
+ */
+function calculateWorkedHours(
+    checkinIso: string | null | undefined,
+    checkoutIso: string | null | undefined,
+): number | null {
+    if (!checkinIso || !checkoutIso) return null;
+    const checkin = new Date(checkinIso).getTime();
+    const checkout = new Date(checkoutIso).getTime();
+    if (!Number.isFinite(checkin) || !Number.isFinite(checkout) || checkout <= checkin) return null;
+    return (checkout - checkin) / (1000 * 60 * 60);
+}
+
+/** Formata horas decimais como "7h30", "8h" ou "45min" (pt-BR, sem casas decimais soltas). */
+function formatWorkedHours(hours: number): string {
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m}min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h${String(m).padStart(2, '0')}`;
 }
 
 export default function ReceiptView() {
     const { jobId } = useParams<{ jobId: string }>();
     const navigate = useNavigate();
     const { addToast } = useToast();
+    // ADR-20260816 — filtro de EXIBIÇÃO (qual freela, quando o turno tem mais de um), NUNCA
+    // autorização: a RLS de `shift_payments` (sp_select_participants) decide o que a sessão
+    // pode ver. Um `worker` alheio não vaza nada — `getReceipt` simplesmente não acha a linha.
+    const [searchParams] = useSearchParams();
+    const workerIdParam = searchParams.get('worker');
 
     const [loading, setLoading] = useState(true);
     const [receipt, setReceipt] = useState<ShiftPaymentReceipt | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [confirming, setConfirming] = useState(false);
+    // Chegada/saída reais do turno — trazidas do recibo pra ser um documento de conferência,
+    // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
+    const [attendance, setAttendance] = useState<ShiftAttendance | null>(null);
 
     useEffect(() => {
         if (jobId) fetchReceipt();
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId muda
-    }, [jobId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId/worker mudam
+    }, [jobId, workerIdParam]);
 
     const fetchReceipt = async () => {
         // G3: guarda de id falsy — evita `shift_payments?job_id=eq.null` mesmo se essa função
@@ -59,8 +99,35 @@ export default function ReceiptView() {
             if (!user) { navigate('/login'); return; }
             setCurrentUserId(user.id);
 
-            const data = await PaymentRecordService.getReceipt(jobId);
+            const data = await PaymentRecordService.getReceipt(jobId, workerIdParam ?? undefined);
             setReceipt(data);
+
+            // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte
+            // pelo application_id do marcador (RLS: mesmos participantes do recibo, worker ou
+            // empresa dona, então a leitura é permitida para quem já pode ver o recibo).
+            const applicationId = data?.payment.application_id;
+            if (applicationId) {
+                const { data: appData, error: appErr } = await supabase
+                    .from('applications')
+                    .select('worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at')
+                    .eq('id', applicationId)
+                    .maybeSingle();
+                if (appErr) {
+                    logError('ReceiptView: fetchAttendance', appErr);
+                    setAttendance(null);
+                } else {
+                    const checkin = appData?.worker_checkin_at ?? appData?.company_checkin_confirmed_at ?? null;
+                    const checkout = appData?.worker_checkout_at ?? appData?.company_checkout_confirmed_at ?? null;
+                    setAttendance({
+                        checkin,
+                        checkinSource: appData?.worker_checkin_at ? 'worker' : (appData?.company_checkin_confirmed_at ? 'company' : null),
+                        checkout,
+                        checkoutSource: appData?.worker_checkout_at ? 'worker' : (appData?.company_checkout_confirmed_at ? 'company' : null),
+                    });
+                }
+            } else {
+                setAttendance(null);
+            }
         } catch (error) {
             logError('ReceiptView: fetchReceipt', error);
         } finally {
@@ -151,6 +218,9 @@ export default function ReceiptView() {
                     <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
                         {isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'}
                     </h1>
+                    {/* Nome do freela logo abaixo do título — turno com mais de um freela nunca
+                        fica ambíguo sobre de quem é este recibo (ADR-20260816). */}
+                    <p className="text-sm font-black mt-1">{worker?.full_name || 'Freela não identificado'}</p>
                     <p className="text-xs font-bold text-gray-400 uppercase mt-1">Registro Worki (declaratório)</p>
                 </div>
 
@@ -192,6 +262,51 @@ export default function ReceiptView() {
                             </span>
                         )}
                     </div>
+
+                    {/* Chegada/saída reais — base do acerto no mundo real. Não inventa: turno
+                        concluído pelo caminho legado (sem application vinculada) simplesmente
+                        omite este bloco em vez de mostrar zero/hora errada. */}
+                    {attendance && (attendance.checkin || attendance.checkout) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-200">
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <LogIn size={12} /> Chegada
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {attendance.checkin
+                                        ? format(new Date(attendance.checkin), 'HH:mm', { locale: ptBR })
+                                        : 'Não registrado'}
+                                </p>
+                                {attendance.checkinSource === 'company' && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                )}
+                            </div>
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <LogOut size={12} /> Saída
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {attendance.checkout
+                                        ? format(new Date(attendance.checkout), 'HH:mm', { locale: ptBR })
+                                        : 'Não registrado'}
+                                </p>
+                                {attendance.checkoutSource === 'company' && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                )}
+                            </div>
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <Clock size={12} /> Total de horas trabalhadas
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {(() => {
+                                        const hours = calculateWorkedHours(attendance.checkin, attendance.checkout);
+                                        return hours !== null ? formatWorkedHours(hours) : 'Não registrado';
+                                    })()}
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className={`grid grid-cols-1 ${isScheduled ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4 mb-6`}>

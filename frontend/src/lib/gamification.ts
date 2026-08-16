@@ -1,6 +1,3 @@
-import { supabase } from './supabase';
-import { logError } from '../lib/logger'
-
 export const LEVELS = [
     { level: 1, minXp: 0 },
     { level: 2, minXp: 100 },
@@ -21,37 +18,4 @@ export const calculateLevel = (xp: number) => {
         }
     }
     return 1;
-};
-
-export const addXP = async (userId: string, amount: number) => {
-    try {
-        // Get current XP
-        const { data: worker, error: fetchError } = await supabase
-            .from('workers')
-            .select('xp')
-            .eq('id', userId)
-            .single();
-
-        if (fetchError) throw fetchError;
-
-        const currentXp = worker.xp || 0;
-        const newXp = currentXp + amount;
-        const newLevel = calculateLevel(newXp);
-
-        // Update XP and Level
-        const { error: updateError } = await supabase
-            .from('workers')
-            .update({
-                xp: newXp,
-                level: newLevel
-            })
-            .eq('id', userId);
-
-        if (updateError) throw updateError;
-
-        return { newXp, newLevel };
-    } catch (error) {
-        logError('Error adding XP:', error);
-        return null;
-    }
 };

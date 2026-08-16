@@ -25,17 +25,26 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
         }
 
         const table = userRole === 'worker' ? 'workers' : 'companies';
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from(table)
             .update({
                 accepted_tos: true,
                 tos_version: 'v1',
                 tos_accepted_at: new Date().toISOString()
             })
-            .eq('id', user.id);
+            .eq('id', user.id)
+            .select('id');
 
         if (error) {
             addToast('Erro ao salvar aceite dos termos. Tente novamente.', 'error');
+            setLoading(false);
+            return;
+        }
+
+        // 0 linhas sem erro = RLS negou em silêncio (PostgREST 204). Aceite de termos é
+        // contratual — não pode ficar em loop silencioso (aceita, gate reaparece, aceita de novo).
+        if (!data || data.length === 0) {
+            addToast('Não foi possível confirmar o aceite dos termos. Tente novamente ou contate o suporte.', 'error');
             setLoading(false);
             return;
         }

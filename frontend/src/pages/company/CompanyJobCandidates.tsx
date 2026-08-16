@@ -3,16 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
-import { SpendLimitService } from '../../services/spendLimitService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
+import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
-import EscrowStatusBadge from '../../components/EscrowStatusBadge';
+import { todayLocalDate, formatDateOnly } from '../../lib/dateUtils';
 import type { Application, PaymentSource, ShiftPayment, TeamMember } from '../../types';
 
 /**
@@ -31,6 +31,18 @@ function isInviteExpired(app: Application): boolean {
   );
 }
 
+/**
+ * Convite cancelado pela EMPRESA antes de qualquer resposta do freela (onda 3 — "Cancelar
+ * Convite"). Distingue de forma confiável de "freela cancelou o turno que aceitou"
+ * (também `status='cancelled'`, mas nesse caso `invitation_response='accepted'` — o freela
+ * só cancela DEPOIS de ter aceitado). Sem coluna nova: usa a combinação
+ * `invited_by_company_at` preenchido (veio de convite push) + `invitation_response` nulo
+ * (nunca respondeu) para identificar exatamente esse caminho.
+ */
+function isInviteCancelledUnanswered(app: Application): boolean {
+  return app.status === 'cancelled' && !!app.invited_by_company_at && !app.invitation_response;
+}
+
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
     cash: 'Dinheiro',
@@ -38,13 +50,50 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
 };
 
 /**
- * Formata uma data "date-only" (`scheduled_for`, YYYY-MM-DD) como data LOCAL, sem shift de
- * fuso. `new Date("YYYY-MM-DD")` é interpretado como meia-noite UTC; em BRT (UTC-3) isso
- * recua a data em 1 dia. Mesmo padrão de `ReceiptView.formatDateOnly` / `components/JobCard.tsx`.
+ * Monta o timestamp ISO absoluto do fallback manual de chegada/saída — quando a EMPRESA
+ * confirma um horário que o freela não marcou no app (bar fecha às 02h, gerente só registra
+ * às 09h da manhã seguinte: gravar `now()` faria o recibo mentir "Saída 09:00" e ~13h
+ * trabalhadas, para sempre — `shift_payments`/o registro de presença não são editáveis depois).
+ *
+ * Base: data do turno (`jobStartDate`, YYYY-MM-DD) + horário HH:MM informado no modal (nunca
+ * `now()`). Turno que vira a noite (ex.: entra 18h, sai 02h) tem a SAÍDA no dia seguinte ao
+ * `start_date` — se o horário informado for "menor" que a referência de entrada, soma 1 dia.
+ * Sem isso, `ReceiptView` (que calcula horas por subtração de timestamps absolutos) sairia
+ * com "menos 16 horas" em vez de 8.
+ *
+ * Referência de entrada para decidir o rollover da SAÍDA, em ordem de confiança: a chegada já
+ * registrada de fato (do freela, ou já confirmada pela empresa nesta mesma tela) quando
+ * existir; senão o horário PLANEJADO do turno (`work_start_time`). Chegada nunca rola de dia
+ * (é sempre a data do turno).
  */
-function formatDateOnly(dateOnly: string): string {
-    const [y, m, d] = dateOnly.split('-').map(Number);
-    return format(new Date(y, m - 1, d), 'dd/MM/yyyy', { locale: ptBR });
+function buildManualAttendanceTimestamp(
+    app: Application,
+    jobStartDate: string,
+    jobStartTime: string | null,
+    type: 'checkin' | 'checkout',
+    timeHHmm: string,
+): string | null {
+    if (!jobStartDate || !timeHHmm) return null;
+    const [y, m, d] = jobStartDate.split('-').map(Number);
+    const [h, min] = timeHHmm.split(':').map(Number);
+    if (![y, m, d, h, min].every(Number.isFinite)) return null;
+
+    let dayOffset = 0;
+    if (type === 'checkout') {
+        const checkinIso = app.worker_checkin_at ?? app.company_checkin_confirmed_at ?? null;
+        let refMinutes: number | null = null;
+        if (checkinIso) {
+            const ref = new Date(checkinIso);
+            refMinutes = ref.getHours() * 60 + ref.getMinutes();
+        } else if (jobStartTime) {
+            const [startH, startM] = jobStartTime.slice(0, 5).split(':').map(Number);
+            if (Number.isFinite(startH) && Number.isFinite(startM)) refMinutes = startH * 60 + startM;
+        }
+        if (refMinutes !== null && (h * 60 + min) < refMinutes) dayOffset = 1;
+    }
+
+    const date = new Date(y, m - 1, d + dayOffset, h, min, 0, 0);
+    return date.toISOString();
 }
 
 // Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
@@ -65,30 +114,52 @@ export default function CompanyJobCandidates() {
     const [comment, setComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [confirmingCheckin, setConfirmingCheckin] = useState<string | null>(null);
+    // Fallback manual de chegada/saída — só quando o freela NÃO marcou (worker_checkin_at/
+    // worker_checkout_at ausente). Pede o horário real em vez de gravar o momento do clique.
+    const [manualAttendance, setManualAttendance] = useState<{ app: Application; type: 'checkin' | 'checkout' } | null>(null);
+    const [manualAttendanceTime, setManualAttendanceTime] = useState('');
+    const [confirmingManualAttendance, setConfirmingManualAttendance] = useState(false);
     const [confirmDeliveryApp, setConfirmDeliveryApp] = useState<Application | null>(null);
     const [releasing, setReleasing] = useState(false);
-    const [escrowStatusMap, setEscrowStatusMap] = useState<Record<string, 'reserved' | 'released'>>({});
     // Modo A (pagamento externo declaratório) — ramifica por escrow.kind por application.
     // Sem entrada no map = turno sem escrow (modo A); 'prepaid'/'postpaid' = caminho de escrow existente.
     const [escrowKindMap, setEscrowKindMap] = useState<Record<string, 'prepaid' | 'postpaid'>>({});
     const [jobBudget, setJobBudget] = useState(0);
-    // Registro de pagamento externo (modo A) já feito para ESTE job (UNIQUE por job_id no schema).
-    const [shiftPayment, setShiftPayment] = useState<ShiftPayment | null>(null);
+    // Registro de pagamento externo (modo A) por freela (ADR-20260816 — o marcador é por
+    // (job_id, worker_id), não mais por job_id sozinho: um turno com N freelas tem N
+    // marcadores independentes). Cada card olha só a própria entrada deste mapa.
+    const [paymentByWorker, setPaymentByWorker] = useState<Record<string, ShiftPayment>>({});
+
+    // Dados do turno + empresa usados só para montar a mensagem pronta do WhatsApp (onda 3).
+    const [jobLocation, setJobLocation] = useState('');
+    const [jobStartDate, setJobStartDate] = useState('');
+    const [jobStartTime, setJobStartTime] = useState<string | null>(null);
+    const [jobEndTime, setJobEndTime] = useState<string | null>(null);
+    const [companyName, setCompanyName] = useState('');
+
+    // "Cancelar Convite" — invited sem resposta, libera o slot (onda 3).
+    const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);
+
+    // "Dispensar deste turno" — hired/in_progress, exige confirmação explícita (onda 3).
+    const [dismissApp, setDismissApp] = useState<Application | null>(null);
+    const [dismissing, setDismissing] = useState(false);
 
     // Modal "Registrar pagamento" (modo A)
     const [paymentModalApp, setPaymentModalApp] = useState<Application | null>(null);
     const [paymentSource, setPaymentSource] = useState<PaymentSource>('external_pix');
     const [paymentAmount, setPaymentAmount] = useState(0);
-    const [paymentPaidAt, setPaymentPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+    const [paymentPaidAt, setPaymentPaidAt] = useState(() => todayLocalDate());
     const [paymentNote, setPaymentNote] = useState('');
     const [recordingPayment, setRecordingPayment] = useState(false);
     const [paymentRecorded, setPaymentRecorded] = useState(false);
+    // R1.4: copiar a chave PIX do freela direto dos modais de pagamento (modo A).
+    const [pixCopied, setPixCopied] = useState(false);
 
     // Modal "Agendar pagamento" (modo A — ADR-20260712, promessa com data prevista)
     const [scheduleModalApp, setScheduleModalApp] = useState<Application | null>(null);
     const [scheduleSource, setScheduleSource] = useState<PaymentSource>('external_pix');
     const [scheduleAmount, setScheduleAmount] = useState(0);
-    const [scheduledFor, setScheduledFor] = useState(() => new Date().toISOString().slice(0, 10));
+    const [scheduledFor, setScheduledFor] = useState(() => todayLocalDate());
     const [scheduleNote, setScheduleNote] = useState('');
     const [scheduling, setScheduling] = useState(false);
     const [paymentScheduled, setPaymentScheduled] = useState(false);
@@ -122,17 +193,33 @@ export default function CompanyJobCandidates() {
             if (!user) { navigate('/login'); return; }
 
             // Fetch Job Title (only if owned by this company)
-            const { data: job, error: jobError } = await supabase.from('jobs').select('title, budget').eq('id', id).eq('company_id', user.id).single();
+            const { data: job, error: jobError } = await supabase
+                .from('jobs')
+                .select('title, budget, location, start_date, work_start_time, work_end_time')
+                .eq('id', id)
+                .eq('company_id', user.id)
+                .single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);
             setJobBudget(job.budget ?? 0);
+            setJobLocation(job.location ?? '');
+            setJobStartDate(job.start_date ?? '');
+            setJobStartTime(job.work_start_time ?? null);
+            setJobEndTime(job.work_end_time ?? null);
+
+            // Nome da empresa (companies.id === owner_id === auth.uid(), 1:1) — só para
+            // montar a mensagem do WhatsApp (onda 3), best-effort.
+            const { data: companyRow } = await supabase.from('companies').select('name').eq('id', user.id).maybeSingle();
+            setCompanyName(companyRow?.name ?? '');
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
+            // Minimização de dado (LGPD, harness-security-reviewer): traz só as colunas que esta
+            // tela de fato consome — NÃO `worker:workers(*)`, que trazia cpf/birth_date sem uso.
             const { data, error } = await supabase
                 .from('applications')
                 .select(`
                     *,
-                    worker:workers(*),
+                    worker:workers(id, full_name, avatar_url, primary_role, rating_average, reviews_count, city, tags, level, phone, pix_key),
                     worker_checkin_at,
                     worker_checkout_at,
                     company_checkin_confirmed_at,
@@ -144,27 +231,27 @@ export default function CompanyJobCandidates() {
             if (error) throw error;
             setCandidates(data || []);
 
-            // Fetch escrow status + kind per application for this job
+            // Fetch escrow kind per application for this job (só o kind é usado para ramificar
+            // Confirmar Entrega vs Registrar Pagamento — ver `renderCompletionAction`).
             const { data: escrowRows } = await supabase
                 .from('escrow_transactions')
-                .select('application_id, status, kind')
+                .select('application_id, kind')
                 .eq('job_id', id);
-            const statusMap: Record<string, 'reserved' | 'released'> = {};
             const kindMap: Record<string, 'prepaid' | 'postpaid'> = {};
             (escrowRows || []).forEach((row) => {
-                if (row.application_id && (row.status === 'reserved' || row.status === 'released')) {
-                    statusMap[row.application_id] = row.status;
-                }
                 if (row.application_id && (row.kind === 'prepaid' || row.kind === 'postpaid')) {
                     kindMap[row.application_id] = row.kind;
                 }
             });
-            setEscrowStatusMap(statusMap);
             setEscrowKindMap(kindMap);
 
-            // Modo A: existe registro de pagamento externo já feito para este turno?
-            const payment = await PaymentRecordService.getPaymentByJob(id);
-            setShiftPayment(payment);
+            // Modo A: registros de pagamento externo já feitos para este turno — um por
+            // freela (ADR-20260816). `listActivePaymentsByJob` devolve 0..N linhas; hoje
+            // (banco ainda sem a migration) no máximo 1, mas o mapa já fica pronto para N.
+            const payments = await PaymentRecordService.listActivePaymentsByJob(id);
+            const byWorker: Record<string, ShiftPayment> = {};
+            payments.forEach((p) => { byWorker[p.worker_id] = p; });
+            setPaymentByWorker(byWorker);
         } catch (error) {
             logError('CompanyJobCandidates', error);
         } finally {
@@ -172,8 +259,11 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+    // RLS negado silenciosamente): sem checar `data`, um UPDATE negado pela policy USING (0
+    // linhas, sem erro) reportaria "status atualizado" com o banco intocado.
     const handleUpdateStatus = async (appId: string, newStatus: string) => {
-        const { error } = await supabase.from('applications').update({ status: newStatus }).eq('id', appId);
+        const { data, error } = await supabase.from('applications').update({ status: newStatus }).eq('id', appId).select('id');
 
         if (error) {
             logError('CompanyJobCandidates: handleUpdateStatus', error);
@@ -182,6 +272,10 @@ export default function CompanyJobCandidates() {
             // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
             // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
             addToast(error.message || 'Erro ao atualizar status do freela.', 'error');
+            return;
+        }
+        if (!data || data.length === 0) {
+            addToast('Não foi possível atualizar o status deste freela. Atualize a página e tente novamente.', 'error');
             return;
         }
 
@@ -200,8 +294,11 @@ export default function CompanyJobCandidates() {
             setReleasing(false);
             return;
         }
-        const { error: updateError } = await supabase.from('applications').update({ status: 'completed' }).eq('id', app.id);
-        if (updateError) {
+        // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md) — ver
+        // `handleUpdateStatus` acima para o raciocínio completo.
+        const { data: updatedApp, error: updateError } = await supabase.from('applications').update({ status: 'completed' }).eq('id', app.id).select('id');
+        if (updateError || !updatedApp || updatedApp.length === 0) {
+            logError('CompanyJobCandidates: handleConfirmDelivery.updateStatus', updateError ?? new Error('0 linhas afetadas'));
             addToast('Pagamento liberado, mas houve erro ao atualizar status. Contate o suporte.', 'error');
             setReleasing(false);
             setConfirmDeliveryApp(null);
@@ -214,12 +311,72 @@ export default function CompanyJobCandidates() {
         fetchCandidates();
     };
 
+    // "Cancelar Convite" (onda 3) — invited sem resposta, libera o slot para convidar outro
+    // membro da equipe. Sem notificação simétrica ao freela (ver comentário do service).
+    const handleCancelInvite = async (app: Application) => {
+        setCancelInviteId(app.id);
+        try {
+            const result = await ShiftInviteService.cancelInvite(app.id);
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível cancelar o convite.', 'error');
+                return;
+            }
+            addToast('Convite cancelado. Você pode convidar outro freela.', 'success');
+            fetchCandidates();
+        } finally {
+            setCancelInviteId(null);
+        }
+    };
+
+    // "Dispensar deste turno" (onda 3) — hired/in_progress, gesto sério: exige confirmação
+    // explícita no modal (dismissApp) antes de chamar o service.
+    const handleDismissFromShift = async () => {
+        if (!dismissApp) return;
+        setDismissing(true);
+        try {
+            const result = await ShiftInviteService.dismissFromShift(dismissApp.id);
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível dispensar o freela.', 'error');
+                return;
+            }
+            addToast('Freela dispensado deste turno.', 'success');
+            setDismissApp(null);
+            fetchCandidates();
+        } finally {
+            setDismissing(false);
+        }
+    };
+
+    // "Avisar no WhatsApp" (onda 3) — zero backend: monta a mensagem com os dados reais do
+    // turno já carregados na tela e abre o `wa.me` numa aba nova. Sem telefone válido, não faz nada
+    // (o botão já vem desabilitado/oculto nesse caso — ver render).
+    const handleWhatsAppNotify = (app: Application) => {
+        const phone = normalizePhoneForWhatsApp(app.worker?.phone ?? null);
+        if (!phone) return;
+        // PostgREST devolve `HH:MM:SS` (`work_start_time`/`work_end_time` são `time`) — fatiar
+        // pros primeiros 5 chars, senão a mensagem sai "(08:00:00 às 17:00:00)". Mesmo padrão
+        // defensivo de `CompanyJobs.tsx`.
+        const startLabel = jobStartTime?.slice(0, 5) ?? null;
+        const endLabel = jobEndTime?.slice(0, 5) ?? null;
+        const timeLabel = startLabel ? `${startLabel}${endLabel ? ` às ${endLabel}` : ''}` : null;
+        const message = buildShiftInviteWhatsAppMessage({
+            companyName,
+            jobTitle,
+            dateLabel: jobStartDate ? formatDateOnly(jobStartDate, 'dd/MM/yyyy') : null,
+            timeLabel,
+            location: jobLocation,
+            amount: jobBudget,
+            appUrl: `${window.location.origin}/my-jobs`,
+        });
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    };
+
     // Modo A (pagamento externo) — abre o modal "Registrar pagamento" pré-preenchido com o valor do turno.
     const openPaymentModal = (app: Application) => {
         setPaymentModalApp(app);
         setPaymentSource('external_pix');
         setPaymentAmount(jobBudget);
-        setPaymentPaidAt(new Date().toISOString().slice(0, 10));
+        setPaymentPaidAt(todayLocalDate());
         setPaymentNote('');
         setPaymentRecorded(false);
     };
@@ -234,7 +391,7 @@ export default function CompanyJobCandidates() {
         setScheduleModalApp(app);
         setScheduleSource('external_pix');
         setScheduleAmount(jobBudget);
-        setScheduledFor(new Date().toISOString().slice(0, 10));
+        setScheduledFor(todayLocalDate());
         setScheduleNote('');
         setPaymentScheduled(false);
     };
@@ -311,7 +468,7 @@ export default function CompanyJobCandidates() {
 
             if (!result.success) {
                 if (result.alreadyRecorded) {
-                    addToast('Este turno já tem um pagamento registrado. Veja o recibo.', 'info');
+                    addToast('Este freela já tem um pagamento registrado neste turno. Veja o recibo.', 'info');
                     closePaymentModal();
                     fetchCandidates();
                     return;
@@ -320,30 +477,19 @@ export default function CompanyJobCandidates() {
                 return;
             }
 
-            // Registro OK — avaliar o alerta de teto de gasto (R12) com a MESMA fonte
-            // unificada (escrow ∪ marcador externo) que o dashboard financeiro usa,
-            // senão o alerta fica cego ao modo A (não há releaseEscrow para disparar isso).
-            // Best-effort, fire-and-forget: nunca bloqueia nem falha o registro do pagamento
-            // (espelha walletService.releaseOrCaptureEscrow.spendAlert).
-            void (async () => {
-                try {
-                    const { data: { user: authUser } } = await supabase.auth.getUser();
-                    if (authUser) {
-                        await SpendLimitService.evaluateSpendAlert(authUser.id);
-                    }
-                } catch (alertErr) {
-                    logError('CompanyJobCandidates: handleRecordPayment.spendAlert', alertErr);
-                }
-            })();
-
             // Registro OK — agora sim marcamos o turno como concluído. Falha aqui não
             // desfaz o registro (já é a fonte de verdade do pagamento); só avisamos.
-            const { error: updateError } = await supabase
+            // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE
+            // sob RLS negado silenciosamente): sem checar `data`, um UPDATE negado pela policy
+            // USING reportaria "concluído" com o turno ainda preso em 'hired'/'in_progress' —
+            // pago, mas sem saída (dead-end).
+            const { data: updatedApp, error: updateError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', paymentModalApp.id);
-            if (updateError) {
-                logError('CompanyJobCandidates: handleRecordPayment.updateStatus', updateError);
+                .eq('id', paymentModalApp.id)
+                .select('id');
+            if (updateError || !updatedApp || updatedApp.length === 0) {
+                logError('CompanyJobCandidates: handleRecordPayment.updateStatus', updateError ?? new Error('0 linhas afetadas'));
                 addToast('Pagamento registrado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
             } else {
                 addToast('Pagamento registrado com sucesso!', 'success');
@@ -385,7 +531,7 @@ export default function CompanyJobCandidates() {
 
             if (!result.success) {
                 if (result.alreadyActive) {
-                    addToast('Este turno já tem um pagamento registrado ou agendado. Veja o comprovante.', 'info');
+                    addToast('Este freela já tem um pagamento registrado ou agendado neste turno. Veja o comprovante.', 'info');
                     closeScheduleModal();
                     fetchCandidates();
                     return;
@@ -394,12 +540,15 @@ export default function CompanyJobCandidates() {
                 return;
             }
 
-            const { error: updateError } = await supabase
+            // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — ver
+            // `handleRecordPayment` acima para o raciocínio completo).
+            const { data: updatedApp, error: updateError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', scheduleModalApp.id);
-            if (updateError) {
-                logError('CompanyJobCandidates: handleSchedulePayment.updateStatus', updateError);
+                .eq('id', scheduleModalApp.id)
+                .select('id');
+            if (updateError || !updatedApp || updatedApp.length === 0) {
+                logError('CompanyJobCandidates: handleSchedulePayment.updateStatus', updateError ?? new Error('0 linhas afetadas'));
                 addToast('Pagamento agendado, mas houve erro ao concluir o turno. Contate o suporte.', 'error');
             } else {
                 addToast('Pagamento agendado com sucesso!', 'success');
@@ -441,14 +590,20 @@ export default function CompanyJobCandidates() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
-            // Update Application Status to reviewed (best-effort, already completed)
-            const { error: appError } = await supabase
+            // Update Application Status to reviewed (best-effort, already completed — o
+            // botão "Avaliar" só existe para app.status === 'completed', então este UPDATE é
+            // um no-op idempotente na maioria dos casos; `.select('id')` só para observar via
+            // log se algum dia deixar de ser no-op sem depender de reclamação de usuário).
+            const { data: appData, error: appError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', selectedApp.id);
+                .eq('id', selectedApp.id)
+                .select('id');
 
             if (appError) {
                 logError('CompanyJobCandidates: app status update failed', appError);
+            } else if (!appData || appData.length === 0) {
+                logError('CompanyJobCandidates: app status update afetou 0 linhas (RLS negou em silêncio)', { applicationId: selectedApp.id });
             }
 
             // Create Review (non-critical, best-effort)
@@ -520,15 +675,41 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // R1.4: copiar a chave PIX do freela — mostrada nos modais "Registrar Pagamento" e
+    // "Agendar Pagamento" (modo A: a empresa paga por fora e precisa da chave à mão).
+    const handleCopyPix = async (pixKey: string) => {
+        try {
+            await navigator.clipboard.writeText(pixKey);
+            setPixCopied(true);
+            addToast('Chave PIX copiada!', 'success');
+            setTimeout(() => setPixCopied(false), 2500);
+        } catch {
+            addToast('Não foi possível copiar a chave PIX.', 'error');
+        }
+    };
+
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — ver `cancelInvite`/
+    // `dismissFromShift` em shiftInviteService.ts): sob RLS, um UPDATE cuja linha não casa mais
+    // com a policy USING não gera erro — retorna 0 linhas (PostgREST 204). Sem checar `data`, a
+    // tela reportaria "confirmada" mesmo quando o banco não mudou nada.
     const handleConfirmCheckin = async (appId: string) => {
         setConfirmingCheckin(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
-                .update({ company_checkin_confirmed_at: new Date().toISOString() })
-                .eq('id', appId);
+                .update({
+                    company_checkin_confirmed_at: new Date().toISOString(),
+                    status: 'in_progress'
+                })
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível confirmar a chegada deste freela.', 'error');
+                return;
+            }
+            addToast('Chegada confirmada!', 'success');
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
@@ -539,14 +720,30 @@ export default function CompanyJobCandidates() {
     };
 
     const handleConfirmCheckout = async (appId: string) => {
+        // Defesa em profundidade (a UI já esconde este gesto sem chegada confirmada — ver
+        // render acima): sem `company_checkin_confirmed_at`, `buildManualAttendanceTimestamp`
+        // não tem referência de rollover e as horas do recibo se perdem para sempre.
+        const target = candidates.find((c) => c.id === appId);
+        if (!target?.company_checkin_confirmed_at) {
+            addToast('Confirme a chegada deste freela antes de registrar a saída.', 'error');
+            return;
+        }
         setConfirmingCheckin(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ company_checkout_confirmed_at: new Date().toISOString() })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível confirmar a saída deste freela.', 'error');
+                return;
+            }
+            // Este gesto destrava "Registrar Pagamento" — merece confirmação visível, não só
+            // um refetch silencioso (a empresa precisa saber que já pode seguir o fluxo).
+            addToast('Saída confirmada!', 'success');
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
@@ -556,10 +753,75 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // Abre o modal de horário manual — usado quando o freela NÃO marcou a chegada/saída no
+    // app (o botão vira "Confirmar Presença"/"Registrar Saída"). Pré-preenche com o horário
+    // PLANEJADO do turno (`work_start_time`/`work_end_time`), nunca com `now()`: é o melhor
+    // palpite (é o que quase sempre aconteceu) e o gerente confirma ou ajusta.
+    const openManualAttendanceModal = (app: Application, type: 'checkin' | 'checkout') => {
+        // Defesa em profundidade (a UI já esconde este gesto sem chegada confirmada — ver
+        // render acima): mesmo motivo de `handleConfirmCheckout`.
+        if (type === 'checkout' && !app.company_checkin_confirmed_at) {
+            addToast('Confirme a chegada deste freela antes de registrar a saída.', 'error');
+            return;
+        }
+        const plannedTime = type === 'checkin' ? jobStartTime : jobEndTime;
+        setManualAttendance({ app, type });
+        setManualAttendanceTime(plannedTime ? plannedTime.slice(0, 5) : '');
+    };
+
+    const closeManualAttendanceModal = () => {
+        setManualAttendance(null);
+        setManualAttendanceTime('');
+    };
+
+    // Grava o horário REAL informado pela empresa (não `now()`) em `company_checkin_confirmed_at`
+    // ou `company_checkout_confirmed_at` — nunca nos campos do freela (`worker_*`), que o
+    // trigger `validate_application_update` rejeita a empresa alterar.
+    const handleConfirmManualAttendance = async () => {
+        if (!manualAttendance || !manualAttendanceTime) return;
+        const { app, type } = manualAttendance;
+        const timestamp = buildManualAttendanceTimestamp(app, jobStartDate, jobStartTime, type, manualAttendanceTime);
+        if (!timestamp) {
+            addToast('Informe um horário válido.', 'error');
+            return;
+        }
+        setConfirmingManualAttendance(true);
+        try {
+            const updatePayload = type === 'checkin'
+                ? { company_checkin_confirmed_at: timestamp, status: 'in_progress' }
+                : { company_checkout_confirmed_at: timestamp };
+            const { data, error } = await supabase
+                .from('applications')
+                .update(updatePayload)
+                .eq('id', app.id)
+                .select('id');
+
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast(
+                    type === 'checkin' ? 'Não foi possível confirmar a chegada deste freela.' : 'Não foi possível confirmar a saída deste freela.',
+                    'error'
+                );
+                return;
+            }
+            addToast(type === 'checkin' ? 'Chegada confirmada!' : 'Saída confirmada!', 'success');
+            closeManualAttendanceModal();
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleConfirmManualAttendance', error);
+            addToast('Erro ao confirmar horário.', 'error');
+        } finally {
+            setConfirmingManualAttendance(false);
+        }
+    };
+
     const computeSteps = (app: Application) => {
         const checkinComplete = !!(app.worker_checkin_at && app.company_checkin_confirmed_at);
         const checkinActive = !!(app.worker_checkin_at && !app.company_checkin_confirmed_at);
-        const checkoutComplete = !!(app.worker_checkout_at && app.company_checkout_confirmed_at);
+        // "Saída" fica completa assim que a EMPRESA confirma — inclusive pelo caminho manual
+        // (freela foi embora sem apertar "saída" no app; ver `handleConfirmCheckout`). Não
+        // exigir `worker_checkout_at` aqui, senão o estágio nunca sai de "pendente" nesse caso.
+        const checkoutComplete = !!app.company_checkout_confirmed_at;
         const checkoutActive = !!(app.worker_checkout_at && !app.company_checkout_confirmed_at);
 
         return [
@@ -585,7 +847,7 @@ export default function CompanyJobCandidates() {
         <div className="flex items-center gap-2 flex-wrap">
             {payment.scheduled_for && (
                 <span className="flex items-center gap-1 text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-yellow-50 border-yellow-200 text-yellow-700">
-                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for)}
+                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy')}
                 </span>
             )}
             <button
@@ -597,7 +859,7 @@ export default function CompanyJobCandidates() {
                 Marcar como pago
             </button>
             <button
-                onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}`); }}
+                onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}?worker=${payment.worker_id}`); }}
                 className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
             >
                 <Receipt size={14} /> Ver Comprovante
@@ -620,14 +882,11 @@ export default function CompanyJobCandidates() {
                 </button>
             );
         }
-        const matchingPayment =
-            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
-                ? shiftPayment
-                : null;
+        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
         if (matchingPayment?.status === 'recorded') {
             return (
                 <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
                     className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                 >
                     <Receipt size={14} /> Ver Recibo
@@ -663,7 +922,7 @@ export default function CompanyJobCandidates() {
                     <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
                         <ArrowLeft size={16} strokeWidth={3} /> Voltar para Turnos
                     </button>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Freelas do Turno</h1>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter">Presença e Pagamento</h1>
                     <p className="text-gray-500 font-bold">{jobTitle} • {candidates.length} freela{candidates.length !== 1 ? 's' : ''}</p>
                 </div>
             </div>
@@ -725,9 +984,6 @@ export default function CompanyJobCandidates() {
                                         </div>
 
                                         <div className="flex items-center gap-2 flex-wrap justify-end">
-                                            {/* Escrow Status Badge — per-candidate status */}
-                                            <EscrowStatusBadge escrowStatus={escrowStatusMap[app.id] ?? null} />
-
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleChat(app); }}
                                                 className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors"
@@ -770,10 +1026,47 @@ export default function CompanyJobCandidates() {
                                                                     <Send size={14} /> Convidar outro
                                                                 </button>
                                                             </>
+                                                    ) : isInviteCancelledUnanswered(app) ? (
+                                                            <>
+                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-500">
+                                                                    Convite cancelado
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
+                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <Send size={14} /> Convidar outro
+                                                                </button>
+                                                            </>
                                                     ) : app.status === 'invited' ? (
-                                                            <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
-                                                                Aguardando resposta
-                                                            </span>
+                                                            <>
+                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
+                                                                    Aguardando resposta
+                                                                </span>
+                                                                {app.worker?.phone ? (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleWhatsAppNotify(app); }}
+                                                                        className="p-1 px-3 bg-[#25D366] text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-black transition-colors flex items-center gap-1"
+                                                                    >
+                                                                        <MessageCircle size={14} /> Avisar no WhatsApp
+                                                                    </button>
+                                                                ) : (
+                                                                    <span
+                                                                        title="Freela sem telefone cadastrado"
+                                                                        className="text-xs font-bold uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-400"
+                                                                    >
+                                                                        WhatsApp indisponível
+                                                                    </span>
+                                                                )}
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); void handleCancelInvite(app); }}
+                                                                    disabled={cancelInviteId === app.id}
+                                                                    className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                                >
+                                                                    {cancelInviteId === app.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                                                    Cancelar Convite
+                                                                </button>
+                                                            </>
                                                     ) : (
                                                         <span className={`text-xs font-black uppercase px-3 py-1 rounded-lg border-2 ${app.status === 'hired' ? 'bg-green-100 border-green-200 text-green-700' :
                                                             app.status === 'in_progress' ? 'bg-orange-100 border-orange-200 text-orange-700' :
@@ -807,54 +1100,104 @@ export default function CompanyJobCandidates() {
                                                     {(app.status === 'hired' || app.status === 'in_progress') && (
                                                         <>
                                                             {/* Show check-in status */}
-                                                            {app.worker_checkin_at && !app.company_checkin_confirmed_at && (
+                                                            {!app.company_checkin_confirmed_at ? (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleConfirmCheckin(app.id); }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (app.worker_checkin_at) {
+                                                                            handleConfirmCheckin(app.id);
+                                                                        } else {
+                                                                            openManualAttendanceModal(app, 'checkin');
+                                                                        }
+                                                                    }}
                                                                     disabled={confirmingCheckin === app.id}
-                                                                    className="p-1 px-3 bg-blue-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-blue-600 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                                    className="p-1.5 px-3 bg-green-600 text-white rounded-lg text-xs font-black uppercase hover:bg-green-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
                                                                 >
                                                                     {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                                                                    Confirmar Chegada
+                                                                    {app.worker_checkin_at ? 'Confirmar Chegada' : 'Confirmar Presença'}
                                                                 </button>
-                                                            )}
-                                                            {app.company_checkin_confirmed_at && (
-                                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
-                                                                    <CheckCircle size={12} /> Chegada OK
+                                                            ) : (
+                                                                <span className="text-xs font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                    <CheckCircle size={13} />
+                                                                    {app.worker_checkin_at ? 'Chegada OK' : 'Chegada registrada pela empresa'}
                                                                 </span>
                                                             )}
 
-                                                            {/* Show check-out status */}
-                                                            {app.worker_checkout_at && !app.company_checkout_confirmed_at && (
+                                                            {/* Show check-out status — mesmo fallback do check-in: a empresa pode
+                                                                confirmar a saída mesmo se o freela não apertou "saída" no celular
+                                                                (turno acabou tarde da noite, sem sinal do app). Sem isso, o turno
+                                                                fica impagável para sempre. O rótulo distingue os dois casos para
+                                                                não sugerir que o freela marcou algo que não marcou.
+
+                                                                Ordem chegada→saída EXIGIDA (revisão pré-piloto): registrar/confirmar
+                                                                a saída antes da chegada estar confirmada quebra
+                                                                `buildManualAttendanceTimestamp` (sem `company_checkin_confirmed_at`
+                                                                nem `worker_checkin_at` como referência, `refMinutes` fica null,
+                                                                `dayOffset` sempre 0 — em turno sem `work_start_time`, a saída pode
+                                                                gravar ANTES da chegada que só será registrada depois).
+                                                                `calculateWorkedHours` então devolve null e o recibo perde as horas
+                                                                para sempre (`shift_payments` é imutável). Falha segura, não mente —
+                                                                mas o único artefato de auditoria do modo A fica sem o dado. A
+                                                                cronologia real (ninguém sai antes de entrar) resolve na origem: só
+                                                                oferece "Registrar/Confirmar Saída" depois que a chegada estiver
+                                                                confirmada; antes disso, mostra um estado neutro explicando o motivo. */}
+                                                            {!app.company_checkin_confirmed_at ? (
+                                                                <span className="text-xs font-bold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                    <Square size={12} /> Confirme a chegada primeiro
+                                                                </span>
+                                                            ) : !app.company_checkout_confirmed_at ? (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleConfirmCheckout(app.id); }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (app.worker_checkout_at) {
+                                                                            handleConfirmCheckout(app.id);
+                                                                        } else {
+                                                                            openManualAttendanceModal(app, 'checkout');
+                                                                        }
+                                                                    }}
                                                                     disabled={confirmingCheckin === app.id}
                                                                     className="p-1 px-3 bg-purple-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-purple-600 transition-colors flex items-center gap-1 disabled:opacity-50"
                                                                 >
                                                                     {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                                                                    Confirmar Saída
+                                                                    {app.worker_checkout_at ? 'Confirmar Saída' : 'Registrar Saída'}
                                                                 </button>
-                                                            )}
-                                                            {app.company_checkout_confirmed_at && (
+                                                            ) : (
                                                                 <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded flex items-center gap-1">
-                                                                    <CheckCircle size={12} /> Saída OK
+                                                                    <CheckCircle size={12} />
+                                                                    {app.worker_checkout_at ? 'Saída OK' : 'Saída registrada pela empresa'}
                                                                 </span>
                                                             )}
 
                                                             {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
+
+                                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
+                                                                "Dispensar" é para ANTES do turno acontecer. `hasAttendedShift` (mesmo
+                                                                predicado usado por shiftInviteService.dismissFromShift — nunca replicado
+                                                                condição a condição) cobre os TRÊS sinais de comparecimento, incluindo
+                                                                "empresa confirmou a chegada" mesmo sem o freela ter batido check-in no
+                                                                app (o caminho canônico do modo A). Sem qualquer um dos três, dispensar
+                                                                deixaria um turno trabalhado sem pagamento e sem recibo, e a application
+                                                                'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
+                                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar). */}
+                                                            {!hasAttendedShift(app) && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
+                                                                    className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <UserX size={14} /> Dispensar
+                                                                </button>
+                                                            )}
                                                         </>
                                                     )}
 
                                                     {/* Turno finalizado via modo A (pagamento externo) — ramifica por status do marcador. */}
                                                     {app.status === 'completed' && !escrowKindMap[app.id] && (() => {
-                                                        const matchingPayment =
-                                                            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
-                                                                ? shiftPayment
-                                                                : null;
+                                                        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
                                                         if (matchingPayment?.status === 'recorded') {
                                                             return (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
                                                                     className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                                                                 >
                                                                     <Receipt size={14} /> Ver Recibo
@@ -1042,6 +1385,93 @@ export default function CompanyJobCandidates() {
                 </div>
             )}
 
+            {/* Modal de horário manual — chegada/saída sem marcação do freela no app. O recibo é o
+                único artefato de auditoria do modo A: não pode gravar o momento do clique da
+                empresa (ex.: gerente registrando às 09h da manhã seguinte um turno que fechou
+                às 02h) como se fosse o horário real. Pré-preenchido com o horário PLANEJADO do
+                turno; o gerente confirma ou ajusta. */}
+            {manualAttendance && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-1">
+                            {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
+                        </h2>
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-5">
+                            {manualAttendance.app.worker?.full_name || 'Este freela'} não marcou {manualAttendance.type === 'checkin' ? 'a chegada' : 'a saída'} no app
+                        </p>
+
+                        <div className="mb-6">
+                            <label htmlFor="manual-attendance-time" className="block text-sm font-bold uppercase mb-2">
+                                Horário real de {manualAttendance.type === 'checkin' ? 'chegada' : 'saída'}
+                            </label>
+                            <input
+                                id="manual-attendance-time"
+                                type="time"
+                                value={manualAttendanceTime}
+                                onChange={(e) => setManualAttendanceTime(e.target.value)}
+                                className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
+                            />
+                            <p className="text-xs font-medium text-gray-500 mt-2">
+                                Pré-preenchido com o horário planejado do turno. Ajuste para o horário real, se
+                                foi diferente — este dado vai para o recibo do freela.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={closeManualAttendanceModal}
+                                disabled={confirmingManualAttendance}
+                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmManualAttendance}
+                                disabled={confirmingManualAttendance || !manualAttendanceTime}
+                                className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {confirmingManualAttendance ? <><Loader2 size={16} className="animate-spin" /> Confirmando...</> : 'Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação explícita */}
+            {dismissApp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">Dispensar Freela</h2>
+                        <p className="text-gray-600 font-medium mb-3">
+                            {dismissApp.worker?.full_name || 'Este freela'} já foi contratado para este turno e está
+                            contando com ele. Ao dispensar, o turno sai da agenda dele imediatamente.
+                        </p>
+                        <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                            <p className="text-xs font-bold text-yellow-800">
+                                O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
+                                vale reforçar por telefone/WhatsApp também.
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDismissApp(null)}
+                                disabled={dismissing}
+                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDismissFromShift}
+                                disabled={dismissing}
+                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {dismissing ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</> : 'Confirmar Dispensa'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
             {paymentModalApp && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1070,6 +1500,24 @@ export default function CompanyJobCandidates() {
                                         ))}
                                     </div>
                                 </div>
+
+                                {paymentModalApp.worker?.pix_key && (
+                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
+                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
+                                            <Wallet size={16} className="flex-shrink-0" />
+                                            <span className="truncate">{paymentModalApp.worker.pix_key}</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyPix(paymentModalApp.worker!.pix_key as string)}
+                                            aria-label="Copiar chave PIX do freela"
+                                            title="Copiar chave PIX"
+                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
+                                        >
+                                            {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="mb-4">
                                     <label htmlFor="payment-amount" className="block text-sm font-bold uppercase mb-2">
@@ -1156,7 +1604,7 @@ export default function CompanyJobCandidates() {
                                         Fechar
                                     </button>
                                     <button
-                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}`)}
+                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}?worker=${paymentModalApp.worker_id}`)}
                                         className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Receipt size={16} /> Ver Recibo
@@ -1196,6 +1644,24 @@ export default function CompanyJobCandidates() {
                                         ))}
                                     </div>
                                 </div>
+
+                                {scheduleModalApp.worker?.pix_key && (
+                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
+                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
+                                            <Wallet size={16} className="flex-shrink-0" />
+                                            <span className="truncate">{scheduleModalApp.worker.pix_key}</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyPix(scheduleModalApp.worker!.pix_key as string)}
+                                            aria-label="Copiar chave PIX do freela"
+                                            title="Copiar chave PIX"
+                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
+                                        >
+                                            {pixCopied ? <Check size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="mb-4">
                                     <label htmlFor="schedule-amount" className="block text-sm font-bold uppercase mb-2">
@@ -1283,7 +1749,7 @@ export default function CompanyJobCandidates() {
                                         Fechar
                                     </button>
                                     <button
-                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}`)}
+                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}?worker=${scheduleModalApp.worker_id}`)}
                                         className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Receipt size={16} /> Ver Comprovante
@@ -1358,6 +1824,7 @@ export default function CompanyJobCandidates() {
                     </div>
                 </div>
             )}
+
         </div>
     );
 }

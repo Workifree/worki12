@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { todayLocalDate } from '../../lib/dateUtils';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import type { TeamMember } from '../../types';
@@ -13,17 +14,19 @@ import type { TeamMember } from '../../types';
 // Sem tech/remoto — o turno é sempre presencial, definido pela função (salão/cozinha/evento).
 const SHIFT_CATEGORIES: { name: string; slug: string }[] = [
     { name: 'Garçom / Garçonete', slug: 'garcom' },
+    { name: 'Barista / Cafeteria', slug: 'barista' },
     { name: 'Barman / Bartender', slug: 'barman' },
-    { name: 'Cozinha / Auxiliar', slug: 'cozinha' },
+    { name: 'Cozinheiro / Cozinha', slug: 'cozinha' },
+    { name: 'Auxiliar de Cozinha / Cumim', slug: 'auxiliar_cozinha' },
     { name: 'Atendente / Balcão', slug: 'atendente' },
-    { name: 'Caixa', slug: 'caixa' },
+    { name: 'Caixa / Frente de Loja', slug: 'caixa' },
     { name: 'Recepção / Hostess', slug: 'recepcao' },
-    { name: 'Limpeza / Copa', slug: 'limpeza' },
-    { name: 'Estoque / Logística', slug: 'estoque' },
+    { name: 'Limpeza / Copa / Steward', slug: 'limpeza' },
+    { name: 'Estoque / Reposição', slug: 'estoque' },
     { name: 'Segurança / Portaria', slug: 'seguranca' },
-    { name: 'Promotor / Panfletagem', slug: 'promotor' },
-    { name: 'Auxiliar de Eventos', slug: 'eventos' },
-    { name: 'Outro', slug: 'outro' },
+    { name: 'Promotor / Degustação', slug: 'promotor' },
+    { name: 'Auxiliar de Eventos / Buffet', slug: 'eventos' },
+    { name: 'Outro (Hospitality)', slug: 'outro' },
 ];
 
 export default function CompanyCreateJob() {
@@ -140,6 +143,16 @@ export default function CompanyCreateJob() {
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
 
+    // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
+    const canProceed = () => {
+        switch (step) {
+            case 1: return !!(formData.title.trim() && formData.category);
+            case 2: return !!formData.description.trim();
+            case 3: return !!(parseFloat(formData.budget) > 0 && formData.start_date && formData.start_date >= todayLocalDate() && formData.work_start_time && formData.work_end_time);
+            default: return true;
+        }
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
@@ -177,8 +190,14 @@ export default function CompanyCreateJob() {
             };
 
             if (isEditing) {
-                const { error } = await supabase.from('jobs').update(payload).eq('id', id);
+                // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+                // RLS de `jobs` foi ligada nesta revisão — "Turno atualizado com sucesso!" não
+                // pode mentir quando o UPDATE afetou 0 linhas.
+                const { data: updated, error } = await supabase.from('jobs').update(payload).eq('id', id).select('id');
                 if (error) throw error;
+                if (!updated || updated.length === 0) {
+                    throw new Error('Não foi possível salvar as alterações: verifique se você ainda tem permissão sobre este turno.');
+                }
                 // Invalida o cache do React Query (staleTime 5min) para o dashboard não
                 // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
@@ -237,7 +256,7 @@ export default function CompanyCreateJob() {
                                     type="text"
                                     aria-label="Título do Turno"
                                     className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold text-lg placeholder:text-gray-300 transition-all"
-                                    placeholder="Ex: Garçom para evento de sábado"
+                                    placeholder="Ex: Garçom para evento de sábado, Barista para cafeteria..."
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
@@ -278,7 +297,7 @@ export default function CompanyCreateJob() {
                                 <textarea
                                     aria-label="Descrição Completa"
                                     className="w-full h-32 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
-                                    placeholder="Descreva o projeto, responsabilidades e objetivos..."
+                                    placeholder="Descreva a dinâmica do turno, responsabilidades no salão/bar/cozinha e postura esperada..."
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
@@ -289,7 +308,7 @@ export default function CompanyCreateJob() {
                                 <textarea
                                     aria-label="Requisitos"
                                     className="w-full h-24 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
-                                    placeholder="- React Native&#10;- TypeScript&#10;- Figma"
+                                    placeholder="- Experiência em atendimento ou preparo&#10;- Agilidade e pontualidade&#10;- Boa comunicação e trabalho em equipe"
                                     value={formData.requirements}
                                     onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
                                 />
@@ -317,13 +336,13 @@ export default function CompanyCreateJob() {
                                 <DollarSign size={20} /> Valor & Cronograma
                             </h2>
 
-                            {/* Aviso postpago */}
+                            {/* Aviso sobre como o pagamento funciona no piloto (modo A) */}
                             {!isEditing && (
                                 <div className="p-4 rounded-xl border-2 bg-blue-50 border-blue-200 flex items-start gap-3">
                                     <DollarSign size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <span className="text-xs font-black uppercase text-blue-700 block mb-1">Pagamento postpago</span>
-                                        <p className="text-xs text-blue-600 font-bold">Nenhum depósito antecipado. O freela é pago na conclusão do turno (Slice 2).</p>
+                                        <span className="text-xs font-black uppercase text-blue-700 block mb-1">Como funciona o pagamento</span>
+                                        <p className="text-xs text-blue-600 font-bold">Você combina e paga o freela direto (PIX ou dinheiro). Depois do turno, registre o pagamento aqui e o Worki emite o recibo pros dois lados.</p>
                                     </div>
                                 </div>
                             )}
@@ -372,6 +391,7 @@ export default function CompanyCreateJob() {
                                         <input
                                             type="date"
                                             aria-label="Data de início"
+                                            min={todayLocalDate()}
                                             className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl py-3 pl-10 pr-4 font-bold transition-all"
                                             value={formData.start_date}
                                             onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
@@ -438,7 +458,7 @@ export default function CompanyCreateJob() {
                                         type="text"
                                         aria-label="Localização Específica"
                                         className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl py-3 pl-10 pr-4 font-bold placeholder:text-gray-300 transition-all"
-                                        placeholder="Ex: São Paulo, SP (ou deixe vazio se remoto)"
+                                        placeholder="Ex: Rua Augusta, 1200 - Consolação, São Paulo"
                                         value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                     />
@@ -460,8 +480,8 @@ export default function CompanyCreateJob() {
 
                         <button
                             onClick={step === 3 ? handleSubmit : handleNext}
-                            disabled={loading}
-                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50"
+                            disabled={loading || !canProceed()}
+                            className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Criar Turno') : 'Próximo'}
                             {!loading && step < 3 && <ChevronRight size={20} />}

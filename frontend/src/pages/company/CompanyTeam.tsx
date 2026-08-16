@@ -1,478 +1,83 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
+import { useState, useEffect } from 'react';
+import { Users, Clock, UserPlus } from 'lucide-react';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
-import { useToast } from '../../contexts/ToastContext';
-import { TeamConnectionService } from '../../services/teamConnectionService';
+import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
-import type { TeamMember, TeamConnection } from '../../types';
-
-// UUID "solto" — mesmo formato usado como Worki ID (auth.uid()). O QR de
-// identidade (Profile.tsx) codifica o workerId cru, sem prefixo/URL.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Extrai o token de convite de um texto colado pelo usuário.
- *
- * O freela pode colar a URL completa (`https://.../convite/w_xxxx`) ou só o
- * token (`w_xxxx`). Se `raw` for uma URL válida, pega o último segmento do
- * path; caso contrário, assume que já é o token puro.
- */
-function extractInviteToken(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed);
-    const segments = url.pathname.split('/').filter(Boolean);
-    return segments[segments.length - 1] ?? trimmed;
-  } catch {
-    return trimmed;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponent: card de membro da equipe
-// ---------------------------------------------------------------------------
-
-interface MemberCardProps {
-  member: TeamMember;
-}
-
-function MemberCard({ member }: MemberCardProps) {
-  const { worker } = member;
-  const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
-  const { addToast } = useToast();
-  const [linkCopied, setLinkCopied] = useState(false);
-
-  // Link transitivo: já tenho esse freela no elenco → posso repassar o link
-  // dele pra outra empresa se conectar, sem pedir de novo ao freela.
-  const handleShareLink = async () => {
-    const { url } = TeamConnectionService.generateWorkerInviteToken(worker.id);
-    try {
-      await navigator.clipboard.writeText(url);
-      setLinkCopied(true);
-      addToast('Link do freela copiado! Repasse para outra empresa.', 'success');
-      setTimeout(() => setLinkCopied(false), 2500);
-    } catch {
-      addToast('Não foi possível copiar o link.', 'error');
-    }
-  };
-
-  return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
-      {/* Avatar */}
-      <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={worker.full_name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-xl">
-            {worker.full_name?.[0]?.toUpperCase() ?? '?'}
-          </div>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <h3 className="font-black uppercase text-base truncate">{worker.full_name}</h3>
-        {worker.primary_role && (
-          <p className="text-sm font-bold text-gray-500 uppercase truncate">{worker.primary_role}</p>
-        )}
-        <div className="flex flex-wrap gap-2 mt-2">
-          {typeof worker.rating_average === 'number' && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-yellow-50 text-yellow-700 px-2 py-1 rounded-xl border border-yellow-200">
-              <Star size={12} fill="currentColor" /> {worker.rating_average.toFixed(1)}
-            </span>
-          )}
-          {typeof worker.completed_jobs_count === 'number' && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-xl">
-              <Briefcase size={12} /> {worker.completed_jobs_count} jobs
-            </span>
-          )}
-          {worker.city && (
-            <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-xl">
-              {worker.city}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Status badge + repassar link */}
-      <div className="flex flex-col items-end gap-2 flex-shrink-0">
-        <span className="bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
-          Elenco
-        </span>
-        <button
-          onClick={handleShareLink}
-          aria-label={`Repassar link do freela ${worker.full_name}`}
-          title="Repassar link deste freela para outra empresa"
-          className="p-1.5 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
-        >
-          {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponent: card de conexão pendente
-// ---------------------------------------------------------------------------
-
-interface PendingCardProps {
-  connection: TeamConnection;
-}
-
-function PendingCard({ connection }: PendingCardProps) {
-  const workerData = connection.worker;
-  const name = workerData?.full_name ?? 'Freela';
-
-  return (
-    <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-xl bg-gray-200 border-2 border-gray-300 flex items-center justify-center font-black text-gray-500">
-        {name[0]?.toUpperCase() ?? '?'}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-black uppercase text-sm truncate">{name}</p>
-        {workerData?.primary_role && (
-          <p className="text-xs font-bold text-gray-400 uppercase">{workerData.primary_role}</p>
-        )}
-      </div>
-      <div className="flex items-center gap-1 text-xs font-bold text-yellow-700 bg-yellow-50 px-2 py-1 rounded-xl border border-yellow-200">
-        <Clock size={12} /> Aguardando
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponent: scanner de câmera QR (lê o QR de identidade do worker)
-// ---------------------------------------------------------------------------
-
-const QR_READER_ELEMENT_ID = 'add-worker-qr-reader';
-
-interface QrScannerPaneProps {
-  /** Chamado com o texto decodificado do QR (deve ser um Worki ID / UUID). */
-  onDecoded: (decodedText: string) => void;
-  /** true enquanto a última leitura está sendo processada (pausa a câmera). */
-  processing: boolean;
-}
-
-function QrScannerPane({ onDecoded, processing }: QrScannerPaneProps) {
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const onDecodedRef = useRef(onDecoded);
-
-  useEffect(() => {
-    onDecodedRef.current = onDecoded;
-  }, [onDecoded]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const scanner = new Html5Qrcode(QR_READER_ELEMENT_ID, {
-      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-      verbose: false,
-    });
-    scannerRef.current = scanner;
-
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText) => {
-          if (cancelled) return;
-          onDecodedRef.current(decodedText);
-        },
-        () => {
-          // Frame sem QR detectado — esperado a cada tick, não é erro real.
-        },
-      )
-      .catch((err) => {
-        if (cancelled) return;
-        logError('CompanyTeam.qrScanner.start', err);
-        setCameraError('Não foi possível acessar a câmera. Verifique a permissão do navegador para este site.');
-      });
-
-    return () => {
-      cancelled = true;
-      const instance = scannerRef.current;
-      if (!instance) return;
-      // G1: instance.stop() pode lançar SINCRONAMENTE (não é promise rejection)
-      // quando o scanner nunca chegou a iniciar (ex.: desktop sem webcam ou
-      // permissão negada) — isso derrubava a tela inteira no unmount. Por
-      // isso todo o cleanup vai dentro de um try/catch defensivo, e só
-      // chamamos stop() se o estado indicar que a câmera está de fato rodando.
-      try {
-        const state = instance.getState?.();
-        const isRunning =
-          state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED;
-        if (!isRunning) {
-          // Nunca iniciou (ou já parou) — nada a interromper, só limpa o DOM.
-          instance.clear();
-          return;
-        }
-        instance
-          .stop()
-          .then(() => instance.clear())
-          .catch(() => {
-            // câmera pode já ter sido interrompida (unmount rápido) — seguro ignorar
-          });
-      } catch {
-        // stop()/getState()/clear() lançou de forma síncrona — nunca deixar
-        // isso escapar do cleanup do unmount.
-      }
-    };
-  }, []);
-
-  if (cameraError) {
-    return (
-      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center flex flex-col items-center gap-2">
-        <CameraOff className="text-red-500" size={28} />
-        <p className="text-sm font-bold text-red-600">{cameraError}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <div
-        id={QR_READER_ELEMENT_ID}
-        className="rounded-xl overflow-hidden border-2 border-black bg-black [&_video]:w-full [&_video]:rounded-xl"
-      />
-      {processing && (
-        <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center">
-          <Loader2 className="animate-spin text-white" size={32} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Subcomponent: modal "Adicionar freela"
-// ---------------------------------------------------------------------------
-
-type AddMethod = 'link' | 'phone' | 'qr';
-
-interface AddWorkerModalProps {
-  onClose: () => void;
-  onAdded: () => void;
-  addWorker: (workerId: string, source: 'qr' | 'link' | 'phone') => Promise<boolean>;
-}
-
-function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
-  // G1: default é 'phone' (Worki ID) — NÃO monta a câmera (nem pede
-  // permissão) ao abrir o modal. QR fica como tab opt-in, só monta o
-  // scanner quando o usuário clica na aba QR.
-  const [method, setMethod] = useState<AddMethod>('phone');
-  const [phone, setPhone] = useState('');
-  const [workerId, setWorkerId] = useState('');
-  const [linkInput, setLinkInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [qrProcessing, setQrProcessing] = useState(false);
-  const qrLockRef = useRef(false);
-  const { addToast } = useToast();
-
-  // A empresa adiciona SEMPRE pelo perfil do freela (QR/Worki ID/link DO
-  // freela) — nunca mandando o próprio link da empresa (esse é usado para a
-  // empresa SER encontrada/adicionada, não para adicionar alguém).
-  const handleLinkSubmit = async () => {
-    const token = extractInviteToken(linkInput);
-    const targetWorkerId = TeamConnectionService.resolveWorkerInviteToken(token);
-    if (!targetWorkerId) {
-      addToast('Link inválido. Peça ao freela o link de perfil dele (Perfil → "Copiar meu link").', 'error');
-      return;
-    }
-    setLoading(true);
-    const ok = await addWorker(targetWorkerId, 'link');
-    setLoading(false);
-    if (ok) {
-      onAdded();
-      onClose();
-    }
-  };
-
-  const handlePhoneSubmit = async () => {
-    const raw = workerId.trim();
-    if (!raw) return;
-
-    // Tolerante ao erro comum: colar o LINK/token de perfil no campo do Worki ID.
-    // Se não for um UUID cru, tenta resolver como token de convite antes de desistir.
-    let target = raw;
-    if (!UUID_RE.test(raw)) {
-      const resolved = TeamConnectionService.resolveWorkerInviteToken(extractInviteToken(raw));
-      if (resolved) {
-        target = resolved;
-      } else {
-        addToast('Worki ID inválido. Cole o Worki ID do freela (Perfil → "Meu QR de Identidade" → "Copiar Worki ID") ou use a aba Link.', 'error');
-        return;
-      }
-    }
-
-    setLoading(true);
-    const ok = await addWorker(target, 'phone');
-    setLoading(false);
-    if (ok) {
-      onAdded();
-      onClose();
-    }
-  };
-
-  // A câmera manda frames continuamente; trava para não disparar 2x a mesma leitura.
-  const handleQrDecoded = useCallback(
-    async (decodedText: string) => {
-      if (qrLockRef.current) return;
-      const candidate = decodedText.trim();
-
-      if (!UUID_RE.test(candidate)) {
-        addToast('QR inválido. Peça ao freela para abrir "Meu QR de Identidade" no perfil dele.', 'error');
-        return;
-      }
-
-      qrLockRef.current = true;
-      setQrProcessing(true);
-      const ok = await addWorker(candidate, 'qr');
-      setQrProcessing(false);
-
-      if (ok) {
-        onAdded();
-        onClose();
-        return;
-      }
-      // erro já foi mostrado via toast pelo addWorker — libera pra tentar de novo
-      qrLockRef.current = false;
-    },
-    [addWorker, addToast, onAdded, onClose],
-  );
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-black uppercase tracking-tight">Adicionar Freela</h2>
-          <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-            <X size={20} />
-          </button>
-        </div>
-        <p className="text-sm font-bold text-gray-500 mb-6">
-          Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou.
-        </p>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b-2 border-gray-200 pb-1">
-          {([
-            { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
-            { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
-            { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setMethod(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-t-xl font-black uppercase text-sm transition-all ${
-                method === tab.id
-                  ? 'bg-black text-white translate-y-[2px]'
-                  : 'text-gray-400 hover:text-black hover:bg-gray-100'
-              }`}
-            >
-              <tab.icon size={16} /> {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Conteúdo por método */}
-        {method === 'link' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Cole o <span className="font-black">link de perfil</span> que o freela te enviou
-              (ele encontra em Perfil → "Copiar meu link").
-            </p>
-            <div className="space-y-2">
-              <label htmlFor="worker-link-input" className="text-xs font-bold uppercase tracking-wide">
-                Link de perfil do freela
-              </label>
-              <input
-                id="worker-link-input"
-                type="text"
-                value={linkInput}
-                onChange={(e) => setLinkInput(e.target.value)}
-                placeholder="Cole aqui o link enviado pelo freela"
-                className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-            <button
-              onClick={handleLinkSubmit}
-              disabled={loading || !linkInput.trim()}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
-              {loading ? 'Adicionando...' : 'Adicionar pelo Link'}
-            </button>
-            <p className="text-xs text-gray-400 text-center">
-              O freela aparecerá em "Aguardando" até aceitar o convite.
-            </p>
-          </div>
-        )}
-
-        {method === 'qr' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Aponte a câmera para o <span className="font-black">QR de Identidade</span> do freela
-              (ele encontra em Perfil → "Meu QR de Identidade").
-            </p>
-            <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
-            <p className="text-xs text-gray-400 text-center">
-              O freela aparecerá em "Aguardando" até aceitar o convite.
-            </p>
-          </div>
-        )}
-
-        {method === 'phone' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Digite o <span className="font-black">ID do worker</span> (Worki ID) para adicionar diretamente.
-              Busca por telefone disponível na v1.1.
-            </p>
-            <div className="space-y-2">
-              <label htmlFor="phone-input" className="text-xs font-bold uppercase tracking-wide">
-                Worki ID do freela
-              </label>
-              <input
-                id="phone-input"
-                type="text"
-                value={phone}
-                onChange={(e) => { setPhone(e.target.value); setWorkerId(e.target.value); }}
-                placeholder="Cole o ID do freela aqui"
-                className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-            <button
-              onClick={handlePhoneSubmit}
-              disabled={loading || !workerId.trim()}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
-              {loading ? 'Enviando...' : 'Enviar Convite'}
-            </button>
-            <p className="text-xs text-gray-400">
-              Busca por CPF/telefone disponível na v1.1. Por enquanto, peça o Worki ID ao freela.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+import type { TeamMember } from '../../types';
+import { MemberCard } from '../../components/team/MemberCard';
+import { PendingCard } from '../../components/team/PendingCard';
+import { AddWorkerModal } from '../../components/team/AddWorkerModal';
+import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
+import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
+import type { WorkerHistoryWithCompany } from '../../components/team/types';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
+//
+// Orquestra o "Meu Elenco": lista de freelas aceitos/pendentes, histórico com
+// a empresa (batch, sem N+1) e os modais de adicionar/convidar/remover.
+// A UI de cada peça vive em `components/team/` — ver ali para os cards e modais.
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, addWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  // R "Convidar direto do elenco": modal por membro + histórico batch (1 query p/ todo o elenco).
+  const [invitingMember, setInvitingMember] = useState<TeamMember | null>(null);
+  const [historyByWorker, setHistoryByWorker] = useState<Record<string, WorkerHistoryWithCompany>>({});
+
+  const handleConfirmRemove = async () => {
+    if (!removingMember) return;
+    setIsDeleting(true);
+    try {
+      await removeWorker(removingMember.worker.id);
+      setRemovingMember(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Histórico com a empresa (turnos concluídos) para TODO o elenco de uma vez — evita N+1.
+  useEffect(() => {
+    if (!companyId || teamMembers.length === 0) {
+      setHistoryByWorker({});
+      return;
+    }
+    let active = true;
+    const workerIds = teamMembers.map((m) => m.worker.id);
+    void (async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('worker_id, jobs!inner(company_id, start_date)')
+        .eq('status', 'completed')
+        .eq('jobs.company_id', companyId)
+        .in('worker_id', workerIds);
+
+      if (error) {
+        logError('CompanyTeam.fetchHistory', error);
+        return;
+      }
+      if (!active) return;
+
+      const map: Record<string, WorkerHistoryWithCompany> = {};
+      interface CompletedRow {
+        worker_id: string;
+        jobs: { start_date: string | null } | { start_date: string | null }[] | null;
+      }
+      (data as unknown as CompletedRow[] ?? []).forEach((row) => {
+        const jobsField = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
+        const startDate = jobsField?.start_date ?? null;
+        const entry = map[row.worker_id] ?? { count: 0, lastDate: null };
+        entry.count += 1;
+        if (startDate && (!entry.lastDate || startDate > entry.lastDate)) entry.lastDate = startDate;
+        map[row.worker_id] = entry;
+      });
+      setHistoryByWorker(map);
+    })();
+    return () => { active = false; };
+  }, [companyId, teamMembers]);
 
   if (loading) {
     return (
@@ -517,7 +122,13 @@ export default function CompanyTeam() {
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {teamMembers.map((member) => (
-              <MemberCard key={member.connection.id} member={member} />
+              <MemberCard
+                key={member.connection.id}
+                member={member}
+                onRemove={(m) => setRemovingMember(m)}
+                onInvite={(m) => setInvitingMember(m)}
+                history={historyByWorker[member.worker.id]}
+              />
             ))}
           </div>
         </section>
@@ -561,6 +172,25 @@ export default function CompanyTeam() {
           onClose={() => setShowAddModal(false)}
           onAdded={refresh}
           addWorker={addWorker}
+        />
+      )}
+
+      {/* Modal "Convidar para turno" — a partir de um freela do elenco */}
+      {invitingMember && (
+        <InviteToShiftModal
+          member={invitingMember}
+          onClose={() => setInvitingMember(null)}
+          onInvited={refresh}
+        />
+      )}
+
+      {/* Modal de Confirmação de Remoção */}
+      {removingMember && (
+        <RemoveMemberDialog
+          member={removingMember}
+          isDeleting={isDeleting}
+          onCancel={() => setRemovingMember(null)}
+          onConfirm={() => { void handleConfirmRemove(); }}
         />
       )}
     </div>

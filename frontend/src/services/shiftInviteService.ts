@@ -118,7 +118,6 @@ async function dispatchAuthorizePayment(
           message:
             `A autorização do pagamento para o turno falhou: ${errMsg}. ` +
             'Verifique o método de pagamento cadastrado para garantir que o freela receba.',
-          link: '/company/wallet',
         });
       } catch (notifErr) {
         logError('shiftInvite.authorizePayment.notif', notifErr);
@@ -155,6 +154,18 @@ export interface RespondToInviteResult {
   error?: string;
 }
 
+export interface CancelInviteResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface DismissFromShiftResult {
+  success: boolean;
+  error?: string;
+  /** true quando o bloqueio foi por já existir pagamento (agendado ou registrado) para ESTE freela neste turno. */
+  blockedByPayment?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
@@ -183,6 +194,48 @@ function calcExpiry(hours: number): string {
   const d = new Date();
   d.setHours(d.getHours() + hours);
   return d.toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// hasAttendedShift — predicado único de "o freela já compareceu" (revisão pré-piloto, QA)
+// ---------------------------------------------------------------------------
+
+/** Sinais de presença de uma application — subconjunto usado por `hasAttendedShift`. */
+export interface AttendanceSignals {
+  worker_checkin_at?: string | null;
+  company_checkin_confirmed_at?: string | null;
+  company_checkout_confirmed_at?: string | null;
+}
+
+/**
+ * true quando o freela já COMPARECEU ao turno, por QUALQUER um dos três sinais reais que o
+ * sistema reconhece. "Dispensar" é um gesto de ANTES do turno acontecer; a partir do momento
+ * em que qualquer um destes sinais existe, o freela já tem trabalho a faturar — o caminho
+ * correto passa a ser registrar (ou, se necessário, estornar) o pagamento, nunca dispensar
+ * (`applications.status → 'cancelled'` é irreversível: `UNIQUE(job_id, worker_id)` impede
+ * reconvidar o mesmo freela para o mesmo turno).
+ *
+ * Os três sinais, nenhum redundante — cobrem os três jeitos reais de um turno começar:
+ *  1. `worker_checkin_at`             — o próprio freela bateu chegada no app.
+ *  2. `company_checkin_confirmed_at`  — a empresa confirmou a chegada pela tela, MESMO sem o
+ *     freela nunca ter aberto o app (`handleConfirmCheckin`/"Confirmar Presença" —
+ *     justamente o caminho canônico do modo A, freela que não usa o app).
+ *  3. `company_checkout_confirmed_at` — a empresa já confirmou a SAÍDA (turno claramente
+ *     aconteceu, mesmo no caso raro de o checkin nunca ter sido confirmado).
+ *
+ * Centralizado e nomeado de propósito (não replicado condição a condição em cada chamador):
+ * foi a ausência do sinal (2) numa versão anterior desta guarda — presente só em
+ * `shiftInviteService.dismissFromShift` e no render de `CompanyJobCandidates` — que deixava
+ * "Dispensar" disponível depois de "Confirmar Presença" sem o freela ter batido check-in no
+ * app (o caminho normal quando ele não usa o app). Uma quarta forma de "o turno começou" no
+ * futuro só precisa entrar AQUI, uma vez, para os dois lados (UI e service) ficarem corretos.
+ */
+export function hasAttendedShift(app: AttendanceSignals): boolean {
+  return !!(
+    app.worker_checkin_at ||
+    app.company_checkin_confirmed_at ||
+    app.company_checkout_confirmed_at
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +379,198 @@ export const ShiftInviteService = {
   },
 
   // -------------------------------------------------------------------------
+  // EMPRESA: desfazer convite/contratação (revisão pré-piloto, onda 3)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cancela um convite que ainda NÃO foi respondido pelo freela ('invited' → 'cancelled').
+   * Libera o job para convidar outro membro da equipe — a MESMA application/worker não pode
+   * ser reconvidada (UNIQUE(job_id, worker_id) no schema); é preciso escolher outro freela.
+   *
+   * Notificação simétrica ao freela: este método NÃO insere notificação nenhuma pelo client
+   * (mesmo a policy de INSERT de `notifications`, desde `20260702000000_notifications_notify_counterpart.sql`,
+   * já permitindo empresa→worker quando existe `team_connections` com status 'accepted' — ver
+   * `inviteWorkerToShift` acima, que insere assim). Quem avisa o freela aqui é o trigger
+   * `trg_notify_counterpart_on_application_cancel` (SECURITY DEFINER, migration
+   * `20260816150000_notify_counterpart_on_application_cancel.sql`, ADR-20260816-notificacao-
+   * contraparte-por-trigger), disparado automaticamente por este mesmo UPDATE
+   * (`status → 'cancelled'`) — ramifica por `auth.uid()` para saber quem foi o ator e notifica
+   * a contraparte certa. Preferido a um INSERT no client por não depender de RLS de
+   * `authenticated`: um INSERT pelo client exigiria vínculo de equipe VIVO (`team_connections
+   * accepted`), e se o freela sair do Elenco/bloquear a empresa DEPOIS do turno, esse INSERT
+   * seria negado em silêncio — justo para quem tem atrito com a empresa e mais precisa da
+   * trilha do recibo. O trigger SECURITY DEFINER não passa por essa RLS, então o aviso
+   * independe do vínculo. NÃO adicionar INSERT em `notifications` aqui — duplicaria o aviso.
+   */
+  async cancelInvite(applicationId: string): Promise<CancelInviteResult> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Sessão expirada.' };
+
+      const { data: current, error: fetchErr } = await supabase
+        .from('applications')
+        .select('id, status')
+        .eq('id', applicationId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        logError('shiftInvite.cancelInvite.fetch', fetchErr);
+        return { success: false, error: 'Convite não encontrado.' };
+      }
+      if (!current) return { success: false, error: 'Convite não encontrado.' };
+      if (current.status !== 'invited') {
+        return {
+          success: false,
+          error: `Transição inválida: status atual é '${current.status}', esperado 'invited'.`,
+        };
+      }
+
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md): sob RLS, um
+      // UPDATE cuja linha não casa mais com a policy USING não gera erro — retorna 0 linhas
+      // e o PostgREST devolve 204. Sem checar `data`, o service reportaria sucesso mesmo
+      // quando o banco não mudou nada.
+      const { data: updated, error: updateErr } = await supabase
+        .from('applications')
+        .update({ status: 'cancelled' })
+        .eq('id', applicationId)
+        .eq('status', 'invited')
+        .select('id');
+
+      if (updateErr) {
+        logError('shiftInvite.cancelInvite.update', updateErr);
+        return { success: false, error: 'Erro ao cancelar o convite.' };
+      }
+      if (!updated || updated.length === 0) {
+        return { success: false, error: 'Não foi possível cancelar este convite.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('shiftInvite.cancelInvite', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro inesperado.',
+      };
+    }
+  },
+
+  /**
+   * Dispensa um freela JÁ contratado deste turno ('hired' | 'in_progress' → 'cancelled').
+   * Gesto sério (o freela já contava com o turno) — a UI DEVE exigir confirmação explícita
+   * antes de chamar isto; este método não confirma nada, só executa a transição.
+   *
+   * Guarda: bloqueia se já existe um marcador ATIVO em `shift_payments` (status
+   * 'scheduled' ou 'recorded') para ESTE FREELA neste turno (ADR-20260816 — o marcador é
+   * por (job_id, worker_id), não mais por job_id sozinho: dois freelas do mesmo turno têm
+   * marcadores independentes, e o pagamento de um não pode travar o dispensar do outro).
+   * Motivo do bloqueio em si: dispensar deixaria o marcador ATIVO deste freela órfão —
+   * atrelado a alguém que não está mais no turno. A empresa precisa estornar
+   * (`PaymentRecordService.voidPayment`) antes.
+   *
+   * Guarda (revisão pré-piloto, onda 3 — QA #2, reforçada na rodada seguinte de QA): bloqueia
+   * também se o freela já COMPARECEU ao turno — `hasAttendedShift` (ver acima), que cobre os
+   * TRÊS sinais reais (checkin do próprio freela, chegada confirmada pela empresa, ou saída
+   * confirmada pela empresa). "Dispensar" é um gesto de ANTES do turno; depois que o freela
+   * trabalhou, dispensar (status→'cancelled') tornaria o turno impagável para sempre —
+   * `UNIQUE(job_id, worker_id)` impede reconvidar o mesmo freela e a UI de pagamento só
+   * aparece para 'hired'|'in_progress'|'completed'. Nesse ponto o caminho certo é registrar
+   * o pagamento (ou estornar um já registrado).
+   *
+   * Notificação simétrica ao freela: mesmo caminho de `cancelInvite` — o trigger
+   * `trg_notify_counterpart_on_application_cancel` avisa o freela automaticamente; este
+   * método não insere notificação nenhuma.
+   */
+  async dismissFromShift(applicationId: string): Promise<DismissFromShiftResult> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Sessão expirada.' };
+
+      const { data: current, error: fetchErr } = await supabase
+        .from('applications')
+        .select(
+          'id, status, job_id, worker_id, worker_checkin_at, company_checkin_confirmed_at, company_checkout_confirmed_at',
+        )
+        .eq('id', applicationId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        logError('shiftInvite.dismissFromShift.fetch', fetchErr);
+        return { success: false, error: 'Freela não encontrado neste turno.' };
+      }
+      if (!current) return { success: false, error: 'Freela não encontrado neste turno.' };
+      if (current.status !== 'hired' && current.status !== 'in_progress') {
+        return {
+          success: false,
+          error: `Transição inválida: status atual é '${current.status}', esperado 'hired' ou 'in_progress'.`,
+        };
+      }
+
+      if (hasAttendedShift(current)) {
+        return {
+          success: false,
+          error: 'O turno já foi cumprido; dispensar não está mais disponível. Registre o pagamento deste turno.',
+        };
+      }
+
+      // Guarda: pagamento ATIVO (scheduled|recorded) DESTE FREELA neste job bloqueia o
+      // dispensar (ver motivo no comentário do método) — checagem defensiva, além da UI já
+      // impedir. `.limit(1)` (não `.maybeSingle()`): o filtro por worker_id já garante no
+      // máximo 1 linha em qualquer estado do banco (atual OU pós-migration), mas `.limit(1)`
+      // não quebra se, por alguma inconsistência, houver mais de uma — só ignora o excedente.
+      const { data: activePayments, error: paymentErr } = await supabase
+        .from('shift_payments')
+        .select('id, status')
+        .eq('job_id', current.job_id)
+        .eq('worker_id', current.worker_id)
+        .in('status', ['scheduled', 'recorded'])
+        .limit(1);
+
+      if (paymentErr) {
+        logError('shiftInvite.dismissFromShift.checkPayment', paymentErr);
+        return { success: false, error: 'Erro ao verificar pagamento do turno.' };
+      }
+      const activePayment = activePayments?.[0] ?? null;
+      if (activePayment) {
+        return {
+          success: false,
+          blockedByPayment: true,
+          error:
+            'Este freela já tem um pagamento registrado ou agendado neste turno. Estorne o pagamento antes de dispensá-lo.',
+        };
+      }
+
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md) — ver `cancelInvite`
+      // acima para o raciocínio completo (UPDATE sob RLS sem match no USING = 0 linhas, sem erro).
+      const { data: updated, error: updateErr } = await supabase
+        .from('applications')
+        .update({ status: 'cancelled' })
+        .eq('id', applicationId)
+        .in('status', ['hired', 'in_progress'])
+        .select('id');
+
+      if (updateErr) {
+        logError('shiftInvite.dismissFromShift.update', updateErr);
+        return { success: false, error: 'Erro ao dispensar o freela deste turno.' };
+      }
+      if (!updated || updated.length === 0) {
+        return { success: false, error: 'Não foi possível dispensar este freela.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('shiftInvite.dismissFromShift', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro inesperado.',
+      };
+    }
+  },
+
+  // -------------------------------------------------------------------------
   // WORKER: responder ao convite (aceitar ou recusar)
   // -------------------------------------------------------------------------
 
@@ -390,7 +635,13 @@ export const ShiftInviteService = {
       const newStatus: ApplicationStatus = response === 'accepted' ? 'hired' : 'declined';
       const now = new Date().toISOString();
 
-      const { error: updateErr } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
+      // RLS negado silenciosamente): se a linha não casar mais com a policy USING no momento
+      // do UPDATE (ex.: convite cancelado pela empresa entre o fetch e esta chamada), o
+      // PostgREST retorna 204 sem erro e 0 linhas afetadas. Sem checar `data`, o freela veria
+      // "convite aceito" com o banco intocado — é justamente o gesto que abre o turno inteiro
+      // (o pior sítio para mentir: ninguém descobre até o dia do turno).
+      const { data: updated, error: updateErr } = await supabase
         .from('applications')
         .update({
           status: newStatus,
@@ -398,11 +649,19 @@ export const ShiftInviteService = {
           invitation_responded_at: now,
         })
         .eq('id', applicationId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .eq('status', 'invited')
+        .select('id');
 
       if (updateErr) {
         logError('shiftInvite.respondToInvite.update', updateErr);
         return { success: false, error: 'Erro ao registrar resposta.' };
+      }
+      if (!updated || updated.length === 0) {
+        return {
+          success: false,
+          error: 'Não foi possível registrar sua resposta a este convite. Atualize a página e tente novamente.',
+        };
       }
 
       // 4. Resolver o owner da empresa (necessário tanto para notificação de aceite quanto
@@ -559,3 +818,76 @@ export const ShiftInviteService = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------
+// WhatsApp — aviso manual de convite (zero backend, deep link `wa.me`)
+// ---------------------------------------------------------------------------
+// O convite só existe dentro do app: o InviteTakeover só dispara com o app aberto e a
+// notificação do navegador não sobrevive à aba fechada. Sem push real/SMS (infra que o
+// projeto não tem), o telefone já cadastrado do freela (`workers.phone`) é o único canal
+// fora do app que a empresa tem à mão. Funções puras (sem I/O) — fáceis de testar isoladas.
+
+/**
+ * Normaliza um telefone brasileiro (gravado mascarado, ex.: "(11) 99999-9999") para o
+ * formato que o `wa.me` espera: só dígitos, com DDI 55 na frente.
+ *
+ * - 10/11 dígitos (DDD + telefone, sem DDI) → prefixa "55".
+ * - 12/13 dígitos já começando com "55" → mantém como está (já veio com DDI).
+ * - Qualquer outro formato (vazio, incompleto, sem DDD reconhecível) → `null`, nunca gera
+ *   `wa.me/undefined` ou um link quebrado.
+ */
+export function normalizePhoneForWhatsApp(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Já veio com DDI 55 (12 = DDD + fixo 8 dígitos + 55; 13 = DDD + celular 9 dígitos + 55).
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+    return digits;
+  }
+
+  // Número local sem DDI (10 = fixo, 11 = celular).
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+
+  return null;
+}
+
+export interface ShiftInviteWhatsAppMessageParams {
+  companyName: string;
+  jobTitle: string;
+  /** Data já formatada pelo caller (ex.: "16/08/2026") — evita duplicar a lógica de fuso aqui. */
+  dateLabel?: string | null;
+  /** Horário já formatado pelo caller (ex.: "08:00 às 17:00"). */
+  timeLabel?: string | null;
+  location?: string | null;
+  /** Valor do turno em BRL. */
+  amount?: number | null;
+  /** URL para o freela abrir o app e responder ao convite. */
+  appUrl: string;
+}
+
+/**
+ * Monta a mensagem pronta do WhatsApp — nome da empresa, título do turno, data, horário,
+ * local e valor, mais o link direto para o app. Não genérica: usa os dados reais do turno.
+ */
+export function buildShiftInviteWhatsAppMessage(params: ShiftInviteWhatsAppMessageParams): string {
+  const { companyName, jobTitle, dateLabel, timeLabel, location, amount, appUrl } = params;
+
+  const valueLabel =
+    typeof amount === 'number' && amount > 0
+      ? `Valor: R$ ${amount.toFixed(2).replace('.', ',')}`
+      : null;
+
+  const lines = [
+    `Oi! Aqui é ${companyName || 'a empresa'} pelo Worki.`,
+    `Te convidei para o turno "${jobTitle}"${dateLabel ? `, ${dateLabel}` : ''}${timeLabel ? ` (${timeLabel})` : ''}.`,
+    location ? `Local: ${location}` : null,
+    valueLabel,
+    '',
+    `Dá uma olhada e responde no app: ${appUrl}`,
+  ].filter((line): line is string => line !== null);
+
+  return lines.join('\n');
+}

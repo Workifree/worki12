@@ -21,7 +21,7 @@
   TanStack React Query 5.90.20 está no `package.json` e um `QueryClient` é montado em `App.tsx`, mas
   **as páginas NÃO usam `useQuery` na prática.** Seguir o padrão existente (useState/useEffect) ao
   implementar features novas, salvo decisão explícita de migrar.
-- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push), `financialBIService` (BI unificado), `spendLimitService` (teto + alerta).
+- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push).
 - **Toda query autenticada começa com** `supabase.auth.getUser()` → redireciona para `/login` se `null`.
 - **Backend:** Supabase (PostgREST + Realtime + Auth + Storage + Edge Functions Deno)
 - **Supabase JS:** 2.91.0 — client em `frontend/src/lib/supabase.ts` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
@@ -49,7 +49,7 @@
 - Helper compartilhado: `supabase/functions/_shared/asaas.ts` (+ `getCorsHeaders()`)
 - Modelo: **carteira central** (sem subcontas); saldo por usuário no DB (`wallets.balance`)
 - Tipos de pagamento: PIX, Boleto, Cartão de Crédito
-- **Fluxos prepago (Slice 1):** `DepositModal` → `asaas-deposit`; saque `asaas-withdraw`; checkout `asaas-checkout`; sync `asaas-sync`; webhook `asaas-webhook`
+- **Fluxos prepago (Slice 1):** `asaas-deposit` (depósito); saque `asaas-withdraw`; checkout `asaas-checkout`; sync `asaas-sync`; webhook `asaas-webhook`
 - **Fluxos postpago (Slice 2):** `asaas-tokenize-card` (salva cartão); `asaas-authorize-payment` (pré-autorização); `asaas-capture-payment` (captura hold); `asaas-release-hold` (cancela hold)
 - **Endpoints Asaas utilizados:**
   - `POST /v3/creditCard` — tokenizar cartão (Slice 2)
@@ -92,13 +92,25 @@
   - **`company_monthly_revenue`** (20260623000100) — faturamento mensal declarado (input para BI-3). Campos: `company_id, year_month` (DATE dia 1), `amount`. Upsert (company_id, year_month). RLS por owner.
   - **`companies.default_briefing`** (20260710000100) — texto de briefing padrão do negócio (pré-preenche turno). Simples, NÃO toca saldo.
 - **Mudanças em shift_payments (Slice 3, modo A + agendamento):**
-  - **20260712000000** — novo status `scheduled`, coluna `scheduled_for date` (promessa imutável), `paid_at` agora nullable (NULL em scheduled, setado na efetivação). UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')`. Trigger reescrito para liberar SÓ transição `scheduled→recorded` de `paid_at`. Máquina de estados: `scheduled→recorded|voided`, `recorded→voided`. ZERO impacto em saldo/escrow.
-- **Notificação de cancelamento pelo worker (Slice 5):**
-  - **20260714000000** — novo trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path='') em `applications`. AFTER UPDATE WHEN (NEW.status='cancelled' AND OLD.status IN ('hired','in_progress')) → insere notificação para dono da empresa (type='status_change'). **Landmark:** notificação automática à contraparte que RLS bloqueia inserir direto.
+  - **20260712000000** — novo status `scheduled`, coluna `scheduled_for date` (promessa imutável), `paid_at` agora nullable (NULL em scheduled, setado na efetivação). UNIQUE parcial `(job_id) WHERE status IN ('scheduled','recorded')` (histórico; **ver 20260816220000 abaixo**). Trigger reescrito para liberar SÓ transição `scheduled→recorded` de `paid_at`. Máquina de estados: `scheduled→recorded|voided`, `recorded→voided`. ZERO impacto em saldo/escrow.
+  - **20260816220000** — índice UNIQUE trocado de `(job_id)` para `(job_id, worker_id)` com predicado parcial `WHERE status IN ('scheduled','recorded')`. Razão: turno pode ter N freelas (painel pós-criação convida vários); índice antigo regrediu granularidade já existente em `escrow_transactions` (por freela). **Ordem obrigatória:** frontend adaptado primeiro (passo 1: Passo 1 de `paymentRecordService` + `CompanyJobCandidates`), migration depois (passo 2). Sem o passo 1, `.maybeSingle()` falha com PGRST116 (UI fica cega). ADR-20260816-marcador-pagamento-por-freela.md.
+- **Notificação de cancelamento (bidirecional, Onda 1 — Revisão Piloto):**
+  - **20260714000000** — trigger `trg_notify_company_on_worker_cancel` (SECURITY DEFINER, search_path='') em `applications`. **[SUBSTITUÍDO em 20260816150000]**
+  - **20260816150000** — trigger unificado `trg_notify_counterpart_on_application_cancel` (SECURITY DEFINER, search_path='') substitui o anterior. Ramifica por `auth.uid()`: 
+    - `auth.uid() = worker_id` → notifica empresa
+    - `auth.uid() = company_id` (do job) → notifica freela **[NOVO — empresa agora pode dispensar]**
+    - `auth.uid() IS NULL` (service_role/cron/delete-account) → notifica ambos com texto neutro
+    Covers cancelamento de convite ('invited'), turno ('hired'/'in_progress'), e cancelamento após exclusão de conta. ADR-20260816-notificacao-contraparte-por-trigger.md.
+- **RLS que estava desligada em produção (Onda 1 — Revisão Piloto, 20260816):**
+  - **`20260816210000_enable_rls_jobs`** — RLS de `jobs` estava DESLIGADA (policies existiam mas eram inertes); ligada. SELECT mantido `USING (true)` (Fase 1) para não quebrar subqueries de outras tabelas que referenciam `jobs`. UPDATE/DELETE agora protegidas: 4 policies novas com ancoragem dupla (`company_id = auth.uid()` OR via `companies.owner_id`). ADR-20260816-rls-desligada-jobs-conversation.md.
+  - **`20260816210100_enable_rls_conversation_message`** — RLS de `public."Conversation"` e `public."Message"` ligada (estavam desligadas). `anon` revogado de ambas. Função `can_access_conversation()` (SECURITY DEFINER) como ponto único de decisão. ADR-20260816-rls-desligada-jobs-conversation.md.
+- **RLS de `workers` restrita por vínculo (Onda 1 — Revisão Piloto, 20260816):**
+  - **`20260816120000_workers_select_by_relationship`** — policy SELECT em `workers` trocada de `USING (true)` para `USING (public.can_view_worker_profile(id))`. Razão: `workers` contém dados sensíveis (CPF, telefone, PIX key); qualquer conta autenticada podia varrer a base inteira. Agora restrita a: (1) self (freela lê próprio perfil), (2) elenco via `team_connections` status 'pending'/'accepted', (3) vínculo operacional via `applications` em `jobs` da empresa. Função SECURITY DEFINER evita recursão de RLS. ADR-20260816-workers-select-por-vinculo.md.
 - **Policy adicional (20260623000200):**
   - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
 - Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,
   `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for).
+- **Estado do banco em produção:** **`supabase/migrations/APLICACAO-2026-08-16.md`** registra o estado real de 16/08/2026 (revisão pré-piloto), incluindo divergências entre timestamps de aplicação vs. nome de arquivo, verificações executadas, e lacunas declaradas. Este é o censo oficial — o repositório de migrations é referência de schema, mas não é a fonte da verdade do estado atual de produção (políticas podem ter sido ligadas/desligadas manualmente pelo dashboard).
 - **RPCs de agregados do worker (Slice 4):**
   - **`recompute_worker_aggregates(uuid)`** — recomputa `xp`, `level`, `completed_jobs_count`, `earnings_total`. SECURITY DEFINER, service_role only, idempotente. Fórmula: `xp = completed_jobs_count*100 + bônus_perfil` (foto +50, especialidades +75).
   - **`recompute_my_aggregates()`** — wrapper auth-scoped para cliente recomputar próprios agregados após editar perfil. GRANT EXECUTE TO authenticated.
@@ -106,7 +118,7 @@
   - **Landmark:** trigger legado `award_xp_on_job_completion` NÃO era DEFINER → RLS bloqueava UPDATE do freela quando empresa concluía turno (causa real de "XP não sobe") = **foi removido**.
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
-  `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir.
+  `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir. RLS ligada em produção a partir de **20260816** (`enable_rls_conversation_message`); antes era desligada — `anon` podia listar todas as conversas. UPDATE em `Message` (campo `read_at`) ficou quebrado até essa migration (query afetava 0 linhas, silenciosamente).
 
 ## Qualidade & testes
 

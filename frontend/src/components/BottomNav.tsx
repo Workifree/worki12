@@ -1,4 +1,4 @@
-import { Home, User, MessageSquare, Wallet, PlusCircle, Users, Contact, Inbox } from 'lucide-react';
+import { Home, User, MessageSquare, PlusCircle, Users, Contact, Inbox, Briefcase, Receipt } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 interface BottomNavProps {
@@ -12,6 +12,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
         { icon: Home, label: 'Início', path: '/dashboard' },
         { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Clientes', path: '/carteira' },
+        { icon: Receipt, label: 'Receb.', path: '/recebimentos' }, // Shortened label ("Meus Recebimentos")
         { icon: MessageSquare, label: 'Msgs', path: '/messages' }, // Shortened label
         { icon: User, label: 'Perfil', path: '/profile' },
     ];
@@ -20,7 +21,8 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
         { icon: Home, label: 'Início', path: '/company/dashboard' },
         { icon: Users, label: 'Elenco', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar', path: '/company/create' },
-        { icon: Wallet, label: 'Carteira', path: '/company/wallet' },
+        { icon: Briefcase, label: 'Turnos', path: '/company/jobs' },
+        { icon: MessageSquare, label: 'Msgs', path: '/company/messages' }, // Shortened label (mesmo padrão do worker)
         { icon: User, label: 'Perfil', path: '/company/profile' },
     ];
 
@@ -36,7 +38,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                         to={item.path}
                         aria-label={item.label}
                         className={({ isActive }) => `
-                 flex flex-col items-center justify-center w-full h-full gap-1 p-2
+                 flex flex-col items-center justify-center w-full h-full gap-1 py-2 px-1
                  ${isActive
                                 ? (isCompany ? 'text-blue-600' : 'text-primary')
                                 : 'text-gray-400 hover:text-black'}
@@ -45,7 +47,18 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                         {({ isActive }) => (
                             <>
                                 <item.icon size={22} strokeWidth={isActive ? 3 : 2} />
-                                <span className={`text-[10px] font-black uppercase ${isActive ? (isCompany ? 'text-blue-600' : 'text-primary') : 'text-gray-400'}`}>
+                                {/* px-1 (em vez de p-2) libera ~4px/item — medido com Playwright: fecha o
+                                    overflow horizontal do nav do worker a 320px (iPhone SE 1ª geração,
+                                    o pior caso; "Convites"/8 chars era o item que estourava) sem reduzir
+                                    a fonte de 10px em nenhum item, nos dois papéis.
+                                    `truncate` (SEM `min-w-0` no link pai) é só rede de segurança: cai o
+                                    texto com reticências se algum rótulo futuro/escala de fonte do SO
+                                    não couber, mas não some com o "floor" de conteúdo do flex item, então
+                                    não altera a distribuição/legibilidade no caso normal — confirmado por
+                                    medição que em 320/360/375px nenhum rótulo hoje é cortado. Sem isso,
+                                    o pior cenário seria a barra ganhar scroll horizontal, pior ainda numa
+                                    barra fixa. */}
+                                <span className={`text-[10px] font-black uppercase truncate max-w-full ${isActive ? (isCompany ? 'text-blue-600' : 'text-primary') : 'text-gray-400'}`}>
                                     {item.label}
                                 </span>
                             </>

@@ -1,9 +1,13 @@
 /**
- * CompanyOrdersReport — Relatório de Ordens (turnos) da empresa.
+ * CompanyOrdersReport — Relatório de Ordens da empresa.
  *
- * "Ordem" = turno; "nota"/comprovante = pagamento (shift_payments). Ao registrar o
- * pagamento o turno já vira 'completed' e some das listas de turnos ativos — esta
- * página dá a visão consolidada (aberta/paga/conciliada) + export pro financeiro/estoquista.
+ * "Ordem" = par (turno, freela) — não mais "turno" sozinho (ver ADR-20260816-marcador-
+ * pagamento-por-freela.md). Um turno com N freelas contratados pode virar até N ordens,
+ * cada uma com seu próprio status (aberta/paga/conciliada): o freela com pagamento
+ * registrado usa os dados da nota; o freela contratado mas ainda sem pagamento aparece
+ * como 'aberta' (passivo em aberto), pra não sumir do relatório. "Nota"/comprovante =
+ * pagamento (shift_payments). Ao registrar o pagamento a candidatura do freela já vira
+ * 'completed' — esta página dá a visão consolidada + export pro financeiro/estoquista.
  *
  * Padrões: useState + useEffect, imports relativos, TS strict, design neo-brutalista empresa.
  */
@@ -163,7 +167,8 @@ export default function CompanyOrdersReport() {
           <FileText size={32} strokeWidth={3} /> Relatório de Ordens
         </h1>
         <p className="text-gray-500 text-sm">
-          Visão consolidada dos turnos (ordens) e seus pagamentos — export pro financeiro/estoquista.
+          Visão consolidada dos turnos e seus pagamentos — um turno com mais de um freela
+          vira uma ordem por freela — export pro financeiro/estoquista.
         </p>
       </header>
 
@@ -266,12 +271,19 @@ export default function CompanyOrdersReport() {
 
       {/* Resumo */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 print:grid-cols-5">
-          <SummaryCard label="Total" value={String(summary.total)} />
+        // `summary.total` conta ORDENS (pares turno+freela), não turnos distintos — um
+        // turno com 2 freelas soma 2 aqui. Rótulo "Ordens" em vez de "Total" pra não
+        // sugerir contagem de turnos (orderReportService.ts — JSDoc do topo).
+        // Valor pago (realizado) e valor previsto (passivo em aberto, estimado) são
+        // números de natureza diferente — nunca somados num "Valor Total" só, que
+        // mentiria misturando dinheiro que já saiu com estimativa do que falta pagar.
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 print:grid-cols-6">
+          <SummaryCard label="Ordens" value={String(summary.total)} />
           <SummaryCard label="Abertas" value={String(summary.abertas)} className="text-yellow-700" />
           <SummaryCard label="Pagas" value={String(summary.pagas)} className="text-blue-700" />
           <SummaryCard label="Conciliadas" value={String(summary.conciliadas)} className="text-primary" />
-          <SummaryCard label="Valor Total" value={formatBRL(summary.valorTotal)} className="col-span-2 sm:col-span-1" />
+          <SummaryCard label="Valor Pago" value={formatBRL(summary.valorPago)} />
+          <SummaryCard label="Valor Previsto" value={formatBRL(summary.valorPrevisto)} className="text-yellow-700" />
         </div>
       )}
 
@@ -301,7 +313,7 @@ export default function CompanyOrdersReport() {
           {/* Mobile: cards */}
           <div className="flex flex-col gap-3 md:hidden print:hidden">
             {rows.map((row) => (
-              <OrderCard key={row.jobId} row={row} />
+              <OrderCard key={`${row.jobId}:${row.workerId ?? 'none'}`} row={row} />
             ))}
           </div>
 
@@ -321,7 +333,7 @@ export default function CompanyOrdersReport() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.jobId} className="border-b border-gray-200 last:border-0">
+                  <tr key={`${row.jobId}:${row.workerId ?? 'none'}`} className="border-b border-gray-200 last:border-0">
                     <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
                     <td className="px-4 py-3 font-medium">{row.category ?? row.title}</td>
                     <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>
