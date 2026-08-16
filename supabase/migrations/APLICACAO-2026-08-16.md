@@ -137,6 +137,63 @@ leva. Antes de considerar o chat liberado: abrir a conversa nos dois lados, envi
 mensagem de cada, confirmar que aparece em tempo real e que o contador de não-lidas zera
 (este último exercita a policy de `read_at`, que **nunca funcionou** antes).
 
+---
+
+# Terceira leva — marcador de pagamento por freela
+
+## O que estava errado
+
+`shift_payments` tinha `UNIQUE (job_id) WHERE status IN ('scheduled','recorded')` — **um
+marcador ativo por turno**. Mas o produto trata "turno com mais de um freela" como normal: o
+painel pós-criação lista o Elenco inteiro com um botão "Convidar" por freela e conclui com
+"N convites enviados", e nada fecha o slot.
+
+Consequência: ao registrar o pagamento do 2º freela, o INSERT batia em `23505` e a UI dizia
+*"Este turno já tem um pagamento registrado"* — falso para ele. E como
+`applications.status='completed'` só é setado **depois** do INSERT bem-sucedido, **o turno do
+2º freela nunca concluía** — preso em `hired` para sempre, sem recibo.
+
+## A arqueologia (`harness-architect`)
+
+O `UNIQUE(job_id)` **não foi decisão de produto**. O HALT que originou o índice discutia a
+dimensão **temporal** (estorno → novo registro); "e se o turno tiver dois freelas?" não
+aparece em lugar nenhum. A justificativa ancorava no ADR-20260630, onde `job_id` resolvia
+anti-dupla-contagem **entre trilhos** — *"um turno é pago por exatamente uma **fonte**"*. Isso
+virou *"uma **linha** por turno"*. A colagem é o erro.
+
+`escrow_transactions`, o trilho de dinheiro, **sempre** foi por `application_id`. O marcador
+do modo A regrediu a granularidade que o projeto já tinha.
+
+## A ordem, que não era preferência
+
+O architect foi categórico: **não aplicar a migration sozinha, em nenhuma hipótese.**
+`getPaymentByJob`, `getReceipt` e `dismissFromShift` usavam `.maybeSingle()` sobre
+`(job_id, status ativo)`. Com dois marcadores ativos isso vira `PGRST116`, tratado como
+`null` — a UI ficaria **cega para os dois freelas**, e o recibo diria "não encontrado" para um
+pagamento existente. Pior que o beco, que ao menos falhava alto.
+
+Por isso: **frontend worker-aware primeiro** (commit `f6614898`), migration depois.
+
+## Aplicado e verificado
+
+| Verificação | Resultado |
+|---|---|
+| Índice trocado para `(job_id, worker_id)` | confirmado em `pg_indexes` |
+| Mesmo freela, mesmo turno (idempotência) | `ERROR 23505` — continua barrado |
+| **Segundo freela, mesmo turno** | **INSERT aceito** (antes: impossível) |
+| Trigger notifica o freela **novo**, não o antigo | confirmado |
+| Rollback | 4 pagamentos, 0 linhas de teste, 27 notificações |
+
+Diagnóstico antes de aplicar: nenhum turno tinha 2+ freelas ativos e o beco **não estava
+materializado** — ninguém estava preso.
+
+## Limitação conhecida, registrada e fora do escopo do piloto
+
+`orderReportService`/`CompanyOrdersReport` emite **uma linha por turno** e colapsa N
+marcadores: com dois freelas, o relatório mostra um pagamento, um nome, e o valor total
+subconta. Não quebra (não usa `.maybeSingle()`). Regravar a granularidade do relatório é
+escopo que o piloto não paga — fica para depois.
+
 ## Pendências pré-existentes (fora desta leva, NÃO corrigidas)
 
 O advisor reporta outros achados anteriores a este trabalho, entre eles um `ERROR`
