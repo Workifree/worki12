@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Calendar, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+
+// Fuso-safe: mesmo padrão de `ReceiptView.formatDateOnly` / `CompanyJobs.tsx` — "YYYY-MM-DD" é
+// interpretado como data LOCAL (não UTC), evitando o off-by-one que faria o turno de amanhã
+// aparecer como hoje em BRT.
+function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
+    const dateStr = isoOrDateOnly.split('T')[0];
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return format(new Date(y, m - 1, d), pattern, { locale: ptBR });
+}
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -25,6 +34,7 @@ export default function CompanyJobDetails() {
         scope: string;
         status: string;
         created_at: string;
+        start_date?: string | null;
         views?: number;
         work_start_time?: string;
         work_end_time?: string;
@@ -201,10 +211,12 @@ export default function CompanyJobDetails() {
                                 {job.status === 'open' ? 'Turno Ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
                             </span>
                             <h1 className="text-3xl font-black uppercase tracking-tight mb-2">{job.title}</h1>
-                            <div className="flex items-center gap-4 text-sm font-bold text-gray-500">
+                            <div className="flex items-center gap-4 text-sm font-bold text-gray-500 flex-wrap">
                                 <span className="flex items-center gap-1"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
-                                <span className="flex items-center gap-1"><MapPin size={16} /> Presencial</span>
-                                <span className="flex items-center gap-1"><Clock size={16} /> {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
+                                <span className="flex items-center gap-1 capitalize text-black">
+                                    <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
+                                </span>
+                                <span className="flex items-center gap-1"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
                             </div>
                         </div>
                         <div className="text-right">

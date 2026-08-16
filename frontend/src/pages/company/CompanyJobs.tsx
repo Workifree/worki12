@@ -1,9 +1,9 @@
-import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
@@ -66,17 +66,272 @@ function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Agenda por dia — a pergunta nº1 da operação é "quem trabalha amanhã?". A lista
+// deixa de ser ordenada por data de criação (organização de banco) e passa a ser
+// agrupada por `start_date` (organização de operação): Hoje / Amanhã / Esta Semana
+// / Depois / Sem Data, com "Anteriores" ao fim (nunca escondido, só recolhido).
+// ---------------------------------------------------------------------------
+
+type DayBucketKey = 'today' | 'tomorrow' | 'week' | 'later' | 'no_date' | 'past';
+
+interface DayBucket<T> {
+    key: DayBucketKey;
+    label: string;
+    jobs: T[];
+}
+
+const BUCKET_LABELS: Record<DayBucketKey, string> = {
+    today: 'Hoje',
+    tomorrow: 'Amanhã',
+    week: 'Esta Semana',
+    later: 'Depois',
+    no_date: 'Sem Data',
+    past: 'Anteriores',
+};
+
+const BUCKET_ORDER: DayBucketKey[] = ['today', 'tomorrow', 'week', 'later', 'no_date', 'past'];
+
+// Fuso-safe: mesmo padrão de `ReceiptView.formatDateOnly` — "YYYY-MM-DD" é interpretado
+// como data LOCAL (não UTC). `new Date("YYYY-MM-DD")` direto recuaria a data em 1 dia em
+// BRT e faria "amanhã" aparecer como "hoje" — exatamente o bug que destruiria a feature.
+function parseDateOnly(isoOrDateOnly: string): Date {
+    const dateStr = isoOrDateOnly.split('T')[0];
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
+function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
+    return format(parseDateOnly(isoOrDateOnly), pattern, { locale: ptBR });
+}
+
+function startOfDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function bucketKeyForDate(startDate: string | null | undefined, today: Date): DayBucketKey {
+    if (!startDate) return 'no_date';
+    const diffDays = Math.round((parseDateOnly(startDate).getTime() - today.getTime()) / 86_400_000);
+    if (diffDays < 0) return 'past';
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'tomorrow';
+    if (diffDays <= 6) return 'week';
+    return 'later';
+}
+
+// Agrupa turnos por dia. `referenceDate` é injetável (nunca `new Date()` direto no cálculo)
+// para permitir teste determinístico do caso de virada (turno de hoje vs. amanhã).
+// eslint-disable-next-line react-refresh/only-export-components -- função pura reaproveitada pelo teste de agrupamento (evita novo arquivo fora do escopo desta mudança)
+export function groupJobsByDay<T extends { start_date?: string | null }>(
+    jobs: T[],
+    referenceDate: Date = new Date()
+): DayBucket<T>[] {
+    const today = startOfDay(referenceDate);
+    const buckets: Record<DayBucketKey, T[]> = { today: [], tomorrow: [], week: [], later: [], no_date: [], past: [] };
+
+    jobs.forEach((job) => {
+        buckets[bucketKeyForDate(job.start_date, today)].push(job);
+    });
+
+    const sortByDateAsc = (a: T, b: T) => {
+        if (!a.start_date) return 1;
+        if (!b.start_date) return -1;
+        return a.start_date.localeCompare(b.start_date);
+    };
+    buckets.week.sort(sortByDateAsc);
+    buckets.later.sort(sortByDateAsc);
+    buckets.past.sort((a, b) => sortByDateAsc(b, a)); // mais recente primeiro — relevância decrescente
+
+    return BUCKET_ORDER
+        .map((key) => ({ key, label: BUCKET_LABELS[key], jobs: buckets[key] }))
+        .filter((bucket) => bucket.jobs.length > 0);
+}
+
+interface Job {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    location?: string;
+    created_at: string;
+    start_date?: string | null;
+    work_start_time?: string | null;
+    work_end_time?: string | null;
+    freela?: FreelaSummary | null;
+}
+
+function formatTimeRange(job: Job): string | null {
+    if (!job.work_start_time && !job.work_end_time) return null;
+    const start = job.work_start_time?.slice(0, 5) || '--:--';
+    const end = job.work_end_time?.slice(0, 5) || '--:--';
+    return `${start}–${end}`;
+}
+
+interface JobRowProps {
+    job: Job;
+    bucketKey: DayBucketKey;
+    openMenu: string | null;
+    setOpenMenu: (id: string | null) => void;
+    navigate: NavigateFunction;
+    setInviteJobId: (id: string | null) => void;
+    handleStatusChange: (id: string, status: string) => void;
+    setDeleteJobId: (id: string | null) => void;
+}
+
+// Uma linha da agenda: horário + função + freela (nome/avatar/estado) visíveis sem clicar.
+// Turno sem freela atrelado "grita" — buraco de escala é o problema nº1 da operação diária.
+function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobId, handleStatusChange, setDeleteJobId }: JobRowProps) {
+    const timeRange = formatTimeRange(job);
+    const isNearTerm = bucketKey === 'today' || bucketKey === 'tomorrow';
+    const canInvite = job.status === 'open' || job.status === 'paused';
+    const missingFreela = !job.freela;
+    const urgentGap = missingFreela && isNearTerm;
+
+    return (
+        <div
+            className={`bg-white border-2 rounded-xl p-6 transition-all group shadow-sm hover:shadow-md ${urgentGap ? 'border-amber-400 bg-amber-50/60' : 'border-gray-100 hover:border-black'
+                }`}
+        >
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+
+                <div>
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
+                        <h3 className="font-bold text-lg">{job.title}</h3>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {job.status === 'open' ? 'Ativa' : 'Fechada'}
+                        </span>
+                        {urgentGap && (
+                            <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                <AlertTriangle size={11} /> Sem freela
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 font-medium">
+                        <span className="bg-gray-50 px-2 py-1 rounded uppercase font-bold">{job.type === 'freelance' ? 'Freelance' : 'Fixo'}</span>
+                        {timeRange && (
+                            <span className="flex items-center gap-1 font-bold text-black">
+                                <Clock size={12} /> {timeRange}
+                            </span>
+                        )}
+                        {job.start_date && !isNearTerm && (
+                            <span className="flex items-center gap-1 capitalize">
+                                <Calendar size={12} /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
+                            </span>
+                        )}
+                        {job.location && <span>• {job.location}</span>}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4 border-t md:border-t-0 pt-4 md:pt-0 border-gray-100">
+                    {/* Estado do freela (modelo push) — no lugar de Candidatos/Visitas */}
+                    {job.freela ? (
+                        <button
+                            onClick={() => navigate(`/company/jobs/${job.id}/candidates`)}
+                            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                        >
+                            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                {job.freela.avatarUrl ? (
+                                    <img src={job.freela.avatarUrl} alt={job.freela.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-sm">
+                                        {job.freela.name[0]?.toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="font-bold text-sm truncate max-w-[140px]">
+                                    {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
+                                </span>
+                                <span className={`text-[10px] font-black uppercase ${job.freela.state === 'confirmed' ? 'text-green-600' :
+                                    job.freela.state === 'completed' ? 'text-blue-600' : 'text-orange-500'
+                                    }`}>
+                                    {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Finalizado' : 'Aguardando resposta'}
+                                </span>
+                            </div>
+                            {job.freela.state === 'confirmed' && (
+                                <span className="ml-1 bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded-lg font-black uppercase text-[10px] flex items-center gap-1 transition-colors">
+                                    <PlayCircle size={12} /> Presença
+                                </span>
+                            )}
+                        </button>
+                    ) : canInvite ? (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setInviteJobId(job.id); }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors ${urgentGap ? 'bg-amber-500 hover:bg-black text-white' : 'bg-black text-white hover:bg-blue-600'
+                                }`}
+                        >
+                            <UserPlus size={16} strokeWidth={3} /> Convidar Freela
+                        </button>
+                    ) : (
+                        <span className="flex items-center gap-1 text-xs font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+                            <AlertTriangle size={12} /> Sem freela
+                        </span>
+                    )}
+
+                    <div className="relative">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenu(openMenu === job.id ? null : job.id);
+                            }}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            aria-label="Mais opções do turno"
+                        >
+                            <MoreHorizontal size={20} className="text-gray-400" />
+                        </button>
+
+                        {openMenu === job.id && (
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/candidates`); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-b border-gray-100"
+                                >
+                                    <Users size={16} /> Presença e Pagamento
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}`); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2"
+                                >
+                                    <Eye size={16} /> Ver Detalhes
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/edit`); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                >
+                                    <Edit2 size={16} /> Editar
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open');
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                >
+                                    {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
+                                    {job.status === 'open' ? 'Pausar' : 'Reativar'}
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenu(null);
+                                        setDeleteJobId(job.id);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                >
+                                    <Trash2 size={16} /> Excluir
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
 export default function CompanyJobs() {
     const navigate = useNavigate();
-    interface Job {
-        id: string;
-        title: string;
-        type: string;
-        status: string;
-        location?: string;
-        created_at: string;
-        freela?: FreelaSummary | null;
-    }
 
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
@@ -90,6 +345,10 @@ export default function CompanyJobs() {
     const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
     // Vaga alvo do modal "Convidar Freela" (atrelar freela a uma vaga já criada).
     const [inviteJobId, setInviteJobId] = useState<string | null>(null);
+    // "Anteriores" fica recolhido por padrão — passado não deve atrapalhar a leitura do dia
+    // de operação. Abre automaticamente quando a empresa escolhe o filtro "Finalizados"
+    // (é exatamente o que ela pediu pra ver) e continua alternável manualmente.
+    const [pastExpanded, setPastExpanded] = useState(initialFilter === 'closed');
     const { addToast } = useToast();
 
     // Elenco da empresa + action de convite reaproveitados (mesmos de CompanyCreateJob).
@@ -105,6 +364,10 @@ export default function CompanyJobs() {
         const timer = setTimeout(() => setDebouncedSearch(search), 300);
         return () => clearTimeout(timer);
     }, [search]);
+
+    useEffect(() => {
+        if (filter === 'closed') setPastExpanded(true);
+    }, [filter]);
 
     const fetchJobs = async () => {
         try {
@@ -201,6 +464,10 @@ export default function CompanyJobs() {
         return matchesSearch && matchesFilter;
     });
 
+    // Agrupamento por dia — reordenação/reagrupamento sobre os mesmos dados já carregados,
+    // aplicado depois de busca/filtro (as seções nunca ficam fora de sincronia com eles).
+    const dayBuckets = groupJobsByDay(filteredJobs);
+
     return (
         <>
         <PageMeta title="Meus Turnos" />
@@ -216,11 +483,11 @@ export default function CompanyJobs() {
                 </div>
             </div>
         )}
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-3xl font-black uppercase tracking-tighter">Meus Turnos</h1>
-                    <p className="text-gray-500 font-medium">Gerencie seus turnos ativos.</p>
+                    <p className="text-gray-500 font-medium">Sua agenda de turnos, dia a dia.</p>
                 </div>
                 <button
                     onClick={() => navigate('/company/create')}
@@ -231,8 +498,8 @@ export default function CompanyJobs() {
             </div>
 
             {/* Filters */}
-            <div className="flex gap-4 mb-6">
-                <div className="relative flex-1 max-w-md">
+            <div className="flex flex-wrap gap-3 md:gap-4 mb-6">
+                <div className="relative flex-1 min-w-[160px] max-w-md">
                     <Search className="absolute left-3 top-3 text-gray-400" size={20} />
                     <input
                         type="text"
@@ -268,8 +535,8 @@ export default function CompanyJobs() {
                 </button>
             </div>
 
-            {/* Jobs List */}
-            <div className="space-y-4">
+            {/* Agenda por dia */}
+            <div className="space-y-8">
                 {loading ? (
                     <div className="space-y-4 animate-pulse">
                         {[...Array(4)].map((_, i) => (
@@ -281,124 +548,43 @@ export default function CompanyJobs() {
                         Nenhum turno encontrado.
                     </div>
                 ) : (
-                    filteredJobs.map((job) => (
-                        <div key={job.id} className="bg-white border-2 border-gray-100 hover:border-black rounded-xl p-6 transition-all group shadow-sm hover:shadow-md">
-                            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-
-                                <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h3 className="font-bold text-lg">{job.title}</h3>
-                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                            {job.status === 'open' ? 'Ativa' : 'Fechada'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-4 text-xs text-gray-500 font-medium">
-                                        <span className="bg-gray-50 px-2 py-1 rounded uppercase font-bold">{job.type === 'freelance' ? 'Freelance' : 'Fixo'}</span>
-                                        <span>Publicado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
-                                        {job.location && <span>• {job.location}</span>}
-                                    </div>
+                    dayBuckets.map((bucket) => (
+                        <div key={bucket.key}>
+                            {bucket.key === 'past' ? (
+                                <button
+                                    onClick={() => setPastExpanded(v => !v)}
+                                    className="w-full sticky top-0 z-10 -mx-4 px-4 md:mx-0 md:px-0 py-2 mb-3 bg-[#F4F4F0]/95 backdrop-blur-sm flex items-center justify-between gap-2 border-b-2 border-black/10"
+                                >
+                                    <span className="flex items-center gap-2 text-sm font-black uppercase tracking-tight text-gray-500">
+                                        {bucket.label}
+                                        <span className="text-[10px] font-black bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{bucket.jobs.length}</span>
+                                    </span>
+                                    {pastExpanded ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+                                </button>
+                            ) : (
+                                <div className="sticky top-0 z-10 -mx-4 px-4 md:mx-0 md:px-0 py-2 mb-3 bg-[#F4F4F0]/95 backdrop-blur-sm flex items-center gap-2 border-b-2 border-black/10">
+                                    <h2 className="text-sm font-black uppercase tracking-tight text-gray-500">{bucket.label}</h2>
+                                    <span className="text-[10px] font-black bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{bucket.jobs.length}</span>
                                 </div>
+                            )}
 
-                                <div className="flex items-center gap-4 border-t md:border-t-0 pt-4 md:pt-0 border-gray-100">
-                                    {/* Estado do freela (modelo push) — no lugar de Candidatos/Visitas */}
-                                    {job.freela ? (
-                                        <button
-                                            onClick={() => navigate(`/company/jobs/${job.id}/candidates`)}
-                                            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
-                                        >
-                                            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                                                {job.freela.avatarUrl ? (
-                                                    <img src={job.freela.avatarUrl} alt={job.freela.name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-sm">
-                                                        {job.freela.name[0]?.toUpperCase()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-sm truncate max-w-[140px]">
-                                                    {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
-                                                </span>
-                                                <span className={`text-[10px] font-black uppercase ${job.freela.state === 'confirmed' ? 'text-green-600' :
-                                                    job.freela.state === 'completed' ? 'text-blue-600' : 'text-orange-500'
-                                                    }`}>
-                                                    {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Finalizado' : 'Aguardando resposta'}
-                                                </span>
-                                            </div>
-                                            {job.freela.state === 'confirmed' && (
-                                                <span className="ml-1 bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded-lg font-black uppercase text-[10px] flex items-center gap-1 transition-colors">
-                                                    <PlayCircle size={12} /> Presença
-                                                </span>
-                                            )}
-                                        </button>
-                                    ) : (job.status === 'open' || job.status === 'paused') ? (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setInviteJobId(job.id); }}
-                                            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl font-black uppercase text-xs hover:bg-blue-600 transition-colors"
-                                        >
-                                            <UserPlus size={16} strokeWidth={3} /> Convidar Freela
-                                        </button>
-                                    ) : (
-                                        <span className="text-xs font-bold uppercase text-gray-400">Sem freela</span>
-                                    )}
-
-                                    <div className="relative">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenMenu(openMenu === job.id ? null : job.id);
-                                            }}
-                                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                        >
-                                            <MoreHorizontal size={20} className="text-gray-400" />
-                                        </button>
-
-                                        {openMenu === job.id && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/candidates`); }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-b border-gray-100"
-                                                >
-                                                    <Users size={16} /> Gerenciar Freelas
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}`); }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2"
-                                                >
-                                                    <Eye size={16} /> Ver Detalhes
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/edit`); }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
-                                                >
-                                                    <Edit2 size={16} /> Editar
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open');
-                                                    }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
-                                                >
-                                                    {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-                                                    {job.status === 'open' ? 'Pausar' : 'Reativar'}
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setOpenMenu(null);
-                                                        setDeleteJobId(job.id);
-                                                    }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
-                                                >
-                                                    <Trash2 size={16} /> Excluir
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
+                            {(bucket.key !== 'past' || pastExpanded) && (
+                                <div className="space-y-4">
+                                    {bucket.jobs.map((job) => (
+                                        <JobRow
+                                            key={job.id}
+                                            job={job}
+                                            bucketKey={bucket.key}
+                                            openMenu={openMenu}
+                                            setOpenMenu={setOpenMenu}
+                                            navigate={navigate}
+                                            setInviteJobId={setInviteJobId}
+                                            handleStatusChange={handleStatusChange}
+                                            setDeleteJobId={setDeleteJobId}
+                                        />
+                                    ))}
                                 </div>
-
-                            </div>
+                            )}
                         </div>
                     ))
                 )}

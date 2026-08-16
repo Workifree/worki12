@@ -1,12 +1,216 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff, Trash2, AlertTriangle, Wallet, Copy } from 'lucide-react';
+import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff, Trash2, AlertTriangle, Wallet, Copy, Send, History, CalendarX2, PlusCircle } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
+import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import type { TeamMember, TeamConnection } from '../../types';
+
+// ---------------------------------------------------------------------------
+// Histórico do freela com ESTA empresa (turnos concluídos) — batch para todo o
+// elenco de uma vez (evita N+1: 1 query cobre todos os membros da tela).
+// ---------------------------------------------------------------------------
+
+interface WorkerHistoryWithCompany {
+  /** Quantos turnos concluídos o freela já fez com esta empresa. */
+  count: number;
+  /** Data (YYYY-MM-DD) do turno concluído mais recente, se houver. */
+  lastDate: string | null;
+}
+
+/** Formata uma data "date-only" (YYYY-MM-DD) sem shift de fuso (mesmo padrão de ReceiptView). */
+function formatHistoryDate(dateOnly: string): string {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+  return date.toLocaleDateString('pt-BR');
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
+// escolhe um turno elegível (open/paused, sem esse freela já atrelado, data
+// futura ou sem data) e dispara o convite via useCompanyInvites.
+// ---------------------------------------------------------------------------
+
+interface EligibleJob {
+  id: string;
+  title: string;
+  start_date: string | null;
+  work_start_time: string | null;
+  work_end_time: string | null;
+  location: string | null;
+  budget: number | null;
+}
+
+interface InviteToShiftModalProps {
+  member: TeamMember;
+  onClose: () => void;
+  onInvited: () => void;
+}
+
+function InviteToShiftModal({ member, onClose, onInvited }: InviteToShiftModalProps) {
+  const navigate = useNavigate();
+  const [jobs, setJobs] = useState<EligibleJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const { invite, invitingWorkerId } = useCompanyInvites(selectedJobId);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      setLoadingJobs(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { if (active) setLoadingJobs(false); return; }
+
+        const { data: companyRow } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+        const companyId = companyRow?.id as string | undefined;
+        if (!companyId) { if (active) { setJobs([]); setLoadingJobs(false); } return; }
+
+        // Turnos abertos/pausados desta empresa — candidatos a convite.
+        const { data: jobsData, error: jobsErr } = await supabase
+          .from('jobs')
+          .select('id, title, start_date, work_start_time, work_end_time, location, budget')
+          .eq('company_id', companyId)
+          .in('status', ['open', 'paused'])
+          .order('start_date', { ascending: true });
+
+        if (jobsErr) {
+          logError('CompanyTeam.InviteToShiftModal.fetchJobs', jobsErr);
+          if (active) { setJobs([]); setLoadingJobs(false); }
+          return;
+        }
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        // Data futura (ou hoje) ou sem data — convidar para turno de ontem não faz sentido.
+        const futureOrUndated = (jobsData ?? []).filter(
+          (j) => !j.start_date || j.start_date >= todayStr,
+        );
+
+        const jobIds = futureOrUndated.map((j) => j.id);
+        let excludeSet = new Set<string>();
+        if (jobIds.length > 0) {
+          const { data: apps, error: appsErr } = await supabase
+            .from('applications')
+            .select('job_id')
+            .eq('worker_id', member.worker.id)
+            .in('job_id', jobIds);
+          if (appsErr) {
+            logError('CompanyTeam.InviteToShiftModal.fetchApps', appsErr);
+          } else {
+            excludeSet = new Set((apps ?? []).map((a) => a.job_id as string));
+          }
+        }
+
+        const eligible = futureOrUndated.filter((j) => !excludeSet.has(j.id));
+        if (active) setJobs(eligible);
+      } catch (err) {
+        logError('CompanyTeam.InviteToShiftModal', err);
+        if (active) setJobs([]);
+      } finally {
+        if (active) setLoadingJobs(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [member.worker.id]);
+
+  const handleConfirmInvite = async () => {
+    if (!selectedJobId) return;
+    const ok = await invite(member.worker.id);
+    if (ok) {
+      onInvited();
+      onClose();
+    }
+  };
+
+  const isInviting = invitingWorkerId === member.worker.id;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget && !isInviting) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-black uppercase tracking-tight">Convidar para turno</h2>
+          <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        <p className="text-sm font-bold text-gray-500 mb-5">
+          Escolha um turno para convidar <span className="font-black text-black">{member.worker.full_name}</span>.
+        </p>
+
+        {loadingJobs && (
+          <div className="space-y-3 animate-pulse">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
+          </div>
+        )}
+
+        {!loadingJobs && jobs.length === 0 && (
+          <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+            <CalendarX2 size={32} className="mx-auto mb-2 opacity-30" />
+            <p className="font-bold text-sm">Nenhum turno elegível para convidar agora.</p>
+            <p className="text-xs mt-1">Crie um turno aberto (sem esse freela atrelado e com data futura) para poder convidar.</p>
+            <button
+              onClick={() => { onClose(); navigate('/company/create'); }}
+              className="mt-4 bg-black hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors inline-flex items-center gap-2"
+            >
+              <PlusCircle size={16} /> Criar turno
+            </button>
+          </div>
+        )}
+
+        {!loadingJobs && jobs.length > 0 && (
+          <>
+            <div className="space-y-2 max-h-72 overflow-y-auto mb-5">
+              {jobs.map((job) => {
+                const selected = selectedJobId === job.id;
+                return (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => setSelectedJobId(job.id)}
+                    disabled={isInviting}
+                    className={`w-full text-left p-3 rounded-xl border-2 transition-all disabled:opacity-50 ${
+                      selected ? 'border-black bg-primary-light' : 'border-gray-100 hover:border-black'
+                    }`}
+                  >
+                    <p className="font-black uppercase text-sm truncate">{job.title}</p>
+                    <div className="flex flex-wrap gap-2 mt-1 text-xs font-bold text-gray-500">
+                      {job.start_date ? (
+                        <span>{formatHistoryDate(job.start_date)}</span>
+                      ) : (
+                        <span>Sem data definida</span>
+                      )}
+                      {job.work_start_time && <span>· {job.work_start_time}{job.work_end_time ? `–${job.work_end_time}` : ''}</span>}
+                      {typeof job.budget === 'number' && <span>· R$ {job.budget.toFixed(2).replace('.', ',')}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => { void handleConfirmInvite(); }}
+              disabled={!selectedJobId || isInviting}
+              className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isInviting ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+              {isInviting ? 'Enviando convite...' : 'Confirmar convite'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // UUID "solto" — mesmo formato usado como Worki ID (auth.uid()). O QR de
 // identidade (Profile.tsx) codifica o workerId cru, sem prefixo/URL.
@@ -38,9 +242,13 @@ function extractInviteToken(raw: string): string {
 interface MemberCardProps {
   member: TeamMember;
   onRemove: (member: TeamMember) => void;
+  /** Histórico de turnos concluídos com ESTA empresa (batch, sem N+1). */
+  history?: WorkerHistoryWithCompany;
+  /** Abre o modal "Convidar para turno" para este freela. */
+  onInvite: (member: TeamMember) => void;
 }
 
-function MemberCard({ member, onRemove }: MemberCardProps) {
+function MemberCard({ member, onRemove, history, onInvite }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
@@ -85,8 +293,9 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
       tabIndex={0}
       onClick={goToProfile}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
-      className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
+      className="bg-white border-2 border-black rounded-2xl p-5 flex flex-col gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
     >
+    <div className="flex items-start gap-4">
       {/* Avatar */}
       <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
         {avatarUrl ? (
@@ -118,6 +327,17 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
           {worker.city && (
             <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-xl">
               {worker.city}
+            </span>
+          )}
+          {/* Histórico com esta empresa — o dado que ajuda a decidir "chamo esse ou outro?". */}
+          {history && history.count > 0 ? (
+            <span className="flex items-center gap-1 text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-xl border border-indigo-200">
+              <History size={12} /> {history.count} turno{history.count !== 1 ? 's' : ''} com você
+              {history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs font-bold bg-gray-100 text-gray-400 px-2 py-1 rounded-xl">
+              <History size={12} /> Nenhum turno ainda com você
             </span>
           )}
         </div>
@@ -167,6 +387,18 @@ function MemberCard({ member, onRemove }: MemberCardProps) {
             <Trash2 size={16} />
           </button>
         </div>
+      </div>
+    </div>
+
+      {/* Ação principal: convidar este freela pra um turno — o que a empresa mais quer
+          fazer a partir do elenco (antes só havia compartilhar/remover). */}
+      <div className="border-t-2 border-gray-100 pt-4">
+        <button
+          onClick={(e) => { e.stopPropagation(); onInvite(member); }}
+          className="w-full bg-black hover:bg-blue-600 text-white px-4 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
+        >
+          <Send size={16} /> Convidar para turno
+        </button>
       </div>
     </div>
   );
@@ -540,10 +772,13 @@ function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, addWorker, removeWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const [showAddModal, setShowAddModal] = useState(false);
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // R "Convidar direto do elenco": modal por membro + histórico batch (1 query p/ todo o elenco).
+  const [invitingMember, setInvitingMember] = useState<TeamMember | null>(null);
+  const [historyByWorker, setHistoryByWorker] = useState<Record<string, WorkerHistoryWithCompany>>({});
 
   const handleConfirmRemove = async () => {
     if (!removingMember) return;
@@ -555,6 +790,46 @@ export default function CompanyTeam() {
       setIsDeleting(false);
     }
   };
+
+  // Histórico com a empresa (turnos concluídos) para TODO o elenco de uma vez — evita N+1.
+  useEffect(() => {
+    if (!companyId || teamMembers.length === 0) {
+      setHistoryByWorker({});
+      return;
+    }
+    let active = true;
+    const workerIds = teamMembers.map((m) => m.worker.id);
+    void (async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('worker_id, jobs!inner(company_id, start_date)')
+        .eq('status', 'completed')
+        .eq('jobs.company_id', companyId)
+        .in('worker_id', workerIds);
+
+      if (error) {
+        logError('CompanyTeam.fetchHistory', error);
+        return;
+      }
+      if (!active) return;
+
+      const map: Record<string, WorkerHistoryWithCompany> = {};
+      interface CompletedRow {
+        worker_id: string;
+        jobs: { start_date: string | null } | { start_date: string | null }[] | null;
+      }
+      (data as unknown as CompletedRow[] ?? []).forEach((row) => {
+        const jobsField = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
+        const startDate = jobsField?.start_date ?? null;
+        const entry = map[row.worker_id] ?? { count: 0, lastDate: null };
+        entry.count += 1;
+        if (startDate && (!entry.lastDate || startDate > entry.lastDate)) entry.lastDate = startDate;
+        map[row.worker_id] = entry;
+      });
+      setHistoryByWorker(map);
+    })();
+    return () => { active = false; };
+  }, [companyId, teamMembers]);
 
   if (loading) {
     return (
@@ -603,6 +878,8 @@ export default function CompanyTeam() {
                 key={member.connection.id}
                 member={member}
                 onRemove={(m) => setRemovingMember(m)}
+                onInvite={(m) => setInvitingMember(m)}
+                history={historyByWorker[member.worker.id]}
               />
             ))}
           </div>
@@ -647,6 +924,15 @@ export default function CompanyTeam() {
           onClose={() => setShowAddModal(false)}
           onAdded={refresh}
           addWorker={addWorker}
+        />
+      )}
+
+      {/* Modal "Convidar para turno" — a partir de um freela do elenco */}
+      {invitingMember && (
+        <InviteToShiftModal
+          member={invitingMember}
+          onClose={() => setInvitingMember(null)}
+          onInvited={refresh}
         />
       )}
 

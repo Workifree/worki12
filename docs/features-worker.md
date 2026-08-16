@@ -107,15 +107,23 @@ Ambos veem as avaliações mútuas — isso constrói confiança e reputação.
 
 ---
 
-## Recibos de Pagamento
+## Meus Recebimentos
 
-Depois que a empresa registra um pagamento, você recebe uma **notificação** e pode acessar o **recibo de pagamento** — um comprovante bilateral que confirma o valor, data e método de pagamento.
+Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Meus Recebimentos"** — uma tela dedicada onde você acompanha todos os pagamentos.
+
+### Acessar Meus Recebimentos
+
+1. No menu inferior (BottomNav), clique em **"Receb."** (Meus Recebimentos)
+2. Você vê todos os pagamentos registrados separados por status:
+   - **Agendados:** A empresa prometeu pagar em uma data futura
+   - **Aguardam confirmação:** A empresa registrou que pagou — confirme que recebeu
+   - **Recebidos:** Você confirmou o recebimento
+   - **Cancelados:** Pagamentos que foram estornados
 
 ### Acessar o Recibo
 
-1. Você recebe uma notificação (sino) quando a empresa registra o pagamento
-2. Clique na notificação para abrir o recibo
-3. Ou procure em **"Meus Jobs"** → turno concluído → botão **"Ver Recibo"**
+1. Clique em qualquer item em **"Meus Recebimentos"**
+2. Abre o **recibo** — o comprovante bilateral do pagamento
 
 ### O Recibo Mostra
 

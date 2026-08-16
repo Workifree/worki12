@@ -45,6 +45,7 @@ function buildChain(overrides: Record<string, unknown> = {}) {
   const chain: Record<string, unknown> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     order: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -52,6 +53,21 @@ function buildChain(overrides: Record<string, unknown> = {}) {
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
   }
   return { ...chain, ...overrides }
+}
+
+// Cadeia "thenable" que aceita QUALQUER número de .eq()/.in() encadeados antes de resolver —
+// necessária para ShiftInviteService.cancelInvite/dismissFromShift, que fazem
+// `.update(...).eq('id', id).eq('status', 'invited')` (ou `.in('status', [...])`), dois
+// filtros encadeados após o update (o `buildChain` padrão só suporta um nível).
+function chainableResolve(result: { data: unknown; error: unknown } = { data: null, error: null }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj: any = {}
+  obj.eq = vi.fn(() => obj)
+  obj.in = vi.fn(() => obj)
+  obj.select = vi.fn(() => obj)
+  obj.then = (onFulfilled?: (v: typeof result) => unknown, onRejected?: (e: unknown) => unknown) =>
+    Promise.resolve(result).then(onFulfilled, onRejected)
+  return obj
 }
 
 const JOB_DATA = { title: 'Garcom para Evento' }
@@ -252,6 +268,222 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
         'error'
       )
     })
+  })
+})
+
+// Application status='invited' com telefone cadastrado — botão WhatsApp + Cancelar Convite.
+const APP_INVITED_WITH_PHONE = [
+  {
+    id: 'app-invited-1',
+    job_id: 'job-123',
+    worker_id: 'worker-2',
+    status: 'invited',
+    invited_by_company_at: new Date().toISOString(),
+    invitation_response: null,
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-2',
+      full_name: 'Maria Souza',
+      avatar_url: null,
+      city: 'São Paulo',
+      level: 1,
+      rating_average: 5,
+      reviews_count: 0,
+      tags: [],
+      phone: '(11) 99999-9999',
+    },
+    worker_checkin_at: null,
+    worker_checkout_at: null,
+    company_checkin_confirmed_at: null,
+    company_checkout_confirmed_at: null,
+  },
+]
+
+// Mesmo status, sem telefone cadastrado — botão WhatsApp deve virar indicador desabilitado.
+const APP_INVITED_NO_PHONE = [
+  {
+    ...APP_INVITED_WITH_PHONE[0],
+    id: 'app-invited-2',
+    worker: { ...APP_INVITED_WITH_PHONE[0].worker, phone: null },
+  },
+]
+
+// Application status='hired' — elegível para "Dispensar deste turno".
+const APP_HIRED = [
+  {
+    id: 'app-hired-1',
+    job_id: 'job-123',
+    worker_id: 'worker-3',
+    status: 'hired',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-3',
+      full_name: 'Carlos Lima',
+      avatar_url: null,
+      city: 'São Paulo',
+      level: 1,
+      rating_average: 5,
+      reviews_count: 0,
+      tags: [],
+      phone: '(11) 98888-8888',
+    },
+    worker_checkin_at: null,
+    worker_checkout_at: null,
+    company_checkin_confirmed_at: null,
+    company_checkout_confirmed_at: null,
+  },
+]
+
+describe('CompanyJobCandidates — Cancelar Convite (invited sem resposta)', () => {
+  it('mostra o botão "Cancelar Convite" para convite aguardando resposta', async () => {
+    setupMocksWithApps(APP_INVITED_WITH_PHONE)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Maria Souza')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Cancelar Convite')).toBeInTheDocument()
+  })
+
+  it('chama update de applications para status cancelled ao clicar em Cancelar Convite', async () => {
+    const { mockAddToast, appChain } = setupMocksWithApps(APP_INVITED_WITH_PHONE)
+    // O service busca a application atual via .select().eq().maybeSingle() antes de atualizar.
+    appChain.maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'app-invited-1', status: 'invited' },
+      error: null,
+    })
+    appChain.update = vi.fn().mockReturnValue(chainableResolve())
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Maria Souza')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Cancelar Convite'))
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        'Convite cancelado. Você pode convidar outro freela.',
+        'success'
+      )
+    })
+
+    expect(appChain.update).toHaveBeenCalledWith({ status: 'cancelled' })
+  })
+})
+
+describe('CompanyJobCandidates — Avisar no WhatsApp', () => {
+  it('mostra o botão de WhatsApp quando o freela tem telefone cadastrado', async () => {
+    setupMocksWithApps(APP_INVITED_WITH_PHONE)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Maria Souza')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Avisar no WhatsApp')).toBeInTheDocument()
+  })
+
+  it('abre uma aba wa.me com o telefone normalizado ao clicar', async () => {
+    setupMocksWithApps(APP_INVITED_WITH_PHONE)
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Maria Souza')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Avisar no WhatsApp'))
+
+    expect(openSpy).toHaveBeenCalledTimes(1)
+    const [url] = openSpy.mock.calls[0]
+    expect(String(url)).toMatch(/^https:\/\/wa\.me\/5511999999999\?text=/)
+
+    openSpy.mockRestore()
+  })
+
+  it('não mostra o botão de WhatsApp quando o freela não tem telefone cadastrado', async () => {
+    setupMocksWithApps(APP_INVITED_NO_PHONE)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Maria Souza')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Avisar no WhatsApp')).not.toBeInTheDocument()
+    expect(screen.getByText('WhatsApp indisponível')).toBeInTheDocument()
+  })
+})
+
+describe('CompanyJobCandidates — Dispensar deste turno', () => {
+  it('abre modal de confirmação ao clicar em Dispensar', async () => {
+    setupMocksWithApps(APP_HIRED)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Dispensar'))
+
+    expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
+    expect(screen.getByText(/já foi contratado para este turno/)).toBeInTheDocument()
+  })
+
+  it('modal fecha ao clicar Cancelar sem chamar update', async () => {
+    const { appChain } = setupMocksWithApps(APP_HIRED)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Dispensar'))
+    expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Cancelar'))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /Dispensar Freela/i })).not.toBeInTheDocument()
+    })
+
+    expect(appChain.update).not.toHaveBeenCalled()
+  })
+
+  it('confirma a dispensa e chama update de applications para status cancelled', async () => {
+    const { mockAddToast, appChain } = setupMocksWithApps(APP_HIRED)
+    // O service busca a application atual (id, status, job_id) e checa shift_payments
+    // ativo antes de atualizar — sem pagamento ativo (mock padrão de shift_payments cai no
+    // fallback buildChain(), que resolve maybeSingle() com data: null).
+    appChain.maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'app-hired-1', status: 'hired', job_id: 'job-123' },
+      error: null,
+    })
+    appChain.update = vi.fn().mockReturnValue(chainableResolve())
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Dispensar'))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Confirmar Dispensa'))
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Freela dispensado deste turno.', 'success')
+    })
+
+    expect(appChain.update).toHaveBeenCalledWith({ status: 'cancelled' })
   })
 })
 

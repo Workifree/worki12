@@ -12,7 +12,7 @@ export default function Terms() {
         </button>
         <h1 className="text-3xl font-bold mb-6">Termos de Uso</h1>
         <div className="bg-white rounded-xl border-2 border-black p-8 space-y-4 text-sm leading-relaxed">
-          <p className="text-gray-600">Última atualização: Agosto de 2026</p>
+          <p className="text-gray-600">Última atualização: 16 de agosto de 2026</p>
 
           <h2 className="text-xl font-bold mt-6">1. Aceitação dos Termos</h2>
           <p>Ao acessar e usar a plataforma Worki ("Plataforma"), você concorda integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize a Plataforma. A Worki reserva-se o direito de atualizar estes Termos a qualquer momento, notificando os usuários por e-mail ou pela própria Plataforma.</p>
@@ -31,7 +31,7 @@ export default function Terms() {
             <li><strong>Registro e recibo:</strong> após o pagamento, a Contratante pode registrar na Plataforma que o pagamento foi realizado (valor, forma e data). A Worki emite um recibo com esses dados, disponível para as duas partes, e o Worker pode confirmar o recebimento diretamente no recibo. Esse registro tem caráter declaratório — serve como histórico e comprovante entre as partes, mas <strong>não é documento fiscal</strong>, e a Worki não verifica de forma independente se o pagamento de fato ocorreu.</li>
             <li><strong>Responsabilidade pelo pagamento:</strong> o valor, a forma e o prazo de pagamento são de responsabilidade exclusiva da Contratante. A Worki não garante, não antecipa e não se responsabiliza por qualquer valor devido ao Worker.</li>
           </ul>
-          <p className="mt-2">A Plataforma também pode oferecer, como recurso opcional, uma carteira digital para depósito e saque via PIX processados por um parceiro de pagamentos. Esse recurso não é o fluxo padrão deste piloto; quando utilizado, aplicam-se as regras específicas exibidas na própria tela da carteira.</p>
+          <p className="mt-2">Neste piloto, nenhum dinheiro passa pela Worki: a Plataforma não custodia, não intermedeia e não liquida o pagamento entre Contratante e Worker.</p>
 
           <h2 className="text-xl font-bold mt-6">5. Taxas</h2>
           <p>No piloto atual, a Worki <strong>não cobra nenhuma taxa</strong> sobre o pagamento combinado entre Contratante e Worker: o uso da Plataforma para publicar vagas, convidar freelancers, gerenciar turnos e registrar pagamentos é gratuito. A Worki reserva-se o direito de introduzir cobranças no futuro, notificando os usuários com antecedência mínima de 30 dias.</p>
@@ -61,7 +61,7 @@ export default function Terms() {
           <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-green-600 font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
 
           <h2 className="text-xl font-bold mt-6">11. Suspensão e Encerramento</h2>
-          <p>A Worki pode suspender ou encerrar o acesso de usuários que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais. Em caso de encerramento, eventual saldo remanescente na carteira digital opcional da Plataforma (quando esse recurso tiver sido utilizado) será devolvido conforme aplicável.</p>
+          <p>A Worki pode suspender ou encerrar o acesso de usuários que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais.</p>
 
           <h2 className="text-xl font-bold mt-6">12. Foro e Legislação</h2>
           <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de São Paulo/SP para dirimir quaisquer controvérsias.</p>

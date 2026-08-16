@@ -91,8 +91,11 @@ export interface Job {
 
 /**
  * Status de application (pull = candidatura worker; push = convite empresa).
- * 'invited'  — empresa convidou; aguarda resposta do freela (R5/R7).
- * 'declined' — freela recusou; NEUTRO, zero punição (R7).
+ * 'invited'   — empresa convidou; aguarda resposta do freela (R5/R7).
+ * 'declined'  — freela recusou; NEUTRO, zero punição (R7).
+ * 'cancelled' — worker cancelou turno já aceito (hired/in_progress → cancelled, ver
+ *   `trg_notify_company_on_worker_cancel`) OU empresa cancelou convite/dispensou do
+ *   turno. Transição irreversível (Article — máquina de estados de cancelamento).
  * Demais status: fluxo pull legado.
  */
 export type ApplicationStatus =
@@ -104,7 +107,8 @@ export type ApplicationStatus =
   | 'completed'
   | 'rejected'
   | 'invited'
-  | 'declined';
+  | 'declined'
+  | 'cancelled';
 
 /**
  * Resposta do freela a um convite push.

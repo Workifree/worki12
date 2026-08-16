@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MeusRecebimentos from './MeusRecebimentos'
 import type { WorkerShiftPaymentListItem } from '../services/paymentRecordService'
@@ -132,7 +133,7 @@ describe('MeusRecebimentos', () => {
     expect(screen.getAllByText(/Promessa/i).length).toBeGreaterThan(0)
   })
 
-  it('mostra itens cancelados (voided) de forma discreta, sem esconder', async () => {
+  it('mostra itens cancelados (voided) de forma discreta, sem esconder, com o motivo', async () => {
     mockListForWorker.mockResolvedValue([
       makeItem({ id: 'sp-voided', status: 'voided', voided_at: '2026-07-05T00:00:00Z', void_reason: 'Valor errado' }, 'Estoquista'),
     ])
@@ -141,6 +142,37 @@ describe('MeusRecebimentos', () => {
 
     await waitFor(() => expect(screen.getByText('Estoquista')).toBeInTheDocument())
     expect(screen.getByText('Cancelados')).toBeInTheDocument()
+    expect(screen.getByText(/Motivo: Valor errado/i)).toBeInTheDocument()
+  })
+
+  it('não navega ao clicar em um card cancelado (voided) — evita abrir o recibo errado', async () => {
+    const user = userEvent.setup()
+    mockListForWorker.mockResolvedValue([
+      makeItem({ id: 'sp-voided', status: 'voided', voided_at: '2026-07-05T00:00:00Z', void_reason: 'Valor errado', job_id: 'job-voided' }, 'Estoquista'),
+    ])
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('Estoquista')).toBeInTheDocument())
+
+    // Card cancelado não é um "role=button" clicável (sem foco/teclado/click habilitados).
+    expect(screen.queryByRole('button', { name: /Estoquista/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByText('Estoquista'))
+    expect(mockNavigate).not.toHaveBeenCalledWith('/recibo/job-voided')
+  })
+
+  it('navega para o recibo ao clicar em um card recorded (ativo)', async () => {
+    const user = userEvent.setup()
+    mockListForWorker.mockResolvedValue([
+      makeItem({ id: 'sp-active', status: 'recorded', worker_confirmed_at: '2026-07-01T10:00:00Z', job_id: 'job-active' }, 'Garçom'),
+    ])
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('Garçom')).toBeInTheDocument())
+    await user.click(screen.getByText('Garçom'))
+    expect(mockNavigate).toHaveBeenCalledWith('/recibo/job-active')
   })
 
   it('resume total recebido (só recorded) e total agendado sem usar a palavra "saldo"', async () => {

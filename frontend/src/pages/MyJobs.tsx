@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -99,6 +99,9 @@ export default function MyJobs() {
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
     const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
+    // "Falar com a empresa" — o gesto simétrico do freela (empresa já tinha o ícone de chat
+    // na tela de presença). id da application sendo processada (loading do botão).
+    const [chattingId, setChattingId] = useState<string | null>(null);
     // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
@@ -327,6 +330,37 @@ export default function MyJobs() {
             addToast('Erro ao cancelar turno. Tente novamente.', 'error');
         } finally {
             setCancelLoading(false);
+        }
+    };
+
+    // Gesto simétrico ao handleChat da empresa (CompanyJobCandidates): procura Conversation
+    // por application_uuid (job.id AQUI é o id da application, não da vaga), cria se não existir.
+    // Sem isso o freela não tem como puxar conversa se a empresa nunca abriu o chat do turno.
+    const handleChat = async (job: JobApplication) => {
+        setChattingId(job.id);
+        try {
+            const { data: existingConvs } = await supabase
+                .from('Conversation')
+                .select('id')
+                .eq('application_uuid', job.id)
+                .limit(1);
+
+            if (existingConvs && existingConvs.length > 0) {
+                navigate(`/messages?conversation=${existingConvs[0].id}`);
+            } else {
+                const newConvId = crypto.randomUUID();
+                const { error } = await supabase
+                    .from('Conversation')
+                    .insert({ id: newConvId, application_uuid: job.id, islocked: false });
+
+                if (error) throw error;
+                navigate(`/messages?conversation=${newConvId}`);
+            }
+        } catch (err) {
+            logError('MyJobs: handleChat', err);
+            addToast('Erro ao iniciar conversa.', 'error');
+        } finally {
+            setChattingId(null);
         }
     };
 
@@ -650,6 +684,16 @@ export default function MyJobs() {
                                         Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
                                     </div>
                                 )}
+
+                                {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
+                                <button
+                                    onClick={() => handleChat(job)}
+                                    disabled={chattingId === job.id}
+                                    className="bg-white hover:bg-black text-black hover:text-white border-2 border-black px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm"
+                                >
+                                    {chattingId === job.id ? <Loader2 className="animate-spin" size={18} /> : <MessageCircle size={18} />}
+                                    Falar com a empresa
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -688,6 +732,14 @@ export default function MyJobs() {
                             </div>
                             <div className="flex flex-col items-end gap-2">
                                 <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
+                                <button
+                                    onClick={() => handleChat(job)}
+                                    disabled={chattingId === job.id}
+                                    className="text-xs font-black text-black hover:text-white hover:bg-black uppercase px-3 py-2 rounded-xl border-2 border-black transition-colors flex items-center gap-1 min-h-[44px] disabled:opacity-50"
+                                >
+                                    {chattingId === job.id ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+                                    Falar com a empresa
+                                </button>
                                 <button
                                     onClick={() => setCancelJob(job)}
                                     className="text-xs font-black text-red-600 hover:text-white hover:bg-red-500 uppercase px-3 py-2 rounded-xl border-2 border-red-200 hover:border-red-500 transition-colors flex items-center gap-1 min-h-[44px]"

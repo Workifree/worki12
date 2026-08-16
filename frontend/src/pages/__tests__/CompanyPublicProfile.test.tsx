@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import CompanyPublicProfile from '../CompanyPublicProfile'
 
@@ -7,18 +7,25 @@ import CompanyPublicProfile from '../CompanyPublicProfile'
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     from: vi.fn(),
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }) },
     rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
   },
 }))
 
 // Mock useNavigate (não precisamos navegar de verdade nos testes)
+const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
-    useNavigate: vi.fn(() => vi.fn()),
+    useNavigate: () => mockNavigate,
   }
 })
+
+// "Falar com a empresa" usa useToast só para feedback de erro — mocka o provider.
+vi.mock('../../contexts/ToastContext', () => ({
+  useToast: vi.fn(() => ({ addToast: vi.fn(), removeToast: vi.fn() })),
+}))
 
 import { supabase } from '../../lib/supabase'
 
@@ -130,5 +137,81 @@ describe('CompanyPublicProfile', () => {
     })
 
     expect(screen.getByText('Esta empresa ainda não definiu um briefing padrão.')).toBeInTheDocument()
+  })
+
+  it('mostra "Falar com a empresa" quando há relação (application existente) e cria a Conversation ao clicar', async () => {
+    const companiesChain = buildChain({
+      single: vi.fn().mockResolvedValue({ data: COMPANY_DATA, error: null }),
+    })
+    const reviewsChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+    const applicationsChain = buildChain({
+      limit: vi.fn().mockResolvedValue({ data: [{ id: 'app-1' }], error: null }),
+    })
+    const conversationInsert = vi.fn().mockResolvedValue({ data: null, error: null })
+    const conversationChain = buildChain({
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }), // nenhuma Conversation existente ainda
+      insert: conversationInsert,
+    })
+
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'worker-1' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'companies') return companiesChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'reviews') return reviewsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'Conversation') return conversationChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
+    fireEvent.click(chatButton)
+
+    await waitFor(() => {
+      expect(conversationInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ application_uuid: 'app-1', islocked: false })
+      )
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/messages?conversation='))
+    })
+  })
+
+  it('não mostra "Falar com a empresa" quando não há relação (sem application)', async () => {
+    const companiesChain = buildChain({
+      single: vi.fn().mockResolvedValue({ data: COMPANY_DATA, error: null }),
+    })
+    const reviewsChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+    const applicationsChain = buildChain({
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'worker-1' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'companies') return companiesChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'reviews') return reviewsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Cafeteria Central')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: /Falar com a empresa/i })).not.toBeInTheDocument()
   })
 })

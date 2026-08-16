@@ -154,6 +154,18 @@ export interface RespondToInviteResult {
   error?: string;
 }
 
+export interface CancelInviteResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface DismissFromShiftResult {
+  success: boolean;
+  error?: string;
+  /** true quando o bloqueio foi por já existir pagamento (agendado ou registrado) para o turno. */
+  blockedByPayment?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers internos
 // ---------------------------------------------------------------------------
@@ -319,6 +331,160 @@ export const ShiftInviteService = {
       logError('shiftInvite.inviteWorkerToShift', err);
       return {
         application: null,
+        error: err instanceof Error ? err.message : 'Erro inesperado.',
+      };
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // EMPRESA: desfazer convite/contratação (revisão pré-piloto, onda 3)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cancela um convite que ainda NÃO foi respondido pelo freela ('invited' → 'cancelled').
+   * Libera o job para convidar outro membro da equipe — a MESMA application/worker não pode
+   * ser reconvidada (UNIQUE(job_id, worker_id) no schema); é preciso escolher outro freela.
+   *
+   * Notificação simétrica ao freela: este método NÃO insere notificação nenhuma pelo client
+   * (mesmo a policy de INSERT de `notifications`, desde `20260702000000_notifications_notify_counterpart.sql`,
+   * já permitindo empresa→worker quando existe `team_connections` com status 'accepted' — ver
+   * `inviteWorkerToShift` acima, que insere assim). Quem avisa o freela aqui é o trigger
+   * `trg_notify_counterpart_on_application_cancel` (SECURITY DEFINER, migration
+   * `20260816150000_notify_counterpart_on_application_cancel.sql`, ADR-20260816-notificacao-
+   * contraparte-por-trigger), disparado automaticamente por este mesmo UPDATE
+   * (`status → 'cancelled'`) — ramifica por `auth.uid()` para saber quem foi o ator e notifica
+   * a contraparte certa. Preferido a um INSERT no client por não depender de RLS de
+   * `authenticated`: um INSERT pelo client exigiria vínculo de equipe VIVO (`team_connections
+   * accepted`), e se o freela sair do Elenco/bloquear a empresa DEPOIS do turno, esse INSERT
+   * seria negado em silêncio — justo para quem tem atrito com a empresa e mais precisa da
+   * trilha do recibo. O trigger SECURITY DEFINER não passa por essa RLS, então o aviso
+   * independe do vínculo. NÃO adicionar INSERT em `notifications` aqui — duplicaria o aviso.
+   */
+  async cancelInvite(applicationId: string): Promise<CancelInviteResult> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Sessão expirada.' };
+
+      const { data: current, error: fetchErr } = await supabase
+        .from('applications')
+        .select('id, status')
+        .eq('id', applicationId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        logError('shiftInvite.cancelInvite.fetch', fetchErr);
+        return { success: false, error: 'Convite não encontrado.' };
+      }
+      if (!current) return { success: false, error: 'Convite não encontrado.' };
+      if (current.status !== 'invited') {
+        return {
+          success: false,
+          error: `Transição inválida: status atual é '${current.status}', esperado 'invited'.`,
+        };
+      }
+
+      const { error: updateErr } = await supabase
+        .from('applications')
+        .update({ status: 'cancelled' })
+        .eq('id', applicationId)
+        .eq('status', 'invited');
+
+      if (updateErr) {
+        logError('shiftInvite.cancelInvite.update', updateErr);
+        return { success: false, error: 'Erro ao cancelar o convite.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('shiftInvite.cancelInvite', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro inesperado.',
+      };
+    }
+  },
+
+  /**
+   * Dispensa um freela JÁ contratado deste turno ('hired' | 'in_progress' → 'cancelled').
+   * Gesto sério (o freela já contava com o turno) — a UI DEVE exigir confirmação explícita
+   * antes de chamar isto; este método não confirma nada, só executa a transição.
+   *
+   * Guarda: bloqueia se já existe um marcador ATIVO em `shift_payments` (status
+   * 'scheduled' ou 'recorded') para este job. Motivo: dispensar deixaria esse marcador
+   * órfão — atrelado a um freela que não está mais no turno — e o UNIQUE parcial de
+   * `shift_payments` (`(job_id) WHERE status IN ('scheduled','recorded')`) impediria
+   * registrar/agendar o pagamento de um freela substituto enquanto o marcador antigo
+   * seguir ativo. A empresa precisa estornar (`PaymentRecordService.voidPayment`) antes.
+   *
+   * Notificação simétrica ao freela: mesmo caminho de `cancelInvite` — o trigger
+   * `trg_notify_counterpart_on_application_cancel` avisa o freela automaticamente; este
+   * método não insere notificação nenhuma.
+   */
+  async dismissFromShift(applicationId: string): Promise<DismissFromShiftResult> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Sessão expirada.' };
+
+      const { data: current, error: fetchErr } = await supabase
+        .from('applications')
+        .select('id, status, job_id')
+        .eq('id', applicationId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        logError('shiftInvite.dismissFromShift.fetch', fetchErr);
+        return { success: false, error: 'Freela não encontrado neste turno.' };
+      }
+      if (!current) return { success: false, error: 'Freela não encontrado neste turno.' };
+      if (current.status !== 'hired' && current.status !== 'in_progress') {
+        return {
+          success: false,
+          error: `Transição inválida: status atual é '${current.status}', esperado 'hired' ou 'in_progress'.`,
+        };
+      }
+
+      // Guarda: pagamento ATIVO (scheduled|recorded) para este job bloqueia o dispensar
+      // (ver motivo no comentário do método) — checagem defensiva, além da UI já impedir.
+      const { data: activePayment, error: paymentErr } = await supabase
+        .from('shift_payments')
+        .select('id, status')
+        .eq('job_id', current.job_id)
+        .in('status', ['scheduled', 'recorded'])
+        .maybeSingle();
+
+      if (paymentErr) {
+        logError('shiftInvite.dismissFromShift.checkPayment', paymentErr);
+        return { success: false, error: 'Erro ao verificar pagamento do turno.' };
+      }
+      if (activePayment) {
+        return {
+          success: false,
+          blockedByPayment: true,
+          error:
+            'Este turno já tem um pagamento registrado ou agendado. Estorne o pagamento antes de dispensar o freela.',
+        };
+      }
+
+      const { error: updateErr } = await supabase
+        .from('applications')
+        .update({ status: 'cancelled' })
+        .eq('id', applicationId)
+        .in('status', ['hired', 'in_progress']);
+
+      if (updateErr) {
+        logError('shiftInvite.dismissFromShift.update', updateErr);
+        return { success: false, error: 'Erro ao dispensar o freela deste turno.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('shiftInvite.dismissFromShift', err);
+      return {
+        success: false,
         error: err instanceof Error ? err.message : 'Erro inesperado.',
       };
     }
@@ -558,3 +724,76 @@ export const ShiftInviteService = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------
+// WhatsApp — aviso manual de convite (zero backend, deep link `wa.me`)
+// ---------------------------------------------------------------------------
+// O convite só existe dentro do app: o InviteTakeover só dispara com o app aberto e a
+// notificação do navegador não sobrevive à aba fechada. Sem push real/SMS (infra que o
+// projeto não tem), o telefone já cadastrado do freela (`workers.phone`) é o único canal
+// fora do app que a empresa tem à mão. Funções puras (sem I/O) — fáceis de testar isoladas.
+
+/**
+ * Normaliza um telefone brasileiro (gravado mascarado, ex.: "(11) 99999-9999") para o
+ * formato que o `wa.me` espera: só dígitos, com DDI 55 na frente.
+ *
+ * - 10/11 dígitos (DDD + telefone, sem DDI) → prefixa "55".
+ * - 12/13 dígitos já começando com "55" → mantém como está (já veio com DDI).
+ * - Qualquer outro formato (vazio, incompleto, sem DDD reconhecível) → `null`, nunca gera
+ *   `wa.me/undefined` ou um link quebrado.
+ */
+export function normalizePhoneForWhatsApp(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Já veio com DDI 55 (12 = DDD + fixo 8 dígitos + 55; 13 = DDD + celular 9 dígitos + 55).
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+    return digits;
+  }
+
+  // Número local sem DDI (10 = fixo, 11 = celular).
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+
+  return null;
+}
+
+export interface ShiftInviteWhatsAppMessageParams {
+  companyName: string;
+  jobTitle: string;
+  /** Data já formatada pelo caller (ex.: "16/08/2026") — evita duplicar a lógica de fuso aqui. */
+  dateLabel?: string | null;
+  /** Horário já formatado pelo caller (ex.: "08:00 às 17:00"). */
+  timeLabel?: string | null;
+  location?: string | null;
+  /** Valor do turno em BRL. */
+  amount?: number | null;
+  /** URL para o freela abrir o app e responder ao convite. */
+  appUrl: string;
+}
+
+/**
+ * Monta a mensagem pronta do WhatsApp — nome da empresa, título do turno, data, horário,
+ * local e valor, mais o link direto para o app. Não genérica: usa os dados reais do turno.
+ */
+export function buildShiftInviteWhatsAppMessage(params: ShiftInviteWhatsAppMessageParams): string {
+  const { companyName, jobTitle, dateLabel, timeLabel, location, amount, appUrl } = params;
+
+  const valueLabel =
+    typeof amount === 'number' && amount > 0
+      ? `Valor: R$ ${amount.toFixed(2).replace('.', ',')}`
+      : null;
+
+  const lines = [
+    `Oi! Aqui é ${companyName || 'a empresa'} pelo Worki.`,
+    `Te convidei para o turno "${jobTitle}"${dateLabel ? `, ${dateLabel}` : ''}${timeLabel ? ` (${timeLabel})` : ''}.`,
+    location ? `Local: ${location}` : null,
+    valueLabel,
+    '',
+    `Dá uma olhada e responde no app: ${appUrl}`,
+  ].filter((line): line is string => line !== null);
+
+  return lines.join('\n');
+}

@@ -12,7 +12,7 @@ export default function Privacy() {
         </button>
         <h1 className="text-3xl font-bold mb-6">Política de Privacidade</h1>
         <div className="bg-white rounded-xl border-2 border-black p-8 space-y-4 text-sm leading-relaxed">
-          <p className="text-gray-600">Última atualização: Agosto de 2026</p>
+          <p className="text-gray-600">Última atualização: 16 de agosto de 2026</p>
 
           <p>Esta Política de Privacidade descreve como a Worki ("nós", "nossa Plataforma") coleta, utiliza, compartilha e protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).</p>
 
@@ -22,7 +22,7 @@ export default function Privacy() {
             <li><strong>Dados de cadastro:</strong> nome completo, e-mail, telefone, CPF (Workers) e data de nascimento (Workers)</li>
             <li><strong>Dados profissionais (Workers):</strong> habilidades, especialidades, experiência, foto, cidade/localização</li>
             <li><strong>Dados empresariais (Contratantes):</strong> razão social, CNPJ ou CPF, setor de atuação</li>
-            <li><strong>Dados de pagamento (Workers):</strong> chave PIX cadastrada pelo Worker, usada para viabilizar o pagamento direto feito pela Contratante (a Worki não processa nem custodia esse pagamento — veja a Seção 2)</li>
+            <li><strong>Dados de pagamento (Workers):</strong> chave PIX e telefone cadastrados pelo Worker, usados para viabilizar o pagamento direto feito pela Contratante (a Worki não processa nem custodia esse pagamento — veja a Seção 2)</li>
             <li><strong>Histórico de turnos e pagamentos declarados:</strong> vagas, candidaturas, convites, registros de pagamento (valor, forma e data informados pela Contratante) e confirmações de recebimento pelo Worker</li>
             <li><strong>Dados de uso:</strong> páginas acessadas, ações realizadas, data/hora de acesso, dispositivo e navegador</li>
           </ul>
@@ -33,9 +33,8 @@ export default function Privacy() {
             <li>Criação e gerenciamento de conta</li>
             <li>Autenticação e segurança de acesso</li>
             <li>Conexão entre Contratantes e Workers (exibição de perfis, elenco/convites e candidaturas)</li>
-            <li>Exibição da chave PIX do Worker para a Contratante com quem ele tem vínculo ativo (elenco ou turno), para viabilizar o pagamento direto entre as partes — neste piloto, o pagamento em si é combinado e realizado diretamente entre Contratante e Worker, fora da Plataforma</li>
+            <li>Exibição da chave PIX e do telefone do Worker para a Contratante com quem ele tem vínculo ativo (elenco ou turno), para permitir que a Contratante efetue o pagamento combinado — neste piloto, o pagamento em si é combinado e realizado diretamente entre Contratante e Worker, fora da Plataforma</li>
             <li>Registro de pagamentos declarados pela Contratante e emissão do recibo/comprovante entre as partes</li>
-            <li>Para quem optar por usar a carteira digital opcional da Plataforma: processamento de depósitos, saques e saldo via parceiro de pagamentos (Asaas)</li>
             <li>Comunicação de atualizações, notificações e suporte</li>
             <li>Melhoria da Plataforma e análise de uso agregado</li>
             <li>Cumprimento de obrigações legais e regulatórias</li>
@@ -53,8 +52,8 @@ export default function Privacy() {
           <h2 className="text-xl font-bold mt-6">4. Compartilhamento de Dados</h2>
           <p>Compartilhamos seus dados apenas com:</p>
           <ul className="list-disc pl-6 space-y-1">
-            <li><strong>Contratante com vínculo ativo:</strong> a chave PIX e demais dados de contato do Worker ficam visíveis apenas para a Contratante com quem ele tem um vínculo ativo (elenco pendente/aceito ou candidatura/convite de turno) — nunca para qualquer conta na Plataforma</li>
-            <li><strong>Asaas:</strong> processamento de depósitos, saques e movimentações na carteira digital opcional da Plataforma, apenas para usuários que utilizarem esse recurso (dados necessários à transação). No fluxo padrão deste piloto, o pagamento é combinado diretamente entre Contratante e Worker e não passa pela Worki nem pela Asaas</li>
+            <li><strong>Contratante com vínculo:</strong> a chave PIX e o telefone do Worker ficam visíveis apenas para a Contratante com quem ele tem elenco aceito ou pendente, ou pelo menos uma candidatura/convite de turno em comum (incluindo turnos já concluídos ou cancelados, para manter o recibo e o histórico legíveis) — com a finalidade exclusiva de permitir que essa Contratante efetue o pagamento combinado pelo turno. A base legal é a execução do contrato entre as partes. Nenhuma outra conta da Plataforma tem acesso a esses dados. Quando o vínculo é só de elenco (sem turno já registrado), o Worker pode encerrar esse acesso a qualquer momento saindo do elenco ou bloqueando a Contratante</li>
+            <li><strong>CPF e data de nascimento do Worker:</strong> essa mesma regra de vínculo controla o acesso no banco de dados a esses dois campos, mas nenhuma tela da Plataforma hoje os exibe para a Contratante — eles ficam armazenados para verificação de identidade e obrigações legais da Worki, não para consulta pela Contratante</li>
             <li><strong>Supabase:</strong> infraestrutura de banco de dados e autenticação (dados criptografados)</li>
             <li><strong>Resend:</strong> envio de e-mails transacionais (apenas e-mail e nome)</li>
             <li><strong>Sentry:</strong> monitoramento de erros (dados anonimizados, sem dados pessoais)</li>

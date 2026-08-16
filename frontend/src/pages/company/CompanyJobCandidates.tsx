@@ -5,8 +5,9 @@ import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
+import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage } from '../../services/shiftInviteService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
@@ -28,6 +29,18 @@ function isInviteExpired(app: Application): boolean {
     (app.status === 'invited' && pastDeadline) ||
     (app.status === 'declined' && !app.invitation_response && pastDeadline)
   );
+}
+
+/**
+ * Convite cancelado pela EMPRESA antes de qualquer resposta do freela (onda 3 — "Cancelar
+ * Convite"). Distingue de forma confiável de "freela cancelou o turno que aceitou"
+ * (também `status='cancelled'`, mas nesse caso `invitation_response='accepted'` — o freela
+ * só cancela DEPOIS de ter aceitado). Sem coluna nova: usa a combinação
+ * `invited_by_company_at` preenchido (veio de convite push) + `invitation_response` nulo
+ * (nunca respondeu) para identificar exatamente esse caminho.
+ */
+function isInviteCancelledUnanswered(app: Application): boolean {
+  return app.status === 'cancelled' && !!app.invited_by_company_at && !app.invitation_response;
 }
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
@@ -73,6 +86,20 @@ export default function CompanyJobCandidates() {
     const [jobBudget, setJobBudget] = useState(0);
     // Registro de pagamento externo (modo A) já feito para ESTE job (UNIQUE por job_id no schema).
     const [shiftPayment, setShiftPayment] = useState<ShiftPayment | null>(null);
+
+    // Dados do turno + empresa usados só para montar a mensagem pronta do WhatsApp (onda 3).
+    const [jobLocation, setJobLocation] = useState('');
+    const [jobStartDate, setJobStartDate] = useState('');
+    const [jobStartTime, setJobStartTime] = useState<string | null>(null);
+    const [jobEndTime, setJobEndTime] = useState<string | null>(null);
+    const [companyName, setCompanyName] = useState('');
+
+    // "Cancelar Convite" — invited sem resposta, libera o slot (onda 3).
+    const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);
+
+    // "Dispensar deste turno" — hired/in_progress, exige confirmação explícita (onda 3).
+    const [dismissApp, setDismissApp] = useState<Application | null>(null);
+    const [dismissing, setDismissing] = useState(false);
 
     // Modal "Registrar pagamento" (modo A)
     const [paymentModalApp, setPaymentModalApp] = useState<Application | null>(null);
@@ -123,10 +150,24 @@ export default function CompanyJobCandidates() {
             if (!user) { navigate('/login'); return; }
 
             // Fetch Job Title (only if owned by this company)
-            const { data: job, error: jobError } = await supabase.from('jobs').select('title, budget').eq('id', id).eq('company_id', user.id).single();
+            const { data: job, error: jobError } = await supabase
+                .from('jobs')
+                .select('title, budget, location, start_date, work_start_time, work_end_time')
+                .eq('id', id)
+                .eq('company_id', user.id)
+                .single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);
             setJobBudget(job.budget ?? 0);
+            setJobLocation(job.location ?? '');
+            setJobStartDate(job.start_date ?? '');
+            setJobStartTime(job.work_start_time ?? null);
+            setJobEndTime(job.work_end_time ?? null);
+
+            // Nome da empresa (companies.id === owner_id === auth.uid(), 1:1) — só para
+            // montar a mensagem do WhatsApp (onda 3), best-effort.
+            const { data: companyRow } = await supabase.from('companies').select('name').eq('id', user.id).maybeSingle();
+            setCompanyName(companyRow?.name ?? '');
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
             // Minimização de dado (LGPD, harness-security-reviewer): traz só as colunas que esta
@@ -215,6 +256,61 @@ export default function CompanyJobCandidates() {
         setReleasing(false);
         addToast('Entrega confirmada! Pagamento liberado ao profissional.', 'success');
         fetchCandidates();
+    };
+
+    // "Cancelar Convite" (onda 3) — invited sem resposta, libera o slot para convidar outro
+    // membro da equipe. Sem notificação simétrica ao freela (ver comentário do service).
+    const handleCancelInvite = async (app: Application) => {
+        setCancelInviteId(app.id);
+        try {
+            const result = await ShiftInviteService.cancelInvite(app.id);
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível cancelar o convite.', 'error');
+                return;
+            }
+            addToast('Convite cancelado. Você pode convidar outro freela.', 'success');
+            fetchCandidates();
+        } finally {
+            setCancelInviteId(null);
+        }
+    };
+
+    // "Dispensar deste turno" (onda 3) — hired/in_progress, gesto sério: exige confirmação
+    // explícita no modal (dismissApp) antes de chamar o service.
+    const handleDismissFromShift = async () => {
+        if (!dismissApp) return;
+        setDismissing(true);
+        try {
+            const result = await ShiftInviteService.dismissFromShift(dismissApp.id);
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível dispensar o freela.', 'error');
+                return;
+            }
+            addToast('Freela dispensado deste turno.', 'success');
+            setDismissApp(null);
+            fetchCandidates();
+        } finally {
+            setDismissing(false);
+        }
+    };
+
+    // "Avisar no WhatsApp" (onda 3) — zero backend: monta a mensagem com os dados reais do
+    // turno já carregados na tela e abre o `wa.me` numa aba nova. Sem telefone válido, não faz nada
+    // (o botão já vem desabilitado/oculto nesse caso — ver render).
+    const handleWhatsAppNotify = (app: Application) => {
+        const phone = normalizePhoneForWhatsApp(app.worker?.phone ?? null);
+        if (!phone) return;
+        const timeLabel = jobStartTime ? `${jobStartTime}${jobEndTime ? ` às ${jobEndTime}` : ''}` : null;
+        const message = buildShiftInviteWhatsAppMessage({
+            companyName,
+            jobTitle,
+            dateLabel: jobStartDate ? formatDateOnly(jobStartDate) : null,
+            timeLabel,
+            location: jobLocation,
+            amount: jobBudget,
+            appUrl: `${window.location.origin}/my-jobs`,
+        });
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
     };
 
     // Modo A (pagamento externo) — abre o modal "Registrar pagamento" pré-preenchido com o valor do turno.
@@ -667,7 +763,7 @@ export default function CompanyJobCandidates() {
                     <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
                         <ArrowLeft size={16} strokeWidth={3} /> Voltar para Turnos
                     </button>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Freelas do Turno</h1>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter">Presença e Pagamento</h1>
                     <p className="text-gray-500 font-bold">{jobTitle} • {candidates.length} freela{candidates.length !== 1 ? 's' : ''}</p>
                 </div>
             </div>
@@ -774,10 +870,47 @@ export default function CompanyJobCandidates() {
                                                                     <Send size={14} /> Convidar outro
                                                                 </button>
                                                             </>
+                                                    ) : isInviteCancelledUnanswered(app) ? (
+                                                            <>
+                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-500">
+                                                                    Convite cancelado
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
+                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <Send size={14} /> Convidar outro
+                                                                </button>
+                                                            </>
                                                     ) : app.status === 'invited' ? (
-                                                            <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
-                                                                Aguardando resposta
-                                                            </span>
+                                                            <>
+                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
+                                                                    Aguardando resposta
+                                                                </span>
+                                                                {app.worker?.phone ? (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleWhatsAppNotify(app); }}
+                                                                        className="p-1 px-3 bg-[#25D366] text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-black transition-colors flex items-center gap-1"
+                                                                    >
+                                                                        <MessageCircle size={14} /> Avisar no WhatsApp
+                                                                    </button>
+                                                                ) : (
+                                                                    <span
+                                                                        title="Freela sem telefone cadastrado"
+                                                                        className="text-xs font-bold uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-400"
+                                                                    >
+                                                                        WhatsApp indisponível
+                                                                    </span>
+                                                                )}
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); void handleCancelInvite(app); }}
+                                                                    disabled={cancelInviteId === app.id}
+                                                                    className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                                >
+                                                                    {cancelInviteId === app.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                                                    Cancelar Convite
+                                                                </button>
+                                                            </>
                                                     ) : (
                                                         <span className={`text-xs font-black uppercase px-3 py-1 rounded-lg border-2 ${app.status === 'hired' ? 'bg-green-100 border-green-200 text-green-700' :
                                                             app.status === 'in_progress' ? 'bg-orange-100 border-orange-200 text-orange-700' :
@@ -845,6 +978,14 @@ export default function CompanyJobCandidates() {
 
                                                             {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
+
+                                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal */}
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
+                                                                className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
+                                                            >
+                                                                <UserX size={14} /> Dispensar
+                                                            </button>
                                                         </>
                                                     )}
 
@@ -1039,6 +1180,41 @@ export default function CompanyJobCandidates() {
                                 className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {releasing ? <><Loader2 size={16} className="animate-spin" /> Processando...</> : 'Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação explícita */}
+            {dismissApp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">Dispensar Freela</h2>
+                        <p className="text-gray-600 font-medium mb-3">
+                            {dismissApp.worker?.full_name || 'Este freela'} já foi contratado para este turno e está
+                            contando com ele. Ao dispensar, o turno sai da agenda dele imediatamente.
+                        </p>
+                        <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                            <p className="text-xs font-bold text-yellow-800">
+                                O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
+                                vale reforçar por telefone/WhatsApp também.
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDismissApp(null)}
+                                disabled={dismissing}
+                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDismissFromShift}
+                                disabled={dismissing}
+                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {dismissing ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</> : 'Confirmar Dispensa'}
                             </button>
                         </div>
                     </div>

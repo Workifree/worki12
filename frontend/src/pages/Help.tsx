@@ -20,7 +20,7 @@ const faqs = [
     },
     {
         q: 'O que é o recibo e a confirmação de recebimento?',
-        a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela é notificado e pode confirmar que recebeu o pagamento, o que fecha o ciclo do turno com um comprovante para ambos os lados.',
+        a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela acompanha isso em "Meus Recebimentos" e, ao abrir o recibo, pode confirmar que recebeu o pagamento — o que fecha o ciclo do turno com um comprovante para ambos os lados.',
     },
     {
         q: 'Como saio do elenco de uma empresa, ou como a empresa remove alguém?',

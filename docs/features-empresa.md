@@ -26,7 +26,12 @@ Você tem duas formas principais de adicionar freelancers:
 4. Cole o ID e envie o convite
 5. Ele receberá uma notificação e poderá aceitar
 
-**QR Scanner (v1.1):** Futuramente, você poderá escanear o código QR do perfil do freelancer com a câmera do seu celular.
+#### 3. QR Scanner
+1. Vá para **Minha Equipe**
+2. Clique em **"Adicionar Freela"** → aba **"QR"**
+3. Aponte a câmera para o código QR do perfil do freelancer
+4. O app reconhece e convida instantaneamente
+5. Freelancer aceita o convite → entra na sua equipe
 
 ### Visão de Minha Equipe
 

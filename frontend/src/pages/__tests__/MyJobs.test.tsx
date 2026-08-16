@@ -119,14 +119,16 @@ function buildChain(overrides: Record<string, unknown> = {}) {
     update: vi.fn().mockReturnThis(),
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
     in: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
   }
   return { ...chain, ...overrides }
 }
 
-function setupMocks(apps: ApplicationRow[] = []) {
+function setupMocks(apps: ApplicationRow[] = [], conversationOverrides: Record<string, unknown> = {}) {
   const mockAddToast = vi.fn()
+  const mockNavigate = vi.fn()
   vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
-  vi.mocked(useNavigate).mockReturnValue(vi.fn())
+  vi.mocked(useNavigate).mockReturnValue(mockNavigate)
 
   vi.mocked(supabase.auth.getUser).mockResolvedValue({
     data: { user: { id: 'worker-1' } },
@@ -141,13 +143,16 @@ function setupMocks(apps: ApplicationRow[] = []) {
     order: vi.fn().mockResolvedValue({ data: apps, error: null }),
   })
 
+  const conversationChain = buildChain(conversationOverrides)
+
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'reviews') return reviewsChain as unknown as ReturnType<typeof supabase.from>
     if (table === 'applications') return appsChain as unknown as ReturnType<typeof supabase.from>
+    if (table === 'Conversation') return conversationChain as unknown as ReturnType<typeof supabase.from>
     return buildChain() as unknown as ReturnType<typeof supabase.from>
   })
 
-  return { mockAddToast }
+  return { mockAddToast, mockNavigate, conversationChain }
 }
 
 function renderComponent() {
@@ -282,5 +287,60 @@ describe('MyJobs - Erro de autenticacao', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/login')
     })
+  })
+})
+
+describe('MyJobs - Falar com a empresa', () => {
+  it('cria a Conversation e navega ao clicar em "Falar com a empresa" (Em Andamento)', async () => {
+    const { mockNavigate, conversationChain } = setupMocks([APP_IN_PROGRESS], {
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }), // nenhuma Conversation existente ainda
+      insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
+    fireEvent.click(chatButton)
+
+    await waitFor(() => {
+      expect(conversationChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ application_uuid: APP_IN_PROGRESS.id, islocked: false })
+      )
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/messages?conversation='))
+    })
+  })
+
+  it('reusa a Conversation existente em vez de criar outra', async () => {
+    const { mockNavigate, conversationChain } = setupMocks([APP_IN_PROGRESS], {
+      limit: vi.fn().mockResolvedValue({ data: [{ id: 'conv-existing' }], error: null }),
+    })
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
+    fireEvent.click(chatButton)
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/messages?conversation=conv-existing')
+    })
+    expect(conversationChain.insert).not.toHaveBeenCalled()
+  })
+
+  it('mostra "Falar com a empresa" também na aba Agendados', async () => {
+    const scheduledApp: ApplicationRow = {
+      ...APP_IN_PROGRESS,
+      id: 'app-4',
+      status: 'hired',
+      worker_checkin_at: null,
+      job: { ...APP_IN_PROGRESS.job!, start_date: '2099-01-01' },
+    }
+    setupMocks([scheduledApp])
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Agendados'))
+
+    expect(await screen.findByRole('button', { name: /Falar com a empresa/i })).toBeInTheDocument()
   })
 })

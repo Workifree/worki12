@@ -44,12 +44,18 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 - Ícones decorativos (lupa/funil) removidos de dashboards
 - "Dica Pro" com dados inventados foi corrigida/removida
 
-**Remoção de Superfície de Modelo Antigo:**
+**Remoção de Superfície de Modelo Antigo (Modos B/C — Postpago):**
+- Seção "Carteira da Empresa" (`/company/wallet`) removida
+- Modais de depósito e cartão de crédito removidos (Modo B/C não está no piloto)
 - Página "Painel Financeiro" (`/company/financeiro`) removida
-- Seção "Carteira da Empresa" (`/company/wallet`) removida — substituída por histórico de pagamentos
-- Modais de depósito e cartão de crédito removidos
-- Página "Meu Saldo" (worker) removida (modo A não movimenta saldo na plataforma)
+- Página "Meu Saldo" (worker) removida — substituída por [**Meus Recebimentos**](#meus-recebimentos-pagamento-externo-modo-a)
 - Código morto removido: `Analytics.tsx`, `CreateJob.tsx`, `Placeholder.tsx`, `WorkerDashboard.tsx`
+
+**Meus Recebimentos (Pagamento Externo — Modo A):**
+- Nova página `/recebimentos` acessível pelo menu inferior (BottomNav)
+- Freelancer acompanha todos os pagamentos registrados pelas empresas em uma única tela
+- Categorias: agendados (promessa), aguardando confirmação, recebidos, cancelados
+- Cada item abre o recibo bilateral completo para conferência e confirmação
 
 ### Adicionado
 
@@ -113,51 +119,51 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 - Visualização de recibos de pagamentos registrados
 - Confirmação de recebimento (gera valor comprovado no recibo bilateral)
 
-#### Slice 1 — Loop Relacional (MVP)
+#### Meu Elenco e Convites de Turno (Novo Fluxo de Contratação)
 
 **Empresa:**
-- Página "Minha Equipe" (`/company/team`) — adicionar freelancers por link de convite ou Worki ID
-- Campo "Briefing" ao criar turno (regras, dress code, procedimentos visíveis no convite)
-- Convite direto de turno para freelancers da equipe
-- Acompanhamento de respostas (aceito/recusado/aguardando/expirado)
+- Página "Minha Equipe" (`/company/team`) — construir e gerenciar sua equipe de freelancers
+  - Adicionar por: link de convite, Worki ID ou **QR Scanner** (câmera)
+  - Ver status: confirmados, aguardando resposta, bloqueados
+- Campo "Briefing" ao criar turno (regras, dress code, procedimentos)
+- Convite direto de turno para freelancers da equipe (sem abrir no feed)
+- Acompanhamento de respostas (aceito, recusado, aguardando, expirado)
 
 **Freelancer:**
-- Aba "Convites" em "Meus Jobs" — receber e responder convites de turno
-- Campo QR de identidade no perfil (`/profile` → ícone QR) — código único para empresas adicionar
-- Página de aceite de convite por link (`/convite/:token`)
+- Aba "Convites" em "Meus Turnos" — receber e responder convites de turno
+- Código QR de identidade no perfil (empresas podem escanear para adicionar)
+- Link de aceite de convite por e-mail/WhatsApp/SMS
 - Resposta neutra a convites (recusar não afeta reputação)
 
 **Ambos:**
-- Avaliação bidirecional pós-turno (empresa → freelancer; freelancer → empresa)
-- Direção explícita em avaliações (quem avalia quem)
+- Avaliação bidirecional pós-turno (empresa avalia freelancer; freelancer avalia empresa)
+- Histórico completo de avaliações nos perfis públicos
 
-#### Slice 2 — Pagamento Postpago (modelo Uber)
+### FUTURO — Não lançado no piloto
+
+#### Slice 2 — Pagamento Postpago (modelo Uber — Futuro)
+
+Recursos planejados para expansão futura:
 
 **Empresa:**
-- Cadastro de cartão de crédito na Carteira da Empresa (`/company/wallet`)
+- Cadastro de cartão de crédito na Carteira da Empresa
 - Seção "Cartões de Crédito" com interface de adicionar/gerenciar cartões
-- Modal de cadastro de cartão com validação de dados (número, validade, CVV, CPF/CNPJ, CEP, telefone)
-- Cartão tokenizado no Asaas (número do cartão não é armazenado no Worki)
 - Modelo de pagamento postpago: **sem depósito antecipado**
 - Na conclusão do turno, o cartão é automaticamente debitado
-- Aviso in-app quando a autorização do cartão falha
-- Turno fica pendente de pagamento até que o cartão seja aceito
 
-#### Slice 3 — Inteligência Financeira (BI da Empresa)
+#### Slice 3 — Inteligência Financeira (BI da Empresa — Futuro)
+
+Recursos planejados para expansão futura:
 
 **Empresa:**
-- Página "Painel Financeiro" (`/company/financeiro`) — acessível pelo menu Sidebar e card na Carteira
-- **Teto de gasto mensal:** configurar limite, barra de progresso colorida (80%/90%/100%), alertas in-app
-- **Faturamento do mês:** CTA para informar, destrava indicador de custo % faturamento
-- **Indicadores de custo:** custo total, custo/hora, custo % faturamento
-- **Gasto por freelancer:** ranking com horas, turnos, fonte das horas (estimada/mista/checada), valor total
-- **Custo de no-show (estimativa):** contagem de turnos aceitos sem checkout, custo de oportunidade
-- **Alerta de concentração:** flag quando freela ultrapassa 150h E 20 dias distintos (risco de vínculo trabalhista)
-- **Seletor de período:** análise por mês atual ou mês anterior
+- Painel Financeiro com análise detalhada de gasto
+- **Teto de gasto mensal** com alertas
+- **Faturamento do mês** e indicadores de custo
+- **Gasto por freelancer** e tendências
+- **Alerta de concentração** para risco de vínculo trabalhista
 
 ### Alterado
 
-- Fluxo de criação de turno: freelancers da equipe em vez de candidatos anônimos no feed
-- Modelo de convite: aceite/recusa substituem candidatura automática em vagas
-- Modelo de pagamento: postpago (cartão on-file) é agora a opção padrão; pré-pago (depósito) permanece funcional
-- Card "Painel Financeiro" adicionado na Carteira da Empresa como atalho para Financeiro
+- **Fluxo de criação de turno:** Freelancers da sua equipe em vez de candidatos anônimos no feed
+- **Modelo de convite:** Aceitar/recusar convites em vez de candidatura automática em vagas abertas
+- **Modelo de pagamento (Piloto):** Pagamento Externo (Modo A — PIX/dinheiro direto) é o padrão; registrado e confirmado no app

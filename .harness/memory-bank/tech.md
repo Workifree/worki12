@@ -21,7 +21,7 @@
   TanStack React Query 5.90.20 está no `package.json` e um `QueryClient` é montado em `App.tsx`, mas
   **as páginas NÃO usam `useQuery` na prática.** Seguir o padrão existente (useState/useEffect) ao
   implementar features novas, salvo decisão explícita de migrar.
-- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push), `financialBIService` (BI unificado), `spendLimitService` (teto + alerta).
+- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push).
 - **Toda query autenticada começa com** `supabase.auth.getUser()` → redireciona para `/login` se `null`.
 - **Backend:** Supabase (PostgREST + Realtime + Auth + Storage + Edge Functions Deno)
 - **Supabase JS:** 2.91.0 — client em `frontend/src/lib/supabase.ts` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
@@ -49,7 +49,7 @@
 - Helper compartilhado: `supabase/functions/_shared/asaas.ts` (+ `getCorsHeaders()`)
 - Modelo: **carteira central** (sem subcontas); saldo por usuário no DB (`wallets.balance`)
 - Tipos de pagamento: PIX, Boleto, Cartão de Crédito
-- **Fluxos prepago (Slice 1):** `DepositModal` → `asaas-deposit`; saque `asaas-withdraw`; checkout `asaas-checkout`; sync `asaas-sync`; webhook `asaas-webhook`
+- **Fluxos prepago (Slice 1):** `asaas-deposit` (depósito); saque `asaas-withdraw`; checkout `asaas-checkout`; sync `asaas-sync`; webhook `asaas-webhook`
 - **Fluxos postpago (Slice 2):** `asaas-tokenize-card` (salva cartão); `asaas-authorize-payment` (pré-autorização); `asaas-capture-payment` (captura hold); `asaas-release-hold` (cancela hold)
 - **Endpoints Asaas utilizados:**
   - `POST /v3/creditCard` — tokenizar cartão (Slice 2)

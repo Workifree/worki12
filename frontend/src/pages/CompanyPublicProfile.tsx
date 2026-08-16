@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList, MessageCircle, Loader2 } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import ProfileReviews from '../components/ProfileReviews';
 import { logError } from '../lib/logger';
+import { useToast } from '../contexts/ToastContext';
 
 interface CompanyPublicData {
     id: string;
@@ -29,9 +30,14 @@ interface CompanyPublicData {
 export default function CompanyPublicProfile() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { addToast } = useToast();
     const [company, setCompany] = useState<CompanyPublicData | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    // "Falar com a empresa": só existe canal se houver uma application do freela
+    // autenticado com um turno desta empresa (Conversation é amarrada a application_uuid).
+    const [applicationId, setApplicationId] = useState<string | null>(null);
+    const [chatLoading, setChatLoading] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -55,6 +61,20 @@ export default function CompanyPublicProfile() {
                 if (error) throw error;
                 if (!active) return;
                 setCompany(data as CompanyPublicData);
+
+                // Relação existente? Reusa a MESMA application (mais recente) que WorkerPublicProfile
+                // usa do lado da empresa — sem ela não há para onde amarrar a Conversation.
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user && active) {
+                    const { data: apps } = await supabase
+                        .from('applications')
+                        .select('id, jobs!inner(company_id)')
+                        .eq('worker_id', user.id)
+                        .eq('jobs.company_id', id)
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (active && apps && apps.length > 0) setApplicationId(apps[0].id as string);
+                }
             } catch (error) {
                 logError('CompanyPublicProfile.fetch', error);
                 if (active) setNotFound(true);
@@ -65,6 +85,37 @@ export default function CompanyPublicProfile() {
 
         return () => { active = false; };
     }, [id]);
+
+    // Espelha handleChat do lado da empresa (CompanyJobCandidates/WorkerPublicProfile):
+    // procura Conversation por application_uuid, cria se não existir.
+    const handleChat = async () => {
+        if (!applicationId) return;
+        setChatLoading(true);
+        try {
+            const { data: existingConvs } = await supabase
+                .from('Conversation')
+                .select('id')
+                .eq('application_uuid', applicationId)
+                .limit(1);
+
+            if (existingConvs && existingConvs.length > 0) {
+                navigate(`/messages?conversation=${existingConvs[0].id}`);
+            } else {
+                const newConvId = crypto.randomUUID();
+                const { error } = await supabase
+                    .from('Conversation')
+                    .insert({ id: newConvId, application_uuid: applicationId, islocked: false });
+
+                if (error) throw error;
+                navigate(`/messages?conversation=${newConvId}`);
+            }
+        } catch (error) {
+            logError('CompanyPublicProfile.handleChat', error);
+            addToast('Erro ao iniciar conversa.', 'error');
+        } finally {
+            setChatLoading(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -169,6 +220,19 @@ export default function CompanyPublicProfile() {
                         <p className="text-base text-gray-600 font-medium mt-6 leading-relaxed whitespace-pre-wrap">
                             {company.description}
                         </p>
+                    )}
+
+                    {/* "Falar com a empresa" — só aparece se houver relação (uma application
+                        do freela com um turno desta empresa); sem isso não há canal para criar. */}
+                    {applicationId && (
+                        <button
+                            onClick={() => void handleChat()}
+                            disabled={chatLoading}
+                            className="mt-6 inline-flex items-center gap-2 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageCircle size={18} />}
+                            Falar com a empresa
+                        </button>
                     )}
                 </div>
             </div>

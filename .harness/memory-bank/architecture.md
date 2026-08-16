@@ -47,7 +47,7 @@ Browser (SPA React 19)
 | `pages/`, `pages/company/`, `pages/worker/` | Telas de rota por papel. Lógica de tela + fetch direto. |
 | `components/` | UI reutilizável cross-papel (cards, modais, navegação, guards). |
 | `contexts/` | Estado global de sessão, notificações, toasts. |
-| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `paymentRecordService` (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `financialBIService` (BI unificado: escrow + shift_payments), `spendLimitService` (teto de gasto + alerta), `analytics`, `api` (edge functions). |
+| `services/` | Lógica de negócio não-UI: `walletService` (escrow prepago/postpago, ramificação por `kind`), `paymentMethodService` (tokenize, capture, release-hold de cartão), `paymentRecordService` (modo A — registro de pagamento externo, sem mover saldo), `teamConnectionService` (equipe/relações), `shiftInviteService` (convites push), `analytics`, `api` (edge functions). |
 | `lib/` | Config e utilitários: `supabase` (client), `gamification`, `validation`, `logger`. |
 | `types/` | Contrato de tipos do domínio (à mão — fonte da verdade). |
 | `supabase/functions/` | Operações privilegiadas (Asaas, admin, notificações) — Deno + service_role. |
@@ -274,40 +274,6 @@ Exibe: nome, logo, capa, setor, descrição, endereço, briefing padrão, avalia
 **Objetivo:** o freela consegue abrir o perfil da empresa a partir do convite pendente (`InviteTakeover`), da **Carteira de Clientes** (lista de empresas em `team_connections`),
 ou do cabeçalho do chat, **antes de aceitar** o convite — assimetria de confiança que equilibra o fluxo push.
 Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get_profile_reviews` com mascaramento de nomes de avaliadores).
-
-## Camada de inteligência financeira (Slice 3: operação)
-
-Empresa acessa BI sobre gasto mensal, horas por freela, ratio de custo, no-show estimado e concentração de horas (risco de vínculo).
-
-**Tabelas novas:**
-- **`company_spend_limits`** — teto de gasto mensal por empresa (scope='' = empresa inteira em v1). Campos: `amount`, `alert_thresholds` (default [80,90,100]), `financial_contact_email/phone`. RLS por owner. Não toca saldo (Article 8).
-- **`company_monthly_revenue`** — faturamento mensal declarado pela empresa (input para custo-%-faturamento). Campo: `amount`, `year_month` (DATE ancorada no dia 1). RLS por owner.
-
-**Policy adicional:**
-- **`notifications` INSERT** — nova policy `WITH CHECK (auth.uid() = user_id)` (migration 20260623000200) destrava a inserção de alerta in-app pelo cliente (spendLimitService.evaluateSpendAlert).
-
-**Fluxo de alerta (R12):**
-1. Empresa configura teto em `company_spend_limits` (RLS permite owner criar/editar).
-2. Alerta é **best-effort, post-pagamento:** após releaseEscrow bem-sucedido, chama `spendLimitService.evaluateSpendAlert` (não bloqueia).
-3. Service computa gasto acumulado (BI-1) via query direto em `escrow_transactions` (não materializado), compara com teto.
-4. Se cruzou limiar (80/90/100 ou OVER), insere notificação idempotente em `notifications` com link estável `/company/financeiro?alert=<companyId>:<YYYYMM>:<threshold>`.
-5. Idempotência: SELECT-before-INSERT verifica link existente antes de inserir.
-6. Notificação chega em tempo real via Realtime (NotificationContext).
-7. WhatsApp = Slice 4 (pendente).
-
-**BI (Business Intelligence) — unificado: escrow + shift_payments, sem views:**
-- **BI-1: Gasto acumulado** — UNION de (escrow released/captured) + (shift_payments recorded), dedupe por job_id (escrow precede).
-- **BI-2: Gasto + horas por freela** — agrupado por worker_id, fonte unificada. Horas reais se checkout_at/checkin_at existem; fallback jobs.estimated_hours.
-- **BI-3: Ratio custo/hora + custo-%-faturamento** — custo/horas; custo/faturamento declarado (null se não informado).
-- **BI-4: Custo de no-show estimado** — heurística v1, rotulado como estimativa (application com status='hired'/invitation_response='accepted', turno passou, sem checkout e sem registro de pagamento).
-- **BI-5: Flag de concentração de horas/dias** — worker flagged se >= 150h AND >= 20 dias (constantes de produto em service, não DB). Sinaliza risco de vínculo trabalhista.
-
-**Services:**
-- **`financialBIService`** — queries paralelas (getAccumulatedSpend, getSpendByWorker, getCostRatio, getNoShowCost, getConcentrationFlags), método `getAllBI` reutiliza. Unifica escrow + shift_payments. Sem React Query (Article 5).
-- **`spendLimitService`** — CRUD de teto + revenue, `evaluateSpendAlert(companyId, now?)` idempotente (fora da RPC, best-effort). Delega a `financialBIService` para gasto unificado. Alerta dispara após qualquer registro de gasto (captura/liberação OU shift_payment).
-
-**UI:**
-- Nova página `pages/company/CompanyFinancial` (`/company/financeiro`) com cards de BI, alertas, input de faturamento, config de teto.
 
 ## Dependências externas
 

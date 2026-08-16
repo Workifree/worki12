@@ -31,7 +31,7 @@ frontend/src/
 ├── App.tsx              # router (BrowserRouter) + providers + React.lazy de todas as páginas
 ├── main.tsx             # bootstrap React
 ├── index.css            # @tailwind base/components/utilities + keyframes (slideIn) + glassmorphism util
-├── components/          # componentes reutilizáveis GLOBAIS (JobCard, DepositModal, Sidebar,
+├── components/          # componentes reutilizáveis GLOBAIS (JobCard, Sidebar,
 │                        #   ProtectedRoute, BottomNav, NotificationBell, RateModal, TosGateModal, ...)
 │   └── __tests__/       # testes co-located dos componentes
 ├── contexts/            # AuthContext, NotificationContext, ToastContext
@@ -41,7 +41,7 @@ frontend/src/
 │   └── __tests__/
 ├── pages/               # páginas de rota (papel worker no topo)
 │   ├── company/         # páginas exclusivas da empresa (CompanyDashboard, CompanyCreateJob,
-│   │                    #   CompanyJobCandidates, CompanyWallet, CompanyProfile, ...)
+│   │                    #   CompanyJobCandidates, CompanyProfile, ...)
 │   ├── worker/          # páginas exclusivas do worker (WorkerDashboard, WorkerOnboarding)
 │   └── __tests__/
 ├── services/            # walletService.ts, analytics.ts, api.ts (invokeFunction)
@@ -62,7 +62,7 @@ frontend/src/
 
 | Papel | Onde fica a página | Prefixo de rota |
 |---|---|---|
-| Worker | `pages/*.tsx` e `pages/worker/*.tsx` | `/dashboard`, `/jobs`, `/wallet`, ... |
+| Worker | `pages/*.tsx` e `pages/worker/*.tsx` | `/dashboard`, `/jobs`, `/recebimentos` (Meus Recebimentos), ... |
 | Empresa | `pages/company/*.tsx` | `/company/dashboard`, `/company/jobs`, ... |
 | Compartilhado/público | `pages/*.tsx` | `/login`, `/`, `/terms`, `/privacy` |
 

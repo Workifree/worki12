@@ -80,9 +80,9 @@ O pagamento é registrado no histórico do turno e pode ser acessado a qualquer 
 
 ### Acessar o Recibo
 
-1. Vá para **"Meus Jobs"**
-2. Localize o turno concluído
-3. Clique em **"Ver Recibo"**
+1. Vá para **"Meus Recebimentos"** (menu inferior)
+2. Localize o pagamento registrado pela empresa
+3. Clique nele para abrir o **recibo**
 
 ### O Recibo Mostra
 

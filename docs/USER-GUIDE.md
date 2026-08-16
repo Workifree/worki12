@@ -10,7 +10,6 @@ Gerencie sua equipe de freelancers, crie turnos e contrate com confiança.
 
 **Comece aqui:**
 1. Leia [Guia da Empresa](./features-empresa.md) — passo a passo para usar a plataforma
-2. Consulte [Resumo das Mudanças (Slice 1)](./slice-1-overview.md) — o que é novo
 
 **Tópicos principais:**
 - Minha Equipe (Elenco) — adicionar freelancers por link, QR ou Worki ID
@@ -27,10 +26,10 @@ Encontre oportunidades, responda convites de empresas e ganhe com flexibilidade.
 
 **Comece aqui:**
 1. Leia [Guia do Freelancer](./features-worker.md) — como funciona tudo
-2. Consulte [Resumo das Mudanças (Slice 1)](./slice-1-overview.md) — novidades
 
 **Tópicos principais:**
 - Configurar Chave PIX — para a empresa pagar você rápido via PIX
+- Meus Recebimentos — acompanhe todos os pagamentos registrados pelas empresas
 - Carteira de Clientes — veja empresas que você trabalha regularmente
 - Perfil Público da Empresa — conheça a empresa antes de aceitar convite
 - Aba "Convites" em Meus Jobs — responda aos convites de turno
@@ -41,10 +40,9 @@ Encontre oportunidades, responda convites de empresas e ganhe com flexibilidade.
 
 ## Futuros Aprimoramentos
 
-**Versão 1.1 (Em Planejamento):**
-- QR Scanner (empresa aponta câmera pro QR do freelancer)
+**Em Planejamento:**
 - Notificações via WhatsApp
-- Novas opções de pagamento (cartão de crédito postpago)
+- Novas opções de pagamento (cartão de crédito postpago — Modo B/C)
 
 ### Fase 2
 - BI financeiro (gasto, horas, tendência)

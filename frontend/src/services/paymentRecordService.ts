@@ -21,6 +21,15 @@
  *     é tratada como `alreadyRecorded: true`, nunca propagada como crash.
  *  4. Fontes: external_pix | cash | other.
  *
+ * NOTIFICAÇÃO AO FREELA (migrations 20260816140000 e 20260816150000) — NÃO fazer
+ * aqui: agendar/registrar/efetivar/estornar um `shift_payment` já dispara a
+ * notificação correspondente ("pagamento agendado", "registrado", "efetivado",
+ * "estornado") via trigger `SECURITY DEFINER` no banco, no INSERT/UPDATE de
+ * `shift_payments`. Este service NUNCA deve dar `INSERT` em `notifications` — faria
+ * o freela receber o mesmo aviso em duplicidade. Se um método deste arquivo parece
+ * "não notificar ninguém", a notificação não está faltando: ela é responsabilidade
+ * do trigger, não do client.
+ *
  * Padrões do projeto:
  *  - Fetch/mutate: supabase.from direto (Art. 5 — sem React Query).
  *  - Tipos à mão em types/index.ts (Art. 2).

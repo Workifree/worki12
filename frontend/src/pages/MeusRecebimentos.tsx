@@ -62,7 +62,13 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
     const isVoided = payment.status === 'voided';
     const isScheduled = payment.status === 'scheduled';
 
+    // Cartão cancelado ('voided') não navega: o recibo (`/recibo/:jobId`) resolve pelo
+    // marcador ATIVO do turno (scheduled|recorded), não pelo id deste registro estornado.
+    // Se a empresa reestornou e registrou de novo, clicar aqui abriria o recibo do OUTRO
+    // marcador (valor diferente do card clicado) — ou "não encontrado" se não houver
+    // marcador ativo. Card cancelado é só histórico: mostra o que aconteceu, sem link.
     const handleOpen = () => {
+        if (isVoided) return;
         if (job?.id) onOpen(job.id);
     };
 
@@ -72,11 +78,11 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
 
     return (
         <div
-            role="button"
-            tabIndex={0}
-            onClick={handleOpen}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
-            className={`bg-white border-2 rounded-2xl p-5 flex items-start gap-4 transition-all cursor-pointer hover:-translate-y-1 ${isVoided ? 'border-gray-200 opacity-70' : 'border-black'} ${borderShadowClass}`}
+            role={isVoided ? undefined : 'button'}
+            tabIndex={isVoided ? undefined : 0}
+            onClick={isVoided ? undefined : handleOpen}
+            onKeyDown={isVoided ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
+            className={`bg-white border-2 rounded-2xl p-5 flex items-start gap-4 transition-all ${isVoided ? 'border-gray-200 opacity-70 cursor-default' : 'border-black cursor-pointer hover:-translate-y-1'} ${borderShadowClass}`}
         >
             <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
                 {company?.logo_url ? (
@@ -122,6 +128,11 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                         <span className="flex items-center gap-1 text-xs font-black uppercase bg-gray-100 text-gray-500 px-2 py-1 rounded-xl">
                             <XCircle size={12} />
                             Cancelado
+                        </span>
+                    )}
+                    {isVoided && payment.void_reason && (
+                        <span className="text-xs font-bold text-gray-400 italic">
+                            Motivo: {payment.void_reason}
                         </span>
                     )}
                     <span className="text-xs font-bold text-gray-400 uppercase">

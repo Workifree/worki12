@@ -7,7 +7,7 @@ import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import PageMeta from '../components/PageMeta';
-import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2, LogIn, LogOut } from 'lucide-react';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 
@@ -16,6 +16,43 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     cash: 'Dinheiro',
     other: 'Outro',
 };
+
+/** Chegada/saída reais do turno (applications.worker_checkin_at / worker_checkout_at). */
+interface ShiftAttendance {
+    checkin: string | null;
+    checkout: string | null;
+}
+
+/**
+ * Total de horas trabalhadas entre chegada e saída REGISTRADAS (timestamps completos, com
+ * data — não só hora-do-dia). Turno que cruza a meia-noite (ex.: 18h10 às 01h00) é resolvido
+ * automaticamente pela subtração de datas absolutas: como cada timestamp já carrega sua
+ * própria data, checkout "no dia seguinte" não precisa do hack "+24h" usado em `calculateHours`
+ * (CompanyCreateJob.tsx), que só é necessário para strings de hora soltas sem data.
+ *
+ * Retorna `null` se checkin/checkout ausentes ou se checkout <= checkin (dado inconsistente —
+ * melhor omitir a linha do recibo do que exibir um total errado/negativo).
+ */
+function calculateWorkedHours(
+    checkinIso: string | null | undefined,
+    checkoutIso: string | null | undefined,
+): number | null {
+    if (!checkinIso || !checkoutIso) return null;
+    const checkin = new Date(checkinIso).getTime();
+    const checkout = new Date(checkoutIso).getTime();
+    if (!Number.isFinite(checkin) || !Number.isFinite(checkout) || checkout <= checkin) return null;
+    return (checkout - checkin) / (1000 * 60 * 60);
+}
+
+/** Formata horas decimais como "7h30", "8h" ou "45min" (pt-BR, sem casas decimais soltas). */
+function formatWorkedHours(hours: number): string {
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m}min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h${String(m).padStart(2, '0')}`;
+}
 
 /**
  * Formata uma data "date-only" (ex.: `job.start_date`, ou `payment.paid_at` quando gravado
@@ -43,6 +80,9 @@ export default function ReceiptView() {
     const [receipt, setReceipt] = useState<ShiftPaymentReceipt | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [confirming, setConfirming] = useState(false);
+    // Chegada/saída reais do turno — trazidas do recibo pra ser um documento de conferência,
+    // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
+    const [attendance, setAttendance] = useState<ShiftAttendance | null>(null);
 
     useEffect(() => {
         if (jobId) fetchReceipt();
@@ -61,6 +101,29 @@ export default function ReceiptView() {
 
             const data = await PaymentRecordService.getReceipt(jobId);
             setReceipt(data);
+
+            // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte
+            // pelo application_id do marcador (RLS: mesmos participantes do recibo, worker ou
+            // empresa dona, então a leitura é permitida para quem já pode ver o recibo).
+            const applicationId = data?.payment.application_id;
+            if (applicationId) {
+                const { data: appData, error: appErr } = await supabase
+                    .from('applications')
+                    .select('worker_checkin_at, worker_checkout_at')
+                    .eq('id', applicationId)
+                    .maybeSingle();
+                if (appErr) {
+                    logError('ReceiptView: fetchAttendance', appErr);
+                    setAttendance(null);
+                } else {
+                    setAttendance({
+                        checkin: appData?.worker_checkin_at ?? null,
+                        checkout: appData?.worker_checkout_at ?? null,
+                    });
+                }
+            } else {
+                setAttendance(null);
+            }
         } catch (error) {
             logError('ReceiptView: fetchReceipt', error);
         } finally {
@@ -192,6 +255,45 @@ export default function ReceiptView() {
                             </span>
                         )}
                     </div>
+
+                    {/* Chegada/saída reais — base do acerto no mundo real. Não inventa: turno
+                        concluído pelo caminho legado (sem application vinculada) simplesmente
+                        omite este bloco em vez de mostrar zero/hora errada. */}
+                    {attendance && (attendance.checkin || attendance.checkout) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-200">
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <LogIn size={12} /> Chegada
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {attendance.checkin
+                                        ? format(new Date(attendance.checkin), 'HH:mm', { locale: ptBR })
+                                        : 'Não registrado'}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <LogOut size={12} /> Saída
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {attendance.checkout
+                                        ? format(new Date(attendance.checkout), 'HH:mm', { locale: ptBR })
+                                        : 'Não registrado'}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                    <Clock size={12} /> Total de horas trabalhadas
+                                </span>
+                                <p className="font-bold text-sm">
+                                    {(() => {
+                                        const hours = calculateWorkedHours(attendance.checkin, attendance.checkout);
+                                        return hours !== null ? formatWorkedHours(hours) : 'Não registrado';
+                                    })()}
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className={`grid grid-cols-1 ${isScheduled ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4 mb-6`}>

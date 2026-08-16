@@ -217,43 +217,26 @@ export const PaymentMethodService = {
 `invokeFunction`. Leituras usam `supabase` direto. Sem React Query (Article 5 — inconsistência). Service exporta
 objeto com métodos; no frontend chamar via `services/api.ts invokeFunction()` + error handling centralizado em `lib/logger.ts`.
 
-## Idempotência de alerta via link estável + SELECT-before-INSERT (Slice 3)
+## ⚠️ Idempotência de alerta via link estável + SELECT-before-INSERT (Slice 3 — REMOVIDO, piloto)
 
+**HISTÓRICO:** Padrão da Slice 3 (camada BI com `spendLimitService`). Alerta de teto de gasto via `/company/financeiro` foi removido na Onda 2 do piloto. 
+Services `spendLimitService` e `financialBIService` não existem mais. Reabertura: opt-in futuro por gatilho do ADR-20260630.
+
+**Padrão permanente — Idempotência de notificação via link único (post-removível):**
+Se uma notificação usa um `link` estável como chave de idempotência (ex.: `/company/worker/:id` para novo membro da equipe), o padrão SELECT-before-INSERT permanece válido:
 ```ts
-// Service: spendLimitService.evaluateSpendAlert
-async evaluateSpendAlert(companyId: string, now: Date = new Date()): Promise<void> {
-  // 1. Computar gasto e comparar com teto
-  const spend = await computeAccumulatedSpend(companyId, now);
-  const highestCrossed = determineHighestThreshold(spend, limit); // null | number | 'OVER'
-  if (!highestCrossed) return;
+// SELECT-before-INSERT: verificar se já existe notificação com este link
+const { data: existing } = await supabase
+  .from('notifications')
+  .select('id')
+  .eq('user_id', userId)
+  .eq('link', stableLink)
+  .limit(1)
+  .maybeSingle();
 
-  // 2. Construir chave de idempotência (link estável por período/threshold)
-  const alertLink = `/company/financeiro?alert=${companyId}:${yyyymm(now)}:${highestCrossed}`;
-
-  // 3. SELECT-before-INSERT: verificar se já existe
-  const { data: existing } = await supabase
-    .from('notifications')
-    .select('id')
-    .eq('user_id', ownerId)
-    .eq('link', alertLink)
-    .limit(1)
-    .maybeSingle();
-  
-  if (existing) return; // Idempotência: alerta já enviado
-
-  // 4. Inserir notificação (novo — policy 20260623000200 destrava INSERT para authenticated)
-  await supabase.from('notifications').insert({
-    user_id: ownerId,
-    type: 'payment',
-    title, message, link: alertLink,
-  });
-}
+if (existing) return; // Idempotência: notificação já enviada
 ```
-
-**Razão:** alerta pode rodar múltiplas vezes no período (retry, cron, etc.). Link estável (companyId:YYYYMM:threshold) como chave de idempotência
-garante que o mesmo alerta NÃO é gravado em dobro. SELECT-before-INSERT cai em race condition? Não: notifications INSERT é rápido
-e o pior caso (dois alerts chegam simultâneos) expõe 2 notificações idênticas por 1 segundo — UX aceitável em alerta (não dinheiro).
-Policy `WITH CHECK (auth.uid() = user_id)` (nova 20260623000200) destrava INSERT do client (spendLimitService roda com role authenticated, owner inserindo para si).
+Policy `WITH CHECK (auth.uid() = user_id)` destrava INSERT do client (usuário inserindo notificação para si — usado em operações best-effort).
 
 ## Agregados do worker via função idempotente SECURITY DEFINER (Slice 4)
 
