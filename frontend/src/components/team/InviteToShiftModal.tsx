@@ -13,6 +13,19 @@ import { formatHistoryDate } from './utils';
 // futura ou sem data) e dispara o convite via useCompanyInvites.
 // ---------------------------------------------------------------------------
 
+// Data de hoje em horário LOCAL — evita off-by-one de fuso que `toISOString()`
+// (UTC) causaria à noite em BRT (das 21h às 23:59, `todayStr` UTC já vira
+// amanhã e descartaria o turno de hoje como "passado"). Mesmo padrão de
+// `todayLocalDate()` em `CompanyCreateJob.tsx` — duplicado aqui até existir um
+// helper compartilhado em `lib/`.
+function todayLocalDate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 interface EligibleJob {
   id: string;
   title: string;
@@ -66,7 +79,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
           return;
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = todayLocalDate();
         // Data futura (ou hoje) ou sem data — convidar para turno de ontem não faz sentido.
         const futureOrUndated = (jobsData ?? []).filter(
           (j) => !j.start_date || j.start_date >= todayStr,
@@ -168,7 +181,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
                       ) : (
                         <span>Sem data definida</span>
                       )}
-                      {job.work_start_time && <span>· {job.work_start_time}{job.work_end_time ? `–${job.work_end_time}` : ''}</span>}
+                      {job.work_start_time && <span>· {job.work_start_time.slice(0, 5)}{job.work_end_time ? `–${job.work_end_time.slice(0, 5)}` : ''}</span>}
                       {typeof job.budget === 'number' && <span>· R$ {job.budget.toFixed(2).replace('.', ',')}</span>}
                     </div>
                   </button>

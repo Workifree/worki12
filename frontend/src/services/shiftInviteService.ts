@@ -385,15 +385,23 @@ export const ShiftInviteService = {
         };
       }
 
-      const { error: updateErr } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md): sob RLS, um
+      // UPDATE cuja linha não casa mais com a policy USING não gera erro — retorna 0 linhas
+      // e o PostgREST devolve 204. Sem checar `data`, o service reportaria sucesso mesmo
+      // quando o banco não mudou nada.
+      const { data: updated, error: updateErr } = await supabase
         .from('applications')
         .update({ status: 'cancelled' })
         .eq('id', applicationId)
-        .eq('status', 'invited');
+        .eq('status', 'invited')
+        .select('id');
 
       if (updateErr) {
         logError('shiftInvite.cancelInvite.update', updateErr);
         return { success: false, error: 'Erro ao cancelar o convite.' };
+      }
+      if (!updated || updated.length === 0) {
+        return { success: false, error: 'Não foi possível cancelar este convite.' };
       }
 
       return { success: true };
@@ -418,6 +426,14 @@ export const ShiftInviteService = {
    * registrar/agendar o pagamento de um freela substituto enquanto o marcador antigo
    * seguir ativo. A empresa precisa estornar (`PaymentRecordService.voidPayment`) antes.
    *
+   * Guarda (revisão pré-piloto, onda 3 — QA #2): bloqueia também se o freela já COMPARECEU
+   * ao turno (`worker_checkin_at` preenchido — o freela em pessoa marcou chegada) ou se a
+   * empresa já confirmou a saída (`company_checkout_confirmed_at`). "Dispensar" é um gesto
+   * de ANTES do turno; depois que o freela trabalhou, dispensar (status→'cancelled')
+   * tornaria o turno impagável para sempre — `UNIQUE(job_id, worker_id)` impede reconvidar o
+   * mesmo freela e a UI de pagamento só aparece para 'hired'|'in_progress'|'completed'. Nesse
+   * ponto o caminho certo é registrar o pagamento (ou estornar um já registrado).
+   *
    * Notificação simétrica ao freela: mesmo caminho de `cancelInvite` — o trigger
    * `trg_notify_counterpart_on_application_cancel` avisa o freela automaticamente; este
    * método não insere notificação nenhuma.
@@ -431,7 +447,7 @@ export const ShiftInviteService = {
 
       const { data: current, error: fetchErr } = await supabase
         .from('applications')
-        .select('id, status, job_id')
+        .select('id, status, job_id, worker_checkin_at, company_checkout_confirmed_at')
         .eq('id', applicationId)
         .maybeSingle();
 
@@ -444,6 +460,13 @@ export const ShiftInviteService = {
         return {
           success: false,
           error: `Transição inválida: status atual é '${current.status}', esperado 'hired' ou 'in_progress'.`,
+        };
+      }
+
+      if (current.worker_checkin_at || current.company_checkout_confirmed_at) {
+        return {
+          success: false,
+          error: 'O turno já foi cumprido; dispensar não está mais disponível. Registre o pagamento deste turno.',
         };
       }
 
@@ -469,15 +492,21 @@ export const ShiftInviteService = {
         };
       }
 
-      const { error: updateErr } = await supabase
+      // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md) — ver `cancelInvite`
+      // acima para o raciocínio completo (UPDATE sob RLS sem match no USING = 0 linhas, sem erro).
+      const { data: updated, error: updateErr } = await supabase
         .from('applications')
         .update({ status: 'cancelled' })
         .eq('id', applicationId)
-        .in('status', ['hired', 'in_progress']);
+        .in('status', ['hired', 'in_progress'])
+        .select('id');
 
       if (updateErr) {
         logError('shiftInvite.dismissFromShift.update', updateErr);
         return { success: false, error: 'Erro ao dispensar o freela deste turno.' };
+      }
+      if (!updated || updated.length === 0) {
+        return { success: false, error: 'Não foi possível dispensar este freela.' };
       }
 
       return { success: true };

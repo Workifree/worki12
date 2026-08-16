@@ -188,3 +188,95 @@ describe('ReceiptView - Horas trabalhadas', () => {
     expect(screen.getAllByText('Não registrado').length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('ReceiptView - Fallback para confirmação da empresa (freela não usou o app)', () => {
+  it('cai para company_checkin_confirmed_at/company_checkout_confirmed_at quando os do freela são nulos, com rótulo de origem', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+
+    const applicationsChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          worker_checkin_at: null,
+          worker_checkout_at: null,
+          company_checkin_confirmed_at: '2026-03-05T18:10:00-03:00',
+          company_checkout_confirmed_at: '2026-03-06T01:00:00-03:00',
+        },
+        error: null,
+      }),
+    })
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('18:10')).toBeInTheDocument()
+    })
+    expect(screen.getByText('01:00')).toBeInTheDocument()
+    // Cálculo de horas continua correto sobre os timestamps absolutos (cruza a meia-noite).
+    expect(screen.getByText('6h50')).toBeInTheDocument()
+    // Origem honesta: os dois horários vieram da empresa, não do freela.
+    expect(screen.getAllByText('Confirmado pela empresa')).toHaveLength(2)
+  })
+
+  it('prioriza a marcação do freela quando ela existe, mesmo com confirmação da empresa também presente', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+
+    const applicationsChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          worker_checkin_at: '2026-03-05T18:05:00-03:00',
+          worker_checkout_at: null,
+          company_checkin_confirmed_at: '2026-03-05T18:10:00-03:00',
+          company_checkout_confirmed_at: '2026-03-06T01:00:00-03:00',
+        },
+        error: null,
+      }),
+    })
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      // Chegada é a do freela (18:05), não a da empresa (18:10).
+      expect(screen.getByText('18:05')).toBeInTheDocument()
+    })
+    // Saída caiu para a confirmação da empresa (freela não bateu saída no app).
+    expect(screen.getByText('01:00')).toBeInTheDocument()
+    // Só a saída leva o rótulo de origem — a chegada é do próprio freela.
+    expect(screen.getAllByText('Confirmado pela empresa')).toHaveLength(1)
+  })
+
+  it('sem nenhum dos dois (freela nem empresa) o bloco continua omitido', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+
+    const applicationsChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          worker_checkin_at: null,
+          worker_checkout_at: null,
+          company_checkin_confirmed_at: null,
+          company_checkout_confirmed_at: null,
+        },
+        error: null,
+      }),
+    })
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Garçom para evento')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Chegada')).not.toBeInTheDocument()
+    expect(screen.queryByText('Confirmado pela empresa')).not.toBeInTheDocument()
+  })
+})

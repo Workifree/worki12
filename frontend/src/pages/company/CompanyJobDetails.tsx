@@ -242,7 +242,7 @@ export default function CompanyJobDetails() {
                                     <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Clock size={20} /> Horário</h3>
                                     <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-100 inline-block">
                                         <p className="font-bold">
-                                            {job.work_start_time} - {job.work_end_time}
+                                            {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
                                             {job.has_lunch && <span className="text-gray-400 ml-2">(1h almoço)</span>}
                                         </p>
                                     </div>

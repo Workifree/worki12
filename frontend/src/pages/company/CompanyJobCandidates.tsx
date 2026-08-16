@@ -59,6 +59,21 @@ function formatDateOnly(dateOnly: string): string {
     return format(new Date(y, m - 1, d), 'dd/MM/yyyy', { locale: ptBR });
 }
 
+/**
+ * Data de HOJE em horário LOCAL (YYYY-MM-DD), para pré-preencher inputs `type="date"`.
+ * `new Date().toISOString().slice(0, 10)` usa UTC: perto da meia-noite em BRT (UTC-3) isso
+ * pré-preenche o dia SEGUINTE — e `paid_at`/`scheduled_for` são imutáveis depois de gravados
+ * (trigger `enforce_shift_payment_immutability`), então a data errada vira definitiva no
+ * recibo. Mesma construção de `CompanyCreateJob.todayLocalDate()`.
+ */
+function todayLocalDate(): string {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 // Fase 2 (piloto push-only): fluxo PULL "Contratar" aposentado — feed público escondido, contratação
 // é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
 // contradiz o pagamento opcional (modo A, ADR-20260630). Religar na Fase 2 = flip para true.
@@ -105,7 +120,7 @@ export default function CompanyJobCandidates() {
     const [paymentModalApp, setPaymentModalApp] = useState<Application | null>(null);
     const [paymentSource, setPaymentSource] = useState<PaymentSource>('external_pix');
     const [paymentAmount, setPaymentAmount] = useState(0);
-    const [paymentPaidAt, setPaymentPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+    const [paymentPaidAt, setPaymentPaidAt] = useState(() => todayLocalDate());
     const [paymentNote, setPaymentNote] = useState('');
     const [recordingPayment, setRecordingPayment] = useState(false);
     const [paymentRecorded, setPaymentRecorded] = useState(false);
@@ -116,7 +131,7 @@ export default function CompanyJobCandidates() {
     const [scheduleModalApp, setScheduleModalApp] = useState<Application | null>(null);
     const [scheduleSource, setScheduleSource] = useState<PaymentSource>('external_pix');
     const [scheduleAmount, setScheduleAmount] = useState(0);
-    const [scheduledFor, setScheduledFor] = useState(() => new Date().toISOString().slice(0, 10));
+    const [scheduledFor, setScheduledFor] = useState(() => todayLocalDate());
     const [scheduleNote, setScheduleNote] = useState('');
     const [scheduling, setScheduling] = useState(false);
     const [paymentScheduled, setPaymentScheduled] = useState(false);
@@ -300,7 +315,12 @@ export default function CompanyJobCandidates() {
     const handleWhatsAppNotify = (app: Application) => {
         const phone = normalizePhoneForWhatsApp(app.worker?.phone ?? null);
         if (!phone) return;
-        const timeLabel = jobStartTime ? `${jobStartTime}${jobEndTime ? ` às ${jobEndTime}` : ''}` : null;
+        // PostgREST devolve `HH:MM:SS` (`work_start_time`/`work_end_time` são `time`) — fatiar
+        // pros primeiros 5 chars, senão a mensagem sai "(08:00:00 às 17:00:00)". Mesmo padrão
+        // defensivo de `CompanyJobs.tsx`.
+        const startLabel = jobStartTime?.slice(0, 5) ?? null;
+        const endLabel = jobEndTime?.slice(0, 5) ?? null;
+        const timeLabel = startLabel ? `${startLabel}${endLabel ? ` às ${endLabel}` : ''}` : null;
         const message = buildShiftInviteWhatsAppMessage({
             companyName,
             jobTitle,
@@ -318,7 +338,7 @@ export default function CompanyJobCandidates() {
         setPaymentModalApp(app);
         setPaymentSource('external_pix');
         setPaymentAmount(jobBudget);
-        setPaymentPaidAt(new Date().toISOString().slice(0, 10));
+        setPaymentPaidAt(todayLocalDate());
         setPaymentNote('');
         setPaymentRecorded(false);
     };
@@ -333,7 +353,7 @@ export default function CompanyJobCandidates() {
         setScheduleModalApp(app);
         setScheduleSource('external_pix');
         setScheduleAmount(jobBudget);
-        setScheduledFor(new Date().toISOString().slice(0, 10));
+        setScheduledFor(todayLocalDate());
         setScheduleNote('');
         setPaymentScheduled(false);
     };
@@ -659,7 +679,10 @@ export default function CompanyJobCandidates() {
     const computeSteps = (app: Application) => {
         const checkinComplete = !!(app.worker_checkin_at && app.company_checkin_confirmed_at);
         const checkinActive = !!(app.worker_checkin_at && !app.company_checkin_confirmed_at);
-        const checkoutComplete = !!(app.worker_checkout_at && app.company_checkout_confirmed_at);
+        // "Saída" fica completa assim que a EMPRESA confirma — inclusive pelo caminho manual
+        // (freela foi embora sem apertar "saída" no app; ver `handleConfirmCheckout`). Não
+        // exigir `worker_checkout_at` aqui, senão o estágio nunca sai de "pendente" nesse caso.
+        const checkoutComplete = !!app.company_checkout_confirmed_at;
         const checkoutActive = !!(app.worker_checkout_at && !app.company_checkout_confirmed_at);
 
         return [
@@ -959,33 +982,44 @@ export default function CompanyJobCandidates() {
                                                                 </span>
                                                             )}
 
-                                                            {/* Show check-out status */}
-                                                            {app.worker_checkout_at && !app.company_checkout_confirmed_at && (
+                                                            {/* Show check-out status — mesmo fallback do check-in: a empresa pode
+                                                                confirmar a saída mesmo se o freela não apertou "saída" no celular
+                                                                (turno acabou tarde da noite, sem sinal do app). Sem isso, o turno
+                                                                fica impagável para sempre. O rótulo distingue os dois casos para
+                                                                não sugerir que o freela marcou algo que não marcou. */}
+                                                            {!app.company_checkout_confirmed_at ? (
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); handleConfirmCheckout(app.id); }}
                                                                     disabled={confirmingCheckin === app.id}
                                                                     className="p-1 px-3 bg-purple-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-purple-600 transition-colors flex items-center gap-1 disabled:opacity-50"
                                                                 >
                                                                     {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                                                                    Confirmar Saída
+                                                                    {app.worker_checkout_at ? 'Confirmar Saída' : 'Registrar Saída'}
                                                                 </button>
-                                                            )}
-                                                            {app.company_checkout_confirmed_at && (
+                                                            ) : (
                                                                 <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded flex items-center gap-1">
-                                                                    <CheckCircle size={12} /> Saída OK
+                                                                    <CheckCircle size={12} />
+                                                                    {app.worker_checkout_at ? 'Saída OK' : 'Saída registrada pela empresa'}
                                                                 </span>
                                                             )}
 
                                                             {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
 
-                                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal */}
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
-                                                                className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
-                                                            >
-                                                                <UserX size={14} /> Dispensar
-                                                            </button>
+                                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
+                                                                "Dispensar" é para ANTES do turno acontecer. Uma vez que o freela já
+                                                                compareceu (checkin próprio) ou a empresa já confirmou a saída, dispensar
+                                                                deixaria um turno trabalhado sem pagamento e sem recibo, e a application
+                                                                'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
+                                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar). */}
+                                                            {!(app.worker_checkin_at || app.company_checkout_confirmed_at) && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
+                                                                    className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <UserX size={14} /> Dispensar
+                                                                </button>
+                                                            )}
                                                         </>
                                                     )}
 

@@ -161,7 +161,8 @@ describe('buildShiftInviteWhatsAppMessage', () => {
 describe('ShiftInviteService.cancelInvite', () => {
   it('cancela um convite invited sem resposta (invited -> cancelled)', async () => {
     const fetchChain = makeChain({ data: { id: 'app-1', status: 'invited' }, error: null });
-    const updateChain = makeChain({ data: null, error: null });
+    // .select('id') no fim da cadeia de update — retorna a linha afetada (sucesso real).
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
 
     mockFrom.mockImplementation((table: string) => {
       if (table !== 'applications') throw new Error(`tabela inesperada: ${table}`);
@@ -170,7 +171,7 @@ describe('ShiftInviteService.cancelInvite', () => {
         update: updateChain.update,
       };
     });
-    // select().eq().maybeSingle() usa fetchChain; update().eq().eq() usa updateChain.
+    // select().eq().maybeSingle() usa fetchChain; update().eq().eq().select() usa updateChain.
     fetchChain.select.mockReturnValue(fetchChain);
     updateChain.update.mockReturnValue(updateChain);
 
@@ -205,6 +206,24 @@ describe('ShiftInviteService.cancelInvite', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/não encontrado/);
   });
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const fetchChain = makeChain({ data: { id: 'app-1', status: 'invited' }, error: null });
+    // PostgREST 204 sem erro, mas 0 linhas casaram o USING — igual ao caso de removeFromTeam.
+    const updateChain = makeChain({ data: [], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== 'applications') throw new Error(`tabela inesperada: ${table}`);
+      return { select: fetchChain.select, update: updateChain.update };
+    });
+    fetchChain.select.mockReturnValue(fetchChain);
+    updateChain.update.mockReturnValue(updateChain);
+
+    const result = await ShiftInviteService.cancelInvite('app-1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Não foi possível cancelar/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -212,13 +231,20 @@ describe('ShiftInviteService.cancelInvite', () => {
 // ---------------------------------------------------------------------------
 
 describe('ShiftInviteService.dismissFromShift', () => {
-  it('dispensa um freela hired sem pagamento ativo (hired -> cancelled)', async () => {
+  it('dispensa um freela hired sem pagamento ativo e sem sinal de comparecimento (hired -> cancelled)', async () => {
     const fetchChain = makeChain({
-      data: { id: 'app-1', status: 'hired', job_id: 'job-1' },
+      data: {
+        id: 'app-1',
+        status: 'hired',
+        job_id: 'job-1',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: null,
+      },
       error: null,
     });
     const paymentChain = makeChain({ data: null, error: null }); // sem pagamento ativo
-    const updateChain = makeChain({ data: null, error: null });
+    // .select('id') no fim da cadeia de update — retorna a linha afetada.
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'applications') {
@@ -236,13 +262,19 @@ describe('ShiftInviteService.dismissFromShift', () => {
     expect(updateChain.update).toHaveBeenCalledWith({ status: 'cancelled' });
   });
 
-  it('dispensa um freela in_progress sem pagamento ativo', async () => {
+  it('dispensa um freela in_progress sem pagamento ativo e sem sinal de comparecimento', async () => {
     const fetchChain = makeChain({
-      data: { id: 'app-2', status: 'in_progress', job_id: 'job-2' },
+      data: {
+        id: 'app-2',
+        status: 'in_progress',
+        job_id: 'job-2',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: null,
+      },
       error: null,
     });
     const paymentChain = makeChain({ data: null, error: null });
-    const updateChain = makeChain({ data: null, error: null });
+    const updateChain = makeChain({ data: [{ id: 'app-2' }], error: null });
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'applications') {
@@ -261,7 +293,13 @@ describe('ShiftInviteService.dismissFromShift', () => {
 
   it('bloqueia o dispensar quando já existe pagamento agendado/registrado para o job', async () => {
     const fetchChain = makeChain({
-      data: { id: 'app-1', status: 'hired', job_id: 'job-1' },
+      data: {
+        id: 'app-1',
+        status: 'hired',
+        job_id: 'job-1',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: null,
+      },
       error: null,
     });
     const paymentChain = makeChain({
@@ -300,5 +338,98 @@ describe('ShiftInviteService.dismissFromShift', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Transição inválida/);
+  });
+
+  // -------------------------------------------------------------------------
+  // Regressão (revisão pré-piloto, QA #2): dispensar depois que o freela já
+  // trabalhou tornava o turno impagável e irreversível (UNIQUE(job_id, worker_id)
+  // impede reconvidar o mesmo freela). Comportamental: dado que o freela já
+  // compareceu (por qualquer um dos dois sinais), dispensar deve ser recusado
+  // ANTES de tocar em `applications` — não apenas "escondido na UI".
+  // -------------------------------------------------------------------------
+
+  it('bloqueia o dispensar quando o freela já fez check-in (worker_checkin_at preenchido)', async () => {
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'in_progress',
+        job_id: 'job-1',
+        worker_checkin_at: '2026-08-16T20:00:00.000Z',
+        company_checkout_confirmed_at: null,
+      },
+      error: null,
+    });
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return { select: fetchChain.select, update: updateChain.update };
+      }
+      throw new Error(`tabela inesperada (não deveria consultar shift_payments): ${table}`);
+    });
+
+    const result = await ShiftInviteService.dismissFromShift('app-1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/turno já foi cumprido/);
+    // Nunca chega a tentar o UPDATE — a application permanece intacta (reversível).
+    expect(updateChain.update).not.toHaveBeenCalled();
+  });
+
+  it('bloqueia o dispensar quando a empresa já confirmou a saída (fallback sem worker_checkout_at)', async () => {
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'in_progress',
+        job_id: 'job-1',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: '2026-08-16T23:00:00.000Z',
+      },
+      error: null,
+    });
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return { select: fetchChain.select, update: updateChain.update };
+      }
+      throw new Error(`tabela inesperada (não deveria consultar shift_payments): ${table}`);
+    });
+
+    const result = await ShiftInviteService.dismissFromShift('app-1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/turno já foi cumprido/);
+    expect(updateChain.update).not.toHaveBeenCalled();
+  });
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'hired',
+        job_id: 'job-1',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: null,
+      },
+      error: null,
+    });
+    const paymentChain = makeChain({ data: null, error: null });
+    const updateChain = makeChain({ data: [], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return { select: fetchChain.select, update: updateChain.update };
+      }
+      if (table === 'shift_payments') {
+        return { select: paymentChain.select };
+      }
+      throw new Error(`tabela inesperada: ${table}`);
+    });
+
+    const result = await ShiftInviteService.dismissFromShift('app-1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Não foi possível dispensar/);
   });
 });

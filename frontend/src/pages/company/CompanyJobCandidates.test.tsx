@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import CompanyJobCandidates from './CompanyJobCandidates'
 
@@ -355,7 +355,9 @@ describe('CompanyJobCandidates — Cancelar Convite (invited sem resposta)', () 
       data: { id: 'app-invited-1', status: 'invited' },
       error: null,
     })
-    appChain.update = vi.fn().mockReturnValue(chainableResolve())
+    // `.select('id')` no fim do UPDATE (revisão pré-piloto — distinguir "negado por RLS
+    // em silêncio" de sucesso real): precisa devolver a linha afetada, não null.
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-invited-1' }], error: null }))
 
     renderComponent()
 
@@ -464,7 +466,8 @@ describe('CompanyJobCandidates — Dispensar deste turno', () => {
       data: { id: 'app-hired-1', status: 'hired', job_id: 'job-123' },
       error: null,
     })
-    appChain.update = vi.fn().mockReturnValue(chainableResolve())
+    // `.select('id')` no fim do UPDATE (mesma razão da guarda de Cancelar Convite acima).
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-hired-1' }], error: null }))
 
     renderComponent()
 
@@ -577,5 +580,152 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
         'error'
       )
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Regressão (revisão pré-piloto, onda 3 — QA BLOQUEADOR 1 e 2, tela "Presença e Pagamento").
+//
+// BLOQUEADOR 1: sem o freela apertar "saída" no celular, a empresa nunca conseguia confirmar
+// a saída (o botão só existia quando `worker_checkout_at` já estava preenchido) e, por
+// consequência, nunca conseguia registrar o pagamento nem emitir o recibo.
+//
+// BLOQUEADOR 2: "Dispensar" ficava disponível mesmo depois que o freela já tinha comparecido
+// ao turno, tornando-o impagável e irreversível (UNIQUE(job_id, worker_id) impede reconvidar).
+// ---------------------------------------------------------------------------
+
+// in_progress, freela chegou (check-in próprio + confirmado pela empresa) mas foi embora sem
+// marcar "saída" no app — cenário real do relatório (bar fecha tarde da noite).
+const APP_CHECKED_IN_NO_CHECKOUT_MARK = [
+  {
+    id: 'app-no-checkout',
+    job_id: 'job-123',
+    worker_id: 'worker-no-checkout',
+    status: 'in_progress',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-no-checkout',
+      full_name: 'Ana Trabalhou',
+      avatar_url: null,
+      city: 'São Paulo',
+      level: 2,
+      rating_average: 4.5,
+      reviews_count: 3,
+      tags: [],
+    },
+    worker_checkin_at: new Date().toISOString(),
+    worker_checkout_at: null,
+    company_checkin_confirmed_at: new Date().toISOString(),
+    company_checkout_confirmed_at: null,
+  },
+]
+
+// Mesmo cenário, mas o freela MARCOU check-out no app — rótulo do botão deve mudar.
+const APP_CHECKED_OUT_BY_WORKER = [
+  {
+    ...APP_CHECKED_IN_NO_CHECKOUT_MARK[0],
+    id: 'app-checked-out',
+    worker_id: 'worker-checked-out',
+    worker: { ...APP_CHECKED_IN_NO_CHECKOUT_MARK[0].worker, full_name: 'Bruno Marcou Saída' },
+    worker_checkout_at: new Date().toISOString(),
+  },
+]
+
+describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BLOQUEADOR 1)', () => {
+  it('permite a empresa registrar a saída mesmo quando o freela nunca marcou check-out no app', async () => {
+    const { appChain } = setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
+    // handleConfirmCheckout faz `.update({...}).eq('id', appId)` sem `.select()` — mesmo
+    // formato usado no resto do arquivo para updates de applications.
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: null, error: null }))
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
+    })
+
+    // O card inteiro também tem role="button" (clique abre o perfil) — escopar a busca a
+    // ele evita casar com o nome acessível agregado do card (que inclui todo texto interno).
+    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    const checkoutButton = within(card).getByRole('button', { name: /Registrar Saída/i })
+    expect(checkoutButton).toBeInTheDocument()
+
+    fireEvent.click(checkoutButton)
+
+    await waitFor(() => {
+      expect(appChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ company_checkout_confirmed_at: expect.any(String) })
+      )
+    })
+    // Não inventa worker_checkout_at — só grava o campo que a empresa efetivamente confirmou
+    // (o recibo distingue "freela marcou" de "empresa confirmou manualmente").
+    const updatePayload = (appChain.update as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]
+    expect(updatePayload).not.toHaveProperty('worker_checkout_at')
+  })
+
+  it('rotula a saída como "Confirmar Saída" (não "Registrar Saída") quando o freela já marcou check-out', async () => {
+    setupMocksWithApps(APP_CHECKED_OUT_BY_WORKER)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
+    expect(within(card).getByRole('button', { name: /Confirmar Saída/i })).toBeInTheDocument()
+  })
+})
+
+describe('CompanyJobCandidates — Dispensar pós-turno (BLOQUEADOR 2)', () => {
+  it('esconde "Dispensar" quando o freela já fez check-in (turno já foi cumprido)', async () => {
+    const appAlreadyCheckedIn = [
+      {
+        ...APP_HIRED[0],
+        id: 'app-hired-2',
+        worker_id: 'worker-ja-chegou',
+        worker: { ...APP_HIRED[0].worker, full_name: 'Daniel Ja Chegou' },
+        worker_checkin_at: new Date().toISOString(),
+      },
+    ]
+    setupMocksWithApps(appAlreadyCheckedIn)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Daniel Ja Chegou')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Dispensar')).not.toBeInTheDocument()
+  })
+
+  it('esconde "Dispensar" quando a saída já foi confirmada pela empresa (fallback sem worker_checkout_at)', async () => {
+    const appCheckoutConfirmed = [
+      {
+        ...APP_HIRED[0],
+        id: 'app-hired-3',
+        worker_id: 'worker-saida-confirmada',
+        worker: { ...APP_HIRED[0].worker, full_name: 'Carla Saida Confirmada' },
+        company_checkout_confirmed_at: new Date().toISOString(),
+      },
+    ]
+    setupMocksWithApps(appCheckoutConfirmed)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carla Saida Confirmada')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Dispensar')).not.toBeInTheDocument()
+  })
+
+  it('mantém "Dispensar" para um freela contratado que ainda não compareceu', async () => {
+    setupMocksWithApps(APP_HIRED)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Dispensar')).toBeInTheDocument()
   })
 })

@@ -8,10 +8,11 @@ const TODAY = new Date(2026, 7, 16) // mês 0-indexado: 7 = agosto
 interface FakeJob {
   id: string
   start_date?: string | null
+  work_start_time?: string | null
 }
 
-function job(id: string, start_date?: string | null): FakeJob {
-  return { id, start_date }
+function job(id: string, start_date?: string | null, work_start_time?: string | null): FakeJob {
+  return { id, start_date, work_start_time }
 }
 
 describe('groupJobsByDay — agenda por dia (CompanyJobs)', () => {
@@ -72,6 +73,28 @@ describe('groupJobsByDay — agenda por dia (CompanyJobs)', () => {
 
   it('lista vazia não gera nenhuma seção', () => {
     expect(groupJobsByDay([], TODAY)).toEqual([])
+  })
+
+  it('ordena "Hoje" por horário de início (ascendente), não pela ordem de criação', () => {
+    // Dois turnos no mesmo dia (almoço e jantar), inseridos fora de ordem.
+    const jobs = [job('jantar', '2026-08-16', '18:00'), job('almoco', '2026-08-16', '11:00')]
+    const buckets = groupJobsByDay(jobs, TODAY)
+    const today = buckets.find((b) => b.key === 'today')
+    expect(today?.jobs.map((j) => j.id)).toEqual(['almoco', 'jantar'])
+  })
+
+  it('ordena "Amanhã" por horário de início (ascendente)', () => {
+    const jobs = [job('tarde', '2026-08-17', '15:00'), job('manha', '2026-08-17', '08:00')]
+    const buckets = groupJobsByDay(jobs, TODAY)
+    const tomorrow = buckets.find((b) => b.key === 'tomorrow')
+    expect(tomorrow?.jobs.map((j) => j.id)).toEqual(['manha', 'tarde'])
+  })
+
+  it('turno de hoje sem horário definido cai para o fim, sem sumir da seção', () => {
+    const jobs = [job('sem-horario', '2026-08-16', null), job('com-horario', '2026-08-16', '09:00')]
+    const buckets = groupJobsByDay(jobs, TODAY)
+    const today = buckets.find((b) => b.key === 'today')
+    expect(today?.jobs.map((j) => j.id)).toEqual(['com-horario', 'sem-horario'])
   })
 
   it('preserva a ordem canônica das seções (Hoje, Amanhã, Esta Semana, Depois, Sem Data, Anteriores)', () => {

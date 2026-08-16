@@ -17,10 +17,21 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
-/** Chegada/saída reais do turno (applications.worker_checkin_at / worker_checkout_at). */
+/** Origem do horário exibido: marcação do próprio freela no app, ou confirmação manual da empresa. */
+type AttendanceSource = 'worker' | 'company';
+
+/**
+ * Chegada/saída do turno. Prioriza a marcação do freela (`worker_checkin_at`/`worker_checkout_at`);
+ * quando ausente, cai para a confirmação manual da empresa (`company_checkin_confirmed_at`/
+ * `company_checkout_confirmed_at`) — caminho mais provável quando o freela não usa o app. O recibo
+ * é documento de conferência: não pode omitir o horário, mas também não pode apresentar um dado
+ * confirmado pela empresa como se fosse marcação do freela — por isso a origem é rastreada.
+ */
 interface ShiftAttendance {
     checkin: string | null;
+    checkinSource: AttendanceSource | null;
     checkout: string | null;
+    checkoutSource: AttendanceSource | null;
 }
 
 /**
@@ -109,16 +120,20 @@ export default function ReceiptView() {
             if (applicationId) {
                 const { data: appData, error: appErr } = await supabase
                     .from('applications')
-                    .select('worker_checkin_at, worker_checkout_at')
+                    .select('worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at')
                     .eq('id', applicationId)
                     .maybeSingle();
                 if (appErr) {
                     logError('ReceiptView: fetchAttendance', appErr);
                     setAttendance(null);
                 } else {
+                    const checkin = appData?.worker_checkin_at ?? appData?.company_checkin_confirmed_at ?? null;
+                    const checkout = appData?.worker_checkout_at ?? appData?.company_checkout_confirmed_at ?? null;
                     setAttendance({
-                        checkin: appData?.worker_checkin_at ?? null,
-                        checkout: appData?.worker_checkout_at ?? null,
+                        checkin,
+                        checkinSource: appData?.worker_checkin_at ? 'worker' : (appData?.company_checkin_confirmed_at ? 'company' : null),
+                        checkout,
+                        checkoutSource: appData?.worker_checkout_at ? 'worker' : (appData?.company_checkout_confirmed_at ? 'company' : null),
                     });
                 }
             } else {
@@ -270,6 +285,9 @@ export default function ReceiptView() {
                                         ? format(new Date(attendance.checkin), 'HH:mm', { locale: ptBR })
                                         : 'Não registrado'}
                                 </p>
+                                {attendance.checkinSource === 'company' && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                )}
                             </div>
                             <div>
                                 <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
@@ -280,6 +298,9 @@ export default function ReceiptView() {
                                         ? format(new Date(attendance.checkout), 'HH:mm', { locale: ptBR })
                                         : 'Não registrado'}
                                 </p>
+                                {attendance.checkoutSource === 'company' && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                )}
                             </div>
                             <div>
                                 <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">

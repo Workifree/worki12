@@ -122,7 +122,7 @@ function bucketKeyForDate(startDate: string | null | undefined, today: Date): Da
 // Agrupa turnos por dia. `referenceDate` é injetável (nunca `new Date()` direto no cálculo)
 // para permitir teste determinístico do caso de virada (turno de hoje vs. amanhã).
 // eslint-disable-next-line react-refresh/only-export-components -- função pura reaproveitada pelo teste de agrupamento (evita novo arquivo fora do escopo desta mudança)
-export function groupJobsByDay<T extends { start_date?: string | null }>(
+export function groupJobsByDay<T extends { start_date?: string | null; work_start_time?: string | null }>(
     jobs: T[],
     referenceDate: Date = new Date()
 ): DayBucket<T>[] {
@@ -138,6 +138,16 @@ export function groupJobsByDay<T extends { start_date?: string | null }>(
         if (!b.start_date) return -1;
         return a.start_date.localeCompare(b.start_date);
     };
+    // "Hoje"/"Amanhã" têm todos o mesmo dia — a pergunta da operação é "em que horário",
+    // não "quando foi criado". Turno sem horário definido cai por último (não some, só
+    // perde prioridade — sem horário pra ordenar, não há como saber onde ele entra no dia).
+    const sortByTimeAsc = (a: T, b: T) => {
+        if (!a.work_start_time) return 1;
+        if (!b.work_start_time) return -1;
+        return a.work_start_time.localeCompare(b.work_start_time);
+    };
+    buckets.today.sort(sortByTimeAsc);
+    buckets.tomorrow.sort(sortByTimeAsc);
     buckets.week.sort(sortByDateAsc);
     buckets.later.sort(sortByDateAsc);
     buckets.past.sort((a, b) => sortByDateAsc(b, a)); // mais recente primeiro — relevância decrescente
