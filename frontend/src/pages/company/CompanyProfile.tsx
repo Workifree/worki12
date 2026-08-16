@@ -123,16 +123,21 @@ export default function CompanyProfile() {
 
             // Tenta salvar com o briefing padrão; se a coluna ainda não foi migrada no
             // banco, refaz sem ela (deploy do frontend nunca quebra a edição do perfil).
-            let { error } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio).
+            let { data, error } = await supabase
                 .from('companies')
                 .update({ ...basePayload, default_briefing: company.default_briefing })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id');
 
             if (error && /default_briefing/i.test(error.message || '')) {
-                ({ error } = await supabase.from('companies').update(basePayload).eq('id', userId));
+                ({ data, error } = await supabase.from('companies').update(basePayload).eq('id', userId).select('id'));
             }
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
+            }
             initialCompanyRef.current = { ...company };
             addToast('Perfil atualizado com sucesso!', 'success');
             setIsEditing(false);
@@ -215,13 +220,18 @@ export default function CompanyProfile() {
             const field = type === 'logo' ? 'logo_url' : 'cover_url';
             setCompany(prev => ({ ...prev, [field]: publicUrl }));
 
-            // Save to DB immediately to persist
-            const { error: dbError } = await supabase
+            // Save to DB immediately to persist — .select('id') obrigatório (patterns.md —
+            // UPDATE sob RLS negado em silêncio).
+            const { data: dbData, error: dbError } = await supabase
                 .from('companies')
                 .update({ [field]: publicUrl })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('id');
 
             if (dbError) throw dbError;
+            if (!dbData || dbData.length === 0) {
+                throw new Error('Não foi possível salvar a imagem: verifique se você ainda tem permissão para editar este perfil.');
+            }
 
             addToast(`${type === 'logo' ? 'Logo' : 'Capa'} atualizada com sucesso!`, 'success');
 

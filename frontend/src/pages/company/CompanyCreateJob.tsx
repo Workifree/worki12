@@ -190,8 +190,14 @@ export default function CompanyCreateJob() {
             };
 
             if (isEditing) {
-                const { error } = await supabase.from('jobs').update(payload).eq('id', id);
+                // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+                // RLS de `jobs` foi ligada nesta revisão — "Turno atualizado com sucesso!" não
+                // pode mentir quando o UPDATE afetou 0 linhas.
+                const { data: updated, error } = await supabase.from('jobs').update(payload).eq('id', id).select('id');
                 if (error) throw error;
+                if (!updated || updated.length === 0) {
+                    throw new Error('Não foi possível salvar as alterações: verifique se você ainda tem permissão sobre este turno.');
+                }
                 // Invalida o cache do React Query (staleTime 5min) para o dashboard não
                 // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });

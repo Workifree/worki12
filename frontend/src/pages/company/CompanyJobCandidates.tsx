@@ -590,14 +590,20 @@ export default function CompanyJobCandidates() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
-            // Update Application Status to reviewed (best-effort, already completed)
-            const { error: appError } = await supabase
+            // Update Application Status to reviewed (best-effort, already completed — o
+            // botão "Avaliar" só existe para app.status === 'completed', então este UPDATE é
+            // um no-op idempotente na maioria dos casos; `.select('id')` só para observar via
+            // log se algum dia deixar de ser no-op sem depender de reclamação de usuário).
+            const { data: appData, error: appError } = await supabase
                 .from('applications')
                 .update({ status: 'completed' })
-                .eq('id', selectedApp.id);
+                .eq('id', selectedApp.id)
+                .select('id');
 
             if (appError) {
                 logError('CompanyJobCandidates: app status update failed', appError);
+            } else if (!appData || appData.length === 0) {
+                logError('CompanyJobCandidates: app status update afetou 0 linhas (RLS negou em silêncio)', { applicationId: selectedApp.id });
             }
 
             // Create Review (non-critical, best-effort)

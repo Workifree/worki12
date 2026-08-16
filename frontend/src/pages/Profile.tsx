@@ -299,12 +299,18 @@ export default function Profile() {
             if (type === 'avatar') updates.avatar_url = publicUrl;
             else updates.cover_url = publicUrl;
 
-            const { error: updateError } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+            // sem isso, um UPDATE negado devolveria 204 sem erro e a UI afirmaria sucesso.
+            const { data: updateData, error: updateError } = await supabase
                 .from('workers')
                 .update(updates)
-                .eq('id', profile.id);
+                .eq('id', profile.id)
+                .select('id');
 
             if (updateError) throw updateError;
+            if (!updateData || updateData.length === 0) {
+                throw new Error('Não foi possível salvar a imagem: verifique se você ainda tem permissão para editar este perfil.');
+            }
 
             setProfile({ ...profile, ...updates } as WorkerProfile);
             addToast(`${type === 'avatar' ? 'Foto de perfil' : 'Capa'} atualizada!`, 'success');
@@ -377,12 +383,18 @@ export default function Profile() {
                 updated_at: new Date()
             };
 
-            const { error } = await supabase
+            // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio):
+            // "Perfil atualizado com sucesso!" não pode mentir quando a RLS negou o UPDATE.
+            const { data, error } = await supabase
                 .from('workers')
                 .update(updates)
-                .eq('id', profile.id);
+                .eq('id', profile.id)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
+            }
 
             setProfile({ ...profile, ...updates });
             initialFormDataRef.current = { ...formData };

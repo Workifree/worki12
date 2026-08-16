@@ -53,12 +53,18 @@ export default function Messages() {
             c.id === conversationId ? { ...c, unread_count: 0 } : c
         ));
 
-        await supabase
+        // read_at é baixo risco de UX (sem toast), mas merece log — não é hipotético:
+        // `Message` já teve RLS ligada sem policy de UPDATE nesta revisão (patterns.md).
+        const { error: msgError } = await supabase
             .from('Message')
             .update({ read_at: new Date().toISOString() })
             .eq('conversationid', conversationId)
             .neq('senderid', userId)
-            .is('read_at', null);
+            .is('read_at', null)
+            .select('id');
+        if (msgError) {
+            logError('Messages.markAsRead.Message', msgError);
+        }
 
         // Também limpa as notificações de mensagem do usuário (sino) — best-effort,
         // não deve quebrar o fluxo de leitura da conversa se falhar.
@@ -68,7 +74,8 @@ export default function Messages() {
                 .update({ read_at: new Date().toISOString() })
                 .eq('user_id', userId)
                 .eq('type', 'message')
-                .is('read_at', null);
+                .is('read_at', null)
+                .select('id');
             if (notifError) {
                 logError('Messages.markAsRead.notifications', notifError);
             }

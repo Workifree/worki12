@@ -548,8 +548,12 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
     })
     const appChain = buildChain({
       order: vi.fn().mockResolvedValue({ data: appWithCheckins, error: null }),
+      // handleSubmitReview faz `.update({status:'completed'}).eq('id', id).select('id')` —
+      // `.select('id')` obrigatório (patterns.md); devolve a linha afetada por padrão.
       update: vi.fn().mockReturnValue(buildChain({
-        eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({ data: [{ id: 'app-3' }], error: null }),
+        }),
       })),
       insert: vi.fn().mockResolvedValue({ data: null, error: null }),
     })

@@ -116,12 +116,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
         if (!dbAvailable) return;
 
-        const { error } = await supabase
+        // read_at é baixo risco de UX (sino não é gesto explícito com toast), mas merece
+        // log — não é hipotético: `Message` já teve RLS ligada sem policy de UPDATE nesta
+        // revisão. .select('id') detecta o 204-sem-erro (patterns.md).
+        const { data, error } = await supabase
             .from('notifications')
             .update({ read_at: new Date().toISOString() })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id');
 
         if (error) logError('Error marking notification as read:', error);
+        else if (!data || data.length === 0) logError('Error marking notification as read: 0 linhas afetadas (RLS negou em silêncio)', { id });
     };
 
     const markAllAsRead = async () => {
@@ -130,11 +135,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
         if (!dbAvailable) return;
 
+        // Efeito em lote: 0 linhas pode ser legítimo (nada não-lido). .select('id') só para
+        // log/observabilidade — não vira erro visível (mesmo raciocínio de patterns.md p/ lote).
         const { error } = await supabase
             .from('notifications')
             .update({ read_at: new Date().toISOString() })
             .eq('user_id', user?.id)
-            .is('read_at', null);
+            .is('read_at', null)
+            .select('id');
 
         if (error) logError('Error marking all as read:', error);
     };

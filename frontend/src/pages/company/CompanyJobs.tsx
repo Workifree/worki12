@@ -344,24 +344,53 @@ export default function CompanyJobs() {
 
     const handleStatusChange = async (id: string, newStatus: string) => {
         setOpenMenu(null);
-        const { error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', id);
-        if (!error) fetchJobs();
+        // .select('id') obrigatório (patterns.md — DELETE/UPDATE sob RLS negado em silêncio):
+        // RLS de `jobs` foi ligada nesta revisão — um UPDATE negado devolve 204 sem erro.
+        const { data, error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', id).select('id');
+        if (error) {
+            logError('CompanyJobs.handleStatusChange', error);
+            addToast('Não foi possível atualizar o turno. Tente novamente.', 'error');
+            return;
+        }
+        if (!data || data.length === 0) {
+            addToast('Não foi possível atualizar o turno: verifique se você ainda tem permissão sobre ele.', 'error');
+            return;
+        }
+        fetchJobs();
     };
 
     const handleDelete = async (jobId: string) => {
-        // 1. Cancel hired workers
-        await supabase.from('applications').update({ status: 'cancelled' }).eq('job_id', jobId).in('status', ['hired', 'in_progress']);
+        // 1. Cancel hired workers — efeito colateral em LOTE: 0 linhas é legítimo (turno sem
+        // ninguém contratado), não é erro. Usa o retorno só para informar quantos freelas
+        // foram de fato notificados.
+        const { data: cancelledApps, error: cancelError } = await supabase
+            .from('applications')
+            .update({ status: 'cancelled' })
+            .eq('job_id', jobId)
+            .in('status', ['hired', 'in_progress'])
+            .select('id');
+        if (cancelError) {
+            logError('CompanyJobs.handleDelete.cancelApplications', cancelError);
+        }
+        const cancelledCount = cancelledApps?.length ?? 0;
 
         // 2. Refund escrow
         await WalletService.refundEscrow(jobId, 'Dinheiro retornado do escrow - turno deletado');
 
-        // 3. Mark deleted
-        const { error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', jobId);
-        if (!error) {
-            addToast('Turno excluído com sucesso.', 'success');
+        // 3. Mark deleted — gesto explícito com toast de sucesso: precisa de `.select('id')`
+        // para não afirmar "excluído" quando a RLS negou em silêncio.
+        const { data: deletedJob, error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', jobId).select('id');
+        if (!error && deletedJob && deletedJob.length > 0) {
+            addToast(
+                cancelledCount > 0
+                    ? `Turno excluído com sucesso. ${cancelledCount} freela${cancelledCount > 1 ? 's' : ''} notificado${cancelledCount > 1 ? 's' : ''}.`
+                    : 'Turno excluído com sucesso.',
+                'success'
+            );
             fetchJobs();
         } else {
-            addToast('Erro ao excluir turno.', 'error');
+            if (error) logError('CompanyJobs.handleDelete.deleteJob', error);
+            addToast('Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.', 'error');
         }
         setDeleteJobId(null);
     };
