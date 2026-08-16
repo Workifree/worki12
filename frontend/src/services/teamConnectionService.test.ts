@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TeamConnectionService } from './teamConnectionService';
+import { supabase } from '../lib/supabase';
 
 // delete().eq().eq().select('id') — a guarda de consentimento (migration
 // 20260816000000_team_connections_delete_guard_blocked.sql) faz o DELETE afetar 0 linhas
@@ -11,16 +12,29 @@ const mockDeleteEq1 = vi.fn(() => ({ eq: mockDeleteEq2 }));
 const mockDelete = vi.fn(() => ({ eq: mockDeleteEq1 }));
 
 // select('*').eq('company_id', ...).eq('worker_id', ...).maybeSingle() — check de idempotência
-// no addToTeam.
+// no addToTeam / getConnectionStatus (2 níveis de .eq()).
 const mockMaybeSingle = vi.fn();
+// select('id, status, worker_id').eq('id', connectionId).maybeSingle() — fetch de estado atual
+// em acceptConnection/blockConnection (1 nível de .eq()). Objeto do 1º .eq() suporta os dois
+// formatos (mais um .eq() OU .maybeSingle() direto) para não colidir com o caso acima.
+const mockFetchMaybeSingle = vi.fn();
 const mockSelectEq2 = vi.fn(() => ({ maybeSingle: mockMaybeSingle }));
-const mockSelectEq1 = vi.fn(() => ({ eq: mockSelectEq2 }));
+const mockSelectEq1 = vi.fn(() => ({ eq: mockSelectEq2, maybeSingle: mockFetchMaybeSingle }));
 const mockSelect = vi.fn(() => ({ eq: mockSelectEq1 }));
 
 // insert(...).select().single() — criação da conexão no addToTeam quando ainda não existe.
 const mockInsertSingle = vi.fn();
 const mockInsertSelect = vi.fn(() => ({ single: mockInsertSingle }));
 const mockInsert = vi.fn(() => ({ select: mockInsertSelect }));
+
+// update(...).eq(...).eq(...).select('id') — acceptConnection / blockConnection. `.select('id')`
+// obrigatório (patterns.md): sob RLS um UPDATE que não casa com o USING retorna 0 linhas sem
+// erro (PostgREST 204) — sem isso a UI mentiria "sucesso" quando o freela mudou de estado entre
+// o fetch e o UPDATE, ou quando o RLS negou.
+const mockUpdateSelect = vi.fn().mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
+const mockUpdateEq2 = vi.fn(() => ({ select: mockUpdateSelect }));
+const mockUpdateEq1 = vi.fn(() => ({ eq: mockUpdateEq2 }));
+const mockUpdate = vi.fn(() => ({ eq: mockUpdateEq1 }));
 
 const mockFrom = vi.fn((table: string) => {
   if (table === 'companies') {
@@ -37,6 +51,7 @@ const mockFrom = vi.fn((table: string) => {
       delete: mockDelete,
       select: mockSelect,
       insert: mockInsert,
+      update: mockUpdate,
     };
   }
   return {
@@ -60,6 +75,11 @@ describe('TeamConnectionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
+    mockUpdateSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'owner-123' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
   });
 
   describe('removeFromTeam', () => {
@@ -218,6 +238,110 @@ describe('TeamConnectionService', () => {
       expect(result.connection).toBeNull();
       expect(result.error).toBe('Link de contato inválido ou expirado.');
       expect(mockInsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('acceptConnection', () => {
+    it('aceita a conexão pendente com sucesso (pending → accepted)', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'pending', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+      mockUpdateSelect.mockResolvedValueOnce({ data: [{ id: 'conn-1' }], error: null });
+
+      const result = await TeamConnectionService.acceptConnection('conn-1');
+
+      expect(result.success).toBe(true);
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+
+    it('retorna erro quando o UPDATE afeta 0 linhas (RLS negou silenciosamente) — não pode reportar sucesso falso', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'pending', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+      // RLS negou: 0 linhas afetadas, sem erro (status PostgREST 204)
+      mockUpdateSelect.mockResolvedValueOnce({ data: [], error: null });
+
+      const result = await TeamConnectionService.acceptConnection('conn-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Não foi possível aceitar: esta conexão não está mais disponível.');
+    });
+
+    it('rejeita transição inválida (status já não é pending) antes mesmo de chamar UPDATE', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'accepted', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+
+      const result = await TeamConnectionService.acceptConnection('conn-1');
+
+      expect(result.success).toBe(false);
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('blockConnection', () => {
+    it('bloqueia a conexão com sucesso (o veto do freela)', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'accepted', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+      mockUpdateSelect.mockResolvedValueOnce({ data: [{ id: 'conn-1' }], error: null });
+
+      const result = await TeamConnectionService.blockConnection('conn-1');
+
+      expect(result.success).toBe(true);
+    });
+
+    it('retorna erro quando o UPDATE afeta 0 linhas — não pode dizer ao freela que ele saiu quando não saiu', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'accepted', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+      mockUpdateSelect.mockResolvedValueOnce({ data: [], error: null });
+
+      const result = await TeamConnectionService.blockConnection('conn-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Não foi possível bloquear: tente novamente ou atualize a página.');
+    });
+
+    it('é idempotente quando a conexão já está blocked (não chama UPDATE)', async () => {
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({
+        data: { user: { id: 'worker-abc-123' } },
+        error: null,
+      } as Awaited<ReturnType<typeof supabase.auth.getUser>>);
+      mockFetchMaybeSingle.mockResolvedValueOnce({
+        data: { id: 'conn-1', status: 'blocked', worker_id: 'worker-abc-123' },
+        error: null,
+      });
+
+      const result = await TeamConnectionService.blockConnection('conn-1');
+
+      expect(result.success).toBe(true);
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 

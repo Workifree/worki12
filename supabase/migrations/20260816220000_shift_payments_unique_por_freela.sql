@@ -1,0 +1,210 @@
+-- Migration: Marcador de pagamento (modo A) passa a ser por (TURNO, FREELA), não por turno
+-- File: supabase/migrations/20260816220000_shift_payments_unique_por_freela.sql
+-- ADR: .harness/memory-bank/decisions/ADR-20260816-marcador-pagamento-por-freela.md
+-- Depende de: 20260630000000_shift_payments.sql (tabela/trigger/RLS)
+--             20260712000000_shift_payment_scheduled.sql (uq_shift_payments_job_active)
+-- Gate: harness-architect (auditoria financeira — NÃO move saldo; Article 8 intacto).
+--
+-- ============================================================================
+-- PROBLEMA (achado do harness-evaluator, revisão pré-piloto — severidade ALTO)
+-- ----------------------------------------------------------------------------
+--   Um turno pode ter N freelas (o painel pós-criação de `CompanyCreateJob` convida
+--   vários; nada no schema nem no service fecha o slot após o primeiro aceite), mas o
+--   marcador de pagamento do modo A é UNIQUE por `job_id`:
+--       uq_shift_payments_job_active = UNIQUE (job_id) WHERE status IN ('scheduled','recorded')
+--   Consequência em produção: pago o 1º freela, o 2º fica sem registro, sem recibo e
+--   sem conclusão do turno (a UI só marca application.status='completed' DEPOIS de um
+--   INSERT bem-sucedido em shift_payments). O 23505 é traduzido como "Este turno já tem
+--   um pagamento registrado" — falso para o 2º freela, e sem saída.
+--
+--   `escrow_transactions` (o trilho de DINHEIRO, modos B/C) SEMPRE foi por
+--   `application_id`/worker. O marcador do modo A regrediu essa granularidade.
+--
+-- ============================================================================
+-- DECISÃO — trocar a chave de dedupe de (job_id) para (job_id, worker_id)
+-- ----------------------------------------------------------------------------
+--   A dimensão TEMPORAL do índice parcial (permitir re-registro após 'voided') era
+--   deliberada e é PRESERVADA: N linhas 'voided' + no máximo UMA ativa.
+--   A dimensão de IDENTIDADE (worker) estava ausente por engano — ver ADR §Intenção.
+--
+--   Novo invariante: no máximo UM marcador ATIVO ('scheduled' OU 'recorded') por
+--   (turno, freela). Continua impossível: duas promessas para o mesmo freela no mesmo
+--   turno, promessa + registro em linhas separadas, ou pagar duas vezes o mesmo freela
+--   pelo mesmo turno (idempotência do 23505 → alreadyRecorded/alreadyActive preservada).
+--
+-- ============================================================================
+-- FRONTEIRA CRÍTICA (Article 8/9/10) — INALTERADA
+-- ----------------------------------------------------------------------------
+--   Esta migration mexe SÓ em um índice. NÃO altera colunas, CHECKs, RLS, GRANTs, o
+--   trigger `enforce_shift_payment_immutability` nem o trigger de notificação. Nenhuma
+--   RPC de saldo é criada ou tocada; `wallets`/`escrow_transactions` não são referenciadas.
+--   `shift_payments` segue sendo REGISTRO/AUDITORIA, nunca liquidação.
+--
+-- ============================================================================
+-- SEGURANÇA DA APLICAÇÃO SOBRE DADO REAL (4 linhas em produção)
+-- ----------------------------------------------------------------------------
+--   É um ALARGAMENTO: o índice antigo (job_id) é ESTRITAMENTE mais forte que o novo
+--   (job_id, worker_id). Toda linha que satisfaz o antigo satisfaz o novo ⇒ a criação do
+--   índice novo NÃO PODE falhar por dado existente, e nenhuma linha muda de estado.
+--   Ordem à prova de janela: CRIA o novo ANTES de dropar o antigo, na mesma transação —
+--   nunca existe um instante sem proteção de duplicidade.
+--   Sem CONCURRENTLY de propósito: tabela de 4 linhas (lock desprezível) e CONCURRENTLY
+--   não roda em bloco transacional, o que abriria justamente a janela acima. Mesmo
+--   critério já registrado em 20260712000000 §3.
+--
+-- ============================================================================
+-- ⚠️  ORDEM DE APLICAÇÃO OBRIGATÓRIA — NÃO APLICAR ANTES DO FRONTEND
+-- ----------------------------------------------------------------------------
+--   Quatro leituras do client assumem "≤1 marcador ativo por job" via `.maybeSingle()`.
+--   Com dois marcadores ativos no mesmo turno, `.maybeSingle()` vira ERRO (PGRST116) e o
+--   client trata erro como null — a UI ficaria CEGA para os DOIS freelas (ambos os cards
+--   voltariam a oferecer "Registrar Pagamento" e o recibo diria "não encontrado"), o que
+--   é PIOR que o beco atual, que ao menos falha alto. Corrigir ANTES (ver ADR §Frontend):
+--     1. paymentRecordService.getPaymentByJob  — filtrar por worker_id
+--     2. paymentRecordService.getReceipt       — resolver por (job_id, viewer/worker_id)
+--     3. shiftInviteService.dismissFromShift   — checar marcador do worker daquela application
+--     4. CompanyJobCandidates                  — estado por worker, não um único shiftPayment
+--   `orderReportService` NÃO usa maybeSingle (não quebra), mas colapsa 2 marcadores em 1
+--   linha por turno — limitação conhecida, ver ADR §Consequências.
+--
+-- ============================================================================
+-- VERIFICAÇÃO — QUERIES READ-ONLY (executar uma a uma via MCP)
+-- ----------------------------------------------------------------------------
+-- ANTES (baseline + pré-condição + calibragem de urgência)
+--
+-- A1. Índices atuais (baseline). ESPERADO: uq_shift_payments_job_active presente.
+--     SELECT indexname, indexdef FROM pg_indexes
+--      WHERE schemaname='public' AND tablename='shift_payments' ORDER BY indexname;
+--
+-- A2. As linhas reais (baseline para comparar depois). ESPERADO: 4 linhas.
+--     SELECT id, job_id, worker_id, status, amount, paid_at, scheduled_for,
+--            worker_confirmed_at, voided_at, created_at
+--       FROM public.shift_payments ORDER BY created_at;
+--
+-- A3. PRÉ-CONDIÇÃO da migration. ESPERADO: 0 linhas (garantido pelo índice antigo).
+--     SELECT job_id, worker_id, count(*) FROM public.shift_payments
+--      WHERE status IN ('scheduled','recorded')
+--      GROUP BY job_id, worker_id HAVING count(*) > 1;
+--
+-- A4. O produto já usa N freelas por turno? (calibra a urgência — não bloqueia nada)
+--     SELECT a.job_id, j.title, j.start_date, count(*) AS freelas_ativos,
+--            array_agg(w.full_name ORDER BY w.full_name) AS nomes,
+--            array_agg(DISTINCT a.status)                AS status
+--       FROM public.applications a
+--       JOIN public.jobs j    ON j.id = a.job_id
+--       LEFT JOIN public.workers w ON w.id = a.worker_id
+--      WHERE a.status IN ('hired','in_progress','completed')
+--      GROUP BY a.job_id, j.title, j.start_date
+--     HAVING count(*) > 1
+--      ORDER BY j.start_date DESC NULLS LAST;
+--
+-- A5. O beco JÁ está materializado? (freela sem marcador num turno que já tem marcador ativo)
+--     SELECT sp.job_id, j.title, sp.worker_id AS freela_com_marcador,
+--            sp.status AS status_marcador, a.worker_id AS freela_sem_marcador,
+--            a.status  AS status_application
+--       FROM public.shift_payments sp
+--       JOIN public.jobs j ON j.id = sp.job_id
+--       JOIN public.applications a
+--         ON a.job_id = sp.job_id AND a.worker_id <> sp.worker_id
+--        AND a.status IN ('hired','in_progress','completed')
+--      WHERE sp.status IN ('scheduled','recorded');
+--
+-- A6. Prova do efeito ANTES (o alvo da mudança). ESPERADO: ERROR 23505 em
+--     uq_shift_payments_job_active. Rodar exatamente o mesmo bloco de B4 abaixo.
+--
+-- ----------------------------------------------------------------------------
+-- DEPOIS (prova do efeito + prova de que nada quebrou)
+--
+-- B1. Índices. ESPERADO: uq_shift_payments_job_worker_active presente,
+--     uq_shift_payments_job_active AUSENTE, demais índices intactos.
+--     SELECT indexname, indexdef FROM pg_indexes
+--      WHERE schemaname='public' AND tablename='shift_payments' ORDER BY indexname;
+--
+-- B2. Dado intacto. ESPERADO: idêntico a A2 (mesmos ids, status, amount, timestamps).
+--     SELECT id, job_id, worker_id, status, amount, paid_at, scheduled_for,
+--            worker_confirmed_at, voided_at, created_at
+--       FROM public.shift_payments ORDER BY created_at;
+--
+-- B3. Superfície inalterada. ESPERADO: mesmos CHECKs, mesmos 3 triggers, mesmas 4 policies.
+--     SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+--      WHERE conrelid='public.shift_payments'::regclass ORDER BY conname;
+--     SELECT tgname FROM pg_trigger
+--      WHERE tgrelid='public.shift_payments'::regclass AND NOT tgisinternal ORDER BY tgname;
+--     SELECT policyname, cmd FROM pg_policies
+--      WHERE schemaname='public' AND tablename='shift_payments' ORDER BY policyname;
+--
+-- B4. PROVA DO EFEITO (positiva): 2º freela no MESMO turno agora é aceito.
+--     ANTES da migration este bloco deve dar ERROR 23505; DEPOIS deve inserir 1 linha.
+--     BEGIN;
+--       INSERT INTO public.shift_payments
+--         (job_id, company_id, worker_id, application_id, source, amount, paid_at, recorded_by)
+--       SELECT sp.job_id, sp.company_id, w2.id, NULL, 'cash', 1.00, now(), sp.recorded_by
+--         FROM public.shift_payments sp
+--         CROSS JOIN LATERAL (
+--           SELECT w.id FROM public.workers w WHERE w.id <> sp.worker_id ORDER BY w.id LIMIT 1
+--         ) w2
+--        WHERE sp.status IN ('scheduled','recorded')
+--        ORDER BY sp.created_at LIMIT 1
+--       RETURNING id, job_id, worker_id, status;   -- ESPERADO (depois): 1 linha
+--       -- e a notificação foi para o freela CERTO (trigger inalterado):
+--       SELECT user_id, type, title, link FROM public.notifications
+--        ORDER BY created_at DESC LIMIT 1;         -- ESPERADO: user_id = worker_id acima
+--     ROLLBACK;
+--
+-- B5. PROVA DO EFEITO (negativa): duplicar o MESMO freela no MESMO turno segue barrado.
+--     BEGIN;
+--       INSERT INTO public.shift_payments
+--         (job_id, company_id, worker_id, application_id, source, amount, paid_at, recorded_by)
+--       SELECT sp.job_id, sp.company_id, sp.worker_id, NULL, 'cash', 1.00, now(), sp.recorded_by
+--         FROM public.shift_payments sp
+--        WHERE sp.status IN ('scheduled','recorded')
+--        ORDER BY sp.created_at LIMIT 1;
+--       -- ESPERADO: ERROR 23505 em uq_shift_payments_job_worker_active
+--     ROLLBACK;
+--
+-- B6. Saldo intacto (Article 8) — nenhuma linha financeira nasceu desta mudança.
+--     SELECT count(*) AS wallets, (SELECT count(*) FROM public.wallet_transactions) AS wtx,
+--            (SELECT count(*) FROM public.escrow_transactions) AS escrow
+--       FROM public.wallets;   -- ESPERADO: idêntico ao baseline
+--
+-- DOWN (rollback): ver rodapé.
+-- ============================================================================
+
+-- =============================================
+-- 1. NOVO ÍNDICE — 1 marcador ATIVO por (turno, freela)
+--    Criado ANTES do DROP do antigo: nunca há janela sem proteção de duplicidade.
+-- =============================================
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_worker_active
+    ON public.shift_payments (job_id, worker_id)
+    WHERE status IN ('scheduled', 'recorded');
+
+COMMENT ON INDEX public.uq_shift_payments_job_worker_active IS
+    'Dedupe do marcador do modo A: no maximo UM marcador ATIVO (scheduled|recorded) por (turno, freela). N linhas voided permitidas (re-agendar/re-registrar). Substitui uq_shift_payments_job_active, que assumia 1 freela por turno. ADR-20260816-marcador-pagamento-por-freela.';
+
+-- =============================================
+-- 2. REMOVE O ÍNDICE ANTIGO (assumia 1 freela por turno)
+-- =============================================
+DROP INDEX IF EXISTS public.uq_shift_payments_job_active;
+
+-- =============================================
+-- 3. COMENTÁRIO DA COLUNA — a documentação dizia "chave de dedupe = job_id"
+-- =============================================
+COMMENT ON COLUMN public.shift_payments.job_id IS
+    'Turno pago. Chave de dedupe em conjunto com worker_id (UNIQUE parcial (job_id, worker_id) WHERE status IN (scheduled,recorded)) — um turno com N freelas tem N marcadores, um por freela. ON DELETE RESTRICT.';
+
+COMMENT ON COLUMN public.shift_payments.worker_id IS
+    'Freela pago (= auth.uid(), ancora do RLS do freela). Parte da chave de dedupe junto com job_id. ON DELETE RESTRICT.';
+
+-- ============================================================================
+-- DOWN (rollback) — sem impacto em saldo/escrow (nenhuma RPC tocada):
+--   -- ATENÇÃO: só é seguro se NENHUM turno tiver 2+ marcadores ATIVOS. Checar antes:
+--   --   SELECT job_id, count(*) FROM public.shift_payments
+--   --    WHERE status IN ('scheduled','recorded') GROUP BY job_id HAVING count(*) > 1;
+--   --   Se retornar linhas, estorne (status='voided' + voided_at + void_reason) os
+--   --   marcadores excedentes ANTES — NUNCA deletar (auditoria não se apaga).
+--   CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_payments_job_active
+--       ON public.shift_payments (job_id) WHERE status IN ('scheduled','recorded');
+--   DROP INDEX IF EXISTS public.uq_shift_payments_job_worker_active;
+--   -- E reverter o frontend worker-aware (senão a UI passa a filtrar por um worker_id
+--   -- que o índice reagrupa por job — funciona, mas volta o beco do 2º freela).
+-- ============================================================================

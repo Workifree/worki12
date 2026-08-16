@@ -162,7 +162,7 @@ export interface CancelInviteResult {
 export interface DismissFromShiftResult {
   success: boolean;
   error?: string;
-  /** true quando o bloqueio foi por já existir pagamento (agendado ou registrado) para o turno. */
+  /** true quando o bloqueio foi por já existir pagamento (agendado ou registrado) para ESTE freela neste turno. */
   blockedByPayment?: boolean;
 }
 
@@ -194,6 +194,48 @@ function calcExpiry(hours: number): string {
   const d = new Date();
   d.setHours(d.getHours() + hours);
   return d.toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// hasAttendedShift — predicado único de "o freela já compareceu" (revisão pré-piloto, QA)
+// ---------------------------------------------------------------------------
+
+/** Sinais de presença de uma application — subconjunto usado por `hasAttendedShift`. */
+export interface AttendanceSignals {
+  worker_checkin_at?: string | null;
+  company_checkin_confirmed_at?: string | null;
+  company_checkout_confirmed_at?: string | null;
+}
+
+/**
+ * true quando o freela já COMPARECEU ao turno, por QUALQUER um dos três sinais reais que o
+ * sistema reconhece. "Dispensar" é um gesto de ANTES do turno acontecer; a partir do momento
+ * em que qualquer um destes sinais existe, o freela já tem trabalho a faturar — o caminho
+ * correto passa a ser registrar (ou, se necessário, estornar) o pagamento, nunca dispensar
+ * (`applications.status → 'cancelled'` é irreversível: `UNIQUE(job_id, worker_id)` impede
+ * reconvidar o mesmo freela para o mesmo turno).
+ *
+ * Os três sinais, nenhum redundante — cobrem os três jeitos reais de um turno começar:
+ *  1. `worker_checkin_at`             — o próprio freela bateu chegada no app.
+ *  2. `company_checkin_confirmed_at`  — a empresa confirmou a chegada pela tela, MESMO sem o
+ *     freela nunca ter aberto o app (`handleConfirmCheckin`/"Confirmar Presença" —
+ *     justamente o caminho canônico do modo A, freela que não usa o app).
+ *  3. `company_checkout_confirmed_at` — a empresa já confirmou a SAÍDA (turno claramente
+ *     aconteceu, mesmo no caso raro de o checkin nunca ter sido confirmado).
+ *
+ * Centralizado e nomeado de propósito (não replicado condição a condição em cada chamador):
+ * foi a ausência do sinal (2) numa versão anterior desta guarda — presente só em
+ * `shiftInviteService.dismissFromShift` e no render de `CompanyJobCandidates` — que deixava
+ * "Dispensar" disponível depois de "Confirmar Presença" sem o freela ter batido check-in no
+ * app (o caminho normal quando ele não usa o app). Uma quarta forma de "o turno começou" no
+ * futuro só precisa entrar AQUI, uma vez, para os dois lados (UI e service) ficarem corretos.
+ */
+export function hasAttendedShift(app: AttendanceSignals): boolean {
+  return !!(
+    app.worker_checkin_at ||
+    app.company_checkin_confirmed_at ||
+    app.company_checkout_confirmed_at
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,19 +462,21 @@ export const ShiftInviteService = {
    * antes de chamar isto; este método não confirma nada, só executa a transição.
    *
    * Guarda: bloqueia se já existe um marcador ATIVO em `shift_payments` (status
-   * 'scheduled' ou 'recorded') para este job. Motivo: dispensar deixaria esse marcador
-   * órfão — atrelado a um freela que não está mais no turno — e o UNIQUE parcial de
-   * `shift_payments` (`(job_id) WHERE status IN ('scheduled','recorded')`) impediria
-   * registrar/agendar o pagamento de um freela substituto enquanto o marcador antigo
-   * seguir ativo. A empresa precisa estornar (`PaymentRecordService.voidPayment`) antes.
+   * 'scheduled' ou 'recorded') para ESTE FREELA neste turno (ADR-20260816 — o marcador é
+   * por (job_id, worker_id), não mais por job_id sozinho: dois freelas do mesmo turno têm
+   * marcadores independentes, e o pagamento de um não pode travar o dispensar do outro).
+   * Motivo do bloqueio em si: dispensar deixaria o marcador ATIVO deste freela órfão —
+   * atrelado a alguém que não está mais no turno. A empresa precisa estornar
+   * (`PaymentRecordService.voidPayment`) antes.
    *
-   * Guarda (revisão pré-piloto, onda 3 — QA #2): bloqueia também se o freela já COMPARECEU
-   * ao turno (`worker_checkin_at` preenchido — o freela em pessoa marcou chegada) ou se a
-   * empresa já confirmou a saída (`company_checkout_confirmed_at`). "Dispensar" é um gesto
-   * de ANTES do turno; depois que o freela trabalhou, dispensar (status→'cancelled')
-   * tornaria o turno impagável para sempre — `UNIQUE(job_id, worker_id)` impede reconvidar o
-   * mesmo freela e a UI de pagamento só aparece para 'hired'|'in_progress'|'completed'. Nesse
-   * ponto o caminho certo é registrar o pagamento (ou estornar um já registrado).
+   * Guarda (revisão pré-piloto, onda 3 — QA #2, reforçada na rodada seguinte de QA): bloqueia
+   * também se o freela já COMPARECEU ao turno — `hasAttendedShift` (ver acima), que cobre os
+   * TRÊS sinais reais (checkin do próprio freela, chegada confirmada pela empresa, ou saída
+   * confirmada pela empresa). "Dispensar" é um gesto de ANTES do turno; depois que o freela
+   * trabalhou, dispensar (status→'cancelled') tornaria o turno impagável para sempre —
+   * `UNIQUE(job_id, worker_id)` impede reconvidar o mesmo freela e a UI de pagamento só
+   * aparece para 'hired'|'in_progress'|'completed'. Nesse ponto o caminho certo é registrar
+   * o pagamento (ou estornar um já registrado).
    *
    * Notificação simétrica ao freela: mesmo caminho de `cancelInvite` — o trigger
    * `trg_notify_counterpart_on_application_cancel` avisa o freela automaticamente; este
@@ -447,7 +491,9 @@ export const ShiftInviteService = {
 
       const { data: current, error: fetchErr } = await supabase
         .from('applications')
-        .select('id, status, job_id, worker_checkin_at, company_checkout_confirmed_at')
+        .select(
+          'id, status, job_id, worker_id, worker_checkin_at, company_checkin_confirmed_at, company_checkout_confirmed_at',
+        )
         .eq('id', applicationId)
         .maybeSingle();
 
@@ -463,32 +509,37 @@ export const ShiftInviteService = {
         };
       }
 
-      if (current.worker_checkin_at || current.company_checkout_confirmed_at) {
+      if (hasAttendedShift(current)) {
         return {
           success: false,
           error: 'O turno já foi cumprido; dispensar não está mais disponível. Registre o pagamento deste turno.',
         };
       }
 
-      // Guarda: pagamento ATIVO (scheduled|recorded) para este job bloqueia o dispensar
-      // (ver motivo no comentário do método) — checagem defensiva, além da UI já impedir.
-      const { data: activePayment, error: paymentErr } = await supabase
+      // Guarda: pagamento ATIVO (scheduled|recorded) DESTE FREELA neste job bloqueia o
+      // dispensar (ver motivo no comentário do método) — checagem defensiva, além da UI já
+      // impedir. `.limit(1)` (não `.maybeSingle()`): o filtro por worker_id já garante no
+      // máximo 1 linha em qualquer estado do banco (atual OU pós-migration), mas `.limit(1)`
+      // não quebra se, por alguma inconsistência, houver mais de uma — só ignora o excedente.
+      const { data: activePayments, error: paymentErr } = await supabase
         .from('shift_payments')
         .select('id, status')
         .eq('job_id', current.job_id)
+        .eq('worker_id', current.worker_id)
         .in('status', ['scheduled', 'recorded'])
-        .maybeSingle();
+        .limit(1);
 
       if (paymentErr) {
         logError('shiftInvite.dismissFromShift.checkPayment', paymentErr);
         return { success: false, error: 'Erro ao verificar pagamento do turno.' };
       }
+      const activePayment = activePayments?.[0] ?? null;
       if (activePayment) {
         return {
           success: false,
           blockedByPayment: true,
           error:
-            'Este turno já tem um pagamento registrado ou agendado. Estorne o pagamento antes de dispensar o freela.',
+            'Este freela já tem um pagamento registrado ou agendado neste turno. Estorne o pagamento antes de dispensá-lo.',
         };
       }
 

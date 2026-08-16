@@ -49,6 +49,10 @@ function buildChain(overrides: Record<string, unknown> = {}) {
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    // `.limit(1)` — usado por `shiftInviteService.dismissFromShift` na guarda de pagamento
+    // ativo por (job_id, worker_id) (ADR-20260816). Resolve vazio por padrão (sem pagamento
+    // ativo); testes específicos sobrescrevem quando precisam simular um marcador existente.
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
     update: vi.fn().mockReturnThis(),
     insert: vi.fn().mockResolvedValue({ data: null, error: null }),
   }
@@ -634,10 +638,11 @@ const APP_CHECKED_OUT_BY_WORKER = [
 
 describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BLOQUEADOR 1)', () => {
   it('permite a empresa registrar a saída mesmo quando o freela nunca marcou check-out no app', async () => {
-    const { appChain } = setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
-    // handleConfirmCheckout faz `.update({...}).eq('id', appId)` sem `.select()` — mesmo
-    // formato usado no resto do arquivo para updates de applications.
-    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: null, error: null }))
+    const { appChain, mockAddToast } = setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
+    // handleConfirmCheckout faz `.update({...}).eq('id', appId).select('id')` — `.select('id')`
+    // é obrigatório (padrão `removeFromTeam`/patterns.md) pra distinguir "negado por RLS em
+    // silêncio" de sucesso real; o mock devolve a linha afetada.
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-no-checkout' }], error: null }))
 
     renderComponent()
 
@@ -662,6 +667,28 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
     // (o recibo distingue "freela marcou" de "empresa confirmou manualmente").
     const updatePayload = (appChain.update as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]
     expect(updatePayload).not.toHaveProperty('worker_checkout_at')
+    // Confirmação visível — este gesto destrava "Registrar Pagamento", não pode ser silencioso.
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Saída confirmada!', 'success')
+    })
+  })
+
+  it('reporta falha (não sucesso mentiroso) quando o UPDATE de checkout afeta 0 linhas (RLS negou em silêncio)', async () => {
+    const { appChain, mockAddToast } = setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [], error: null }))
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Não foi possível confirmar a saída deste freela.', 'error')
+    })
   })
 
   it('rotula a saída como "Confirmar Saída" (não "Registrar Saída") quando o freela já marcou check-out', async () => {
@@ -674,6 +701,127 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
 
     const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
     expect(within(card).getByRole('button', { name: /Confirmar Saída/i })).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Caso central do ADR-20260816: turno com DOIS freelas concluídos (modo A, sem escrow),
+// cada um com o PRÓPRIO marcador de pagamento — nunca cruzados. O banco atual só permite 1
+// marcador ativo por job_id; este teste mocka `listActivePaymentsByJob` diretamente (nível de
+// serviço) para validar que a UI já sabe render N marcadores por job, pronta para depois da
+// migration 20260816220000 sem qualquer outra mudança de código.
+// ---------------------------------------------------------------------------
+
+const APP_TWO_FREELAS_COMPLETED = [
+  {
+    id: 'app-freela-a',
+    job_id: 'job-123',
+    worker_id: 'worker-a',
+    status: 'completed',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-a', full_name: 'Freela A', avatar_url: null, city: 'São Paulo',
+      level: 1, rating_average: 5, reviews_count: 0, tags: [],
+    },
+    worker_checkin_at: new Date().toISOString(),
+    worker_checkout_at: new Date().toISOString(),
+    company_checkin_confirmed_at: new Date().toISOString(),
+    company_checkout_confirmed_at: new Date().toISOString(),
+  },
+  {
+    id: 'app-freela-b',
+    job_id: 'job-123',
+    worker_id: 'worker-b',
+    status: 'completed',
+    cover_letter: '',
+    created_at: new Date().toISOString(),
+    worker: {
+      id: 'worker-b', full_name: 'Freela B', avatar_url: null, city: 'São Paulo',
+      level: 1, rating_average: 5, reviews_count: 0, tags: [],
+    },
+    worker_checkin_at: new Date().toISOString(),
+    worker_checkout_at: new Date().toISOString(),
+    company_checkin_confirmed_at: new Date().toISOString(),
+    company_checkout_confirmed_at: new Date().toISOString(),
+  },
+]
+
+describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com dois freelas)', () => {
+  function setupTwoFreelasMocks() {
+    const mockAddToast = vi.fn()
+    const mockRemoveToast = vi.fn()
+    const mockNavigate = vi.fn()
+    vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: mockRemoveToast })
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate)
+
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'company-user-1' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+
+    const jobChain = buildChain({ single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }) })
+    const appChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: APP_TWO_FREELAS_COMPLETED, error: null }),
+    })
+    // Sem escrow (modo A) — kind map fica vazio para os dois.
+    const escrowChain = buildChain({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
+    // Só o freela A tem marcador ATIVO (recorded); o freela B não tem nenhum —
+    // `listActivePaymentsByJob` devolve só a linha de A, ordenada por created_at.
+    const paymentA = {
+      id: 'sp-a', job_id: 'job-123', company_id: 'company-user-1', worker_id: 'worker-a',
+      application_id: 'app-freela-a', source: 'external_pix', amount: 150, scheduled_for: null,
+      paid_at: new Date().toISOString(), recorded_by: 'company-user-1', worker_confirmed_at: null,
+      note: null, status: 'recorded', voided_at: null, void_reason: null, created_at: new Date().toISOString(),
+    }
+    const shiftPaymentsChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: [paymentA], error: null }),
+    })
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return appChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'escrow_transactions') return escrowChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'shift_payments') return shiftPaymentsChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    return { mockNavigate }
+  }
+
+  it('cada freela mostra o próprio estado de pagamento — A tem recibo, B ainda pode registrar', async () => {
+    setupTwoFreelasMocks()
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Freela A')).toBeInTheDocument()
+      expect(screen.getByText('Freela B')).toBeInTheDocument()
+    })
+
+    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
+    const cardB = screen.getByText('Freela B').closest('[role="button"]') as HTMLElement
+
+    // Freela A já tem marcador 'recorded' — card mostra "Ver Recibo".
+    expect(within(cardA).getByText('Ver Recibo')).toBeInTheDocument()
+    expect(within(cardA).queryByText('Registrar Pagamento')).not.toBeInTheDocument()
+
+    // Freela B não tem NENHUM marcador — nunca herda o "Ver Recibo" de A.
+    expect(within(cardB).getByText('Registrar Pagamento')).toBeInTheDocument()
+    expect(within(cardB).queryByText('Ver Recibo')).not.toBeInTheDocument()
+  })
+
+  it('"Ver Recibo" do freela A navega com ?worker=worker-a — endereça o freela certo', async () => {
+    const { mockNavigate } = setupTwoFreelasMocks()
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Freela A')).toBeInTheDocument()
+    })
+
+    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(cardA).getByText('Ver Recibo'))
+
+    expect(mockNavigate).toHaveBeenCalledWith('/recibo/job-123?worker=worker-a')
   })
 })
 
@@ -693,6 +841,33 @@ describe('CompanyJobCandidates — Dispensar pós-turno (BLOQUEADOR 2)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Daniel Ja Chegou')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Dispensar')).not.toBeInTheDocument()
+  })
+
+  // Regressão (QA final, rodada seguinte): a guarda anterior só olhava worker_checkin_at e
+  // company_checkout_confirmed_at — "Dispensar" continuava disponível logo depois de
+  // "Confirmar Presença" (que grava company_checkin_confirmed_at) quando o freela nunca abriu
+  // o app, exatamente o caminho canônico do modo A.
+  it('esconde "Dispensar" quando só a empresa confirmou a CHEGADA (company_checkin_confirmed_at, sem checkin do freela)', async () => {
+    const appCheckinConfirmedByCompany = [
+      {
+        ...APP_HIRED[0],
+        id: 'app-hired-4',
+        worker_id: 'worker-presenca-confirmada',
+        worker: { ...APP_HIRED[0].worker, full_name: 'Eva Presenca Confirmada' },
+        status: 'in_progress',
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: new Date().toISOString(),
+        company_checkout_confirmed_at: null,
+      },
+    ]
+    setupMocksWithApps(appCheckinConfirmedByCompany)
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Eva Presenca Confirmada')).toBeInTheDocument()
     })
 
     expect(screen.queryByText('Dispensar')).not.toBeInTheDocument()

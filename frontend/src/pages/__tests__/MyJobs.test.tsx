@@ -44,6 +44,7 @@ vi.mock('../../components/PageMeta', () => ({
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { useNavigate } from 'react-router-dom'
+import { computeWorkerSteps, type JobApplication } from '../MyJobs'
 
 interface ApplicationRow {
   id: string
@@ -222,6 +223,124 @@ describe('MyJobs - Botao check-out', () => {
 
     // worker_checkin_at setado e worker_checkout_at null → botão Check-out visível
     expect(screen.getByText('Check-out')).toBeInTheDocument()
+  })
+
+  // Caso central (QA pré-piloto): a empresa registrou a saída sozinha
+  // (company_checkout_confirmed_at) sem o freela ter tocado no app (worker_checkout_at null).
+  // O freela que abrir o app NÃO pode ver um CTA "Check-out" ativo — se tocar, sobrescreveria o
+  // worker_checkout_at, e o recibo prioriza esse campo sobre a confirmação da empresa mesmo em
+  // turno já pago (ReceiptView).
+  it('esconde o CTA Check-out e mostra "Empresa registrou sua saída" quando a empresa confirmou sem o freela', async () => {
+    const companyCheckedOutApp: ApplicationRow = {
+      ...APP_IN_PROGRESS,
+      worker_checkin_at: '2026-03-17T08:00:00Z',
+      worker_checkout_at: null,
+      company_checkin_confirmed_at: '2026-03-17T08:05:00Z',
+      company_checkout_confirmed_at: '2026-03-17T16:10:00Z',
+    }
+    setupMocks([companyCheckedOutApp])
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    await screen.findByText('Barman para Festa')
+
+    // Não pode existir CTA "Check-out" (button) — a empresa já fechou essa etapa.
+    expect(screen.queryByRole('button', { name: 'Check-out' })).not.toBeInTheDocument()
+    // O freela vê que foi a EMPRESA quem registrou a saída, não ele.
+    expect(screen.getByText('Empresa registrou sua saída')).toBeInTheDocument()
+  })
+
+  // Mesmo problema no check-in: empresa pode confirmar chegada sem o freela ter apertado
+  // "Check-in" (handleConfirmCheckin em CompanyJobCandidates não seta worker_checkin_at).
+  it('esconde o CTA Check-in e mostra "Empresa registrou sua chegada" quando a empresa confirmou sem o freela', async () => {
+    const companyCheckedInApp: ApplicationRow = {
+      ...APP_IN_PROGRESS,
+      status: 'in_progress',
+      worker_checkin_at: null,
+      worker_checkout_at: null,
+      company_checkin_confirmed_at: '2026-03-17T08:05:00Z',
+      company_checkout_confirmed_at: null,
+    }
+    setupMocks([companyCheckedInApp])
+    renderComponent()
+
+    fireEvent.click(await screen.findByText('Em Andamento'))
+    await screen.findByText('Barman para Festa')
+
+    expect(screen.queryByRole('button', { name: 'Check-in' })).not.toBeInTheDocument()
+    expect(screen.getByText('Empresa registrou sua chegada')).toBeInTheDocument()
+    // Check-out também não pode ficar disponível: o freela nunca chegou a fazer check-in
+    // por conta própria, mas a etapa "chegada" já está fechada, então o botão de saída aparece.
+    expect(screen.getByRole('button', { name: 'Check-out' })).toBeInTheDocument()
+  })
+})
+
+describe('MyJobs - computeWorkerSteps (lógica pura)', () => {
+  function buildJob(overrides: Partial<JobApplication> = {}): JobApplication {
+    return {
+      id: 'app-1',
+      job_id: 'job-1',
+      status: 'in_progress',
+      title: 'Turno',
+      company_id: 'company-1',
+      company_name: 'Empresa',
+      company_logo: null,
+      pay: 100,
+      date: '17/03/2026',
+      raw_date: '2026-03-17',
+      time: '08:00',
+      end_time: '16:00',
+      location: 'SP',
+      month: 'MAR',
+      day: 17,
+      worker_checkin_at: null,
+      worker_checkout_at: null,
+      company_checkin_confirmed_at: null,
+      company_checkout_confirmed_at: null,
+      ...overrides,
+    }
+  }
+
+  it('sem nenhum registro: chegada active, resto pending', () => {
+    const steps = computeWorkerSteps(buildJob())
+    expect(steps[0].status).toBe('active')
+    expect(steps[1].status).toBe('pending')
+    expect(steps[2].status).toBe('pending')
+  })
+
+  it('checkout confirmado SÓ pela empresa (sem worker_checkout_at) conta como completo — não fica travado em "active"', () => {
+    const steps = computeWorkerSteps(
+      buildJob({
+        worker_checkin_at: '2026-03-17T08:00:00Z',
+        worker_checkout_at: null,
+        company_checkout_confirmed_at: '2026-03-17T16:10:00Z',
+      })
+    )
+    expect(steps[0].status).toBe('complete') // Chegada registrada
+    expect(steps[1].status).toBe('complete') // Check-out — fechado pela empresa
+    expect(steps[2].status).toBe('complete') // Aguardando empresa — já confirmado
+  })
+
+  it('checkin confirmado SÓ pela empresa (sem worker_checkin_at) conta como chegada completa', () => {
+    const steps = computeWorkerSteps(
+      buildJob({
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: '2026-03-17T08:05:00Z',
+      })
+    )
+    expect(steps[0].status).toBe('complete')
+  })
+
+  it('turno totalmente concluído pelo freela: todos os steps completos', () => {
+    const steps = computeWorkerSteps(
+      buildJob({
+        worker_checkin_at: '2026-03-17T08:00:00Z',
+        worker_checkout_at: '2026-03-17T16:00:00Z',
+        company_checkin_confirmed_at: '2026-03-17T08:05:00Z',
+        company_checkout_confirmed_at: '2026-03-17T16:10:00Z',
+      })
+    )
+    expect(steps.every((s) => s.status === 'complete')).toBe(true)
   })
 })
 

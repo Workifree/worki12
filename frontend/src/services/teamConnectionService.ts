@@ -366,18 +366,26 @@ export const TeamConnectionService = {
         };
       }
 
-      const { error } = await supabase
+      // .select('id') obrigatório (patterns.md): sob RLS um UPDATE que não casa com o
+      // USING retorna 0 linhas sem erro (PostgREST 204) — sem isso a UI diria "aceito"
+      // mesmo quando a conexão mudou de estado entre o fetch acima e este UPDATE.
+      const { data, error } = await supabase
         .from('team_connections')
         .update({
           status: 'accepted' as TeamConnectionStatus,
           accepted_at: new Date().toISOString(),
         })
         .eq('id', connectionId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .select('id');
 
       if (error) {
         logError('teamConnection.acceptConnection.update', error);
         return { success: false, error: 'Erro ao aceitar conexão.' };
+      }
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível aceitar: esta conexão não está mais disponível.' };
       }
 
       return { success: true };
@@ -419,18 +427,26 @@ export const TeamConnectionService = {
         return { success: true }; // já bloqueada — idempotente
       }
 
-      const { error } = await supabase
+      // .select('id') obrigatório (patterns.md): este é o VETO do freela — se o UPDATE for
+      // negado pelo RLS (0 linhas, sem erro/204) e a UI disser "sucesso" mesmo assim, o
+      // freela acredita ter saído da equipe/bloqueado a empresa quando na verdade não saiu.
+      const { data, error } = await supabase
         .from('team_connections')
         .update({
           status: 'blocked' as TeamConnectionStatus,
           blocked_by: user.id,
         })
         .eq('id', connectionId)
-        .eq('worker_id', user.id);
+        .eq('worker_id', user.id)
+        .select('id');
 
       if (error) {
         logError('teamConnection.blockConnection.update', error);
         return { success: false, error: 'Erro ao bloquear conexão.' };
+      }
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Não foi possível bloquear: tente novamente ou atualize a página.' };
       }
 
       return { success: true };

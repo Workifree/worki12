@@ -3,6 +3,7 @@ import {
   ShiftInviteService,
   normalizePhoneForWhatsApp,
   buildShiftInviteWhatsAppMessage,
+  hasAttendedShift,
 } from './shiftInviteService';
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,7 @@ function makeChain(result: QueryResult): any {
   chain.eq = vi.fn(() => chain);
   chain.in = vi.fn(() => chain);
   chain.update = vi.fn(() => chain);
+  chain.limit = vi.fn(() => chain);
   chain.maybeSingle = vi.fn(() => Promise.resolve(result));
   chain.single = vi.fn(() => Promise.resolve(result));
   // Torna a própria cadeia "awaitable" — replica supabase-js (o builder é thenable).
@@ -155,6 +157,62 @@ describe('buildShiftInviteWhatsAppMessage', () => {
 });
 
 // ---------------------------------------------------------------------------
+// hasAttendedShift — predicado único de comparecimento (revisão pré-piloto, QA final)
+// ---------------------------------------------------------------------------
+
+describe('hasAttendedShift', () => {
+  it('false quando nenhum dos três sinais está presente', () => {
+    expect(
+      hasAttendedShift({
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: null,
+        company_checkout_confirmed_at: null,
+      }),
+    ).toBe(false);
+  });
+
+  it('true quando só worker_checkin_at está preenchido', () => {
+    expect(
+      hasAttendedShift({
+        worker_checkin_at: '2026-08-16T20:00:00.000Z',
+        company_checkin_confirmed_at: null,
+        company_checkout_confirmed_at: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('true quando só company_checkin_confirmed_at está preenchido (empresa confirmou presença, freela não usou o app)', () => {
+    expect(
+      hasAttendedShift({
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: '2026-08-16T20:05:00.000Z',
+        company_checkout_confirmed_at: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('true quando só company_checkout_confirmed_at está preenchido', () => {
+    expect(
+      hasAttendedShift({
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: null,
+        company_checkout_confirmed_at: '2026-08-16T23:00:00.000Z',
+      }),
+    ).toBe(true);
+  });
+
+  it('true quando os três sinais estão preenchidos', () => {
+    expect(
+      hasAttendedShift({
+        worker_checkin_at: '2026-08-16T20:00:00.000Z',
+        company_checkin_confirmed_at: '2026-08-16T20:05:00.000Z',
+        company_checkout_confirmed_at: '2026-08-16T23:00:00.000Z',
+      }),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ShiftInviteService.cancelInvite
 // ---------------------------------------------------------------------------
 
@@ -237,12 +295,13 @@ describe('ShiftInviteService.dismissFromShift', () => {
         id: 'app-1',
         status: 'hired',
         job_id: 'job-1',
+        worker_id: 'worker-1',
         worker_checkin_at: null,
         company_checkout_confirmed_at: null,
       },
       error: null,
     });
-    const paymentChain = makeChain({ data: null, error: null }); // sem pagamento ativo
+    const paymentChain = makeChain({ data: [], error: null }); // sem pagamento ativo (array vazio, .limit(1))
     // .select('id') no fim da cadeia de update — retorna a linha afetada.
     const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
 
@@ -260,6 +319,8 @@ describe('ShiftInviteService.dismissFromShift', () => {
 
     expect(result.success).toBe(true);
     expect(updateChain.update).toHaveBeenCalledWith({ status: 'cancelled' });
+    // Guarda de pagamento filtra por (job_id, worker_id) — não só job_id (ADR-20260816).
+    expect(paymentChain.eq).toHaveBeenCalledWith('worker_id', 'worker-1');
   });
 
   it('dispensa um freela in_progress sem pagamento ativo e sem sinal de comparecimento', async () => {
@@ -268,12 +329,13 @@ describe('ShiftInviteService.dismissFromShift', () => {
         id: 'app-2',
         status: 'in_progress',
         job_id: 'job-2',
+        worker_id: 'worker-2',
         worker_checkin_at: null,
         company_checkout_confirmed_at: null,
       },
       error: null,
     });
-    const paymentChain = makeChain({ data: null, error: null });
+    const paymentChain = makeChain({ data: [], error: null });
     const updateChain = makeChain({ data: [{ id: 'app-2' }], error: null });
 
     mockFrom.mockImplementation((table: string) => {
@@ -291,19 +353,20 @@ describe('ShiftInviteService.dismissFromShift', () => {
     expect(result.success).toBe(true);
   });
 
-  it('bloqueia o dispensar quando já existe pagamento agendado/registrado para o job', async () => {
+  it('bloqueia o dispensar quando já existe pagamento agendado/registrado para ESTE freela neste job', async () => {
     const fetchChain = makeChain({
       data: {
         id: 'app-1',
         status: 'hired',
         job_id: 'job-1',
+        worker_id: 'worker-1',
         worker_checkin_at: null,
         company_checkout_confirmed_at: null,
       },
       error: null,
     });
     const paymentChain = makeChain({
-      data: { id: 'payment-1', status: 'recorded' },
+      data: [{ id: 'payment-1', status: 'recorded' }],
       error: null,
     });
 
@@ -322,6 +385,46 @@ describe('ShiftInviteService.dismissFromShift', () => {
     expect(result.success).toBe(false);
     expect(result.blockedByPayment).toBe(true);
     expect(result.error).toMatch(/Estorne o pagamento/);
+  });
+
+  // -------------------------------------------------------------------------
+  // Caso central do ADR-20260816: turno com DOIS freelas. O pagamento ativo de
+  // um NÃO pode travar o dispensar do outro — a guarda filtra por (job_id, worker_id),
+  // não por job_id sozinho. Continua válido depois da migration
+  // 20260816220000 (hoje o banco só permite 1 marcador ativo por job; o teste usa mock).
+  // -------------------------------------------------------------------------
+  it('NÃO bloqueia o dispensar do freela B quando o pagamento ativo é do freela A (mesmo job)', async () => {
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-b',
+        status: 'hired',
+        job_id: 'job-1',
+        worker_id: 'worker-B',
+        worker_checkin_at: null,
+        company_checkout_confirmed_at: null,
+      },
+      error: null,
+    });
+    // A guarda consulta shift_payments filtrando por (job_id, worker_id=worker-B) — o
+    // pagamento existente é do worker-A, então a query (que a RLS/filtro real restringiria)
+    // não deve "achar" nada para worker-B. O mock simula esse resultado já filtrado: vazio.
+    const paymentChain = makeChain({ data: [], error: null });
+    const updateChain = makeChain({ data: [{ id: 'app-b' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return { select: fetchChain.select, update: updateChain.update };
+      }
+      if (table === 'shift_payments') {
+        return { select: paymentChain.select };
+      }
+      throw new Error(`tabela inesperada: ${table}`);
+    });
+
+    const result = await ShiftInviteService.dismissFromShift('app-b');
+
+    expect(result.success).toBe(true);
+    expect(paymentChain.eq).toHaveBeenCalledWith('worker_id', 'worker-B');
   });
 
   it('rejeita transição quando o status atual não é hired nem in_progress', async () => {
@@ -383,7 +486,40 @@ describe('ShiftInviteService.dismissFromShift', () => {
         status: 'in_progress',
         job_id: 'job-1',
         worker_checkin_at: null,
+        company_checkin_confirmed_at: null,
         company_checkout_confirmed_at: '2026-08-16T23:00:00.000Z',
+      },
+      error: null,
+    });
+    const updateChain = makeChain({ data: [{ id: 'app-1' }], error: null });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'applications') {
+        return { select: fetchChain.select, update: updateChain.update };
+      }
+      throw new Error(`tabela inesperada (não deveria consultar shift_payments): ${table}`);
+    });
+
+    const result = await ShiftInviteService.dismissFromShift('app-1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/turno já foi cumprido/);
+    expect(updateChain.update).not.toHaveBeenCalled();
+  });
+
+  // Regressão (QA final, rodada seguinte): a guarda anterior só olhava worker_checkin_at
+  // e company_checkout_confirmed_at — deixava "Dispensar" disponível depois de
+  // "Confirmar Presença" (company_checkin_confirmed_at) sem o freela ter batido check-in no
+  // app, que é o caminho CANÔNICO do modo A (freela que não usa o app).
+  it('bloqueia o dispensar quando só a empresa confirmou a CHEGADA (company_checkin_confirmed_at, sem checkin do freela)', async () => {
+    const fetchChain = makeChain({
+      data: {
+        id: 'app-1',
+        status: 'in_progress',
+        job_id: 'job-1',
+        worker_checkin_at: null,
+        company_checkin_confirmed_at: '2026-08-16T20:05:00.000Z',
+        company_checkout_confirmed_at: null,
       },
       error: null,
     });
@@ -409,12 +545,13 @@ describe('ShiftInviteService.dismissFromShift', () => {
         id: 'app-1',
         status: 'hired',
         job_id: 'job-1',
+        worker_id: 'worker-1',
         worker_checkin_at: null,
         company_checkout_confirmed_at: null,
       },
       error: null,
     });
-    const paymentChain = makeChain({ data: null, error: null });
+    const paymentChain = makeChain({ data: [], error: null });
     const updateChain = makeChain({ data: [], error: null });
 
     mockFrom.mockImplementation((table: string) => {

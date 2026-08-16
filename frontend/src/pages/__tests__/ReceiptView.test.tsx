@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ReceiptView from '../ReceiptView'
 import { PaymentRecordService } from '../../services/paymentRecordService'
@@ -38,7 +38,10 @@ function buildChain(overrides: Record<string, unknown> = {}) {
   return { ...chain, ...overrides }
 }
 
-function baseReceipt(overrides: Partial<ShiftPaymentReceipt['payment']> = {}): ShiftPaymentReceipt {
+function baseReceipt(
+  overrides: Partial<ShiftPaymentReceipt['payment']> = {},
+  workerOverrides: Partial<NonNullable<ShiftPaymentReceipt['worker']>> = {},
+): ShiftPaymentReceipt {
   return {
     payment: {
       id: 'pay-1',
@@ -68,7 +71,7 @@ function baseReceipt(overrides: Partial<ShiftPaymentReceipt['payment']> = {}): S
       work_end_time: '02:00',
     },
     company: { id: 'company-1', name: 'Bar do Zé', logo_url: null },
-    worker: { id: 'worker-1', full_name: 'João Silva', avatar_url: null },
+    worker: { id: 'worker-1', full_name: 'João Silva', avatar_url: null, ...workerOverrides },
   }
 }
 
@@ -88,6 +91,83 @@ beforeEach(() => {
     data: { user: { id: 'worker-1' } },
     error: null,
   } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+})
+
+// ---------------------------------------------------------------------------
+// ADR-20260816 — filtro `?worker=` (exibição, nunca autorização) + nome do freela no
+// cabeçalho, para que um turno com N recibos nunca seja ambíguo.
+// ---------------------------------------------------------------------------
+
+describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () => {
+  it('repassa o workerId da querystring para getReceipt(jobId, workerId)', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+
+    render(
+      <MemoryRouter initialEntries={['/recibo/job-1?worker=worker-1']}>
+        <Routes>
+          <Route path="/recibo/:jobId" element={<ReceiptView />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(PaymentRecordService.getReceipt).toHaveBeenCalledWith('job-1', 'worker-1')
+    })
+  })
+
+  it('sem ?worker= na URL, chama getReceipt(jobId, undefined) — resolução fica a cargo do service', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+
+    renderComponent('job-1')
+
+    await waitFor(() => {
+      expect(PaymentRecordService.getReceipt).toHaveBeenCalledWith('job-1', undefined)
+    })
+  })
+
+  it('exibe o nome do freela logo abaixo do título — turno com N recibos nunca fica ambíguo', async () => {
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(
+      baseReceipt({}, { id: 'worker-2', full_name: 'Beltrana Segunda', avatar_url: null })
+    )
+    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+
+    render(
+      <MemoryRouter initialEntries={['/recibo/job-1?worker=worker-2']}>
+        <Routes>
+          <Route path="/recibo/:jobId" element={<ReceiptView />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Recibo de Pagamento/i })).toBeInTheDocument()
+    })
+    // O nome fica no MESMO bloco do título (não só na grade "Freela" mais abaixo) —
+    // desambigua um turno com N recibos sem precisar rolar a página.
+    const headerBlock = screen.getByRole('heading', { name: /Recibo de Pagamento/i }).parentElement as HTMLElement
+    expect(within(headerBlock).getByText('Beltrana Segunda')).toBeInTheDocument()
+  })
+
+  it('workerId alheio: getReceipt (mock) devolve null (RLS não devolveria a linha) — tela mostra "não encontrado", nunca o recibo de outro freela', async () => {
+    // O service já garante isso (não é a UI que filtra) — este teste documenta a UI honrando
+    // um `null` do service como "não encontrado", sem tentar adivinhar outro recibo.
+    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(null)
+    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+
+    render(
+      <MemoryRouter initialEntries={['/recibo/job-1?worker=worker-DE-OUTRO-FREELA']}>
+        <Routes>
+          <Route path="/recibo/:jobId" element={<ReceiptView />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Recibo não encontrado')).toBeInTheDocument()
+    })
+  })
 })
 
 describe('ReceiptView - Horas trabalhadas', () => {

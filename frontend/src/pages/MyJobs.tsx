@@ -15,9 +15,15 @@ import type { ReviewDirection } from '../types';
 
 type Step = { label: string; status: 'complete' | 'active' | 'pending' }
 
-function computeWorkerSteps(job: JobApplication): Step[] {
-    const checkinDone = !!job.worker_checkin_at;
-    const checkoutDone = !!job.worker_checkout_at;
+// Exportado para teste direto da lógica pura (evita duplicar/driftar como aconteceu em
+// CompanyJobCandidates → JobLifecycleStepper.test.tsx). A empresa pode registrar chegada/saída
+// unilateralmente (freela não mexeu no app) — por isso "feito" considera os DOIS lados, nunca
+// só `worker_*`, senão o freela vê um CTA ativo (e um stepper contraditório) para uma etapa que
+// a empresa já fechou.
+// eslint-disable-next-line react-refresh/only-export-components -- função pura reaproveitada pelo teste (evita novo arquivo fora do escopo desta mudança)
+export function computeWorkerSteps(job: JobApplication): Step[] {
+    const checkinDone = !!(job.worker_checkin_at || job.company_checkin_confirmed_at);
+    const checkoutDone = !!(job.worker_checkout_at || job.company_checkout_confirmed_at);
     const companyConfirmed = !!job.company_checkout_confirmed_at;
 
     return [
@@ -44,7 +50,7 @@ function computeWorkerSteps(job: JobApplication): Step[] {
     ];
 }
 
-interface JobApplication {
+export interface JobApplication {
     id: string;
     job_id: string;
     status: string;
@@ -310,17 +316,26 @@ export default function MyJobs() {
     };
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
-    // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel).
+    // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
+    // trigger só dispara se a linha realmente mudou. Sob RLS um UPDATE que não casa com o
+    // USING retorna 0 linhas sem erro (PostgREST 204) — sem `.select()` a UI mentiria "a
+    // empresa foi avisada" quando ninguém foi avisado (padrão obrigatório, patterns.md).
     const handleCancelShift = async () => {
         if (!cancelJob) return;
         setCancelLoading(true);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ status: 'cancelled' })
-                .eq('id', cancelJob.id);
+                .eq('id', cancelJob.id)
+                .select('id');
 
             if (error) throw error;
+
+            if (!data || data.length === 0) {
+                addToast('Não foi possível cancelar este turno. Atualize a página e tente novamente.', 'error');
+                return;
+            }
 
             setCancelJob(null);
             addToast('Turno cancelado. A empresa foi avisada.', 'success');
@@ -635,7 +650,13 @@ export default function MyJobs() {
                         </div>
                         <div className="flex flex-col gap-3 mt-3">
                             <div className="flex flex-col gap-3 min-w-[200px]">
-                                {!job.worker_checkin_at ? (
+                                {/* A empresa pode registrar chegada/saída sem o freela tocar no app
+                                    (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
+                                    `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
+                                    ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
+                                    o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
+                                    quando presente, mesmo em turno já pago). */}
+                                {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
                                     <button
                                         onClick={() => handleCheckin(job.id)}
                                         disabled={actionLoading === job.id}
@@ -647,10 +668,15 @@ export default function MyJobs() {
                                             <><Play size={18} /> Check-in</>
                                         )}
                                     </button>
-                                ) : (
+                                ) : job.worker_checkin_at ? (
                                     <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                                         <CheckCircle2 size={16} />
                                         Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
+                                    </div>
+                                ) : (
+                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                                        <CheckCircle2 size={16} />
+                                        Empresa registrou sua chegada
                                     </div>
                                 )}
 
@@ -664,7 +690,7 @@ export default function MyJobs() {
                                     </div>
                                 )}
 
-                                {job.worker_checkin_at && !job.worker_checkout_at && (
+                                {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
                                     <button
                                         onClick={() => handleCheckout(job.id)}
                                         disabled={actionLoading === job.id}
@@ -682,6 +708,13 @@ export default function MyJobs() {
                                     <div className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                                         <CheckCircle2 size={16} />
                                         Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
+                                    </div>
+                                )}
+
+                                {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
+                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                                        <CheckCircle2 size={16} />
+                                        Empresa registrou sua saída
                                     </div>
                                 )}
 

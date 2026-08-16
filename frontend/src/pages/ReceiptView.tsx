@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
@@ -86,6 +86,11 @@ export default function ReceiptView() {
     const { jobId } = useParams<{ jobId: string }>();
     const navigate = useNavigate();
     const { addToast } = useToast();
+    // ADR-20260816 — filtro de EXIBIÇÃO (qual freela, quando o turno tem mais de um), NUNCA
+    // autorização: a RLS de `shift_payments` (sp_select_participants) decide o que a sessão
+    // pode ver. Um `worker` alheio não vaza nada — `getReceipt` simplesmente não acha a linha.
+    const [searchParams] = useSearchParams();
+    const workerIdParam = searchParams.get('worker');
 
     const [loading, setLoading] = useState(true);
     const [receipt, setReceipt] = useState<ShiftPaymentReceipt | null>(null);
@@ -97,8 +102,8 @@ export default function ReceiptView() {
 
     useEffect(() => {
         if (jobId) fetchReceipt();
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId muda
-    }, [jobId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId/worker mudam
+    }, [jobId, workerIdParam]);
 
     const fetchReceipt = async () => {
         // G3: guarda de id falsy — evita `shift_payments?job_id=eq.null` mesmo se essa função
@@ -110,7 +115,7 @@ export default function ReceiptView() {
             if (!user) { navigate('/login'); return; }
             setCurrentUserId(user.id);
 
-            const data = await PaymentRecordService.getReceipt(jobId);
+            const data = await PaymentRecordService.getReceipt(jobId, workerIdParam ?? undefined);
             setReceipt(data);
 
             // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte
@@ -229,6 +234,9 @@ export default function ReceiptView() {
                     <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
                         {isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'}
                     </h1>
+                    {/* Nome do freela logo abaixo do título — turno com mais de um freela nunca
+                        fica ambíguo sobre de quem é este recibo (ADR-20260816). */}
+                    <p className="text-sm font-black mt-1">{worker?.full_name || 'Freela não identificado'}</p>
                     <p className="text-xs font-bold text-gray-400 uppercase mt-1">Registro Worki (declaratório)</p>
                 </div>
 

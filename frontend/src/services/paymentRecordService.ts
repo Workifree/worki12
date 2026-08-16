@@ -184,6 +184,30 @@ function normalizePaidAt(paidAt?: string | Date): string {
   return typeof paidAt === 'string' ? paidAt : paidAt.toISOString();
 }
 
+/** Projeção reutilizada pelas três consultas de `getReceipt` (ADR-20260816). */
+const RECEIPT_SELECT = `
+  *,
+  job:jobs ( id, title, location, start_date, work_start_time, work_end_time ),
+  company:companies ( id, name, logo_url ),
+  worker:workers ( id, full_name, avatar_url )
+`;
+
+/** Achata a linha (com joins) de `shift_payments` no shape de `ShiftPaymentReceipt`. */
+function mapReceiptRow(data: unknown): ShiftPaymentReceipt | null {
+  if (!data) return null;
+  const { job, company, worker, ...paymentFields } = data as ShiftPayment & {
+    job: ShiftPaymentReceipt['job'];
+    company: ShiftPaymentReceipt['company'];
+    worker: ShiftPaymentReceipt['worker'];
+  };
+  return {
+    payment: paymentFields as ShiftPayment,
+    job: job ?? null,
+    company: company ?? null,
+    worker: worker ?? null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // PaymentRecordService (exportado)
 // ---------------------------------------------------------------------------
@@ -399,18 +423,26 @@ export const PaymentRecordService = {
   },
 
   /**
-   * Busca o marcador ATIVO ('scheduled' ou 'recorded') de um turno, se existir.
-   * Usado pela UI para decidir entre "Registrar/Agendar pagamento", "Marcar como pago" ou
-   * "Ver recibo/comprovante". O UNIQUE parcial garante no máximo 1 linha ativa por job_id.
+   * Busca o marcador ATIVO ('scheduled' ou 'recorded') de um (turno, freela), se existir.
+   *
+   * ADR-20260816 — `workerId` é OBRIGATÓRIO (não opcional): filtrar por `(job_id, worker_id)`
+   * garante no máximo 1 linha em QUALQUER estado do banco — hoje, sob o UNIQUE parcial
+   * `(job_id)`, um turno já tem no máximo 1 linha ativa no total (que bate ou não com o
+   * worker pedido); depois da migration `20260816220000` (UNIQUE `(job_id, worker_id)`),
+   * pode haver 1 linha ativa POR freela. Sem o filtro de worker o `.maybeSingle()` abaixo
+   * viraria PGRST116 (erro) assim que dois freelas do mesmo turno tivessem marcador ativo —
+   * exatamente o beco que o ADR corrige. Uso pontual (ex.: validação defensiva de um freela
+   * específico); a tela da empresa usa `listActivePaymentsByJob` para ver TODOS os freelas.
    */
-  async getPaymentByJob(jobId: string): Promise<ShiftPayment | null> {
+  async getPaymentByJob(jobId: string, workerId: string): Promise<ShiftPayment | null> {
     // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
-    if (!jobId) return null;
+    if (!jobId || !workerId) return null;
     try {
       const { data, error } = await supabase
         .from('shift_payments')
         .select('*')
         .eq('job_id', jobId)
+        .eq('worker_id', workerId)
         .in('status', ['scheduled', 'recorded'])
         .maybeSingle();
 
@@ -426,46 +458,113 @@ export const PaymentRecordService = {
   },
 
   /**
-   * Busca o marcador ativo do turno + dados leves para renderizar o recibo
-   * (empresa, freela, turno). Só-leitura sob RLS — quem não é parte (nem empresa
-   * dona nem freela pago) recebe null.
+   * Lista TODOS os marcadores ATIVOS ('scheduled' ou 'recorded') de um turno — um por freela
+   * quando o turno tem mais de um contratado (ADR-20260816). Mais antigo primeiro.
+   *
+   * Usada pela tela da empresa (`CompanyJobCandidates`) para montar o mapa
+   * `paymentByWorker: Record<worker_id, ShiftPayment>` — cada card do freela olha só a
+   * própria entrada, nunca a de outro. Compatível com o banco ATUAL (no máximo 1 linha,
+   * mesmo comportamento de antes) e com o FUTURO (0..N linhas, uma por freela) sem
+   * nenhuma outra mudança de chamador.
    */
-  async getReceipt(jobId: string): Promise<ShiftPaymentReceipt | null> {
+  async listActivePaymentsByJob(jobId: string): Promise<ShiftPayment[]> {
     // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
-    if (!jobId) return null;
+    if (!jobId) return [];
     try {
       const { data, error } = await supabase
         .from('shift_payments')
-        .select(
-          `
-          *,
-          job:jobs ( id, title, location, start_date, work_start_time, work_end_time ),
-          company:companies ( id, name, logo_url ),
-          worker:workers ( id, full_name, avatar_url )
-        `,
-        )
+        .select('*')
         .eq('job_id', jobId)
         .in('status', ['scheduled', 'recorded'])
-        .maybeSingle();
+        .order('created_at', { ascending: true });
 
       if (error) {
-        logError('paymentRecord.getReceipt', error);
+        logError('paymentRecord.listActivePaymentsByJob', error);
+        return [];
+      }
+      return (data as ShiftPayment[]) ?? [];
+    } catch (err) {
+      logError('paymentRecord.listActivePaymentsByJob', err);
+      return [];
+    }
+  },
+
+  /**
+   * Busca o marcador ativo de um turno + dados leves para renderizar o recibo (empresa,
+   * freela, turno). Só-leitura sob RLS — quem não é parte (nem empresa dona nem freela
+   * pago) recebe null. `/recibo/:jobId` não muda de contrato (link já persistido em
+   * notificações — ver ADR-20260816); a desambiguação entre freelas do mesmo turno é feita
+   * AQUI, pelo espectador, não na rota.
+   *
+   * `workerId` é filtro de EXIBIÇÃO, NUNCA autorização — quem autoriza é a RLS
+   * (`sp_select_participants`). Passar um `worker_id` alheio (de outro freela, ou de um
+   * turno onde o usuário não é parte) não vaza nada: a policy não devolve a linha, e este
+   * método retorna null exatamente como se o registro não existisse.
+   *
+   * Resolução (ADR-20260816):
+   *  1. `workerId` explícito (`?worker=` — a empresa sempre chega aqui a partir do card de
+   *     UM freela específico): filtra por ele.
+   *  2. Sem `workerId`: tenta resolver como o PRÓPRIO freela (`worker_id = auth.uid()`) —
+   *     cobre o link enviado por notificação ao freela, que nunca leva o parâmetro.
+   *  3. Ainda sem resultado (o usuário não é o freela de nenhum marcador ativo deste turno —
+   *     tipicamente a empresa acessando um link antigo, sem `?worker=`): cai para o marcador
+   *     ativo mais antigo que a RLS deixar essa sessão enxergar, de forma determinística.
+   */
+  async getReceipt(jobId: string, workerId?: string): Promise<ShiftPaymentReceipt | null> {
+    // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
+    if (!jobId) return null;
+    try {
+      if (workerId) {
+        const { data, error } = await supabase
+          .from('shift_payments')
+          .select(RECEIPT_SELECT)
+          .eq('job_id', jobId)
+          .in('status', ['scheduled', 'recorded'])
+          .eq('worker_id', workerId)
+          .maybeSingle();
+
+        if (error) {
+          logError('paymentRecord.getReceipt', error);
+          return null;
+        }
+        return mapReceiptRow(data);
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      // 2. Tenta como o próprio freela (caso mais comum sem `?worker=`).
+      const { data: ownRow, error: ownErr } = await supabase
+        .from('shift_payments')
+        .select(RECEIPT_SELECT)
+        .eq('job_id', jobId)
+        .in('status', ['scheduled', 'recorded'])
+        .eq('worker_id', user.id)
+        .maybeSingle();
+
+      if (ownErr) {
+        logError('paymentRecord.getReceipt', ownErr);
         return null;
       }
-      if (!data) return null;
+      if (ownRow) return mapReceiptRow(ownRow);
 
-      const { job, company, worker, ...paymentFields } = data as ShiftPayment & {
-        job: ShiftPaymentReceipt['job'];
-        company: ShiftPaymentReceipt['company'];
-        worker: ShiftPaymentReceipt['worker'];
-      };
+      // 3. Fallback determinístico (empresa em link antigo, sem `?worker=`) — RLS decide o
+      // que essa sessão pode ver; sem vínculo nenhum, `rows` volta vazio.
+      const { data: rows, error: fallbackErr } = await supabase
+        .from('shift_payments')
+        .select(RECEIPT_SELECT)
+        .eq('job_id', jobId)
+        .in('status', ['scheduled', 'recorded'])
+        .order('created_at', { ascending: true })
+        .limit(1);
 
-      return {
-        payment: paymentFields as ShiftPayment,
-        job: job ?? null,
-        company: company ?? null,
-        worker: worker ?? null,
-      };
+      if (fallbackErr) {
+        logError('paymentRecord.getReceipt', fallbackErr);
+        return null;
+      }
+      return mapReceiptRow(rows?.[0] ?? null);
     } catch (err) {
       logError('paymentRecord.getReceipt', err);
       return null;

@@ -5,7 +5,7 @@ import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
-import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage } from '../../services/shiftInviteService';
+import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { logError } from '../../lib/logger';
 import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -99,8 +99,10 @@ export default function CompanyJobCandidates() {
     // Sem entrada no map = turno sem escrow (modo A); 'prepaid'/'postpaid' = caminho de escrow existente.
     const [escrowKindMap, setEscrowKindMap] = useState<Record<string, 'prepaid' | 'postpaid'>>({});
     const [jobBudget, setJobBudget] = useState(0);
-    // Registro de pagamento externo (modo A) já feito para ESTE job (UNIQUE por job_id no schema).
-    const [shiftPayment, setShiftPayment] = useState<ShiftPayment | null>(null);
+    // Registro de pagamento externo (modo A) por freela (ADR-20260816 — o marcador é por
+    // (job_id, worker_id), não mais por job_id sozinho: um turno com N freelas tem N
+    // marcadores independentes). Cada card olha só a própria entrada deste mapa.
+    const [paymentByWorker, setPaymentByWorker] = useState<Record<string, ShiftPayment>>({});
 
     // Dados do turno + empresa usados só para montar a mensagem pronta do WhatsApp (onda 3).
     const [jobLocation, setJobLocation] = useState('');
@@ -221,9 +223,13 @@ export default function CompanyJobCandidates() {
             setEscrowStatusMap(statusMap);
             setEscrowKindMap(kindMap);
 
-            // Modo A: existe registro de pagamento externo já feito para este turno?
-            const payment = await PaymentRecordService.getPaymentByJob(id);
-            setShiftPayment(payment);
+            // Modo A: registros de pagamento externo já feitos para este turno — um por
+            // freela (ADR-20260816). `listActivePaymentsByJob` devolve 0..N linhas; hoje
+            // (banco ainda sem a migration) no máximo 1, mas o mapa já fica pronto para N.
+            const payments = await PaymentRecordService.listActivePaymentsByJob(id);
+            const byWorker: Record<string, ShiftPayment> = {};
+            payments.forEach((p) => { byWorker[p.worker_id] = p; });
+            setPaymentByWorker(byWorker);
         } catch (error) {
             logError('CompanyJobCandidates', error);
         } finally {
@@ -430,7 +436,7 @@ export default function CompanyJobCandidates() {
 
             if (!result.success) {
                 if (result.alreadyRecorded) {
-                    addToast('Este turno já tem um pagamento registrado. Veja o recibo.', 'info');
+                    addToast('Este freela já tem um pagamento registrado neste turno. Veja o recibo.', 'info');
                     closePaymentModal();
                     fetchCandidates();
                     return;
@@ -488,7 +494,7 @@ export default function CompanyJobCandidates() {
 
             if (!result.success) {
                 if (result.alreadyActive) {
-                    addToast('Este turno já tem um pagamento registrado ou agendado. Veja o comprovante.', 'info');
+                    addToast('Este freela já tem um pagamento registrado ou agendado neste turno. Veja o comprovante.', 'info');
                     closeScheduleModal();
                     fetchCandidates();
                     return;
@@ -636,18 +642,27 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — ver `cancelInvite`/
+    // `dismissFromShift` em shiftInviteService.ts): sob RLS, um UPDATE cuja linha não casa mais
+    // com a policy USING não gera erro — retorna 0 linhas (PostgREST 204). Sem checar `data`, a
+    // tela reportaria "confirmada" mesmo quando o banco não mudou nada.
     const handleConfirmCheckin = async (appId: string) => {
         setConfirmingCheckin(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
-                .update({ 
+                .update({
                     company_checkin_confirmed_at: new Date().toISOString(),
                     status: 'in_progress'
                 })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível confirmar a chegada deste freela.', 'error');
+                return;
+            }
             addToast('Chegada confirmada!', 'success');
             fetchCandidates();
         } catch (error) {
@@ -661,12 +676,20 @@ export default function CompanyJobCandidates() {
     const handleConfirmCheckout = async (appId: string) => {
         setConfirmingCheckin(appId);
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .update({ company_checkout_confirmed_at: new Date().toISOString() })
-                .eq('id', appId);
+                .eq('id', appId)
+                .select('id');
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                addToast('Não foi possível confirmar a saída deste freela.', 'error');
+                return;
+            }
+            // Este gesto destrava "Registrar Pagamento" — merece confirmação visível, não só
+            // um refetch silencioso (a empresa precisa saber que já pode seguir o fluxo).
+            addToast('Saída confirmada!', 'success');
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
@@ -720,7 +743,7 @@ export default function CompanyJobCandidates() {
                 Marcar como pago
             </button>
             <button
-                onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}`); }}
+                onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}?worker=${payment.worker_id}`); }}
                 className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
             >
                 <Receipt size={14} /> Ver Comprovante
@@ -743,14 +766,11 @@ export default function CompanyJobCandidates() {
                 </button>
             );
         }
-        const matchingPayment =
-            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
-                ? shiftPayment
-                : null;
+        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
         if (matchingPayment?.status === 'recorded') {
             return (
                 <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
                     className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                 >
                     <Receipt size={14} /> Ver Recibo
@@ -1007,12 +1027,15 @@ export default function CompanyJobCandidates() {
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
 
                                                             {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
-                                                                "Dispensar" é para ANTES do turno acontecer. Uma vez que o freela já
-                                                                compareceu (checkin próprio) ou a empresa já confirmou a saída, dispensar
+                                                                "Dispensar" é para ANTES do turno acontecer. `hasAttendedShift` (mesmo
+                                                                predicado usado por shiftInviteService.dismissFromShift — nunca replicado
+                                                                condição a condição) cobre os TRÊS sinais de comparecimento, incluindo
+                                                                "empresa confirmou a chegada" mesmo sem o freela ter batido check-in no
+                                                                app (o caminho canônico do modo A). Sem qualquer um dos três, dispensar
                                                                 deixaria um turno trabalhado sem pagamento e sem recibo, e a application
                                                                 'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
                                                                 ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar). */}
-                                                            {!(app.worker_checkin_at || app.company_checkout_confirmed_at) && (
+                                                            {!hasAttendedShift(app) && (
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
                                                                     className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
@@ -1025,14 +1048,11 @@ export default function CompanyJobCandidates() {
 
                                                     {/* Turno finalizado via modo A (pagamento externo) — ramifica por status do marcador. */}
                                                     {app.status === 'completed' && !escrowKindMap[app.id] && (() => {
-                                                        const matchingPayment =
-                                                            shiftPayment && shiftPayment.job_id === app.job_id && shiftPayment.worker_id === app.worker_id
-                                                                ? shiftPayment
-                                                                : null;
+                                                        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
                                                         if (matchingPayment?.status === 'recorded') {
                                                             return (
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}`); }}
+                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
                                                                     className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                                                                 >
                                                                     <Receipt size={14} /> Ver Recibo
@@ -1387,7 +1407,7 @@ export default function CompanyJobCandidates() {
                                         Fechar
                                     </button>
                                     <button
-                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}`)}
+                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}?worker=${paymentModalApp.worker_id}`)}
                                         className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Receipt size={16} /> Ver Recibo
@@ -1532,7 +1552,7 @@ export default function CompanyJobCandidates() {
                                         Fechar
                                     </button>
                                     <button
-                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}`)}
+                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}?worker=${scheduleModalApp.worker_id}`)}
                                         className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Receipt size={16} /> Ver Comprovante
