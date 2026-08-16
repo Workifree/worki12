@@ -33,8 +33,9 @@ export default function WorkerOnboarding() {
     });
 
     const rolesList = [
-        'Garçom', 'Cozinheiro', 'Barman', 'Atendente',
-        'Limpeza', 'Recepcionista', 'Promotor', 'Entregador', 'Segurança'
+        'Garçom', 'Atendente', 'Barista', 'Bartender', 'Cozinheiro',
+        'Auxiliar de Cozinha', 'Cumim', 'Recepcionista', 'Caixa',
+        'Copeiro', 'Limpeza / Steward', 'Segurança'
     ];
 
     const availabilityOptions = [

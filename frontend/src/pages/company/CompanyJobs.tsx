@@ -325,6 +325,11 @@ export default function CompanyJobs() {
                                                     {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Finalizado' : 'Aguardando resposta'}
                                                 </span>
                                             </div>
+                                            {job.freela.state === 'confirmed' && (
+                                                <span className="ml-1 bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded-lg font-black uppercase text-[10px] flex items-center gap-1 transition-colors">
+                                                    <PlayCircle size={12} /> Presença
+                                                </span>
+                                            )}
                                         </button>
                                     ) : (job.status === 'open' || job.status === 'paused') ? (
                                         <button

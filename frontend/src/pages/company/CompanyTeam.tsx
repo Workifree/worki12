@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff } from 'lucide-react';
+import { Users, Link2, Phone, QrCode, Check, Clock, Star, Briefcase, X, Loader2, UserPlus, Share2, CameraOff, Trash2, AlertTriangle } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useToast } from '../../contexts/ToastContext';
@@ -36,9 +36,10 @@ function extractInviteToken(raw: string): string {
 
 interface MemberCardProps {
   member: TeamMember;
+  onRemove: (member: TeamMember) => void;
 }
 
-function MemberCard({ member }: MemberCardProps) {
+function MemberCard({ member, onRemove }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
@@ -96,19 +97,29 @@ function MemberCard({ member }: MemberCardProps) {
         </div>
       </div>
 
-      {/* Status badge + repassar link */}
+      {/* Status badge + repassar link + remover */}
       <div className="flex flex-col items-end gap-2 flex-shrink-0">
         <span className="bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
           Elenco
         </span>
-        <button
-          onClick={handleShareLink}
-          aria-label={`Repassar link do freela ${worker.full_name}`}
-          title="Repassar link deste freela para outra empresa"
-          className="p-1.5 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
-        >
-          {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleShareLink}
+            aria-label={`Repassar link do freela ${worker.full_name}`}
+            title="Repassar link deste freela para outra empresa"
+            className="p-1.5 rounded-xl text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
+          >
+            {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
+          </button>
+          <button
+            onClick={() => onRemove(member)}
+            aria-label={`Remover freela ${worker.full_name} do elenco`}
+            title="Remover este freela do seu elenco"
+            className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -471,8 +482,21 @@ function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, addWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, addWorker, removeWorker, refresh } = useCompanyTeam();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmRemove = async () => {
+    if (!removingMember) return;
+    setIsDeleting(true);
+    try {
+      await removeWorker(removingMember.worker.id);
+      setRemovingMember(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -517,7 +541,11 @@ export default function CompanyTeam() {
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {teamMembers.map((member) => (
-              <MemberCard key={member.connection.id} member={member} />
+              <MemberCard
+                key={member.connection.id}
+                member={member}
+                onRemove={(m) => setRemovingMember(m)}
+              />
             ))}
           </div>
         </section>
@@ -562,6 +590,41 @@ export default function CompanyTeam() {
           onAdded={refresh}
           addWorker={addWorker}
         />
+      )}
+
+      {/* Modal de Confirmação de Remoção */}
+      {removingMember && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget && !isDeleting) setRemovingMember(null); }}
+        >
+          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 className="text-xl font-black uppercase mb-2">Remover do Elenco?</h3>
+            <p className="text-sm font-bold text-gray-600 mb-6">
+              Tem certeza que deseja remover <span className="text-black font-black">{removingMember.worker.full_name}</span> do seu elenco? Você poderá convidá-lo novamente depois.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRemovingMember(null)}
+                disabled={isDeleting}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-black py-3 rounded-xl font-black uppercase text-xs transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmRemove}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                {isDeleting ? 'Removendo...' : 'Remover'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

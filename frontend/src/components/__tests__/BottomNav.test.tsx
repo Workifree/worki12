@@ -28,7 +28,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toBeInTheDocument()
     expect(screen.getByLabelText('Elenco')).toBeInTheDocument()
     expect(screen.getByLabelText('Criar')).toBeInTheDocument()
-    expect(screen.getByLabelText('Carteira')).toBeInTheDocument()
+    expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
 
@@ -63,7 +63,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/company/dashboard')
     expect(screen.getByLabelText('Elenco')).toHaveAttribute('href', '/company/team')
     expect(screen.getByLabelText('Criar')).toHaveAttribute('href', '/company/create')
-    expect(screen.getByLabelText('Carteira')).toHaveAttribute('href', '/company/wallet')
+    expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/company/jobs')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/company/profile')
   })
 

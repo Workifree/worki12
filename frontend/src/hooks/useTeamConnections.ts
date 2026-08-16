@@ -29,6 +29,8 @@ export interface UseCompanyTeamResult {
   companyId: string;
   /** Adicionar worker via QR/link/phone. */
   addWorker: (workerId: string, source: TeamConnectionSource) => Promise<boolean>;
+  /** Remover worker do elenco da empresa. */
+  removeWorker: (workerId: string) => Promise<boolean>;
   /** Recarregar dados. */
   refresh: () => void;
 }
@@ -122,7 +124,23 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     [addToast, load],
   );
 
-  return { teamMembers, pendingConnections, loading, companyId, addWorker, refresh: load };
+  const removeWorker = useCallback(
+    async (workerId: string): Promise<boolean> => {
+      const result = await TeamConnectionService.removeFromTeam(workerId);
+
+      if (result.error) {
+        addToast(result.error, 'error');
+        return false;
+      }
+
+      addToast('Freela removido do elenco.', 'success');
+      load();
+      return true;
+    },
+    [addToast, load],
+  );
+
+  return { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh: load };
 }
 
 // ---------------------------------------------------------------------------

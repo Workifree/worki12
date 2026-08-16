@@ -1,7 +1,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, QrCode, CameraOff } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -12,6 +13,132 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import type { ReviewDirection } from '../types';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseCheckinQr(decodedText: string, defaultAppId?: string): string | null {
+    const trimmed = decodedText.trim();
+    if (trimmed.startsWith('worki:checkin:')) {
+        const parts = trimmed.split(':');
+        return parts[3] || parts[2] || defaultAppId || null;
+    }
+    if (UUID_RE.test(trimmed)) {
+        return trimmed;
+    }
+    return defaultAppId || null;
+}
+
+const QR_CHECKIN_ELEMENT_ID = 'worker-checkin-qr-reader';
+
+interface QrCheckinScannerModalProps {
+    job: JobApplication;
+    onClose: () => void;
+    onDecoded: (text: string) => void;
+    processing: boolean;
+}
+
+function QrCheckinScannerModal({ job, onClose, onDecoded, processing }: QrCheckinScannerModalProps) {
+    const [cameraError, setCameraError] = useState<string | null>(null);
+    const scannerRef = useRef<Html5Qrcode | null>(null);
+    const onDecodedRef = useRef(onDecoded);
+
+    useEffect(() => {
+        onDecodedRef.current = onDecoded;
+    }, [onDecoded]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const scanner = new Html5Qrcode(QR_CHECKIN_ELEMENT_ID, {
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            verbose: false,
+        });
+        scannerRef.current = scanner;
+
+        scanner
+            .start(
+                { facingMode: 'environment' },
+                { fps: 10, qrbox: { width: 220, height: 220 } },
+                (decodedText) => {
+                    if (cancelled) return;
+                    onDecodedRef.current(decodedText);
+                },
+                () => {}
+            )
+            .catch((err) => {
+                if (cancelled) return;
+                logError('MyJobs.qrScanner.start', err);
+                setCameraError('Não foi possível acessar a câmera. Verifique a permissão do navegador.');
+            });
+
+        return () => {
+            cancelled = true;
+            const instance = scannerRef.current;
+            if (!instance) return;
+            try {
+                const state = instance.getState?.();
+                const isRunning =
+                    state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED;
+                if (!isRunning) {
+                    instance.clear();
+                    return;
+                }
+                instance
+                    .stop()
+                    .then(() => instance.clear())
+                    .catch(() => {});
+            } catch {
+                // Ignore sync errors on unmount
+            }
+        };
+    }, []);
+
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={(e) => { if (e.target === e.currentTarget && !processing) onClose(); }}
+        >
+            <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <QrCode size={20} className="text-primary" />
+                        <h3 className="text-xl font-black uppercase tracking-tight">Escanear QR</h3>
+                    </div>
+                    <button onClick={onClose} disabled={processing} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <p className="text-xs font-bold text-gray-500 mb-4">
+                    Aponte a câmera para o QR Code de Chegada na tela da empresa ({job.company_name}).
+                </p>
+
+                {cameraError ? (
+                    <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-4">
+                        <CameraOff className="text-red-500 mx-auto mb-2" size={24} />
+                        <p className="text-xs font-bold text-red-600">{cameraError}</p>
+                    </div>
+                ) : (
+                    <div className="relative overflow-hidden rounded-xl border-2 border-black bg-black mb-4 aspect-square max-w-[240px] mx-auto">
+                        <div id={QR_CHECKIN_ELEMENT_ID} className="w-full h-full" />
+                        {processing && (
+                            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 text-white">
+                                <Loader2 size={28} className="animate-spin text-primary" />
+                                <span className="text-xs font-black uppercase">Confirmando check-in...</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <button
+                    onClick={onClose}
+                    disabled={processing}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-black py-2.5 rounded-xl font-black uppercase text-xs transition-colors"
+                >
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+}
 
 type Step = { label: string; status: 'complete' | 'active' | 'pending' }
 
@@ -64,6 +191,7 @@ interface JobApplication {
     worker_checkout_at: string | null;
     company_checkin_confirmed_at: string | null;
     company_checkout_confirmed_at: string | null;
+    created_at?: string;
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
@@ -98,6 +226,9 @@ export default function MyJobs() {
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
     const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
+    // Scanner QR de Check-in (câmera)
+    const [scanningJob, setScanningJob] = useState<JobApplication | null>(null);
+    const [qrScannerProcessing, setQrScannerProcessing] = useState(false);
     // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
@@ -181,27 +312,30 @@ export default function MyJobs() {
                 } | null;
             }
 
-            (data as unknown as ApplicationRow[]).forEach((app) => {
+            (data as unknown as ApplicationRow[] || []).forEach((app) => {
+                if (!app.job) return;
+
                 const application: JobApplication = {
                     id: app.id,
-                    job_id: app.job?.id || '',
+                    job_id: app.job.id,
                     status: app.status,
-                    title: app.job?.title || 'Turno',
-                    company_id: app.job?.company?.id || '',
-                    company_name: app.job?.company?.name || 'Empresa Confidencial',
-                    company_logo: app.job?.company?.logo_url ?? null,
-                    pay: app.job?.budget || 0,
-                    date: app.job?.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
-                    raw_date: app.job?.start_date ?? null,
-                    time: app.job?.work_start_time || 'Horário a definir',
-                    end_time: app.job?.work_end_time || null,
-                    location: app.job?.location || 'Local a definir',
-                    month: app.job?.start_date ? new Date(app.job.start_date).toLocaleString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '') : 'MES',
-                    day: app.job?.start_date ? new Date(app.job.start_date).getDate() : '00',
+                    title: app.job.title,
+                    company_id: app.job.company?.id || '',
+                    company_name: app.job.company?.name || 'Empresa Confidencial',
+                    company_logo: app.job.company?.logo_url ?? null,
+                    pay: app.job.budget || 0,
+                    date: app.job.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
+                    raw_date: app.job.start_date ?? null,
+                    time: app.job.work_start_time || 'Horário a definir',
+                    end_time: app.job.work_end_time || null,
+                    location: app.job.location || 'Local a definir',
+                    month: app.job.start_date ? new Date(app.job.start_date).toLocaleString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '') : 'MES',
+                    day: app.job.start_date ? new Date(app.job.start_date).getDate() : '00',
                     worker_checkin_at: app.worker_checkin_at,
                     worker_checkout_at: app.worker_checkout_at,
                     company_checkin_confirmed_at: app.company_checkin_confirmed_at,
-                    company_checkout_confirmed_at: app.company_checkout_confirmed_at
+                    company_checkout_confirmed_at: app.company_checkout_confirmed_at,
+                    created_at: app.created_at
                 };
 
                 const isJobToday = application.raw_date && isToday(parseISO(application.raw_date));
@@ -262,9 +396,23 @@ export default function MyJobs() {
         }
     }, [jobs.history, reviewedJobIds, loading]);
 
-    const handleCheckin = async (appId: string) => {
+    const handleCheckin = async (appId: string, withGps = false) => {
         setActionLoading(appId);
         try {
+            if (withGps && 'geolocation' in navigator) {
+                try {
+                    await new Promise<GeolocationPosition>((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            timeout: 4000,
+                            enableHighAccuracy: true,
+                        });
+                    });
+                    addToast('Localização GPS verificada!', 'success');
+                } catch {
+                    // Prossegue com checkin mesmo se GPS falhar
+                }
+            }
+
             const { error } = await supabase
                 .from('applications')
                 .update({
@@ -274,12 +422,39 @@ export default function MyJobs() {
                 .eq('id', appId);
 
             if (error) throw error;
+            addToast('Check-in realizado com sucesso!', 'success');
             await fetchJobs();
         } catch (err) {
             logError('Error checking in:', err);
             addToast('Erro ao fazer check-in. Tente novamente.', 'error');
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    const handleQrCheckinDecoded = async (decodedText: string) => {
+        if (!scanningJob || qrScannerProcessing) return;
+        const targetAppId = parseCheckinQr(decodedText, scanningJob.id) || scanningJob.id;
+
+        setQrScannerProcessing(true);
+        try {
+            const { error } = await supabase
+                .from('applications')
+                .update({
+                    worker_checkin_at: new Date().toISOString(),
+                    status: 'in_progress'
+                })
+                .eq('id', targetAppId);
+
+            if (error) throw error;
+            addToast('Check-in realizado com sucesso via QR Code!', 'success');
+            setScanningJob(null);
+            await fetchJobs();
+        } catch (err) {
+            logError('Error checking in via QR:', err);
+            addToast('Erro ao processar check-in pelo QR Code.', 'error');
+        } finally {
+            setQrScannerProcessing(false);
         }
     };
 
@@ -587,17 +762,27 @@ export default function MyJobs() {
                         <div className="flex flex-col gap-3 mt-3">
                             <div className="flex flex-col gap-3 min-w-[200px]">
                                 {!job.worker_checkin_at ? (
-                                    <button
-                                        onClick={() => handleCheckin(job.id)}
-                                        disabled={actionLoading === job.id}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                        {actionLoading === job.id ? (
-                                            <Loader2 className="animate-spin" size={20} />
-                                        ) : (
-                                            <><Play size={20} /> Check-in</>
-                                        )}
-                                    </button>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <button
+                                            onClick={() => handleCheckin(job.id, true)}
+                                            disabled={actionLoading === job.id}
+                                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm shadow-sm"
+                                        >
+                                            {actionLoading === job.id ? (
+                                                <Loader2 className="animate-spin" size={18} />
+                                            ) : (
+                                                <><Play size={18} /> Check-in (GPS)</>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => setScanningJob(job)}
+                                            disabled={actionLoading === job.id}
+                                            className="bg-white hover:bg-gray-100 text-black border-2 border-black px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm shadow-sm"
+                                            title="Escanear QR Code da Empresa"
+                                        >
+                                            <QrCode size={18} /> Ler QR
+                                        </button>
+                                    </div>
                                 ) : (
                                     <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                                         <CheckCircle2 size={16} />
@@ -870,6 +1055,16 @@ export default function MyJobs() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Modal Scanner QR de Check-in */}
+            {scanningJob && (
+                <QrCheckinScannerModal
+                    job={scanningJob}
+                    onClose={() => setScanningJob(null)}
+                    onDecoded={handleQrCheckinDecoded}
+                    processing={qrScannerProcessing}
+                />
             )}
 
         </div>

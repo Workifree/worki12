@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { validateCPF, validateCNPJ, validateEmail, getPasswordStrength } from '../validation'
+import { validateCPF, validateCNPJ, validateCPFOrCNPJ, formatCpfCnpj, validateEmail, getPasswordStrength } from '../validation'
 
 describe('validateCPF', () => {
-    it('aceita CPF valido (529.982.247-25)', () => {
+    it('aceita CPF valido (52998224725)', () => {
         expect(validateCPF('52998224725')).toBe(true)
+    })
+
+    it('aceita CPF valido formatado (529.982.247-25)', () => {
+        expect(validateCPF('529.982.247-25')).toBe(true)
     })
 
     it('aceita CPF valido (111.444.777-35)', () => {
@@ -70,6 +74,51 @@ describe('validateCNPJ', () => {
 
     it('rejeita CNPJ vazio', () => {
         expect(validateCNPJ('')).toBe(false)
+    })
+})
+
+describe('validateCPFOrCNPJ', () => {
+    it('aceita CPF valido desformatado e formatado', () => {
+        expect(validateCPFOrCNPJ('52998224725')).toBe(true)
+        expect(validateCPFOrCNPJ('529.982.247-25')).toBe(true)
+    })
+
+    it('aceita CNPJ valido desformatado e formatado', () => {
+        expect(validateCPFOrCNPJ('11222333000181')).toBe(true)
+        expect(validateCPFOrCNPJ('11.222.333/0001-81')).toBe(true)
+    })
+
+    it('rejeita CPF invalido', () => {
+        expect(validateCPFOrCNPJ('52998224700')).toBe(false)
+    })
+
+    it('rejeita CNPJ invalido', () => {
+        expect(validateCPFOrCNPJ('11222333000100')).toBe(false)
+    })
+
+    it('rejeita comprimentos que nao sao nem CPF nem CNPJ', () => {
+        expect(validateCPFOrCNPJ('1234567890')).toBe(false) // 10 digitos
+        expect(validateCPFOrCNPJ('123456789012')).toBe(false) // 12 digitos
+        expect(validateCPFOrCNPJ('1234567890123')).toBe(false) // 13 digitos
+        expect(validateCPFOrCNPJ('123456789012345')).toBe(false) // 15 digitos
+        expect(validateCPFOrCNPJ('')).toBe(false)
+    })
+})
+
+describe('formatCpfCnpj', () => {
+    it('formata CPF (11 digitos) corretamente', () => {
+        expect(formatCpfCnpj('52998224725')).toBe('529.982.247-25')
+    })
+
+    it('formata CNPJ (14 digitos) corretamente', () => {
+        expect(formatCpfCnpj('11222333000181')).toBe('11.222.333/0001-81')
+    })
+
+    it('formata parcialmente enquanto digita CPF', () => {
+        expect(formatCpfCnpj('123')).toBe('123')
+        expect(formatCpfCnpj('1234')).toBe('123.4')
+        expect(formatCpfCnpj('1234567')).toBe('123.456.7')
+        expect(formatCpfCnpj('1234567890')).toBe('123.456.789-0')
     })
 })
 

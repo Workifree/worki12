@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Loader2, ArrowRight, ArrowLeft, Building2, Briefcase, Target } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
-import { validateCNPJ } from '../../lib/validation';
+import { validateCPF, validateCNPJ, formatCpfCnpj } from '../../lib/validation';
 import PageMeta from '../../components/PageMeta';
 import { logError } from '../../lib/logger'
 
@@ -34,9 +34,11 @@ export default function CompanyOnboarding() {
 
     const companyTypes = [
         { label: 'MEI (Microempreendedor Individual)', value: 'MEI' },
+        { label: 'Pessoa Física / Autônomo', value: 'INDIVIDUAL_PERSON' },
         { label: 'Limitada (LTDA)', value: 'LIMITED' },
         { label: 'Individual (EI)', value: 'INDIVIDUAL' },
         { label: 'Associação', value: 'ASSOCIATION' },
+        { label: 'Outro', value: 'OTHER' },
     ];
 
     useEffect(() => {
@@ -47,14 +49,14 @@ export default function CompanyOnboarding() {
                 setCategories(data);
             } else {
                 setCategories([
-                    { name: 'Tecnologia', slug: 'tech' },
-                    { name: 'Varejo', slug: 'retail' },
                     { name: 'Bares e Restaurantes', slug: 'hospitality' },
-                    { name: 'Eventos', slug: 'events' },
-                    { name: 'Construção Civil', slug: 'construction' },
-                    { name: 'Logística', slug: 'logistics' },
-                    { name: 'Saúde', slug: 'health' },
-                    { name: 'Outro', slug: 'other' }
+                    { name: 'Cafeterias e Confeitarias', slug: 'cafes' },
+                    { name: 'Buffets e Eventos', slug: 'events' },
+                    { name: 'Hotéis e Pousadas', slug: 'hotels' },
+                    { name: 'Casas Noturnas e Lounges', slug: 'nightlife' },
+                    { name: 'Hamburguerias e Lanchonetes', slug: 'fastfood' },
+                    { name: 'Padarias e Empórios', slug: 'bakeries' },
+                    { name: 'Outro (Hospitality)', slug: 'other' }
                 ]);
             }
         }
@@ -70,20 +72,19 @@ export default function CompanyOnboarding() {
         });
     }, [navigate]);
 
-    // CNPJ mask
-    const formatCnpj = (value: string) => {
-        const digits = value.replace(/\D/g, '').slice(0, 14);
-        return digits
-            .replace(/(\d{2})(\d)/, '$1.$2')
-            .replace(/(\d{3})(\d)/, '$1.$2')
-            .replace(/(\d{3})(\d)/, '$1/$2')
-            .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
-    };
-
     const canProceed = () => {
         switch (step) {
-            case 1: return formData.name && formData.cnpj.replace(/\D/g, '').length === 14 && formData.companyType && formData.industry && formData.city;
-            case 2: return formData.hiringGoal && formData.hiringVolume && tosAccepted;
+            case 1: {
+                const cleanDoc = formData.cnpj.replace(/\D/g, '');
+                return Boolean(
+                    formData.name &&
+                    (cleanDoc.length === 11 || cleanDoc.length === 14) &&
+                    formData.companyType &&
+                    formData.industry &&
+                    formData.city
+                );
+            }
+            case 2: return Boolean(formData.hiringGoal && formData.hiringVolume && tosAccepted);
             default: return true;
         }
     };
@@ -91,8 +92,19 @@ export default function CompanyOnboarding() {
     const handleNext = async (e: React.FormEvent) => {
         e.preventDefault();
         if (step === 1) {
-            if (!validateCNPJ(formData.cnpj)) {
-                setCnpjError('CNPJ invalido. Verifique os digitos e tente novamente.');
+            const cleanDoc = formData.cnpj.replace(/\D/g, '');
+            if (cleanDoc.length === 11) {
+                if (!validateCPF(cleanDoc)) {
+                    setCnpjError('CPF inválido. Verifique os dígitos e tente novamente.');
+                    return;
+                }
+            } else if (cleanDoc.length === 14) {
+                if (!validateCNPJ(cleanDoc)) {
+                    setCnpjError('CNPJ inválido. Verifique os dígitos e tente novamente.');
+                    return;
+                }
+            } else {
+                setCnpjError('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
                 return;
             }
             setCnpjError('');
@@ -205,15 +217,18 @@ export default function CompanyOnboarding() {
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">CNPJ *</label>
+                                            <label className="block text-xs font-bold uppercase mb-1">CNPJ ou CPF *</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.cnpj}
-                                                onChange={e => setFormData({ ...formData, cnpj: formatCnpj(e.target.value) })}
+                                                onChange={e => {
+                                                    setFormData({ ...formData, cnpj: formatCpfCnpj(e.target.value) });
+                                                    if (cnpjError) setCnpjError('');
+                                                }}
                                                 aria-label="CNPJ"
                                                 className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
-                                                placeholder="00.000.000/0001-00"
+                                                placeholder="00.000.000/0001-00 ou 000.000.000-00"
                                             />
                                             {cnpjError && <p className="text-red-600 text-xs font-bold mt-1">{cnpjError}</p>}
                                         </div>

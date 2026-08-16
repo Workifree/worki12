@@ -658,4 +658,31 @@ export const TeamConnectionService = {
 
     return !!data;
   },
+
+  /**
+   * Remove um worker da equipe da empresa autenticada (apaga conexão em team_connections).
+   */
+  async removeFromTeam(workerId: string): Promise<UpdateConnectionResult> {
+    try {
+      const companyId = await getAuthenticatedCompanyId();
+      const { error } = await supabase
+        .from('team_connections')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('worker_id', workerId);
+
+      if (error) {
+        logError('teamConnection.removeFromTeam', error);
+        return { success: false, error: 'Erro ao remover freela do elenco.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      logError('teamConnection.removeFromTeam', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro inesperado ao remover freela.',
+      };
+    }
+  },
 };

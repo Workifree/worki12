@@ -616,14 +616,14 @@ export default function Profile() {
                                         type="text"
                                         value={formData.primary_role}
                                         onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
-                                        placeholder="Função Principal (ex: Bartender)"
+                                        placeholder="Função Principal (ex: Garçom, Barista, Bartender, Cozinheiro)"
                                         aria-label="Funcao principal"
                                         className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none"
                                     />
                                     <textarea
                                         value={formData.roles}
                                         onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
-                                        placeholder="Outras habilidades (separe por vírgula)"
+                                        placeholder="Outras habilidades (ex: Atendente, Barista, Caixa, Cumim)"
                                         aria-label="Especialidades"
                                         className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-20"
                                     />
@@ -651,7 +651,7 @@ export default function Profile() {
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                                     aria-label="Sobre voce"
                                     className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-32"
-                                    placeholder="Conte um pouco sobre sua experiência..."
+                                    placeholder="Conte um pouco sobre sua experiência em salão, bar, cafeteria ou cozinha..."
                                 />
                             ) : (
                                 <p className="text-gray-600 font-medium leading-relaxed">

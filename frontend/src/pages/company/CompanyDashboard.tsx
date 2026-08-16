@@ -81,6 +81,46 @@ export default function CompanyDashboard() {
         enabled: !!company
     });
 
+    // PostgREST tipa embeds de relação como array; normalizamos para objeto no render.
+    interface ActiveShiftWorker { id: string; full_name: string | null; avatar_url: string | null; primary_role: string | null }
+    interface ActiveShiftJob { id: string; title: string | null; location: string | null; work_start_time: string | null; work_end_time: string | null }
+    interface ActiveShiftRow {
+        id: string;
+        job_id: string;
+        status: string;
+        worker_checkin_at: string | null;
+        company_checkin_confirmed_at: string | null;
+        created_at: string;
+        worker: ActiveShiftWorker | ActiveShiftWorker[] | null;
+        jobs: ActiveShiftJob | ActiveShiftJob[] | null;
+    }
+
+    // Detalhes dos turnos ativos/em andamento para acesso direto de acompanhamento
+    const { data: activeShifts = [] } = useQuery<ActiveShiftRow[]>({
+        queryKey: ['companyActiveShifts'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return [];
+            const { data } = await supabase
+                .from('applications')
+                .select(`
+                    id,
+                    job_id,
+                    status,
+                    worker_checkin_at,
+                    company_checkin_confirmed_at,
+                    created_at,
+                    worker:workers(id, full_name, avatar_url, primary_role),
+                    jobs!inner(id, title, location, work_start_time, work_end_time, company_id)
+                `)
+                .eq('jobs.company_id', user.id)
+                .in('status', ['hired', 'in_progress'])
+                .order('created_at', { ascending: false });
+            return (data ?? []) as unknown as ActiveShiftRow[];
+        },
+        enabled: !!company
+    });
+
     // Derived State
     const companyName = company?.name || '';
     const loading = isLoadingCompany;
@@ -160,6 +200,70 @@ export default function CompanyDashboard() {
                 </div>
             )}
 
+            {/* Turnos em Andamento / Acompanhamento Direto */}
+            {activeShifts.length > 0 && (
+                <div className="mb-10">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-black uppercase flex items-center gap-2">
+                            <PlayCircle size={22} className="text-green-600 animate-pulse" /> Turnos em Andamento ({activeShifts.length})
+                        </h2>
+                        <button
+                            onClick={() => navigate('/company/jobs?filter=andamento')}
+                            className="text-xs font-black uppercase text-blue-600 hover:underline"
+                        >
+                            Ver todos
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {activeShifts.slice(0, 4).map((app) => {
+                            const worker = Array.isArray(app.worker) ? app.worker[0] : app.worker;
+                            const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
+                            const checkinDone = !!app.company_checkin_confirmed_at;
+
+                            return (
+                                <div
+                                    key={app.id}
+                                    onClick={() => navigate(`/company/jobs/${app.job_id}/candidates`)}
+                                    className="bg-white border-2 border-black rounded-2xl p-5 shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between gap-4"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-12 h-12 rounded-xl bg-gray-200 border-2 border-black overflow-hidden flex-shrink-0 flex items-center justify-center font-black">
+                                                {worker?.avatar_url ? (
+                                                    <img src={worker.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    worker?.full_name?.[0]?.toUpperCase() ?? 'F'
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-black uppercase text-base truncate">{worker?.full_name || 'Freela'}</h4>
+                                                <p className="text-xs font-bold text-gray-500 uppercase truncate">{job?.title || 'Turno'}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border border-black flex-shrink-0 ${checkinDone ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-800'}`}>
+                                            {checkinDone ? 'Presença OK' : 'Aguardando Chegada'}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-3 border-t-2 border-gray-100 text-xs font-bold text-gray-500">
+                                        <span>{job?.location || 'Local a combinar'}</span>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/company/jobs/${app.job_id}/candidates`);
+                                            }}
+                                            className="bg-black hover:bg-primary text-white px-3 py-1.5 rounded-lg font-black uppercase text-xs transition-colors flex items-center gap-1"
+                                        >
+                                            Acompanhar / Presença
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Recent Jobs Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Job List */}
@@ -197,11 +301,11 @@ export default function CompanyDashboard() {
                             </div>
                         ) : (
                             jobs.slice(0, 5).map((job) => (
-                                <div key={job.id} role="button" tabIndex={0} onClick={() => navigate('/company/jobs')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/company/jobs'); } }} className="bg-white border-2 border-black rounded-xl p-5 hover:translate-x-1 hover:-translate-y-1 transition-transform cursor-pointer group">
+                                <div key={job.id} role="button" tabIndex={0} onClick={() => navigate(`/company/jobs/${job.id}/candidates`)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/company/jobs/${job.id}/candidates`); } }} className="bg-white border-2 border-black rounded-xl p-5 hover:translate-x-1 hover:-translate-y-1 transition-transform cursor-pointer group">
                                     <div className="flex justify-between items-start mb-3">
                                         <div>
                                             <h3 className="font-black text-lg uppercase group-hover:text-blue-600 transition-colors">{job.title}</h3>
-                                            <p className="text-xs font-bold text-gray-400 uppercase">{job.location || 'Remoto'} • {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</p>
+                                            <p className="text-xs font-bold text-gray-400 uppercase">{job.location || 'Presencial'} • {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border border-black ${job.status === 'open' ? 'bg-green-400' : 'bg-gray-200'}`}>
                                             {job.status === 'open' ? 'Ativo' : 'Fechado'}

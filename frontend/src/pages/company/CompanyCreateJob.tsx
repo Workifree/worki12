@@ -13,17 +13,19 @@ import type { TeamMember } from '../../types';
 // Sem tech/remoto — o turno é sempre presencial, definido pela função (salão/cozinha/evento).
 const SHIFT_CATEGORIES: { name: string; slug: string }[] = [
     { name: 'Garçom / Garçonete', slug: 'garcom' },
+    { name: 'Barista / Cafeteria', slug: 'barista' },
     { name: 'Barman / Bartender', slug: 'barman' },
-    { name: 'Cozinha / Auxiliar', slug: 'cozinha' },
+    { name: 'Cozinheiro / Cozinha', slug: 'cozinha' },
+    { name: 'Auxiliar de Cozinha / Cumim', slug: 'auxiliar_cozinha' },
     { name: 'Atendente / Balcão', slug: 'atendente' },
-    { name: 'Caixa', slug: 'caixa' },
+    { name: 'Caixa / Frente de Loja', slug: 'caixa' },
     { name: 'Recepção / Hostess', slug: 'recepcao' },
-    { name: 'Limpeza / Copa', slug: 'limpeza' },
-    { name: 'Estoque / Logística', slug: 'estoque' },
+    { name: 'Limpeza / Copa / Steward', slug: 'limpeza' },
+    { name: 'Estoque / Reposição', slug: 'estoque' },
     { name: 'Segurança / Portaria', slug: 'seguranca' },
-    { name: 'Promotor / Panfletagem', slug: 'promotor' },
-    { name: 'Auxiliar de Eventos', slug: 'eventos' },
-    { name: 'Outro', slug: 'outro' },
+    { name: 'Promotor / Degustação', slug: 'promotor' },
+    { name: 'Auxiliar de Eventos / Buffet', slug: 'eventos' },
+    { name: 'Outro (Hospitality)', slug: 'outro' },
 ];
 
 export default function CompanyCreateJob() {
@@ -237,7 +239,7 @@ export default function CompanyCreateJob() {
                                     type="text"
                                     aria-label="Título do Turno"
                                     className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold text-lg placeholder:text-gray-300 transition-all"
-                                    placeholder="Ex: Garçom para evento de sábado"
+                                    placeholder="Ex: Garçom para evento de sábado, Barista para cafeteria..."
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 />
@@ -278,7 +280,7 @@ export default function CompanyCreateJob() {
                                 <textarea
                                     aria-label="Descrição Completa"
                                     className="w-full h-32 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
-                                    placeholder="Descreva o projeto, responsabilidades e objetivos..."
+                                    placeholder="Descreva a dinâmica do turno, responsabilidades no salão/bar/cozinha e postura esperada..."
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
@@ -289,7 +291,7 @@ export default function CompanyCreateJob() {
                                 <textarea
                                     aria-label="Requisitos"
                                     className="w-full h-24 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
-                                    placeholder="- React Native&#10;- TypeScript&#10;- Figma"
+                                    placeholder="- Experiência em atendimento ou preparo&#10;- Agilidade e pontualidade&#10;- Boa comunicação e trabalho em equipe"
                                     value={formData.requirements}
                                     onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
                                 />
@@ -438,7 +440,7 @@ export default function CompanyCreateJob() {
                                         type="text"
                                         aria-label="Localização Específica"
                                         className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl py-3 pl-10 pr-4 font-bold placeholder:text-gray-300 transition-all"
-                                        placeholder="Ex: São Paulo, SP (ou deixe vazio se remoto)"
+                                        placeholder="Ex: Rua Augusta, 1200 - Consolação, São Paulo"
                                         value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                     />

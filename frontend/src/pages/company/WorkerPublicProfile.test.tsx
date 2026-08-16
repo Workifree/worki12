@@ -43,7 +43,7 @@ function buildChain(overrides: Record<string, unknown> = {}) {
 const WORKER_DATA_WITH_REVIEWS = {
   id: 'worker-1',
   full_name: 'Maria Oliveira',
-  bio: 'Desenvolvedora experiente',
+  bio: 'Barista e bartender experiente',
   city: 'São Paulo',
   level: 3,
   xp: 1500,
@@ -51,7 +51,7 @@ const WORKER_DATA_WITH_REVIEWS = {
   recommendation_score: 0,
   rating_average: 4.3,
   reviews_count: 7,
-  tags: ['React', 'TypeScript'],
+  tags: ['Barista', 'Bartender', 'Atendimento'],
   created_at: '2024-01-15T10:00:00.000Z',
   avatar_url: null,
 }

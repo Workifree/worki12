@@ -490,7 +490,7 @@ export default function CompanyProfile() {
                                             onChange={handleChange}
                                             aria-label="Setor"
                                             className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
-                                            placeholder="Ex: Tecnologia"
+                                            placeholder="Ex: Bar & Restaurante, Cafeteria, Eventos, Hotelaria"
                                         />
                                     ) : (
                                         <p className="text-lg font-medium text-gray-700">{company.industry || '—'}</p>
@@ -507,7 +507,7 @@ export default function CompanyProfile() {
                                             onChange={handleChange}
                                             aria-label="Descricao da empresa"
                                             className="w-full font-medium text-gray-700 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all min-h-[140px] resize-none"
-                                            placeholder="Conte sobre sua empresa..."
+                                            placeholder="Conte sobre sua operação, ambiente e estilo de atendimento..."
                                         />
                                     ) : (
                                         <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap">{company.description || 'Nenhuma descrição informada.'}</p>

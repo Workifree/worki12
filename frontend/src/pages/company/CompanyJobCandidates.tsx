@@ -7,7 +7,8 @@ import { SpendLimitService } from '../../services/spendLimitService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
@@ -101,6 +102,8 @@ export default function CompanyJobCandidates() {
     const [reopenLoading, setReopenLoading] = useState(false);
     // "Convidar Freela" — vaga criada sem nenhum freela atrelado (mesmo picker, sem convite anterior).
     const [invitePickerOpen, setInvitePickerOpen] = useState(false);
+    // Modal "QR Code de Chegada" para o freela escanear no local
+    const [qrModalApp, setQrModalApp] = useState<Application | null>(null);
 
     const { addToast } = useToast();
     // Reaproveita o hook do fluxo de convite (mesmo usado em CompanyCreateJob) para disparar
@@ -525,10 +528,15 @@ export default function CompanyJobCandidates() {
         try {
             const { error } = await supabase
                 .from('applications')
-                .update({ company_checkin_confirmed_at: new Date().toISOString() })
+                .update({ 
+                    company_checkin_confirmed_at: new Date().toISOString(),
+                    status: 'in_progress'
+                })
                 .eq('id', appId);
 
             if (error) throw error;
+            addToast('Chegada confirmada!', 'success');
+            setQrModalApp(null);
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
@@ -806,20 +814,30 @@ export default function CompanyJobCandidates() {
 
                                                     {(app.status === 'hired' || app.status === 'in_progress') && (
                                                         <>
+                                                            {/* QR Code Chegada */}
+                                                            {!app.company_checkin_confirmed_at && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setQrModalApp(app); }}
+                                                                    className="p-1.5 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-black uppercase hover:bg-gray-100 transition-colors flex items-center gap-1.5 shadow-sm"
+                                                                    title="Exibir QR Code para o freela escanear no local"
+                                                                >
+                                                                    <QrCode size={14} /> QR Chegada
+                                                                </button>
+                                                            )}
+
                                                             {/* Show check-in status */}
-                                                            {app.worker_checkin_at && !app.company_checkin_confirmed_at && (
+                                                            {!app.company_checkin_confirmed_at ? (
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); handleConfirmCheckin(app.id); }}
                                                                     disabled={confirmingCheckin === app.id}
-                                                                    className="p-1 px-3 bg-blue-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-blue-600 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                                    className="p-1.5 px-3 bg-green-600 text-white rounded-lg text-xs font-black uppercase hover:bg-green-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
                                                                 >
                                                                     {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                                                                    Confirmar Chegada
+                                                                    {app.worker_checkin_at ? 'Confirmar Chegada' : 'Confirmar Presença'}
                                                                 </button>
-                                                            )}
-                                                            {app.company_checkin_confirmed_at && (
-                                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
-                                                                    <CheckCircle size={12} /> Chegada OK
+                                                            ) : (
+                                                                <span className="text-xs font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                    <CheckCircle size={13} /> Chegada OK
                                                                 </span>
                                                             )}
 
@@ -1355,6 +1373,68 @@ export default function CompanyJobCandidates() {
                         >
                             {submittingReview ? 'Enviando...' : 'Enviar Avaliação'}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* QR Code Check-in Modal */}
+            {qrModalApp && (
+                <div
+                    className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={(e) => { if (e.target === e.currentTarget) setQrModalApp(null); }}
+                >
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-center">
+                        <div className="flex justify-between items-center mb-4">
+                            <div className="flex items-center gap-2">
+                                <QrCode size={20} className="text-primary" />
+                                <h3 className="text-xl font-black uppercase tracking-tight">QR de Chegada</h3>
+                            </div>
+                            <button
+                                onClick={() => setQrModalApp(null)}
+                                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <p className="text-xs font-bold text-gray-500 mb-4">
+                            Mostre este código para <span className="text-black font-black">{qrModalApp.worker?.full_name}</span> escanear no local de trabalho.
+                        </p>
+
+                        <div className="flex justify-center mb-4">
+                            <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                                <QRCodeSVG
+                                    value={`worki:checkin:${id}:${qrModalApp.id}`}
+                                    size={200}
+                                    level="M"
+                                    includeMargin={false}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-4 text-left">
+                            <p className="text-[10px] font-black uppercase text-gray-400">Turno</p>
+                            <p className="text-xs font-bold text-black truncate">{jobTitle}</p>
+                            <p className="text-[10px] font-black uppercase text-gray-400 mt-1">Freela</p>
+                            <p className="text-xs font-bold text-black">{qrModalApp.worker?.full_name}</p>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={() => handleConfirmCheckin(qrModalApp.id)}
+                                disabled={confirmingCheckin === qrModalApp.id}
+                                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                                {confirmingCheckin === qrModalApp.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                                Confirmar Presença Manualmente
+                            </button>
+                            <button
+                                onClick={() => setQrModalApp(null)}
+                                className="w-full bg-gray-100 hover:bg-gray-200 text-black py-2.5 rounded-xl font-black uppercase text-xs transition-colors"
+                            >
+                                Fechar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
