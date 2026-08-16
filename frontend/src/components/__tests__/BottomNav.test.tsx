@@ -18,6 +18,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toBeInTheDocument()
     expect(screen.getByLabelText('Convites')).toBeInTheDocument()
     expect(screen.getByLabelText('Clientes')).toBeInTheDocument()
+    expect(screen.getByLabelText('Receb.')).toBeInTheDocument()
     expect(screen.getByLabelText('Msgs')).toBeInTheDocument()
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
@@ -33,12 +34,12 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
 
-  it('worker tem 5 itens de navegacao (push-first: sem busca de vagas)', () => {
+  it('worker tem 6 itens de navegacao (push-first, sem busca de vagas + Meus Recebimentos)', () => {
     renderBottomNav('worker')
 
     const nav = screen.getByLabelText('Menu de navegacao')
     const links = nav.querySelectorAll('a')
-    expect(links).toHaveLength(5)
+    expect(links).toHaveLength(6)
   })
 
   it('company tem 6 itens de navegacao (Mensagens acessivel no mobile)', () => {
@@ -55,6 +56,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/dashboard')
     expect(screen.getByLabelText('Convites')).toHaveAttribute('href', '/my-jobs')
     expect(screen.getByLabelText('Clientes')).toHaveAttribute('href', '/carteira')
+    expect(screen.getByLabelText('Receb.')).toHaveAttribute('href', '/recebimentos')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/profile')
   })
 

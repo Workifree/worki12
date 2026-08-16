@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -77,6 +77,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Home, label: 'Início', path: '/dashboard' },
         { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
+        { icon: Receipt, label: 'Meus Recebimentos', path: '/recebimentos' },
         { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];

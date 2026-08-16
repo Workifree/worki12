@@ -17,6 +17,7 @@ function makeChain(result: { data: any; error: any }) {
     update: vi.fn(() => chain),
     eq: vi.fn(() => chain),
     in: vi.fn(() => chain),
+    order: vi.fn(() => chain),
     maybeSingle: vi.fn(() => promise),
     single: vi.fn(() => promise),
     then: promise.then.bind(promise),
@@ -551,6 +552,69 @@ describe('PaymentRecordService.getReceipt', () => {
     const result = await PaymentRecordService.getReceipt('job-x')
 
     expect(result).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// listForWorker (Meus Recebimentos)
+// ---------------------------------------------------------------------------
+
+describe('PaymentRecordService.listForWorker', () => {
+  it('retorna [] sem chamar o supabase quando workerId é vazio', async () => {
+    const { PaymentRecordService } = await import('./paymentRecordService')
+
+    const result = await PaymentRecordService.listForWorker('')
+
+    expect(result).toEqual([])
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('lista os marcadores do worker com job/company embutidos', async () => {
+    const joinedRecorded = {
+      ...SHIFT_PAYMENT_ROW,
+      job: { id: 'job-1', title: 'Garçom', location: 'SP', start_date: '2026-06-29' },
+      company: { id: 'company-1', name: 'Empresa X', logo_url: null },
+    }
+    const joinedScheduled = {
+      ...SCHEDULED_PAYMENT_ROW,
+      job: { id: 'job-2', title: 'Barman', location: 'RJ', start_date: '2026-07-19' },
+      company: { id: 'company-1', name: 'Empresa X', logo_url: null },
+    }
+    routeFrom({
+      shift_payments: makeChain({ data: [joinedRecorded, joinedScheduled], error: null }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.listForWorker('worker-1')
+
+    expect(result).toHaveLength(2)
+    expect(result[0].payment.id).toBe('sp-1')
+    expect(result[0].job?.title).toBe('Garçom')
+    expect(result[0].company?.name).toBe('Empresa X')
+    expect(result[1].payment.status).toBe('scheduled')
+    expect(mockFrom).toHaveBeenCalledWith('shift_payments')
+  })
+
+  it('retorna [] em erro de query (não propaga exceção)', async () => {
+    routeFrom({
+      shift_payments: makeChain({ data: null, error: { message: 'db error' } }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.listForWorker('worker-1')
+
+    expect(result).toEqual([])
+  })
+
+  it('retorna [] quando não há nenhum marcador (data null)', async () => {
+    routeFrom({
+      shift_payments: makeChain({ data: null, error: null }),
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.listForWorker('worker-1')
+
+    expect(result).toEqual([])
   })
 })
 

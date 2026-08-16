@@ -103,6 +103,26 @@ export interface VoidPaymentResult {
   error?: string;
 }
 
+/**
+ * Item de listagem para "Meus Recebimentos" (worker) — mesmo shape leve de
+ * `ShiftPaymentReceipt`, mas nomeado à parte porque é usado numa LISTA (não um
+ * recibo único) e não carrega `worker` (a tela já sabe quem é o próprio usuário).
+ */
+export interface WorkerShiftPaymentListItem {
+  payment: ShiftPayment;
+  job: {
+    id: string;
+    title: string;
+    location: string;
+    start_date: string;
+  } | null;
+  company: {
+    id: string;
+    name: string;
+    logo_url?: string | null;
+  } | null;
+}
+
 export interface ShiftPaymentReceipt {
   payment: ShiftPayment;
   job: {
@@ -440,6 +460,48 @@ export const PaymentRecordService = {
     } catch (err) {
       logError('paymentRecord.getReceipt', err);
       return null;
+    }
+  },
+
+  /**
+   * Lista TODOS os marcadores (scheduled | recorded | voided) do freela autenticado,
+   * mais recentes primeiro — alimenta "Meus Recebimentos" (worker). Só-leitura sob RLS
+   * (`sp_select_participants`: worker_id = auth.uid()), então não precisa filtrar por
+   * worker_id explicitamente no client, mas fazemos assim mesmo por clareza/defesa (evita
+   * depender só do RLS se a policy mudar) — mesmo espírito de `getAuthCompanyId`.
+   */
+  async listForWorker(workerId: string): Promise<WorkerShiftPaymentListItem[]> {
+    if (!workerId) return [];
+    try {
+      const { data, error } = await supabase
+        .from('shift_payments')
+        .select(
+          `
+          *,
+          job:jobs ( id, title, location, start_date ),
+          company:companies ( id, name, logo_url )
+        `,
+        )
+        .eq('worker_id', workerId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logError('paymentRecord.listForWorker', error);
+        return [];
+      }
+      if (!data) return [];
+
+      return (data as Array<ShiftPayment & {
+        job: WorkerShiftPaymentListItem['job'];
+        company: WorkerShiftPaymentListItem['company'];
+      }>).map(({ job, company, ...paymentFields }) => ({
+        payment: paymentFields as ShiftPayment,
+        job: job ?? null,
+        company: company ?? null,
+      }));
+    } catch (err) {
+      logError('paymentRecord.listForWorker', err);
+      return [];
     }
   },
 

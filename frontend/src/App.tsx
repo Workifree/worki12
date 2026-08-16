@@ -24,6 +24,7 @@ const Messages = lazy(() => import('./pages/Messages'));
 const Profile = lazy(() => import('./pages/Profile'));
 const MyJobs = lazy(() => import('./pages/MyJobs'));
 const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
+const MeusRecebimentos = lazy(() => import('./pages/MeusRecebimentos'));
 const CompanyPublicProfile = lazy(() => import('./pages/CompanyPublicProfile'));
 
 // Company Pages
@@ -156,6 +157,7 @@ function App() {
                       <Route path="dashboard" element={<Dashboard />} />
                       <Route path="my-jobs" element={<MyJobs />} />
                       <Route path="carteira" element={<CarteiraClientes />} />
+                      <Route path="recebimentos" element={<MeusRecebimentos />} />
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />

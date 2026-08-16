@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -638,6 +638,22 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                    <button
+                        type="button"
+                        onClick={() => navigate('/recebimentos')}
+                        className="w-full bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all flex items-center justify-between gap-3 text-left"
+                    >
+                        <span className="flex items-center gap-3">
+                            <Receipt size={22} className="text-primary flex-shrink-0" />
+                            <span>
+                                <span className="block text-sm font-black uppercase">Meus Recebimentos</span>
+                                <span className="block text-xs font-bold text-gray-400">Pagamentos registrados pelas empresas</span>
+                            </span>
+                        </span>
+                        <ChevronRight size={20} className="text-gray-300 flex-shrink-0" />
+                    </button>
 
                     {/* Contact Info */}
                     <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
