@@ -54,3 +54,24 @@ export function parseDateOnly(isoOrDateOnly: string): Date {
 export function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
     return format(parseDateOnly(isoOrDateOnly), pattern, { locale: ptBR });
 }
+
+/**
+ * Duração curta entre dois instantes ISO: "6 min", "1h 12min".
+ *
+ * Vive aqui, e não junto do componente que a usa, porque é a formatação do número que o produto
+ * vende — o tempo entre o disparo do chamado e o primeiro aceite ("de 2 horas para 6 minutos").
+ * Ele vai aparecer no painel do turno, no relatório de operação e no BI; formatar diferente em
+ * cada lugar faria a mesma medida parecer três medidas.
+ */
+export function formatDurationShort(fromIso: string, toIso: string): string {
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+
+  const totalMinutes = Math.round(ms / 60000);
+  if (totalMinutes < 1) return 'menos de 1 min';
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
+}

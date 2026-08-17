@@ -73,6 +73,11 @@ export interface Job {
   has_lunch?: boolean;
   budget: number;
   budget_period?: string;
+  /**
+   * Quantas pessoas o turno precisa (>=1, default 1 — migration 20260817000000).
+   * Uma posição preenchida = uma application hired/in_progress/completed.
+   */
+  slots?: number;
   candidates_count?: number;
   views?: number;
   company_id?: string;
@@ -138,6 +143,144 @@ export interface Application {
   /** Data-limite para o freela responder (R8). Após esta data, slot reabre. */
   invitation_expires_at?: string | null;
   worker?: Partial<WorkerProfile>;
+  job?: Partial<Job>;
+}
+
+// =============================================
+// CHAMADO DE TURNO (F1) — disparo 1→N com primeiro-aceite
+// =============================================
+
+/**
+ * Motivo da quebra que originou o chamado. Alimenta o BI de operação: o sócio-operador
+ * controla o gasto com freela cruzando com nível de falta e quebra de escala.
+ * Espelha o CHECK de `shift_calls.reason` (migration 20260817000100).
+ */
+export type ShiftCallReason =
+  | 'falta'
+  | 'demissao'
+  | 'pico_previsto'
+  | 'evento'
+  | 'ferias'
+  | 'folga'
+  | 'reforco'
+  | 'outro';
+
+/** Rótulos em pt-BR dos motivos — fonte única para dropdown e relatório. */
+export const SHIFT_CALL_REASON_LABELS: Record<ShiftCallReason, string> = {
+  falta: 'Falta de funcionário',
+  demissao: 'Demissão / quebra de escala',
+  pico_previsto: 'Pico de movimento previsto',
+  evento: 'Evento',
+  ferias: 'Cobertura de férias',
+  folga: 'Cobertura de folga',
+  reforco: 'Reforço de equipe',
+  outro: 'Outro',
+};
+
+/** Estado do chamado. Muda SÓ por RPC — nunca por UPDATE do client. */
+export type ShiftCallStatus = 'open' | 'filled' | 'cancelled' | 'expired';
+
+/**
+ * Resposta de um alvo do chamado.
+ * 'closed' = a vaga encheu (ou o chamado foi cancelado/expirou) antes deste alvo responder.
+ * NÃO é recusa e NÃO é punição — o freela segue elegível ao mesmo turno se a vaga reabrir.
+ */
+export type ShiftCallTargetResponse = 'accepted' | 'declined' | 'closed';
+
+/**
+ * Espelha `public.shift_calls` (migration 20260817000100).
+ * Um chamado com um único alvo é o convite individual — não existem dois fluxos.
+ */
+export interface ShiftCall {
+  id: string;
+  job_id: string;
+  company_id: string;
+  /** Quem disparou. Hoje o dono da conta; com multi-unidade, o gerente. */
+  created_by: string;
+  /** Snapshot de `jobs.slots` no disparo. */
+  slots: number;
+  reason: ShiftCallReason;
+  message?: string | null;
+  /** Quantos freelas receberam o disparo (1 = convite individual). Desnormalizado: a RLS não
+   *  deixa o freela contar os concorrentes, e ele precisa saber que a vaga é disputada. */
+  targets_count: number;
+  status: ShiftCallStatus;
+  expires_at: string;
+  created_at: string;
+  closed_at?: string | null;
+  /** Primeiro aceite. (first_claim_at - created_at) = tempo de preenchimento. */
+  first_claim_at?: string | null;
+  // --- joins opcionais para UI ---
+  targets?: ShiftCallTarget[];
+  job?: Partial<Job>;
+}
+
+/** Espelha `public.shift_call_targets` (migration 20260817000100). */
+export interface ShiftCallTarget {
+  id: string;
+  call_id: string;
+  worker_id: string;
+  notified_at: string;
+  responded_at?: string | null;
+  response?: ShiftCallTargetResponse | null;
+  // --- joins opcionais para UI ---
+  worker?: Partial<WorkerProfile>;
+  call?: ShiftCall;
+}
+
+/**
+ * Resultado das RPCs de resposta ao chamado (`claim_shift_slot`, `decline_shift_call`,
+ * `cancel_shift_call`). O banco é a autoridade da corrida — o client só reage ao outcome.
+ */
+export type ShiftCallOutcome =
+  | 'claimed'
+  | 'declined'
+  | 'cancelled'
+  | 'filled'
+  | 'expired'
+  | 'not_target'
+  | 'already_responded'
+  | 'already_hired'
+  | 'blocked_cancelled'
+  | 'not_open'
+  | 'forbidden'
+  | 'not_found'
+  | 'unauthenticated';
+
+export interface ShiftCallRpcResult {
+  outcome: ShiftCallOutcome;
+  application_id?: string;
+  /** Posições ocupadas após este aceite. */
+  filled?: number;
+  slots?: number;
+  pending?: number;
+  response?: ShiftCallTargetResponse;
+  status?: ShiftCallStatus;
+}
+
+/**
+ * Convite pendente na visão do freela, normalizado.
+ * Existem DUAS origens vivas e o freela não deve perceber a diferença:
+ *  - 'call'   — alvo de um `shift_calls` (o caminho novo);
+ *  - 'legacy' — `applications` com status 'invited' criada antes do F1 (ainda em produção).
+ */
+export interface PendingInvite {
+  source: 'call' | 'legacy';
+  /** id do alvo (source='call') ou da application (source='legacy'). */
+  id: string;
+  /** Só em source='call' — é o que a RPC recebe. */
+  callId?: string;
+  /** Só em source='legacy' — é o que `respondToInvite` recebe. */
+  applicationId?: string;
+  jobId: string;
+  expiresAt: string | null;
+  /** true quando outros freelas receberam o mesmo chamado (corrida). */
+  disputed: boolean;
+  /** Quantos alvos receberam este chamado (1 = convite individual). */
+  targetsCount: number;
+  slots: number;
+  reason?: ShiftCallReason;
+  message?: string | null;
   job?: Partial<Job>;
 }
 
