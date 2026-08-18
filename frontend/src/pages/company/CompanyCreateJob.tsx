@@ -1,33 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
-import { todayLocalDate } from '../../lib/dateUtils';
+import { todayLocalDate, formatDateOnly, localDateToTimestamp } from '../../lib/dateUtils';
+import { generateOccurrenceDates, MAX_SERIES_OCCURRENCES } from '../../lib/recurrence';
+import { JobSeriesService } from '../../services/jobSeriesService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
-import type { TeamMember } from '../../types';
+import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
+import type { TeamMember, RecurrenceType } from '../../types';
 
-// Categorias focadas no mercado presencial de atendimento/serviço (pivô empresa-primeiro).
-// Sem tech/remoto — o turno é sempre presencial, definido pela função (salão/cozinha/evento).
-const SHIFT_CATEGORIES: { name: string; slug: string }[] = [
-    { name: 'Garçom / Garçonete', slug: 'garcom' },
-    { name: 'Barista / Cafeteria', slug: 'barista' },
-    { name: 'Barman / Bartender', slug: 'barman' },
-    { name: 'Cozinheiro / Cozinha', slug: 'cozinha' },
-    { name: 'Auxiliar de Cozinha / Cumim', slug: 'auxiliar_cozinha' },
-    { name: 'Atendente / Balcão', slug: 'atendente' },
-    { name: 'Caixa / Frente de Loja', slug: 'caixa' },
-    { name: 'Recepção / Hostess', slug: 'recepcao' },
-    { name: 'Limpeza / Copa / Steward', slug: 'limpeza' },
-    { name: 'Estoque / Reposição', slug: 'estoque' },
-    { name: 'Segurança / Portaria', slug: 'seguranca' },
-    { name: 'Promotor / Degustação', slug: 'promotor' },
-    { name: 'Auxiliar de Eventos / Buffet', slug: 'eventos' },
-    { name: 'Outro (Hospitality)', slug: 'outro' },
-];
+// Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
+const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAY_FULL_LABELS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -40,6 +28,14 @@ export default function CompanyCreateJob() {
     const [loading, setLoading] = useState(false);
     const [createdJobId, setCreatedJobId] = useState<string | null>(null);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
+
+    // Escala Recorrente (F3) — só na criação (não em edição, série é imutável, ADR-20260817).
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>('weekly');
+    const [weekdays, setWeekdays] = useState<number[]>([]);
+    const [rangeEndDate, setRangeEndDate] = useState('');
+    const [createdSeriesSummary, setCreatedSeriesSummary] = useState<{ occurrences: number; label: string } | null>(null);
+
     const [formData, setFormData] = useState({
         title: '',
         category: '',
@@ -146,12 +142,63 @@ export default function CompanyCreateJob() {
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
 
+    const toggleWeekday = (day: number) => {
+        setWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort((a, b) => a - b));
+    };
+
+    // Pré-visualização ao vivo (R8/A3) — recalcula a lista de datas a cada mudança nos
+    // parâmetros de recorrência. Função pura de `lib/recurrence.ts`, testável isoladamente;
+    // aqui só consumimos o resultado para o texto e o bloqueio de envio.
+    const occurrenceDates = useMemo(() => {
+        if (!isRecurring || !formData.start_date || !rangeEndDate) return [];
+        if (recurrenceType === 'weekly' && weekdays.length === 0) return [];
+        if (rangeEndDate < formData.start_date) return [];
+        try {
+            return generateOccurrenceDates({
+                recurrenceType,
+                weekdays: recurrenceType === 'weekly' ? weekdays : undefined,
+                rangeStartDate: formData.start_date,
+                rangeEndDate,
+            });
+        } catch (error) {
+            logError('CompanyCreateJob.occurrenceDates', error);
+            return [];
+        }
+    }, [isRecurring, recurrenceType, weekdays, formData.start_date, rangeEndDate]);
+
+    const overCap = occurrenceDates.length > MAX_SERIES_OCCURRENCES;
+
+    const previewDatesLabel = useMemo(() => {
+        const shown = occurrenceDates.slice(0, 6).map(d => formatDateOnly(d, 'dd/MM'));
+        return occurrenceDates.length > shown.length ? `${shown.join(', ')}…` : shown.join(', ');
+    }, [occurrenceDates]);
+
+    // Resumo pós-criação (R9): "toda domingo, de 06/09 a 27/09" / "todos os dias, de 01/09 a 05/09".
+    const buildRecurrenceLabel = (): string => {
+        const startLabel = formatDateOnly(formData.start_date, 'dd/MM');
+        const endLabel = formatDateOnly(rangeEndDate, 'dd/MM');
+        if (recurrenceType === 'daily') {
+            return `todos os dias, de ${startLabel} a ${endLabel}`;
+        }
+        const days = [...weekdays].sort((a, b) => a - b).map(d => WEEKDAY_FULL_LABELS[d]);
+        const daysLabel = days.length <= 1 ? (days[0] ?? '') : `${days.slice(0, -1).join(', ')} e ${days[days.length - 1]}`;
+        return `toda ${daysLabel}, de ${startLabel} a ${endLabel}`;
+    };
+
     // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
     const canProceed = () => {
         switch (step) {
             case 1: return !!(formData.title.trim() && formData.category);
             case 2: return !!formData.description.trim();
-            case 3: return !!(parseFloat(formData.budget) > 0 && formData.start_date && formData.start_date >= todayLocalDate() && formData.work_start_time && formData.work_end_time);
+            case 3: {
+                const baseValid = !!(parseFloat(formData.budget) > 0 && formData.start_date && formData.start_date >= todayLocalDate() && formData.work_start_time && formData.work_end_time);
+                if (!baseValid) return false;
+                if (isEditing || !isRecurring) return true;
+                if (recurrenceType === 'weekly' && weekdays.length === 0) return false;
+                if (!rangeEndDate || rangeEndDate < formData.start_date) return false;
+                if (occurrenceDates.length === 0 || overCap) return false;
+                return true;
+            }
             default: return true;
         }
     };
@@ -172,6 +219,70 @@ export default function CompanyCreateJob() {
                 return;
             }
 
+            // Escala Recorrente (F3) — caminho separado: cria 1 job_series + N jobs via RPC
+            // atômica (ADR-20260817). Nunca em edição (série é imutável exceto por status).
+            if (!isEditing && isRecurring) {
+                if (recurrenceType === 'weekly' && weekdays.length === 0) {
+                    addToast('Marque pelo menos um dia da semana.', 'error');
+                    setLoading(false);
+                    return;
+                }
+                if (!rangeEndDate || rangeEndDate < formData.start_date) {
+                    addToast('Defina uma data final válida para a recorrência.', 'error');
+                    setLoading(false);
+                    return;
+                }
+                if (occurrenceDates.length === 0) {
+                    addToast('Nenhum turno seria criado com essas datas. Ajuste o período ou os dias da semana.', 'error');
+                    setLoading(false);
+                    return;
+                }
+                // R7/A3: bloqueio NO CLIENT antes de qualquer INSERT — a RPC reforça o mesmo
+                // limite no banco (defesa em profundidade), mas aqui é a primeira barreira.
+                if (occurrenceDates.length > MAX_SERIES_OCCURRENCES) {
+                    addToast(`Essa configuração criaria ${occurrenceDates.length} turnos — o limite é ${MAX_SERIES_OCCURRENCES}. Encurte o período ou marque menos dias da semana.`, 'error');
+                    setLoading(false);
+                    return;
+                }
+
+                const result = await JobSeriesService.createSeries({
+                    recurrenceType,
+                    weekdays: recurrenceType === 'weekly' ? weekdays : undefined,
+                    rangeStartDate: formData.start_date,
+                    rangeEndDate,
+                    occurrenceDates,
+                    jobTemplate: {
+                        title: formData.title,
+                        category: formData.category,
+                        type: formData.type,
+                        description: formData.description,
+                        requirements: formData.requirements,
+                        briefing: formData.briefing,
+                        location: formData.location,
+                        budget: budgetAmount,
+                        budget_type: formData.budget_type,
+                        scope: formData.scope,
+                        work_start_time: formData.work_start_time,
+                        work_end_time: formData.work_end_time,
+                        has_lunch: formData.has_lunch,
+                        slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
+                    },
+                });
+
+                if (result.error || !result.seriesId) {
+                    // LM-12: duplo-clique cai no índice único (23505 no banco) — o service já
+                    // traduz esse caso para "Essa série já foi criada.", nunca repassa cru.
+                    addToast(result.error || 'Erro ao criar a série de turnos.', 'error');
+                    setLoading(false);
+                    return;
+                }
+
+                await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
+                setCreatedSeriesSummary({ occurrences: result.occurrences, label: buildRecurrenceLabel() });
+                setLoading(false);
+                return;
+            }
+
             const payload = {
                 company_id: user.id,
                 title: formData.title,
@@ -184,7 +295,7 @@ export default function CompanyCreateJob() {
                 budget: budgetAmount,
                 budget_type: formData.budget_type,
                 // meio-dia local evita o off-by-one de fuso (meia-noite UTC virava o dia anterior em BRT)
-                start_date: formData.start_date ? new Date(formData.start_date + 'T12:00:00').toISOString() : null,
+                start_date: formData.start_date ? localDateToTimestamp(formData.start_date) : null,
                 scope: formData.scope,
                 work_start_time: formData.work_start_time,
                 work_end_time: formData.work_end_time,
@@ -412,10 +523,13 @@ export default function CompanyCreateJob() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase tracking-wide">Início</label>
+                                    <label htmlFor="job-start-date" className="text-xs font-bold uppercase tracking-wide">
+                                        {isRecurring ? 'Início da recorrência' : 'Início'}
+                                    </label>
                                     <div className="relative">
                                         <Calendar className="absolute left-3 top-3.5 text-gray-400" size={20} />
                                         <input
+                                            id="job-start-date"
                                             type="date"
                                             aria-label="Data de início"
                                             min={todayLocalDate()}
@@ -426,6 +540,116 @@ export default function CompanyCreateJob() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Escala Recorrente (F3) — só na criação; edição de ocorrência isolada não vira série. */}
+                            {!isEditing && (
+                                <div className="space-y-4 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4">
+                                    <div className="flex items-center justify-between flex-wrap gap-3">
+                                        <div>
+                                            <h3 className="text-sm font-black uppercase flex items-center gap-2 text-gray-700">
+                                                <Repeat size={16} /> Repetir este turno
+                                            </h3>
+                                            <p className="text-xs text-gray-400 font-bold mt-1">Cria vários turnos de uma vez, com o mesmo horário e valor.</p>
+                                        </div>
+                                        <div className="flex border-2 border-black rounded-xl overflow-hidden" role="group" aria-label="Repetir este turno">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRecurring(false)}
+                                                aria-pressed={!isRecurring}
+                                                className={`min-h-[44px] px-4 py-2.5 font-black uppercase text-xs transition-colors ${!isRecurring ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                                            >
+                                                Turno único
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRecurring(true)}
+                                                aria-pressed={isRecurring}
+                                                className={`min-h-[44px] px-4 py-2.5 font-black uppercase text-xs transition-colors border-l-2 border-black ${isRecurring ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                                            >
+                                                Recorrente
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {isRecurring && (
+                                        <div className="space-y-4 pt-4 border-t-2 border-dashed border-gray-200">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase tracking-wide">Tipo de recorrência</label>
+                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRecurrenceType('weekly')}
+                                                        aria-pressed={recurrenceType === 'weekly'}
+                                                        className={`flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border-2 font-black uppercase text-xs transition-colors ${recurrenceType === 'weekly' ? 'bg-black text-white border-black' : 'bg-white border-black hover:bg-gray-100'}`}
+                                                    >
+                                                        Toda semana
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setRecurrenceType('daily')}
+                                                        aria-pressed={recurrenceType === 'daily'}
+                                                        className={`flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border-2 font-black uppercase text-xs transition-colors ${recurrenceType === 'daily' ? 'bg-black text-white border-black' : 'bg-white border-black hover:bg-gray-100'}`}
+                                                    >
+                                                        Cobrir um período
+                                                    </button>
+                                                </div>
+                                                {recurrenceType === 'daily' && (
+                                                    <p className="text-xs text-gray-400 font-bold">Ex.: cobrir uma folga de férias — um turno por dia corrido no período.</p>
+                                                )}
+                                            </div>
+
+                                            {recurrenceType === 'weekly' && (
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold uppercase tracking-wide">Dias da semana</label>
+                                                    <div className="flex flex-wrap gap-2" role="group" aria-label="Dias da semana">
+                                                        {WEEKDAY_LABELS.map((label, day) => (
+                                                            <button
+                                                                key={day}
+                                                                type="button"
+                                                                onClick={() => toggleWeekday(day)}
+                                                                aria-pressed={weekdays.includes(day)}
+                                                                aria-label={WEEKDAY_FULL_LABELS[day]}
+                                                                className={`w-11 h-11 rounded-xl border-2 font-black text-xs uppercase transition-colors ${weekdays.includes(day) ? 'bg-primary text-white border-black' : 'bg-white border-black text-black hover:bg-gray-100'}`}
+                                                            >
+                                                                {label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="space-y-2">
+                                                <label htmlFor="job-range-end" className="text-xs font-bold uppercase tracking-wide">Repetir até</label>
+                                                <div className="relative">
+                                                    <Calendar className="absolute left-3 top-3.5 text-gray-400" size={20} />
+                                                    <input
+                                                        id="job-range-end"
+                                                        type="date"
+                                                        aria-label="Repetir até"
+                                                        min={formData.start_date || todayLocalDate()}
+                                                        className="w-full bg-white border-2 border-transparent focus:border-black outline-none rounded-xl py-3 pl-10 pr-4 font-bold transition-all"
+                                                        value={rangeEndDate}
+                                                        onChange={(e) => setRangeEndDate(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Pré-visualização ao vivo (R8) */}
+                                            <div className={`rounded-xl border-2 p-4 text-sm font-bold ${overCap ? 'bg-red-50 border-red-300 text-red-700' : 'bg-white border-black'}`}>
+                                                {occurrenceDates.length === 0 ? (
+                                                    <span className="text-gray-400 font-medium">Defina os dias e o período para ver quantos turnos serão criados.</span>
+                                                ) : overCap ? (
+                                                    <span>Essa configuração criaria {occurrenceDates.length} turnos — o limite é {MAX_SERIES_OCCURRENCES}. Encurte o período ou marque menos dias da semana.</span>
+                                                ) : (
+                                                    <span>
+                                                        Serão criados <strong>{occurrenceDates.length}</strong> turno{occurrenceDates.length > 1 ? 's' : ''} — {previewDatesLabel}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Detailed Schedule */}
                             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 space-y-4">
@@ -510,13 +734,36 @@ export default function CompanyCreateJob() {
                             disabled={loading || !canProceed()}
                             className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : 'Criar Turno') : 'Próximo'}
+                            {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : (isRecurring ? 'Criar Série de Turnos' : 'Criar Turno')) : 'Próximo'}
                             {!loading && step < 3 && <ChevronRight size={20} />}
                             {!loading && step === 3 && <Check size={20} />}
                         </button>
                     </div>
 
             </div>
+
+            {/* Resumo pós-criação de série (R9) — NÃO abre o painel de convite (que assume 1
+                job); convidar continua sendo o fluxo por-ocorrência já existente na agenda. */}
+            {createdSeriesSummary && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 text-center">
+                        <div className="w-14 h-14 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mx-auto mb-4">
+                            <Repeat size={24} className="text-primary" />
+                        </div>
+                        <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Série criada!</h2>
+                        <p className="text-sm font-bold text-gray-600 mb-6">
+                            {createdSeriesSummary.occurrences} turno{createdSeriesSummary.occurrences > 1 ? 's' : ''} criado{createdSeriesSummary.occurrences > 1 ? 's' : ''}: {createdSeriesSummary.label}.
+                            Convide um freela em cada turno na sua agenda.
+                        </p>
+                        <button
+                            onClick={() => navigate('/company/jobs')}
+                            className="w-full min-h-[44px] bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
+                        >
+                            Ir para Meus Turnos
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Painel de convite pós-criação */}
             {showInvitePanel && createdJobId && (

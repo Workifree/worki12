@@ -56,6 +56,21 @@ export function formatDateOnly(isoOrDateOnly: string, pattern: string): string {
 }
 
 /**
+ * Converte uma data "date-only" (`YYYY-MM-DD`) para um timestamp ISO usando a âncora de
+ * MEIO-DIA local — o mesmo truque que `CompanyCreateJob.handleSubmit` já usava inline
+ * (`new Date(d + 'T12:00:00').toISOString()`), extraído aqui por decisão do
+ * ADR-20260817-serie-eager-e-cancelamento-suave (decisão 6, "Escala Recorrente").
+ *
+ * Meio-dia dá ±3h de folga: qualquer fuso brasileiro (UTC-2 a UTC-5) cai no mesmo dia civil ao
+ * ser reconvertido com `parseDateOnly`. Existir em UM lugar só evita a segunda cópia do truque —
+ * é exatamente assim que o off-by-one de fuso documentado no cabeçalho deste arquivo nasceria de
+ * novo (a recorrência é o lugar mais fácil do mundo para escrever essa cópia divergente).
+ */
+export function localDateToTimestamp(dateStr: string): string {
+    return new Date(`${dateStr}T12:00:00`).toISOString();
+}
+
+/**
  * Duração curta entre dois instantes ISO: "6 min", "1h 12min".
  *
  * Vive aqui, e não junto do componente que a usa, porque é a formatação do número que o produto

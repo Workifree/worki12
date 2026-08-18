@@ -39,10 +39,14 @@ export default function CompanyDashboard() {
         queryFn: async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return [];
+            // F3 (Escala Recorrente) pode gerar até 60 turnos por série: sem este filtro, uma
+            // série cancelada em massa (soft delete, status='deleted') ficava inteira aqui —
+            // cosmético antes, inutilizante agora (ADR-20260817).
             const { data } = await supabase
                 .from('jobs')
                 .select('*, views')
                 .eq('company_id', user.id)
+                .neq('status', 'deleted')
                 .order('created_at', { ascending: false });
             return data || [];
         },

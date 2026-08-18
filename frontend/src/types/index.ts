@@ -58,6 +58,17 @@ export interface CompanyProfile {
 
 export interface Job {
   id: string;
+  /**
+   * FK para `job_series` (nullable — `NULL` = turno avulso, comportamento de hoje inalterado).
+   * Espelha `jobs.series_id` (migration 20260817000400, F3 — Escala Recorrente).
+   */
+  series_id?: string | null;
+  /**
+   * Data LOCAL (`YYYY-MM-DD`) desta ocorrência dentro da série — identidade estável da
+   * ocorrência, independente de fuso (ADR-20260817-serie-eager-e-cancelamento-suave, decisão 6).
+   * `NULL` para turnos avulsos.
+   */
+  series_occurrence_date?: string | null;
   display_code?: string;
   title: string;
   description?: string;
@@ -378,6 +389,44 @@ export interface TeamListMember {
  */
 export interface TeamListWithMembers extends TeamList {
   memberIds: string[];
+}
+
+// =============================================
+// ESCALA RECORRENTE (F3) — registro-mãe de série + ocorrências materializadas em `jobs`
+// =============================================
+
+/**
+ * `weekly`  — 1+ dias-da-semana marcados (folga dominical, ex.).
+ * `daily`   — todo dia corrido no intervalo (bloco de cobertura/férias).
+ * Espelha o CHECK de `job_series.recurrence_type` (migration 20260817000400).
+ */
+export type RecurrenceType = 'weekly' | 'daily';
+
+/**
+ * Espelha `public.job_series` (migration 20260817000400, F3 — Escala Recorrente).
+ * Gate: `.harness/memory-bank/decisions/ADR-20260817-serie-eager-e-cancelamento-suave.md`.
+ *
+ * `job_series` é um MOLDE e um registro de auditoria, não o dono das ocorrências (ADR, decisão
+ * 1): depois da geração EAGER, cada `jobs` é canônico e autônomo. Editar a série não é uma
+ * operação suportada — o único campo mutável é `status` (privilégio de coluna, `GRANT UPDATE
+ * (status)`), e mesmo essa mutação acontece via RPC (`stop_job_series`), nunca `.update()` direto
+ * do client em uso normal.
+ */
+export interface JobSeries {
+  id: string;
+  company_id: string;
+  recurrence_type: RecurrenceType;
+  /** 0=domingo..6=sábado. `NULL` quando `recurrence_type === 'daily'`. */
+  weekdays: number[] | null;
+  /** `YYYY-MM-DD`, inclusive. */
+  range_start_date: string;
+  /** `YYYY-MM-DD`, inclusive. Sempre presente — não existe recorrência sem fim (R1). */
+  range_end_date: string;
+  occurrences_generated: number;
+  /** `stopped` = "Cancelar a série inteira" (R11) — impede reaproveitar a série; não é exclusão. */
+  status: 'active' | 'stopped';
+  created_by: string;
+  created_at: string;
 }
 
 // =============================================

@@ -10,6 +10,23 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Escala Recorrente — Turnos que Se Repetem (2026-08-17)
+
+**Empresa:**
+- **Criar série recorrente:** ao invés de cadastrar turnos um por um, crie uma série que gera múltiplos turnos automaticamente
+- **Dois tipos de repetição:** (1) **Toda semana** — escolha os dias que se repetem (seg, ter, etc.); (2) **Cobrir um período** — um turno por dia corrido (ideal para férias/eventos)
+- **Data final obrigatória:** toda série tem um fim — nada de recorrência infinita
+- **Máximo 60 turnos por série:** limita o tamanho das séries; a tela avisa se ultrapassar o limite
+- **Prévia ao criar:** antes de confirmar, você vê quantos turnos serão criados e a lista completa de datas
+- **Cada turno é independente:** após criada, cada turno funciona como um turno normal (edit, convite, pagamento, avaliação)
+- **Convidar para a série inteira:** escolha um freela e convide-o para todas as ocorrências futuras ainda abertas (em paralelo, sem digitar cada uma)
+- **Aviso de sobrecarga:** se convidar alguém para tantos turnos que ultrapasse o limite semanal configurado, a tela avisa (a decisão é sua)
+- **Editar os futuros:** altere título, função, descrição, requisitos, briefing, local, horário, vagas para todas as ocorrências futuras abertas, de uma vez (o valor fica travado)
+- **Cancelar a série:** encerre a série — ela para de gerar novos turnos e remove as ocorrências futuras ainda abertas
+- **Prévia antes de aplicar:** tanto para edição quanto cancelamento, a tela mostra quantos turnos serão afetados e quantos ficarão (porque já têm freela ou chamado)
+- **Proteção de freelas confirmados:** turnos com freela já contratado ou chamado aberto NUNCA são alterados ou cancelados em massa — segurança contra quebra de compromisso
+- **Série é imutável:** após criar, não dá para mudar tipo/dias/datas — crie uma nova se precisar de padrão diferente
+
 #### Chamado de Turno — Disparo 1→N com Primeiro-Aceite (2026-08-17)
 
 **Empresa:**
