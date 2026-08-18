@@ -10,6 +10,35 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Confirmação de Véspera — Validar Presença do Freela um Dia Antes (2026-08-18)
+
+**Freela:**
+- **Card de confirmação em "Meus Turnos":** na véspera do turno, aparece um card destacado perguntando "Você vai trabalhar amanhã?"
+- **Dois botões, um toque:** "Sim, vou" ou "Não vou poder" — resposta imutável (não pode ser mudada depois)
+- **Notificação:** sino avisa que há pedido de confirmação pendente (link direto para `/my-jobs`)
+- **Badge de status:** após responder, o card mostra um badge verde (Confirmado) ou âmbar (Avisou que não vai)
+
+**Empresa:**
+- **Resumo agregado:** tela "Presença e Pagamento" mostra no topo quantos confirmaram, quantos não responderam, quantos disseram que não vão
+- **Badge por freela:** cada linha da lista exibe o status de confirmação (Confirmado / Sem resposta / Avisou que não vai)
+- **Botão "Pedir confirmação":** dispara manualmente um pedido de confirmação a qualquer hora (não só na véspera)
+  - Máximo 2 pedidos por freela no mesmo turno
+  - Cooldown de 6 horas entre pedidos
+  - Botão desabilitado com motivo se limite foi atingido ou cooldown em vigor
+- **Notificação urgente:** quando freela avisa "não vai poder", empresa recebe alerta imediato e acesso direto à tela de turno
+- **"Dispensar e chamar substituto":** novo botão que dispensa o freela **e abre** o Chamado de Turno (F1) para reabrir a vaga na hora (não duplica telas)
+- **Bloqueio seguro:** se houver pagamento agendado/registrado para o freela, dispensa é bloqueada — é preciso estornar o pagamento antes
+
+**Aspecto técnico (operação):**
+- O pedido automático está planejado para às 18h diariamente, mas depende de configuração de servidor (`pg_cron`) que ainda não está habilitada em produção
+- Por enquanto a confirmação funciona **apenas pelo botão manual** "Pedir confirmação" que a empresa controla
+- O automático será ativado assim que a infraestrutura for configurada (não necessita mudança no app)
+
+**Integração:**
+- Sem mudança de status automática — silêncio ou "não vai poder" são só avisos; a empresa decide manualmente se dispensa ou toma ação
+- `applications.status` continua intacto; mudanças passam pelos fluxos já existentes (`dismissFromShift`, check-in/checkout)
+- Resposta da confirmação fica no histórico (dados para análise futura de confiabilidade do freela)
+
 #### Escala Recorrente — Turnos que Se Repetem (2026-08-17)
 
 **Empresa:**

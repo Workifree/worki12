@@ -194,6 +194,53 @@ INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria 
 
 **Ocorrência de série é `jobs` normal:** `series_id` é só etiqueta; `applications`, `shift_calls`, `shift_payments`, `escrow_transactions` apontam para `jobs.id` como sempre. Agenda, Chamado de Turno, e convite direto não sabem que série existe. EAGER venceu lazy por causa dos 3 FKs — materializamos tudo no início, eliminamos carregamento assíncrono e máquinas de estado implícitas.
 
+## Confirmação de Véspera (F4: descoberta de furo com 12h de antecedência)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): a quebra das 8h30 (turno aberto, ninguém aparece)
+> **nasce de gente que não apareceu**. F1 ataca o sintoma (preencher rápido depois da falha); F4 ataca a causa
+> (descobrir o furo com 12h de antecedência em vez de 2h30 antes da hora).
+
+**Tabelas (migrations `20260817000600`):**
+- `shift_attendance_confirmations` — tabela-evento: `(id uuid PK, job_id uuid NOT NULL, worker_id uuid NOT NULL, request_sent_at timestamptz, worker_responded_at timestamptz, response text, confirmation_status text, metadata jsonb, created_at)`. Índice composto `(job_id, worker_id)` sem UNIQUE (várias tentativas permitidas). RLS **SELECT-only** (não há UPDATE/INSERT via client — tudo por RPC DEFINER).
+
+**Helpers SECURITY DEFINER (migração `20260817000600`):**
+- `job_local_date(job_id uuid) → date` — retorna data local do turno convertida do UTC `job.start_date` via fuso `settings.app_timezone` (ou 'America/Sao_Paulo' default). Usado por cron para saber "é hoje 20h se eu enviar confirmação agora?". Problema: cron roda sem sessão (`auth.uid()` NULL), logo não pode depender de policy de SELECT simples em `jobs`. Solução: **`SECURITY DEFINER` obrigatório** (predicado sem sessão = deve ter DEFINER).
+- `job_is_active(job_id uuid) → boolean` — retorna true se turno não foi deletado (`status <> 'deleted'`), não está no passado, e tem freelas candidatos. Também SECURITY DEFINER (mesma razão: cron lê sem sessão).
+
+**Gatilho de tentativa (trigger, migração `20260817000600`):**
+- `trg_notify_worker_on_attendance_request` (BEFORE INSERT ON shift_attendance_confirmations) — SECURITY DEFINER, insere notificação bilateral (`worker` recebe, `company` também avisada).
+
+**RPCs de mutação (migração `20260817000700`, todas SECURITY DEFINER + search_path=''):**
+- `request_attendance_confirmation(job_id, worker_id)` — empresa pede confirmação de presença ao freela para turno de amanhã (7 dias no máximo). Insere linha em `shift_attendance_confirmations` + dispara notificação.
+- `respond_attendance_confirmation(confirmation_id, response_text)` — freela responde (ex.: "Confirmo" / "Não consigo"). Seta `worker_responded_at` + `response` + `confirmation_status`.
+- `request_attendance_confirmations_due` — RPC de leitura (SECURITY DEFINER, STABLE): retorna array de `job_id` que precisam confirmação "por hoje até 20h". Usado pela UI worker em `MyJobs` (R2/R3) para destacar "⚠️ Confirme presença em X turno(s)".
+
+**Agendador (migração `20260817000800`, `pg_cron`) — MANDATÓRIO para cumprir promessa**
+```sql
+IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+  SELECT cron.schedule(
+    'request_attendance_confirmations_7d',
+    '20 * * * *',                 -- 20h UTC (madrugada Brasil, alcance máximo antes de 8h30)
+    $$SELECT public.batch_request_attendance_confirmations_7d();$$
+  );
+END IF;
+```
+**Proteção graceful:** `IF EXISTS` garante que migração passa sem erro se pg_cron não instalado. **Mas a feature é incompleta sem cron** — a promessa ("descobrir furo 12h antes") depende do alcance proativo. Sem agendador: empresa teria de lembrar de apertar botão manual na véspera = **comportamento humano que F4 existe para substituir** (feedback do evaluator: "ALTO" blocker). RPC `batch_request_attendance_confirmations_7d` (SECURITY DEFINER) roda diariamente às 20h UTC (coordenada) alcançando **freelas que não abriram o app** — diferencial vs. F1.
+
+**Pre-requisito:** ops habilita `pg_cron` como passo de validação em produção. Não é "TODO futuro" — é gate de entrega.
+
+**Modelo de dados (por quê tabela-evento e não coluna):**
+Confirmação de véspera é uma **tentativa**, não o contrato. Uma vaga pode ter 10 freelas, cada um recebe N tentativas (reenvios se não responder). Adicionar colunas de tentativa em `applications` levaria a:
+- Duplicação de lógica de notificação
+- Histórico perdido (N tentativas em uma coluna `jsonb` é não-consultável)
+- Máquina de estados em dois lugares (`applications.status` + `applications.attendance_attempt_status`)
+
+`shift_attendance_confirmations` é **evento**: cada linha = uma tentativa. Reutilizável para futuro (webhook de SMS, retry com backoff, análise de padrão de não-aparecimento).
+
+**Dual-flow:** empresa pode clicar manualmente "Pedir Confirmação" (bloqueia no clique) OU cron dispara automaticamente 20h antes. Clique é fallback; automação é padrão. Diferencia de F1 (`expire-invites` é housekeeping de máquina de estados, não core da promessa).
+
+**Padrão: ✓ Tentativa é evento, contrato é linha** + **Escolha de timing depende do alcance necessário** — padrões catalogados em `patterns.md`.
+
 ## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
 **Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).
