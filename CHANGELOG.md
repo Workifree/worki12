@@ -10,6 +10,30 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Chamado de Turno — Disparo 1→N com Primeiro-Aceite (2026-08-17)
+
+**Empresa:**
+- **Novo modelo de convite:** em vez de convidar freela por freela e segurar a vaga por horas, a empresa dispara um turno para vários freelas do Elenco **ao mesmo tempo**
+- **Quem aceitar primeiro fica com a vaga:** o chamado fecha automaticamente quando a vaga é preenchida; os demais recebem notificação sem qualquer punição
+- **Opções de expiração:** 30 minutos, 1 hora, **2 horas (padrão)**, 6 horas, 24 horas, ou até o horário de início do turno
+- **Motivo do chamado:** empresa marca por que precisa chamar (falta de freela, demissão/quebra de escala, pico previsto, evento, férias, folga, reforço)
+- **Métrica de performance:** a tela do turno mostra em quanto tempo a primeira vaga foi preenchida (ex: "6 minutos" em vez de "2 horas")
+- **Visão em tempo real:** painel mostra quantos responderam, quantos recusaram, quantos ainda estão aguardando
+- **Cancelar chamado:** empresa pode parar de procurar a qualquer momento — o chamado encerra e ninguém perde reputação
+- **Convite tradicional ainda funciona:** para chamar apenas um freela, a interface é a mesma (é um chamado com um alvo)
+
+#### Listas do Elenco — Organizar Freelas por Função (2026-08-17)
+
+**Empresa:**
+- **Nova tela "Listas do Elenco":** salvar grupos de freelas por função/tipo ("Cozinha", "Salão", "Chapa", "Limpeza", etc.)
+- **Criar/editar/excluir listas:** interface simples de nomear e marcar freelas
+- **Um freela em várias listas:** o mesmo freela pode estar em "Cozinha" E "Limpeza"
+- **Criar lista vazia:** salvar uma lista sem membros e preenchê-la depois é válido
+- **Usar listas no chamado:** ao disparar um turno, clicar num chip de lista **adiciona todos os freelas daquele grupo** à seleção
+- **Marcar/desmarcar:** clicar novamente no chip remove só aquele grupo (não desfaz os freelas marcados à mão)
+- **Excluir lista não remove ninguém:** quando você exclui uma lista, os freelas continuam no Elenco — apenas a categorização é removida
+- **Disponibilidade na hora:** no moment do chamado, os chips mostram **quantos da lista estão realmente disponíveis** para aquele turno (quem já está alocado ou saiu do Elenco não é contado)
+
 #### Revisão Pré-Piloto (Onda 3) — 2026-08-16
 
 **Agenda de Turnos por Dia (Empresa):**

@@ -83,6 +83,9 @@ e push (convite) coexistem: pull = worker se candidata; push = empresa convida c
 worker clica, autoriza (`/convite/:token`), entra na equipe accepted. Slice 1 também suporta convite por telefone (Worki ID) 
 e QR (v1.1).
 
+**Lista do Elenco (team_lists)** — Agrupamento organizacional de membros do elenco por função/turma/departamento. 
+Tabelas `team_lists` (nome, company_id) + `team_list_members` (list_id, worker_id). Zero consentimento, zero dinheiro — é puro organizacional da empresa. Atalho no `ShiftCallModal` para seleção rápida: clique no chip "Cozinha (5)" seleciona todo o grupo de uma vez (primeiro-clique soma; segundo-clique remove). Membro que sai do elenco é silenciosamente filtrado no cálculo do chip. Feature F2 (Listas salvas do elenco). RLS via `is_company_owner(company_id)`.
+
 **Postpago (Slice 2)** — Modelo de pagamento para turno via convite push: empresa cadastra cartão on-file (tokenização Asaas),
 convida freela (sem reserva de saldo antecipado); no aceite, nada muda; na conclusão, autoriza um hold (pré-autorização)
 no cartão, depois captura o pagamento transferindo o valor ao worker. Coexiste com prepago (pull legado).
