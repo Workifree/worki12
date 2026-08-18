@@ -4,10 +4,12 @@ import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { useCompanyInvites } from '../../hooks/useShiftInvites';
+import { useCompanyInvites, useShiftCalls } from '../../hooks/useShiftInvites';
+import { ShiftCallModal } from '../../components/team/ShiftCallModal';
+import { ShiftCallsPanel } from '../../components/team/ShiftCallsPanel';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
@@ -137,6 +139,10 @@ export default function CompanyJobCandidates() {
     const [jobEndTime, setJobEndTime] = useState<string | null>(null);
     const [companyName, setCompanyName] = useState('');
 
+    // Chamado de turno (F1): quantas vagas o turno tem e o modal de disparo múltiplo.
+    const [jobSlots, setJobSlots] = useState(1);
+    const [callModalOpen, setCallModalOpen] = useState(false);
+
     // "Cancelar Convite" — invited sem resposta, libera o slot (onda 3).
     const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);
 
@@ -177,6 +183,28 @@ export default function CompanyJobCandidates() {
     // Reaproveita o hook do fluxo de convite (mesmo usado em CompanyCreateJob) para disparar
     // um novo convite a partir desta tela quando o anterior expirou sem resposta.
     const { invite: sendReopenInvite, invitingWorkerId: reopenInvitingWorkerId } = useCompanyInvites(id ?? '');
+    const {
+        calls,
+        loading: callsLoading,
+        cancellingId: cancellingCallId,
+        cancel: cancelCall,
+        refresh: refreshCalls,
+    } = useShiftCalls(id ?? '');
+
+    // Posições já ocupadas do turno. Usa os MESMOS status que a RPC `claim_shift_slot` conta —
+    // se os dois divergirem, a tela mostra vaga aberta que o banco recusa (ou o contrário).
+    const filledCount = candidates.filter((app) =>
+        ['hired', 'in_progress', 'completed'].includes(app.status),
+    ).length;
+
+    // Quem não deve aparecer no modal de chamado: já está no turno em qualquer estado vivo, ou
+    // já foi chamado num chamado ainda aberto (chamar de novo só geraria ruído no celular dele).
+    const workerIdsInShift = candidates
+        .filter((app) => app.status !== 'cancelled' && app.status !== 'declined')
+        .map((app) => app.worker_id);
+    const workerIdsPendingCall = calls
+        .filter((call) => call.status === 'open')
+        .flatMap((call) => (call.targets ?? []).filter((t) => !t.response).map((t) => t.worker_id));
 
     useEffect(() => {
         if (id) fetchCandidates();
@@ -195,13 +223,14 @@ export default function CompanyJobCandidates() {
             // Fetch Job Title (only if owned by this company)
             const { data: job, error: jobError } = await supabase
                 .from('jobs')
-                .select('title, budget, location, start_date, work_start_time, work_end_time')
+                .select('title, budget, location, start_date, work_start_time, work_end_time, slots')
                 .eq('id', id)
                 .eq('company_id', user.id)
                 .single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);
             setJobBudget(job.budget ?? 0);
+            setJobSlots(job.slots ?? 1);
             setJobLocation(job.location ?? '');
             setJobStartDate(job.start_date ?? '');
             setJobStartTime(job.work_start_time ?? null);
@@ -923,9 +952,28 @@ export default function CompanyJobCandidates() {
                         <ArrowLeft size={16} strokeWidth={3} /> Voltar para Turnos
                     </button>
                     <h1 className="text-3xl font-black uppercase tracking-tighter">Presença e Pagamento</h1>
-                    <p className="text-gray-500 font-bold">{jobTitle} • {candidates.length} freela{candidates.length !== 1 ? 's' : ''}</p>
+                    <p className="text-gray-500 font-bold">
+                        {jobTitle} • {filledCount} de {jobSlots} vaga{jobSlots !== 1 ? 's' : ''} preenchida{filledCount !== 1 ? 's' : ''}
+                    </p>
                 </div>
+                {/* O gesto de 8h30: um clique, vários freelas, quem aceitar primeiro leva.
+                    Some quando o turno já está completo — não há vaga para disputar. */}
+                {filledCount < jobSlots && (
+                    <button
+                        onClick={() => setCallModalOpen(true)}
+                        className="bg-black hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors flex-shrink-0"
+                    >
+                        <Megaphone size={16} /> Chamar Freelas
+                    </button>
+                )}
             </div>
+
+            <ShiftCallsPanel
+                calls={calls}
+                loading={callsLoading}
+                cancellingId={cancellingCallId}
+                onCancel={(callId) => void cancelCall(callId)}
+            />
 
             {/* Candidates List */}
             <div className="space-y-4">
@@ -1823,6 +1871,25 @@ export default function CompanyJobCandidates() {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Chamado de turno (F1) — disparo para 1..N do elenco, primeiro-aceite */}
+            {callModalOpen && (
+                <ShiftCallModal
+                    job={{
+                        id: id ?? '',
+                        title: jobTitle,
+                        start_date: jobStartDate,
+                        work_start_time: jobStartTime ?? undefined,
+                        slots: jobSlots,
+                    }}
+                    excludeWorkerIds={[...workerIdsInShift, ...workerIdsPendingCall]}
+                    onClose={() => setCallModalOpen(false)}
+                    onDispatched={() => {
+                        refreshCalls();
+                        void fetchCandidates();
+                    }}
+                />
             )}
 
         </div>

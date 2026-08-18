@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -556,9 +556,18 @@ export default function MyJobs() {
                                                 <p className={`font-black uppercase truncate ${companyId ? 'hover:text-primary transition-colors' : ''}`}>{companyName}</p>
                                             </div>
                                         </div>
-                                        <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200 flex-shrink-0">
-                                            Novo convite
-                                        </span>
+                                        {/* Corrida explícita: o freela precisa saber que a vaga é disputada ANTES
+                                            de decidir. Esconder isso seria deixá-lo achar que tem o tempo todo do
+                                            mundo e perder a vaga sem entender por quê. */}
+                                        {invite.disputed ? (
+                                            <span className="ml-auto bg-yellow-100 text-yellow-800 text-xs font-black uppercase px-2 py-1 rounded-xl border border-yellow-300 flex-shrink-0">
+                                                Quem aceitar primeiro
+                                            </span>
+                                        ) : (
+                                            <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200 flex-shrink-0">
+                                                Novo convite
+                                            </span>
+                                        )}
                                     </div>
 
                                     {/* Detalhes do turno */}
@@ -585,11 +594,18 @@ export default function MyJobs() {
                                         </div>
                                     )}
 
-                                    {/* Expiração */}
-                                    {invite.invitation_expires_at && (
+                                    {/* Disputa + expiração */}
+                                    {invite.disputed && (
+                                        <p className="text-xs font-bold text-yellow-700 mb-2 flex items-center gap-1">
+                                            <Users size={12} />
+                                            {invite.targetsCount} freelas receberam este turno
+                                            {invite.slots > 1 ? ` · ${invite.slots} vagas` : ' · 1 vaga'}
+                                        </p>
+                                    )}
+                                    {invite.expiresAt && (
                                         <p className="text-xs font-bold text-yellow-600 mb-4 flex items-center gap-1">
                                             <Clock size={12} />
-                                            Expira {formatDistanceToNow(new Date(invite.invitation_expires_at), { addSuffix: true, locale: ptBR })}
+                                            Expira {formatDistanceToNow(new Date(invite.expiresAt), { addSuffix: true, locale: ptBR })}
                                         </p>
                                     )}
 

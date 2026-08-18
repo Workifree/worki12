@@ -86,6 +86,71 @@ trigger `auto_reserve_escrow_on_hire` pula a reserva no aceite de convite (ADR-2
 legado** (candidatura → hired) ainda reserva no aceite (modelo prepago original, inalterado). O pagamento do
 push é o **Slice 2: postpago** (cartão on-file + captura na conclusão, sem depósito antecipado).
 
+## Chamado de Turno (F1: disparo 1→N com primeiro-aceite)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): a dor #1 não é controle de gasto — é
+> **disponibilidade**. "Oferecer a vaga para vários freelancers simultaneamente, sem segurar a vaga por
+> uma ou duas horas... o primeiro que aceitar preenche, mais ou menos como o Uber faz."
+
+**Tabelas (migrations `20260817000000`–`20260817000200`):**
+- `jobs.slots` (int, default 1, CHECK >= 1) — quantas pessoas o turno precisa. Uma posição preenchida =
+  uma `applications` em `hired|in_progress|completed`.
+- `shift_calls` — o disparo: `(job_id, company_id, created_by, slots, reason, message, targets_count,
+  status, expires_at, created_at, closed_at, first_claim_at)`. Status: `open | filled | cancelled | expired`.
+- `shift_call_targets` — quem foi chamado: `(call_id, worker_id, notified_at, responded_at, response)`.
+  Response: `accepted | declined | closed` (NULL = pendente). UNIQUE `(call_id, worker_id)`.
+
+**Por que tabelas novas e não `applications` estendida (ADR embutido):** `applications_job_worker_unique
+UNIQUE (job_id, worker_id)` + `'cancelled'` irreversível fariam os perdedores da corrida ficarem
+**permanentemente inelegíveis** àquele turno — inclusive se a vaga reabrisse. Apagar as linhas perdedoras
+para liberar o UNIQUE destruiria o histórico "quem foi chamado × quem respondeu × em quanto tempo", que é
+o insumo do BI de operação e do ranking de descoberta futura. Logo: a **tentativa** vive em
+`shift_call_targets`; o **contrato** continua em `applications`, criado só para quem ocupou a vaga.
+
+**Convite individual = chamado de um alvo.** `shiftInviteService.inviteWorkerToShift` delega para
+`ShiftCallService.createShiftCall(jobId, [workerId])`. Não existem dois produtores de convite com regras
+diferentes de reversibilidade.
+
+**RPCs (`20260817000200`, todas SECURITY DEFINER + search_path=''):**
+- `claim_shift_slot(call_id)` — o aceite. **Lock em `jobs`, não em `shift_calls`**: dois chamados abertos
+  do mesmo turno disputam as mesmas vagas, então o recurso escasso é o turno. Devolve jsonb com `outcome`:
+  `claimed | filled | expired | cancelled | not_target | already_responded | already_hired |
+  blocked_cancelled | not_found | unauthenticated`.
+- `decline_shift_call(call_id)` — recusa NEUTRA (R6/R7). Avisa a empresa quando o chamado esvazia.
+- `cancel_shift_call(call_id)` — empresa para de procurar. NÃO desfaz quem já aceitou (isso é
+  `dismissFromShift`, com as guardas de pagamento ativo e presença).
+
+**Como o aceite atravessa os dois triggers de `applications` (conhecimento reutilizável):**
+Ambos são de **UPDATE** (`trg_validate_application_update` BEFORE, `trg_auto_reserve_escrow_on_hire` AFTER).
+- Caminho normal (sem application prévia) → **INSERT** direto com `status='hired'`. Nenhum trigger de
+  UPDATE dispara ⇒ **nenhum escrow reservado, sem flag nenhuma**. Article 8 intacto por construção.
+- Caminho com application prévia ('invited' legado, 'declined', ou status do fluxo pull) → **DOIS UPDATEs**:
+  passo 1 normaliza para `status='invited'` + `invited_by_company_at` (nenhum trigger reage a 'invited'),
+  passo 2 vai para 'hired'. Só assim os dois triggers reconhecem "aceite de convite" e liberam — um UPDATE
+  único vindo de 'declined' seria barrado pelo validador e, se passasse, reservaria escrow prepago
+  (que em modo A aborta por falta de saldo e derrubaria o aceite inteiro).
+
+**Recursão de policy — armadilha resolvida:** a policy de `shift_calls` precisa ler `shift_call_targets`
+(sou alvo?) e a de `shift_call_targets` precisa ler `shift_calls` (sou dono do turno?). Subquery em policy
+é avaliada sob a RLS da tabela referenciada ⇒ A→B→A = erro 42P17 **em runtime, não no CREATE**. Quebrado
+com duas funções SECURITY DEFINER mínimas: `shift_call_job_id(call_id)` (devolve só um uuid) e
+`is_shift_call_target(call_id)` (booleano, sempre sobre `auth.uid()` — não aceita "por qual usuário
+perguntar", então não serve para varrer dado alheio).
+
+**`is_job_owner(job_id)` (SECURITY INVOKER):** repete a ancoragem dupla de `jobs.company_id`
+(`= auth.uid()` OU via `companies.owner_id`) num lugar só. Não é DEFINER de propósito — `jobs`/`companies`
+já têm SELECT `USING (true)`. **É a costura por onde o multi-unidade/gerente (F3) vai passar.**
+
+**Sem policy de UPDATE/DELETE** em nenhuma das duas tabelas: toda transição de estado passa pelas RPCs,
+mantendo a máquina de estados em um lugar auditável.
+
+**Métrica de topo:** `first_claim_at - created_at` = tempo de preenchimento. É o número que prova o ROI
+("de 2 horas para 6 minutos") e aparece na tela da operação, não só em relatório.
+
+**`shift_calls.reason`** (`falta | demissao | pico_previsto | evento | ferias | folga | reforco | outro`)
+devolve o relatório que o sócio-operador já monta na mão: ele controla gasto com freela cruzando com
+nível de falta e quebra de escala.
+
 ## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
 **Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).

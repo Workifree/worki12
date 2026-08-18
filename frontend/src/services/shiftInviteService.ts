@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import { invokeFunction } from './api';
 import { logError } from '../lib/logger';
 import { TeamConnectionService } from './teamConnectionService';
+import { ShiftCallService } from './shiftCallService';
 import type {
   Application,
   ApplicationStatus,
@@ -143,9 +144,16 @@ export interface InviteWorkerToShiftOptions {
 }
 
 export interface InviteWorkerResult {
+  /**
+   * Sempre `null` desde o F1: o convite individual virou um chamado de um alvo e a
+   * `applications` só nasce quando o freela aceita. Mantido no tipo para não quebrar chamadores
+   * que ainda desestruturam este campo.
+   */
   application: Application | null;
+  /** id do `shift_calls` criado. */
+  callId?: string;
   error?: string;
-  /** true quando já existe um convite pendente (idempotência). */
+  /** true quando já existe um convite/chamado pendente (idempotência). */
   alreadyInvited?: boolean;
 }
 
@@ -187,13 +195,6 @@ async function getAuthCompanyId(): Promise<string> {
   if (!company) throw new Error('Perfil de empresa não encontrado.');
 
   return company.id as string;
-}
-
-/** Calcula timestamp de expiração. */
-function calcExpiry(hours: number): string {
-  const d = new Date();
-  d.setHours(d.getHours() + hours);
-  return d.toISOString();
 }
 
 // ---------------------------------------------------------------------------
@@ -248,18 +249,20 @@ export const ShiftInviteService = {
   // -------------------------------------------------------------------------
 
   /**
-   * Convida um worker da equipe para um turno específico.
+   * Convida UM worker da equipe para um turno específico.
    *
-   * Pré-condições verificadas:
-   *  1. O worker é conexão 'accepted' da empresa (R2 — lista fechada).
-   *  2. Não existe convite ativo (invited) para o mesmo job+worker.
+   * Desde o F1 (Chamado de Turno) este método é um **atalho de um alvo** sobre
+   * `ShiftCallService.createShiftCall` — não existe mais um caminho de convite próprio.
    *
-   * Ações:
-   *  1. Insere em `applications` com status='invited'.
-   *  2. Cria notificação in-app (insert em `notifications`).
-   *  3. Invoca `send-notification` para entrega por e-mail.
+   * Por que delegar em vez de manter os dois: enquanto o convite individual escrevia direto em
+   * `applications` com status 'invited', ele produzia um estado que o chamado não produz (uma
+   * application antes do aceite) e que o `UNIQUE(job_id, worker_id)` transforma em bloqueio
+   * permanente se o convite for cancelado. Dois produtores do mesmo convite, com regras
+   * diferentes de reversibilidade, é o tipo de divergência que só aparece no pior dia — a
+   * empresa tentando rechamar alguém e o sistema dizendo que não dá, sem explicar por quê.
    *
-   * Não chama reserve_escrow (Slice 2).
+   * Pré-condições (elenco aceito, idempotência) continuam valendo: a primeira é verificada
+   * aqui e reforçada na policy de INSERT de `shift_call_targets`; a segunda é verificada aqui.
    *
    * @param jobId    UUID do turno (job).
    * @param workerId UUID do worker a convidar.
@@ -273,7 +276,7 @@ export const ShiftInviteService = {
     try {
       const companyId = await getAuthCompanyId();
 
-      // 1. Validar que o worker está na equipe aceita (R2)
+      // 1. Validar que o worker está na equipe aceita (R2 — lista fechada)
       const inTeam = await TeamConnectionService.isWorkerInTeam(companyId, workerId);
       if (!inTeam) {
         return {
@@ -283,7 +286,7 @@ export const ShiftInviteService = {
         };
       }
 
-      // 2. Verificar se já existe convite pendente (idempotência)
+      // 2. Já está no turno? (application de qualquer origem — pull, convite legado ou aceite)
       const { data: existing, error: checkErr } = await supabase
         .from('applications')
         .select('id, status')
@@ -297,12 +300,8 @@ export const ShiftInviteService = {
       }
 
       if (existing) {
-        // Já existe application (qualquer status)
         if (existing.status === 'invited') {
-          return {
-            application: existing as Application,
-            alreadyInvited: true,
-          };
+          return { application: existing as Application, alreadyInvited: true };
         }
         return {
           application: null,
@@ -310,65 +309,35 @@ export const ShiftInviteService = {
         };
       }
 
-      // 3. Calcular expiração
-      const expiresInHours = opts.expiresInHours ?? DEFAULT_INVITE_EXPIRY_HOURS;
-      const expiresAt = calcExpiry(expiresInHours);
-      const now = new Date().toISOString();
+      // 3. Já existe chamado ABERTO deste turno com este freela como alvo pendente?
+      //    (idempotência do caminho novo — evita dois chamados para a mesma pessoa/turno)
+      const { data: openTargets, error: openErr } = await supabase
+        .from('shift_call_targets')
+        .select('id, call:shift_calls!inner ( id, job_id, status )')
+        .eq('worker_id', workerId)
+        .is('response', null)
+        .eq('call.job_id', jobId)
+        .eq('call.status', 'open')
+        .limit(1);
 
-      // 4. Inserir convite em applications
-      const { data: application, error: insertErr } = await supabase
-        .from('applications')
-        .insert({
-          job_id: jobId,
-          worker_id: workerId,
-          status: 'invited' as ApplicationStatus,
-          invited_by_company_at: now,
-          invitation_expires_at: expiresAt,
-        })
-        .select()
-        .single();
-
-      if (insertErr) {
-        if (insertErr.code === '23505') {
-          return { application: null, alreadyInvited: true };
-        }
-        logError('shiftInvite.inviteWorkerToShift.insert', insertErr);
-        return { application: null, error: 'Não foi possível criar o convite.' };
+      if (openErr) {
+        logError('shiftInvite.inviteWorkerToShift.checkCall', openErr);
+      } else if (openTargets && openTargets.length > 0) {
+        return { application: null, alreadyInvited: true };
       }
 
-      // 5. Notificação in-app (insert direto em notifications)
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: workerId,
-        type: 'status_change',
-        title: 'Novo convite de turno',
-        message:
-          opts.message ??
-          'Você recebeu um convite para um turno. Acesse "Convites" para aceitar ou recusar.',
-        link: `/my-jobs`,
+      // 4. Disparo de um alvo só.
+      const expiresInHours = opts.expiresInHours ?? DEFAULT_INVITE_EXPIRY_HOURS;
+      const result = await ShiftCallService.createShiftCall(jobId, [workerId], {
+        expiresInHours,
+        message: opts.message,
       });
 
-      if (notifErr) {
-        // Não bloqueia — a application foi criada; notificação é best-effort
-        logError('shiftInvite.inviteWorkerToShift.notif', notifErr);
+      if (result.error || !result.call) {
+        return { application: null, error: result.error ?? 'Não foi possível criar o convite.' };
       }
 
-      // 6. Entrega por e-mail via send-notification (best-effort)
-      try {
-        await invokeFunction('send-notification', {
-          userId: workerId,
-          type: 'shift_invite',
-          data: {
-            jobId,
-            applicationId: application.id,
-            expiresAt,
-          },
-        });
-      } catch (emailErr) {
-        // Edge function falhou — não bloqueia o convite
-        logError('shiftInvite.inviteWorkerToShift.email', emailErr);
-      }
-
-      return { application: application as Application };
+      return { application: null, callId: result.call.id };
     } catch (err) {
       logError('shiftInvite.inviteWorkerToShift', err);
       return {

@@ -54,7 +54,9 @@ export default function CompanyCreateJob() {
         scope: 'on-site', // sempre presencial no pivô (sem remoto/híbrido)
         work_start_time: '',
         work_end_time: '',
-        has_lunch: false
+        has_lunch: false,
+        /** Quantas pessoas o turno precisa (F1). Texto no form, inteiro no banco. */
+        slots: '1'
     });
 
     // Hooks de equipe e convites — carregados após criação do job
@@ -116,7 +118,8 @@ export default function CompanyCreateJob() {
                     scope: data.scope,
                     work_start_time: data.work_start_time || '',
                     work_end_time: data.work_end_time || '',
-                    has_lunch: data.has_lunch || false
+                    has_lunch: data.has_lunch || false,
+                    slots: String(data.slots ?? 1)
                 });
             }
         } catch (error) {
@@ -186,6 +189,9 @@ export default function CompanyCreateJob() {
                 work_start_time: formData.work_start_time,
                 work_end_time: formData.work_end_time,
                 has_lunch: formData.has_lunch,
+                // CHECK (slots >= 1) no banco — o clamp aqui evita que um campo limpo pela
+                // pessoa (string vazia → NaN) vire erro de constraint na cara dela.
+                slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
                 status: 'open'
             };
 
@@ -381,6 +387,27 @@ export default function CompanyCreateJob() {
                                         </p>
                                     )}
                                 </div>
+                            </div>
+
+                            {/* Vagas (F1): quantas pessoas o turno precisa. É o denominador do
+                                chamado — com 3 vagas, o disparo só fecha no terceiro aceite. */}
+                            <div className="space-y-2">
+                                <label htmlFor="job-slots" className="text-xs font-bold uppercase tracking-wide">
+                                    Quantas pessoas
+                                </label>
+                                <input
+                                    id="job-slots"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    aria-label="Quantas pessoas o turno precisa"
+                                    className="w-full sm:w-40 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold text-lg transition-all"
+                                    value={formData.slots}
+                                    onChange={(e) => setFormData({ ...formData, slots: e.target.value })}
+                                />
+                                <p className="text-xs text-gray-400 font-bold">
+                                    O chamado fica aberto até preencher todas as vagas ou expirar.
+                                </p>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
