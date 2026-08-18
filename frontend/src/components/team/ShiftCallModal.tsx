@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Loader2, Megaphone, Users, Search, AlertTriangle } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import { TeamListService } from '../../services/teamListService';
 import {
   ShiftCallService,
   CALL_EXPIRY_PRESETS,
@@ -9,7 +10,7 @@ import {
 } from '../../services/shiftCallService';
 import { useToast } from '../../contexts/ToastContext';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
-import type { TeamMember, ShiftCallReason, Job } from '../../types';
+import type { TeamMember, ShiftCallReason, Job, TeamListWithMembers } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -25,6 +26,14 @@ import type { TeamMember, ShiftCallReason, Job } from '../../types';
 //     descobrir RÁPIDO que ninguém vai vir, enquanto ainda dá tempo de chamar mais gente.
 //  3. Motivo da quebra obrigatório na prática (default "Outro"): é uma linha de dropdown que
 //     devolve o relatório que o sócio-operador já monta na mão hoje (falta × quebra de escala).
+//
+// F2 (Listas salvas do elenco) somou um atalho: chips por lista salva ("Cozinha", "Salão") entre
+// o grid Motivo/Expira e a busca. Clique é UNIÃO com o que já estava selecionado (nunca limpa
+// seleção manual nem de outro chip); a contagem do chip é a de DISPONÍVEIS pro turno, não o total
+// de membros da lista — um membro que já está no turno (`excludeWorkerIds`) ou que saiu do elenco
+// desde que a lista foi criada é filtrado em silêncio contra o `available` já calculado abaixo,
+// sem query nova e sem erro visível. Zero listas cadastradas = zero mudança visual (comportamento
+// intacto).
 // ---------------------------------------------------------------------------
 
 export interface ShiftCallModalProps {
@@ -43,6 +52,7 @@ export function ShiftCallModal({
 }: ShiftCallModalProps) {
   const { addToast } = useToast();
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [lists, setLists] = useState<TeamListWithMembers[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
@@ -55,9 +65,13 @@ export function ShiftCallModal({
     let active = true;
     void (async () => {
       setLoadingTeam(true);
-      const list = await TeamConnectionService.listTeamMembers();
+      const [teamList, teamLists] = await Promise.all([
+        TeamConnectionService.listTeamMembers(),
+        TeamListService.listLists(),
+      ]);
       if (!active) return;
-      setMembers(list);
+      setMembers(teamList);
+      setLists(teamLists);
       setLoadingTeam(false);
     })();
     return () => {
@@ -71,6 +85,22 @@ export function ShiftCallModal({
     () => members.filter((member) => !excluded.has(member.worker.id)),
     [members, excluded],
   );
+
+  // R9/R10/R11: contagem e seleção do chip são calculadas contra `available` (já exclui
+  // excludeWorkerIds), não contra o total de membros salvos na lista — filtra em silêncio
+  // qualquer worker_id que saiu do elenco (status não mais 'accepted') ou que já está no turno.
+  const availableWorkerIds = useMemo(() => new Set(available.map((m) => m.worker.id)), [available]);
+
+  const listAvailability = useMemo(() => {
+    const map = new Map<string, string[]>();
+    lists.forEach((list) => {
+      map.set(
+        list.id,
+        list.memberIds.filter((id) => availableWorkerIds.has(id)),
+      );
+    });
+    return map;
+  }, [lists, availableWorkerIds]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -99,6 +129,21 @@ export function ShiftCallModal({
       const next = new Set(prev);
       if (allVisibleSelected) visible.forEach((m) => next.delete(m.worker.id));
       else visible.forEach((m) => next.add(m.worker.id));
+      return next;
+    });
+  };
+
+  // R9: clique é UNIÃO com o que já estava selecionado — nunca substitui a seleção manual nem a
+  // de outro chip. Se TODOS os disponíveis da lista já estão marcados, o clique os remove
+  // (toggle liga/desliga); caso contrário, soma os que faltam.
+  const toggleListChip = (listId: string) => {
+    const availableIds = listAvailability.get(listId) ?? [];
+    if (availableIds.length === 0) return;
+    const allSelected = availableIds.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) availableIds.forEach((id) => next.delete(id));
+      else availableIds.forEach((id) => next.add(id));
       return next;
     });
   };
@@ -204,11 +249,44 @@ export function ShiftCallModal({
             </div>
           </div>
 
+          {/* Chips de listas salvas (F2) — só aparece se a empresa tem listas; zero listas = zero mudança visual */}
+          {lists.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {lists.map((list) => {
+                const availableIds = listAvailability.get(list.id) ?? [];
+                const isEmpty = availableIds.length === 0;
+                const isActive = !isEmpty && availableIds.every((id) => selected.has(id));
+                return (
+                  <button
+                    key={list.id}
+                    type="button"
+                    onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
+                    disabled={dispatching || isEmpty}
+                    aria-pressed={isActive}
+                    className={`min-h-11 px-4 py-2.5 rounded-pill border-2 border-black font-black uppercase text-sm flex items-center transition-colors ${
+                      isEmpty
+                        ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-400'
+                        : isActive
+                          ? 'bg-black text-white'
+                          : 'bg-white hover:bg-gray-100'
+                    }`}
+                  >
+                    {list.name} ({availableIds.length})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Busca + selecionar todos */}
           <div className="flex items-center gap-2 mb-3">
             <div className="relative flex-1">
+              <label htmlFor="shift-call-search" className="sr-only">
+                Buscar por nome ou função
+              </label>
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id="shift-call-search"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

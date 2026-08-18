@@ -151,6 +151,28 @@ mantendo a máquina de estados em um lugar auditável.
 devolve o relatório que o sócio-operador já monta na mão: ele controla gasto com freela cruzando com
 nível de falta e quebra de escala.
 
+## Listas do Elenco (F2: camada organizacional)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): com o F1 resolvido (disparo 1→N primeiro-aceite),
+> a operação real ainda não é rápida o bastante — às 8h30 de abertura, o gerente não quer marcar 8 freelas
+> uma a uma, quer um atalho por função/turma que seleciona o grupo inteiro de uma vez.
+
+**Tabelas (migration `20260817000300`):**
+- `team_lists` — `(id uuid PK, company_id uuid NOT NULL, name text NOT NULL CHECK (length(trim(name)) > 0), created_by uuid, created_at timestamptz, updated_at timestamptz)`. RLS via função nova `is_company_owner(company_id)` (SECURITY INVOKER, ancoragem dupla idêntica a `is_job_owner`). SELECT/INSERT/UPDATE/DELETE todos restritos a `is_company_owner`.
+- `team_list_members` — `(id uuid PK, list_id uuid NOT NULL REFERENCES team_lists(id) ON DELETE CASCADE, worker_id uuid NOT NULL REFERENCES workers(id) ON DELETE CASCADE, added_at timestamptz)`, UNIQUE `(list_id, worker_id)`. RLS: SELECT/INSERT/DELETE restritos a `is_company_owner` do `company_id` da lista via subquery em `team_lists`. INSERT trava lista fechada (SÓ `worker_id` com `team_connections.status='accepted'`), espelhando `shift_call_targets`. Um freela pode estar em N listas; lista pode estar/ser criada vazia.
+
+**`is_company_owner(p_company_id uuid)` (SECURITY INVOKER, migração `20260817000300`):** Função paralela a `is_job_owner`, ancoragem dupla (R1/R12 da spec):
+```sql
+company_id = auth.uid() OR company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid())
+```
+INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria nada. **Contrato de manutenção:** `is_job_owner` e `is_company_owner` são um par — qualquer mudança na regra de autorização de empresa (F3 — multi-unidade/gerente) DEVE alterar ambas na mesma migration (agendado para unificação com BEGIN ATOMIC). Cada função carrega COMMENT apontando para a outra e para ADR-20260817-seam-autorizacao-empresa.md.
+
+**Grafo acíclico de policies (conhecimento reutilizável):** `team_lists` references `companies` (SELECT `USING (true)`), `team_list_members` references `team_lists` (via RLS subquery) e `companies` — mas `team_lists` NÃO referencia `team_list_members` em policy. Grafo acíclico = sem recursão 42P17 = sem SECURITY DEFINER precisado. F1 teve de criar dois DEFINERs mínimos por causa da recursão `shift_calls ↔ shift_call_targets`; F2 dispensa isso. Padrão a observar: listar dependências policy de forma orientada antes de criar função com search_path.
+
+**Uso no ShiftCallModal (R8–R11):** O modal já carrega o elenco aceito (`teamMembers`) e os excludos do turno (`excludeWorkerIds`). Listas renderizam como chips entre o grid Motivo/Expira e a barra de busca. Clique num chip calcula interseção com `available` (aceitos - excluídos). Se TODOS disponíveis da lista já estão em `selected`, clique os REMOVE; caso contrário, ADICIONA (união — não limpa seleção manual). Chip desabilitado se contagem = 0. Freela fora do elenco (team_connections não-accepted) é silenciosamente ignorado (filtro client contra `available`, nenhuma query nova, nenhum trigger de limpeza).
+
+**Organizacional puro (Article 8 intacto):** F2 não cria papel novo, não move dinheiro, não muda máquina de estados de F1. É camada de UI/DB que acelera gesto de seleção. Zero impacto em `wallets`, `escrow_transactions`, `shift_payments`.
+
 ## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
 **Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).

@@ -422,6 +422,109 @@ return { success: true };
 em toda operação destrutiva guardada por RLS. Exemplo real: `teamConnectionService.removeFromTeam()` (migração `20260816000000`)
 impede DELETE de linhas `status='blocked'` bloqueadas pelo worker — precisa de `.select()` para saber se foi negado.
 
+## ⚠️ GRANT UPDATE (coluna) é aditivo — exige REVOKE antes (F2 — Listas do Elenco)
+
+**Problema:** `ALTER TABLE t ADD COLUMN c; GRANT UPDATE (c) ON t TO authenticated;` NÃO retira privilégio de UPDATE da tabela inteira.
+Se `authenticated` já tinha `UPDATE` de toda a tabela, o GRANT de coluna fica **adormecido** — update de outra coluna passa.
+A restrição só vale se forem feitos, **nesta ordem**:
+```sql
+REVOKE UPDATE ON <tabela> FROM authenticated;      -- (1) revoga de tabela inteira
+GRANT UPDATE (<coluna_1>, <coluna_2>) ON <tabela> TO authenticated;  -- (2) reconstrói só as colunas permitidas
+```
+
+Sem (1), (2) é noop — a table-level GRANT ganha. **Ordem importa porque REVOKE sem lista de colunas revoga TANTO o privilégio de tabela QUANTO todos os de coluna**.
+
+**Manifesta em runtime no `.update()`:** Uma chamada como `.update({ name: 'novo', other_col: 'valor' })` que inclua uma coluna não-permitida devolve `42501` (permission denied). A **mensagem não menciona coluna** — parece erro de RLS puro, não de GRANT. O padrão de teste correto é:
+```ts
+expect(supabase.from('tabela').update({ name: 'x' })).resolves.toBeDefined();  // ✓ só coluna permitida
+expect(supabase.from('tabela').update({ name: 'x', forbidden: 'y' })).rejects.toThrow('42501');  // ✗ inclui coluna proibida
+```
+
+**Precedentes:** `20260311300000_restrict_wallet_update_columns.sql` (pattern histórico, wallet_id imutável), e F2 usa o mesmo padrão para `company_id` em `team_lists`.
+
+---
+
+## Sem transação entre chamadas PostgREST — ordenação crítica de INSERT/DELETE (F2 — diff de membros)
+
+Operação `setMembers(listId, workerIds)` computa diff: workers-a-adicionar (INSERT) vs. workers-a-remover (DELETE).
+
+**Ordem obrigatória:** INSERT primeiro, depois DELETE. Se DELETE falhar, os dados novos já foram inseridos — falha parcial é detectável.
+Invertida (DELETE então INSERT), um DELETE que falha deixa linhas órfãs sem INSERT para compensar.
+
+```ts
+// ✓ CORRETO — INSERT antes de DELETE
+const toAdd = newSet.filter(id => !currentSet.has(id));
+for (const workerId of toAdd) {
+  const { error: addError } = await supabase.from('team_list_members').insert({ list_id: listId, worker_id: workerId });
+  if (addError) throw addError;
+}
+
+const toRemove = Array.from(currentSet).filter(id => !newSet.has(id));
+for (const workerId of toRemove) {
+  const { error: removeError } = await supabase.from('team_list_members').delete().eq('list_id', listId).eq('worker_id', workerId);
+  if (removeError) throw removeError;
+}
+```
+
+**Razão:** sem transação entre as chamadas (Supabase/PostgREST não oferece multi-statement), ordem define o estado consistente. INSERT-primeiro é padrão defensivo: se algo falha, adiciona-se dado e não remove-se (comissão vs. rollback automático).
+
+---
+
+## `.in('coluna', [])` devolve 0 linhas — pule a chamada (F2 — filtro de disponíveis)
+
+Ao calcular membros disponíveis de uma lista (aceitos no elenco E não-excluídos do turno), após intersecção:
+```ts
+const availableInList = listMembers.filter(id => available.has(id));  // Pode ser []
+
+if (availableInList.length === 0) {
+  // ✗ ERRADO — .in() com array vazio retorna 0 linhas, não erro
+  const { data } = await supabase.from('workers').select('*').in('id', availableInList);
+  // data = [] — verdade ou RLS negou? Indistinto.
+  
+  // ✓ CORRETO — pule a query
+  return [];
+}
+
+const { data } = await supabase.from('workers').select('*').in('id', availableInList);
+return data ?? [];
+```
+
+**Razão:** `.in('coluna', [])` não retorna erro — devolve 0 linhas. Como o projeto usa "0 linhas = RLS negou" como sinal em alguns padrões (DELETE/UPDATE), confundir um array legitimamente vazio com negação de acesso causa bugs silenciosos. Pular a query é explícito e eficiente.
+
+---
+
+## Par `is_job_owner` ↔ `is_company_owner` mantidos em paralelo (F2 — autorização de empresa)
+
+**Situação:** F2 introduz `is_company_owner(company_id)` paralela a `is_job_owner(job_id)`, ambas com a mesma ancoragem dupla:
+```sql
+company_id = auth.uid() OR company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid())
+```
+
+Ambas são **SECURITY INVOKER** (não DEFINER), **STABLE**, com `SET search_path = ''`. Não foram unificadas porque:
+
+1. **Dependência não registrada em corpo de função SQL-as-string:** Se `is_job_owner` delegasse para `is_company_owner` em uma migration, um `DROP FUNCTION is_company_owner` (seu DOWN) quebraria `is_job_owner` **em runtime**, sem erro em tempo de DROP — tabelas que a usam em policy cai silenciosamente.
+
+2. **F3 (multi-unidade/gerente) deve unificar:** Contrato de manutenção: `is_job_owner` e `is_company_owner` são um par. Qualquer mudança na regra de autorização de empresa (adoção de multi-unidade, gerentes, etc.) DEVE alterar **ambas na mesma migration**, e ali a unificação vira naturalmente possível (delegação + BEGIN ATOMIC em PG14+ registra dependência). Cada função carrega COMMENT cruzada e referência ao ADR-20260817.
+
+**Padrão observável:** duplicação intencional quando: (a) corpo SQL como string (sem rastreamento de dependência), (b) conceitos paralelos (job vs. empresa), (c) mudança futura previsível que unifique. Não vale a pena "DRY" se o custo é quebra silenciosa de schema.
+
+---
+
+## Grafo acíclico de policies dispensa SECURITY DEFINER (F2 — `team_lists` ↔ `team_list_members`)
+
+F1 ("Chamado de Turno") precisou de dois helpers SECURITY DEFINER mínimos (`shift_call_job_id`, `is_shift_call_target`) porque as policies de `shift_calls` e `shift_call_targets` se referenciavam mutuamente — erro 42P17 em runtime.
+
+F2 tem grafo **acíclico:** `team_lists` referencia `companies` (SELECT `USING (true)`); `team_list_members` referencia `team_lists` (subquery em policy) E `companies` — mas **`team_lists` NÃO referencia `team_list_members` em nenhuma policy**. Sem aresta de volta = sem recursão = sem DEFINER precisado.
+
+**Critério de decisão:** Antes de criar função SECURITY DEFINER para desbloquear RLS:
+1. Mapear dependências policy entre tabelas (quem referencia quem em USING/WITH CHECK).
+2. Se houver ciclo (A→B→A), DEFINER é necessário. Se grafo é DAG, não.
+3. Se DAG mas policy é complexa, pode valer uma função simples por clareza (não por necessidade).
+
+Documentação do critério: ADR-20260817-seam-autorizacao-empresa.md §Grafo acíclico.
+
+---
+
 ## WhatsApp como canal de notificação sem backend (aviso manual de convite)
 
 ```ts

@@ -340,6 +340,47 @@ export interface MyStore {
 }
 
 // =============================================
+// TEAM LISTS (F2) — agrupamento organizacional do elenco
+// =============================================
+
+/**
+ * Espelha `public.team_lists` (migration 20260817000300, F2).
+ * Agrupamento organizacional interno da empresa sobre o elenco aceito (`team_connections`) —
+ * ex.: "Cozinha", "Salão". Não é vaga, não é convite, não move dinheiro (Article 8 intacto).
+ * Atalho de seleção reaproveitado pelos chips do `ShiftCallModal` (R8/R9).
+ */
+export interface TeamList {
+  id: string;
+  company_id: string;
+  name: string;
+  /** Quem criou a lista. Hoje = dono da conta; com multi-unidade (F3), o gerente. */
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Espelha `public.team_list_members` (migration 20260817000300, F2).
+ * Um freela pode estar em N listas (sem exclusividade). O freela não enxerga esta tabela —
+ * é artefato interno da empresa.
+ */
+export interface TeamListMember {
+  id: string;
+  list_id: string;
+  worker_id: string;
+  added_at: string;
+}
+
+/**
+ * Lista com os `worker_id` dos membros já resolvidos (join `team_list_members`).
+ * Retornado por `TeamListService.listLists()` — consumido pelo CRUD de `CompanyTeam.tsx`
+ * e pelo cálculo de interseção dos chips de `ShiftCallModal` (R9/R10/R11).
+ */
+export interface TeamListWithMembers extends TeamList {
+  memberIds: string[];
+}
+
+// =============================================
 // PAGAMENTO POSTPAGO (Slice 2) — cartão on-file da empresa
 // =============================================
 
