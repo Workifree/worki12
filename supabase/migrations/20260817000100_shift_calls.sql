@@ -120,48 +120,6 @@ COMMENT ON FUNCTION public.is_job_owner(uuid) IS
     'SECURITY INVOKER: jobs/companies já têm SELECT USING(true), não precisa de privilégio extra. '
     'Ponto único de mudança quando entrar multi-unidade/gerente.';
 
--- DEFINER mínimo: quebra o ciclo de policy targets→calls. Devolve só um uuid.
-CREATE OR REPLACE FUNCTION public.shift_call_job_id(p_call_id uuid)
-RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT sc.job_id FROM public.shift_calls sc WHERE sc.id = p_call_id;
-$$;
-
-COMMENT ON FUNCTION public.shift_call_job_id(uuid) IS
-    'job_id de um chamado, SEM passar pela RLS de shift_calls — existe só para quebrar a '
-    'recursão de policy shift_call_targets→shift_calls. Não devolve nenhum outro campo.';
-
--- DEFINER mínimo: quebra o ciclo de policy calls→targets. Sempre sobre auth.uid().
-CREATE OR REPLACE FUNCTION public.is_shift_call_target(p_call_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.shift_call_targets t
-        WHERE t.call_id = p_call_id
-          AND t.worker_id = (SELECT auth.uid())
-    );
-$$;
-
-COMMENT ON FUNCTION public.is_shift_call_target(uuid) IS
-    'A sessão atual é alvo deste chamado? SEM passar pela RLS de shift_call_targets — existe só '
-    'para quebrar a recursão de policy shift_calls→shift_call_targets. Não aceita "por qual '
-    'usuário perguntar": é sempre sobre auth.uid(), então não serve para varrer dado alheio.';
-
-REVOKE ALL ON FUNCTION public.is_job_owner(uuid)          FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.shift_call_job_id(uuid)     FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.is_shift_call_target(uuid)  FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.is_job_owner(uuid)         TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.shift_call_job_id(uuid)    TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.is_shift_call_target(uuid) TO authenticated, service_role;
-
 -- =============================================
 -- 2. TABELA `shift_calls` — o disparo
 -- =============================================
@@ -240,6 +198,57 @@ CREATE INDEX IF NOT EXISTS idx_shift_call_targets_worker_pending
     WHERE response IS NULL;
 CREATE INDEX IF NOT EXISTS idx_shift_call_targets_call
     ON public.shift_call_targets (call_id);
+
+-- =============================================
+-- 3B. HELPERS QUE LEEM AS TABELAS — DEPOIS DELAS, DE PROPÓSITO
+-- =============================================
+-- CORREÇÃO (aplicação em produção, 18/08/2026): estas duas funções estavam ANTES das tabelas
+-- na primeira versão deste arquivo, e a migration era INAPLICÁVEL — `LANGUAGE sql` tem o corpo
+-- VALIDADO no CREATE (diferente de plpgsql, que não é), então `CREATE FUNCTION` referenciando
+-- uma tabela que ainda não existe falha com 42P01. O erro só aparece ao executar: build, lint,
+-- testes e quatro revisões de agente passaram sem detectar. Não reordenar de volta.
+
+-- DEFINER mínimo: quebra o ciclo de policy targets→calls. Devolve só um uuid.
+CREATE OR REPLACE FUNCTION public.shift_call_job_id(p_call_id uuid)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT sc.job_id FROM public.shift_calls sc WHERE sc.id = p_call_id;
+$$;
+
+COMMENT ON FUNCTION public.shift_call_job_id(uuid) IS
+    'job_id de um chamado, SEM passar pela RLS de shift_calls — existe só para quebrar a '
+    'recursão de policy shift_call_targets→shift_calls. Não devolve nenhum outro campo.';
+
+-- DEFINER mínimo: quebra o ciclo de policy calls→targets. Sempre sobre auth.uid().
+CREATE OR REPLACE FUNCTION public.is_shift_call_target(p_call_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.shift_call_targets t
+        WHERE t.call_id = p_call_id
+          AND t.worker_id = (SELECT auth.uid())
+    );
+$$;
+
+COMMENT ON FUNCTION public.is_shift_call_target(uuid) IS
+    'A sessão atual é alvo deste chamado? SEM passar pela RLS de shift_call_targets — existe só '
+    'para quebrar a recursão de policy shift_calls→shift_call_targets. Não aceita "por qual '
+    'usuário perguntar": é sempre sobre auth.uid(), então não serve para varrer dado alheio.';
+
+REVOKE ALL ON FUNCTION public.is_job_owner(uuid)          FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.shift_call_job_id(uuid)     FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.is_shift_call_target(uuid)  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_job_owner(uuid)         TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.shift_call_job_id(uuid)    TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_shift_call_target(uuid) TO authenticated, service_role;
 
 -- =============================================
 -- 4. RLS

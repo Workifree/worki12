@@ -870,3 +870,25 @@ if (phone) {
 canal fora do app que a empresa tem à mão. Funções puras (sem I/O) — testáveis isoladas. Normalização de DDI é essencial: formato brasileiro mascarado
 ("(11) 99999-9999") vira "5511999999999"; invalido retorna `null` evitando links quebrados (`wa.me/undefined`). Mensagem pré-formatada (data, hora, valor, link do app)
 oferece experiência profissional no WhatsApp — não é genérica ("você recebeu um convite"), mas contextualizada (turno, dia, valor, localização).
+## ⚠️ Função `LANGUAGE sql` valida o corpo no CREATE — ordem importa dentro da migration
+
+`CREATE FUNCTION ... LANGUAGE sql` tem o corpo **parseado e validado no momento da criação**: se ele
+referencia uma tabela que ainda não existe naquele ponto do arquivo, a migration falha com
+**42P01** e é **inaplicável**. `LANGUAGE plpgsql` NÃO tem essa validação (o corpo é texto até a
+primeira execução), o que faz a diferença passar despercebida quando se mistura os dois estilos.
+
+**Como isso escapou (18/08/2026):** a migration `20260817000100_shift_calls.sql` definia
+`shift_call_job_id` e `is_shift_call_target` (ambas `LANGUAGE sql`, lendo `shift_calls`/
+`shift_call_targets`) **antes** de criar as tabelas. Passou por `npm run build`, `npm run lint`,
+495 testes e **quatro revisões independentes de agente** (architect, security-reviewer,
+frontend-reviewer, evaluator) sem ninguém detectar — porque nenhum desses gates executa SQL.
+Só apareceu na primeira aplicação real.
+
+**Regra:** dentro de uma migration, a ordem é sempre (1) tabelas, (2) funções que as leem,
+(3) triggers, (4) policies, (5) `ENABLE RLS`, (6) grants. Uma função `LANGUAGE sql` que só lê
+tabelas pré-existentes (ex.: `is_job_owner` sobre `jobs`/`companies`) pode vir antes.
+
+**Corolário de processo:** revisão de agente não substitui execução. Migration não aplicada é
+migration não verificada — nenhuma quantidade de revisão de código pega erro de ordem de DDL.
+
+
