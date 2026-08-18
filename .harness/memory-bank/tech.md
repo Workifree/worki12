@@ -78,6 +78,7 @@
 | `delete-account` | exclusão de conta | normal |
 | `send-notification` | enviar notificação | normal |
 | `expire-invites` | marcar convites expirados como declined (batch automático) | normal |
+| `attendance-confirmation-service` | (futuro) reconciliação de respostas de presença | normal |
 
 ## Banco de dados
 
@@ -110,7 +111,7 @@
 - **Policy adicional (20260623000200):**
   - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
 - Tabelas principais: `workers`, `companies`, `jobs` (estendida com `series_id`, `series_occurrence_date`, `status` soft-delete), `applications`, `wallets`, `wallet_transactions`,
-  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for), **`job_series`** (F3 — config de série recorrente), **`shift_calls`**, **`shift_call_targets`** (F1 — chamado de turno primeiro-aceite), **`team_lists`**, **`team_list_members`** (F2 — listas do elenco).
+  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for), **`job_series`** (F3 — config de série recorrente), **`shift_calls`**, **`shift_call_targets`** (F1 — chamado de turno primeiro-aceite), **`team_lists`**, **`team_list_members`** (F2 — listas do elenco), **`shift_attendance_confirmations`** (F4 — tabela-evento de confirmação de véspera).
 - **Estado do banco em produção:** **`supabase/migrations/APLICACAO-2026-08-16.md`** registra o estado real de 16/08/2026 (revisão pré-piloto), incluindo divergências entre timestamps de aplicação vs. nome de arquivo, verificações executadas, e lacunas declaradas. Este é o censo oficial — o repositório de migrations é referência de schema, mas não é a fonte da verdade do estado atual de produção (políticas podem ter sido ligadas/desligadas manualmente pelo dashboard).
 - **RPCs de agregados do worker (Slice 4):**
   - **`recompute_worker_aggregates(uuid)`** — recomputa `xp`, `level`, `completed_jobs_count`, `earnings_total`. SECURITY DEFINER, service_role only, idempotente. Fórmula: `xp = completed_jobs_count*100 + bônus_perfil` (foto +50, especialidades +75).
@@ -128,6 +129,26 @@
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
   `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir. RLS ligada em produção a partir de **20260816** (`enable_rls_conversation_message`); antes era desligada — `anon` podia listar todas as conversas. UPDATE em `Message` (campo `read_at`) ficou quebrado até essa migration (query afetava 0 linhas, silenciosamente).
+- **Confirmação de Véspera (F4 — Onda 1, Revisão Piloto):**
+  - **`20260817000600_shift_attendance_confirmations.sql`** — tabela-evento `shift_attendance_confirmations` (id uuid PK, job_id, worker_id, request_sent_at, worker_responded_at, response text, confirmation_status text, metadata jsonb, created_at). Índice composto `(job_id, worker_id)` sem UNIQUE (múltiplas tentativas permitidas). RLS **SELECT-only**; INSERT/UPDATE via RPC DEFINER. Trigger `notify_worker_on_attendance_request` (SECURITY DEFINER) dispara notificação ao receber requisição.
+  - **Helpers SECURITY DEFINER (migração 20260817000600, usados por cron/triggers):**
+    - `job_local_date(job_id uuid) → date` — retorna data local do turno (UTC convertido por fuso em `settings.app_timezone`). Consulta `jobs` sem depender de RLS do invoker. SECURITY DEFINER obrigatório (cron roda sem sessão).
+    - `job_is_active(job_id uuid) → boolean` — retorna true se turno não foi deletado, não está no passado, tem freelas. SECURITY DEFINER obrigatório.
+  - **`20260817000700_attendance_confirmation_rpcs.sql`** — RPCs SECURITY DEFINER:
+    - `request_attendance_confirmation(job_id uuid, worker_id uuid)` — empresa pede confirmação ao freela para turno de até 7 dias. Insere em `shift_attendance_confirmations` + notificação bilateral.
+    - `respond_attendance_confirmation(confirmation_id uuid, response_text text)` — freela responde (Confirmo/Não consigo). Seta `worker_responded_at`, `response`, `confirmation_status`.
+    - `request_attendance_confirmations_due(company_id uuid) → TABLE(job_id uuid, worker_id uuid, ...)` — retorna confirmações pendentes para a empresa (leitura). Usado por UI worker (`MyJobs`) para destacar "⚠️ Confirme presença em X turno(s)".
+  - **`20260817000800_schedule_attendance_confirmations.sql`** — agendador Postgres (protegido, **MANDATÓRIO para promessa**):
+    ```sql
+    -- Valida extensão antes de agendar (graceful fallback)
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+      SELECT cron.schedule('request_attendance_confirmations_7d', '20 * * * *', $$SELECT batch_request_attendance_confirmations_7d();$$);
+    END IF;
+    ```
+    RPC `batch_request_attendance_confirmations_7d` (SECURITY DEFINER) roda todo dia 20h UTC (madrugada Brasil, máximo alcance). **pg_cron disponível (1.6.4) mas não instalado em produção** — é pré-requisito de entrega (não TODO de backlog). Feature sem cron: empresa clica manualmente = comportamento humano que F4 existe para **substituir** (feedback architect/evaluator). Clique é fallback; automação é padrão. Runbook: ops habilita pg_cron antes de validar F4.
+  - **Padrão: Tabela-evento RLS SELECT-only** — `shift_attendance_confirmations` permite só leitura via PostgREST; mutation via RPCs DEFINER. Evita escrita direta do client e garante auditoria. Ver `patterns.md` §Tentativa é evento.
+  - **Padrão: Escolha de timing depende do alcance necessário** — expiração preguiçosa (F1) funciona sem agendador; cron-dependent (F4) é obrigatório. Ver `patterns.md` §Escolha de timing.
+  - **Padrão: SECURITY DEFINER para consumidor sem sessão** — helpers `job_local_date`, `job_is_active` são DEFINER porque cron/triggers os chamam sem `auth.uid()`. Se fossem INVOKER, RLS simples em `jobs` retornaria NULL silenciosamente. Ver `patterns.md` §Predicado sem sessão.
 
 ## Qualidade & testes
 

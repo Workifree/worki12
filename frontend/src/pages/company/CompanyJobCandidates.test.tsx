@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import CompanyJobCandidates from './CompanyJobCandidates'
+import type { ShiftAttendanceConfirmation } from '../../types'
 
 // Mock WalletService — must not reference outer variables in factory
 vi.mock('../../services/walletService', () => ({
@@ -35,9 +36,40 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
+// Mock AttendanceConfirmationService (F4) — módulo novo, sem outro teste dependendo do
+// comportamento real. `getConfirmationsForJob` default `[]` reproduz exatamente o que o
+// fallback de `buildChain()` já devolvia via supabase real (mesmo efeito, sem precisar montar
+// uma cadeia de mock para a tabela `shift_attendance_confirmations` em todo teste existente).
+vi.mock('../../services/attendanceConfirmationService', () => ({
+  AttendanceConfirmationService: {
+    getConfirmationsForJob: vi.fn().mockResolvedValue([]),
+    requestConfirmation: vi.fn().mockResolvedValue({ outcome: 'requested' }),
+    respondConfirmation: vi.fn().mockResolvedValue({ outcome: 'confirmed' }),
+    getMyPendingConfirmations: vi.fn().mockResolvedValue([]),
+  },
+}))
+
+// ShiftCallModal (F1) — stub leve, envolto em `vi.fn()` (não uma seta solta) para poder
+// inspecionar QUANDO ele foi chamado pela primeira vez (`mock.invocationCallOrder`/
+// `toHaveBeenCalled`) — é essa inspeção que prova a ORDEM real entre o refetch pós-dispensa e
+// a montagem do F1 (revisão pós-evaluator: a suíte anterior só provava que o refetch
+// ACONTECEU, não que veio ANTES). O que importa para os testes de F4 (blocker 3 do
+// ddl-aprovado.md) é SE o Chamado de Turno abre e COM QUE `excludeWorkerIds`, não o
+// comportamento interno do modal (que tem sua própria suíte de testes). Evita ter que mockar
+// TeamConnectionService/TeamListService (dependências internas do ShiftCallModal real) neste
+// arquivo, que não tem nenhuma relação com F4.
+vi.mock('../../components/team/ShiftCallModal', () => ({
+  ShiftCallModal: vi.fn((props: { excludeWorkerIds?: string[] }) => (
+    <div data-testid="shift-call-modal">{(props.excludeWorkerIds ?? []).join(',')}</div>
+  )),
+}))
+
 // Import mocked modules for assertions
 import { supabase } from '../../lib/supabase'
 import { WalletService } from '../../services/walletService'
+import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService'
+import { ShiftInviteService } from '../../services/shiftInviteService'
+import { ShiftCallModal } from '../../components/team/ShiftCallModal'
 import { useToast } from '../../contexts/ToastContext'
 import { useNavigate } from 'react-router-dom'
 
@@ -1309,5 +1341,213 @@ describe('CompanyJobCandidates — handleRecordPayment: status → completed ap�
     })
     // Nunca reporta sucesso quando o banco não mudou o status do turno.
     expect(mockAddToast).not.toHaveBeenCalledWith('Pagamento registrado com sucesso!', 'success')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// F4 — Confirmação de véspera: "Dispensar e chamar substituto" (blocker 3 do ddl-aprovado.md)
+//
+// Este é o caminho que falha EM SILÊNCIO se a ordem for invertida: abrir o Chamado de Turno
+// (F1) antes de `dismissFromShift` ter sucesso deixaria a application ainda 'hired' —
+// `claim_shift_slot` conta ocupação como hired/in_progress/completed, o chamado se fecharia
+// sozinho como 'filled' e todo o elenco alvo receberia notificação de "vaga preenchida" para
+// uma vaga que nunca existiu. Nada quebra, nada loga — só se descobre pelo estrago. Por isso
+// os dois testes abaixo checam o CAMINHO FELIZ (dismiss ok → F1 abre com estado JÁ atualizado,
+// não uma foto congelada de antes do dismiss) e o CAMINHO BLOQUEADO (pagamento ativo → F1
+// nunca abre), não só que "algo acontece ao clicar".
+// ---------------------------------------------------------------------------
+
+// Dois freelas no mesmo turno: 'worker-3' é quem recebe o CTA elevado (tem sinal de risco —
+// respondeu 'cannot_attend' na confirmação de véspera); 'worker-4' segue hired normalmente,
+// serve de controle para provar que o `excludeWorkerIds` do F1 reflete o estado FRESCO
+// (pós-refetch), não uma closure velha capturada antes do clique.
+const APP_HIRED_RISK = {
+  id: 'app-hired-1',
+  job_id: 'job-123',
+  worker_id: 'worker-3',
+  status: 'hired',
+  cover_letter: '',
+  created_at: new Date().toISOString(),
+  worker: {
+    id: 'worker-3',
+    full_name: 'Carlos Lima',
+    avatar_url: null,
+    city: 'São Paulo',
+    level: 1,
+    rating_average: 5,
+    reviews_count: 0,
+    tags: [],
+    phone: '(11) 98888-8888',
+  },
+  worker_checkin_at: null,
+  worker_checkout_at: null,
+  company_checkin_confirmed_at: null,
+  company_checkout_confirmed_at: null,
+}
+
+const APP_HIRED_OTHER = {
+  id: 'app-hired-2',
+  job_id: 'job-123',
+  worker_id: 'worker-4',
+  status: 'hired',
+  cover_letter: '',
+  created_at: new Date().toISOString(),
+  worker: {
+    id: 'worker-4',
+    full_name: 'Bruna Reis',
+    avatar_url: null,
+    city: 'São Paulo',
+    level: 1,
+    rating_average: 5,
+    reviews_count: 0,
+    tags: [],
+  },
+  worker_checkin_at: null,
+  worker_checkout_at: null,
+  company_checkin_confirmed_at: null,
+  company_checkout_confirmed_at: null,
+}
+
+// Confirmação de véspera respondida 'cannot_attend' para worker-3 — é o sinal de risco que
+// transforma o botão "Dispensar" simples em "Dispensar e chamar substituto".
+const CONFIRMATION_CANNOT_ATTEND: ShiftAttendanceConfirmation[] = [
+  {
+    id: 'sac-1',
+    application_id: 'app-hired-1',
+    job_id: 'job-123',
+    worker_id: 'worker-3',
+    source: 'manual',
+    requested_by: 'company-user-1',
+    requested_at: new Date().toISOString(),
+    response: 'cannot_attend',
+    responded_at: new Date().toISOString(),
+  },
+]
+
+describe('CompanyJobCandidates — Dispensar e chamar substituto (F4, blocker 3)', () => {
+  it('dismissFromShift com sucesso: o F1 SÓ monta depois que o refetch de applications resolve (prova de ordem, não só de que ele aconteceu)', async () => {
+    const { mockAddToast, appChain } = setupMocksWithApps([APP_HIRED_RISK, APP_HIRED_OTHER])
+    vi.mocked(AttendanceConfirmationService.getConfirmationsForJob).mockResolvedValue(CONFIRMATION_CANNOT_ATTEND)
+
+    // A suíte anterior encadeava duas `mockResolvedValueOnce` e só conferia o DOM final — o
+    // `findByTestId` só observa depois que TODOS os `setState` já flush aram, então a ordem
+    // entre "abrir o modal" e "atualizar candidatos" ficava indistinguível ali (mutação
+    // registrada pelo evaluator: mover `setCallModalOpen(true)` para ANTES do
+    // `await fetchCandidates()` continuava verde). Prova real de ordem: a SEGUNDA chamada de
+    // `.order()` (o refetch pós-dispensa) devolve uma Promise que SEGURAMOS pendente até
+    // conferir, no meio do fluxo, que o F1 ainda não montou — só então liberamos o refetch e
+    // conferimos que o F1 monta DEPOIS.
+    let resolveRefetch: (value: { data: unknown; error: null }) => void = () => {}
+    const refetchPromise = new Promise<{ data: unknown; error: null }>((resolve) => {
+      resolveRefetch = resolve
+    })
+    appChain.order = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [APP_HIRED_RISK, APP_HIRED_OTHER], error: null })
+      .mockImplementationOnce(() => refetchPromise)
+
+    const dismissSpy = vi
+      .spyOn(ShiftInviteService, 'dismissFromShift')
+      .mockResolvedValueOnce({ success: true })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Dispensar e chamar substituto')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Dispensar e chamar substituto'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Confirmar e Chamar Substituto'))
+
+    await waitFor(() => {
+      expect(dismissSpy).toHaveBeenCalledWith('app-hired-1')
+    })
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('Freela dispensado deste turno.', 'success')
+    })
+    // `fetchCandidates()` chegou até `.order()` a segunda vez e está PRESO ali (a promise que
+    // devolvemos nunca resolve sozinha) — se o código estivesse correto, `setCallModalOpen(true)`
+    // ainda não foi executado neste ponto, porque ele só roda DEPOIS do `await` que está
+    // suspenso agora mesmo.
+    await waitFor(() => {
+      expect(appChain.order).toHaveBeenCalledTimes(2)
+    })
+
+    // A prova em si: com o refetch ainda pendente, o F1 NÃO pode ter montado. Se a mutação do
+    // evaluator estivesse presente (`setCallModalOpen(true)` antes do `await fetchCandidates()`),
+    // esta asserção falharia — o F1 já teria montado antes de chegarmos aqui.
+    expect(ShiftCallModal).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('shift-call-modal')).not.toBeInTheDocument()
+
+    // Libera o refetch — já reflete worker-3 como 'cancelled' (dispensado com sucesso).
+    resolveRefetch({
+      data: [{ ...APP_HIRED_RISK, status: 'cancelled' }, APP_HIRED_OTHER],
+      error: null,
+    })
+
+    // SÓ agora, depois do refetch resolver, o F1 monta — com estado fresco (worker-4 seguindo
+    // hired é excluído; worker-3, já cancelado, não precisa mais ser excluído da seleção).
+    const callModal = await screen.findByTestId('shift-call-modal')
+    expect(callModal).toHaveTextContent('worker-4')
+    expect(callModal).not.toHaveTextContent('worker-3')
+    expect(ShiftCallModal).toHaveBeenCalledTimes(1)
+
+    dismissSpy.mockRestore()
+  })
+
+  it('dismissFromShift bloqueado por pagamento ativo (blockedByPayment): o Chamado de Turno NUNCA abre, e o toast explica o motivo', async () => {
+    const { mockAddToast } = setupMocksWithApps([APP_HIRED_RISK])
+    vi.mocked(AttendanceConfirmationService.getConfirmationsForJob).mockResolvedValue(CONFIRMATION_CANNOT_ATTEND)
+
+    // Caso real do piloto: modo A agenda pagamento (`shift_payments` em 'scheduled'/'recorded')
+    // — `dismissFromShift` recusa e devolve `blockedByPayment`, sem tocar `applications.status`.
+    const dismissSpy = vi.spyOn(ShiftInviteService, 'dismissFromShift').mockResolvedValueOnce({
+      success: false,
+      blockedByPayment: true,
+      error:
+        'Este freela já tem um pagamento registrado ou agendado neste turno. Estorne o pagamento antes de dispensá-lo.',
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos Lima')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Dispensar e chamar substituto')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Dispensar e chamar substituto'))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Confirmar e Chamar Substituto'))
+
+    await waitFor(() => {
+      expect(dismissSpy).toHaveBeenCalledWith('app-hired-1')
+    })
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        'Este freela já tem um pagamento registrado ou agendado neste turno. Estorne o pagamento antes de dispensá-lo.',
+        'error',
+      )
+    })
+
+    // O caminho perigoso: se o F1 abrisse aqui mesmo com o dismiss bloqueado, o turno
+    // continuaria cheio e o chamado se fecharia sozinho como 'filled' (blocker 3).
+    expect(screen.queryByTestId('shift-call-modal')).not.toBeInTheDocument()
+    // O modal de dispensa continua aberto (não fecha em erro) — a empresa vê o motivo e decide.
+    expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
+
+    dismissSpy.mockRestore()
   })
 })

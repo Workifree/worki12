@@ -615,6 +615,195 @@ Documentação do critério: ADR-20260817-seam-autorizacao-empresa.md §Grafo ac
 
 ---
 
+## ⚠️ Tentativa é evento, contrato é linha (F4 — Confirmação de Véspera)
+
+Confirmação de presença no turno é uma **tentativa**, não o contrato (application). Uma vaga pode ter 10 freelas;
+cada um pode receber N tentativas de confirmação (reenvios se não responder em 12h).
+
+**Padrão correto:** criar tabela-evento separada (`shift_attendance_confirmations`):
+```sql
+CREATE TABLE public.shift_attendance_confirmations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL REFERENCES jobs(id),
+  worker_id uuid NOT NULL REFERENCES workers(id),
+  request_sent_at timestamptz,
+  worker_responded_at timestamptz,
+  response text,
+  confirmation_status text,
+  metadata jsonb,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX idx_attendance_confirmations_job_worker ON public.shift_attendance_confirmations(job_id, worker_id);
+-- Sem UNIQUE — múltiplas tentativas/reenvios por (job, worker)
+-- RLS: SELECT-only. INSERT/UPDATE via RPC DEFINER.
+```
+
+**Razão anti-padrão (colunas em applications):** Adicionar `attendance_attempts jsonb` em `applications` levaria a:
+- Lógica de tentativa duplicada (INSERT notifications em dois places)
+- Histórico perdido ou não-consultável (N tentativas em coluna = sem índice = varredura)
+- Máquina de estados fragmentada (`applications.status` + `applications.attendance_attempt_status`)
+
+**Benefício:** cada linha é auditável. SQL consultável. Reutilizável futuro (retry com backoff, análise de padrão de não-aparecimento, webhook de SMS).
+
+## ⚠️ Coluna nova em `applications` nasce gravável — padrão: tabela-evento + RPC DEFINER (F4)
+
+Supabase grant via `GRANT SELECT, INSERT, UPDATE ON applications TO authenticated` é de **tabela**, não de coluna.
+Adicionar coluna nova em `applications` a faz gravável pelo client via `.update()` sem política de coluna explícita.
+
+**Problema:** se a coluna é estado crítico (ex.: tentativa de confirmação), permitir escrita direta do client quebra auditoria.
+
+**Padrão:** estado que precisa de imutabilidade/auditoria vai para **tabela-evento própria com RLS só de SELECT**:
+```sql
+ALTER TABLE applications
+  ADD COLUMN confirmation_requested_at timestamptz;  -- ✗ se precisa imutabilidade
+
+-- ✓ CORRETO — nova tabela-evento
+CREATE TABLE shift_attendance_confirmations (...)  -- RLS SELECT-only
+-- INSERT/UPDATE via RPC DEFINER (business logic no banco, não no client)
+```
+
+**Precedente histórico:** padrão de `shift_call_targets` (F1) seguiu o mesmo: tabela separada, RLS SELECT-only, mutação por RPC. Landmine corrigido em F4: descoberto em `20260817` que colunas novas nascem gravável silenciosamente.
+
+## ⚠️ Escolha de timing depende de quem precisa ser alcançado — não existe agendador em produção (F4)
+
+Worki **não tem** agendador em produção (`pg_cron` v1.6.4 está **disponível mas não instalado**; nenhum `cron.schedule` em migration,
+nenhum `crons` em `vercel.json`, nenhum `schedule` em workflows; `expire-invites` existe e nunca rodou). Há **dois caminhos legítimos**
+para features que dependem de timing — **a escolha depende de quem precisa ser alcançado**, não de preferência técnica.
+
+**Caminho 1: Expiração preguiçosa (padrão F1 — Chamado de Turno)**
+```
+Convite enviado com expiration_at → quem chegar atrasado (próxima visita) fecha o estado
+Funciona quando alguém vai INEVITAVELMENTE tocar naquele registro
+Exemplo: shift_call com status='open' → freela lê, vê data de expiração, marca como 'expired' na UI
+Custo: zero. Alcance: só quem abre o app.
+```
+
+**Caminho 2: `cron.schedule` versionado em migration (padrão F4 — Confirmação de Véspera) — MANDATÓRIO aqui**
+```
+Noite antes do turno (cron roda 20h UTC) → RPC batch alcança N freelas SEM eles abrirem app
+Necessário quando o valor depende de ALCANÇAR QUEM NÃO VAI ABRIR A TELA
+Exemplo: "confirme presença amanhã" — se esperar freela abrir o app, 8h30 já passou (quebra do turno)
+Custo: agendador em produção (pré-requisito). Alcance: proativo, sem depender do usuário.
+```
+
+**Critério de decisão — alcance necessário:** A promessa da feature decide o padrão. Se é "descobrir furo 12h antes", preguiçoso
+**não funciona** (freela descobrindo o aviso após perder o turno = comportamento humano que a feature existe para **substituir**).
+
+**ADR feedback:**
+- **Architect reprovou v1** (só botão manual): *"entrega a UI de uma feature cuja promessa não é cumprida por nenhum código do PR… 
+  o piloto atribuiria o silêncio ao produto, não à configuração ausente."*
+- **Evaluator:** ausência de pg_cron = **ALTO**. *"A feature é um botão que o gerente precisa lembrar de apertar na véspera — 
+  que é literalmente o comportamento humano que a feature existe para substituir."*
+
+**Implementação F4:**
+```sql
+IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+  SELECT cron.schedule('request_attendance_confirmations_7d', '20 * * * *', 
+    $$SELECT public.batch_request_attendance_confirmations_7d();$$);
+END IF;
+```
+Graceful: migration passa sem erro se pg_cron não está. **Mas a feature é incompleta sem cron** — é pré-requisito de entrega
+(não item de backlog). Runbook deve documentar: "ops: habilitar pg_cron antes de validar F4 em produção".
+
+**Padrão observável:** 
+- Expiração preguiçosa = funciona hoje, funciona sem config. 
+- Cron versionado = exige instalação. Escolha pelo alcance necessário, não por disponibilidade de tech.
+
+## ⚠️ `RAISE WARNING` não chega aos aplicadores via MCP (F4 — logs de migração)
+
+Migrations neste projeto são aplicadas por **MCP** (Supabase Management API, canal de aplicação da CLI). MCP engole
+`NOTICE` e `WARNING` — avisos em SQL não chegam ao runbook/logs do aplicador.
+
+**Exemplo anti-padrão (F4):**
+```sql
+-- ✗ ERRADO — aviso engolido
+IF NOT pg_extension_installed('pg_cron') THEN
+  RAISE WARNING 'pg_cron não encontrado — confirmação de véspera funcionará via frontend apenas.';
+END IF;
+```
+Aplicador nunca vê o aviso. Runbook para F4 precisa dizer explicitamente: "ops: validar se pg_cron está instalado
+com `\dx pg_cron` na sua sessão psql direto".
+
+**Defesa:** toda migration que depende de recurso externo precisa ter:
+1. **Verificação SQL em UP:** `IF EXISTS (SELECT ... FROM pg_available_extensions WHERE ...)` com graceful fallback
+2. **Runbook explícito:** instruções de validação **no arquivo da migration** como comentário (READ-ME-APLICACAO.md)
+3. **Sem RAISE** — instruções vão direto em COMMENT dentro do arquivo .sql
+
+**Padrão:** validação > aviso. Código SQL não conta com warnings chegarem a humanos.
+
+## ⚠️ Predicado consumido sem sessão precisa ser `SECURITY DEFINER` (F4 — cron lê `jobs`)
+
+Função lida por um consumidor **sem sessão** (`auth.uid()` NULL) não pode depender de RLS simples.
+
+**Exemplo (F4):** cron chama `batch_request_attendance_confirmations_7d()` → precisa ler `jobs` para saber "qual turno
+é amanhã em fuso local?". A function `job_local_date(job_id)` converte UTC para local via `settings.app_timezone`.
+
+```sql
+-- ✗ ERRADO — cron roda sem sessão, `auth.uid()` = NULL
+CREATE FUNCTION job_local_date(p_job_id uuid) RETURNS date AS $$
+  SELECT (jobs.start_date AT TIME ZONE settings.app_timezone)::date
+  FROM jobs                               -- ← policy SELECT depende de RLS
+  WHERE jobs.id = p_job_id;
+$$ LANGUAGE sql STABLE;  -- ← INVOKER padrão
+-- Resultado: quando cron chama, RLS nega acesso → retorna NULL
+
+-- ✓ CORRETO — SECURITY DEFINER ignora RLS do invoker
+CREATE FUNCTION job_local_date(p_job_id uuid) RETURNS date AS $$
+  SELECT (jobs.start_date AT TIME ZONE (SELECT value FROM settings WHERE key = 'app_timezone'))::date
+  FROM jobs                               -- ← RLS agora irrelevante
+  WHERE jobs.id = p_job_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '';
+```
+
+**Regra:** Se consumidor não tem sessão (cron, trigger, webhook desautenticado), função INVOKER que acessa tabela com RLS retorna falso → silenciosamente. Sem erro no LOG; a feature para de funcionar sem aviso. **Sempre use SECURITY DEFINER + search_path='' para funções lidas por consumidores sem sessão.**
+
+**Consequência:** função DEFINER sem `search_path = ''` é vulnável a name shadowing de schema externo.
+
+## ⚠️ Teste de mutação prova mais que teste decorativo (F4 — confirmação de presença)
+
+Teste que afirma "ordem está correta" SEM verificar estado intermediário passa falso até quando a ordem está invertida.
+
+**Exemplo real (F4):** dois testes foram quebrados ao reescrever o código:
+1. **Teste de ordem de notificações** — passava com ordem invertida porque asseverava só o DOM final (onde a ordem é indistinguível até ler o HTML inteiro). Virou `toBeTruthy()` sem validar conteúdo real.
+2. **Teste de mensagem específica** — 16 casos que diziam "mensagem contém 'X'" e verificavam `toBeTruthy()`, sem afirmar a string real.
+
+**Padrão de teste real:** bloquear a operação em `Promise.pending()` controlada e validar estado intermediário:
+```ts
+// ✗ ERRADO — afirma só resultado final
+test('notifications arrive in order', async () => {
+  await requestConfirmation(worker1);
+  await requestConfirmation(worker2);
+  // Renderiza UI... passa se worker1 ou worker2 vier primeiro
+  expect(screen.getByText('worker1')).toBeInTheDocument();  // ✓ mas worker2 primeiro? Também passa
+});
+
+// ✓ CORRETO — segura promise e valida estado intermediário
+test('notifications arrive in order', async () => {
+  let resolveNotification: Function | null = null;
+  jest.spyOn(notificationService, 'notify').mockImplementation(
+    () => new Promise(r => { resolveNotification = r; })
+  );
+
+  await requestConfirmation(worker1);
+  // Notificação de worker1 está pendente
+  expect(screen.getByText('notification: worker1')).toBeInTheDocument();  // Intermediário
+  expect(screen.queryByText('notification: worker2')).not.toBeInTheDocument();  // worker2 ainda não
+
+  resolveNotification?.();  // Libera notificação worker1
+  await waitFor(() => expect(screen.getByText('received: worker1')).toBeInTheDocument());
+
+  await requestConfirmation(worker2);
+  // worker1 recebeu, worker2 agora está pendente
+  expect(screen.getByText('notification: worker2')).toBeInTheDocument();  // Nova
+  resolveNotification?.();
+  await waitFor(() => expect(screen.getByText('received: worker2')).toBeInTheDocument());
+
+  // Ordem é verificável aqui porque capturamos transições, não só resultado final
+});
+```
+
+**Razão:** teste que só valida o **resultado final** é "teste decorativo" — prova menos que parece. Validade real = **estado intermediário** (qual vem antes, qual depende do quê). Especialmente crítico em features com timeline/notificações/máquinas de estado.
+
 ## WhatsApp como canal de notificação sem backend (aviso manual de convite)
 
 ```ts

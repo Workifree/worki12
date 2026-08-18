@@ -759,3 +759,56 @@ export interface ShiftPayment {
   void_reason: string | null;
   created_at: string;
 }
+
+// =============================================
+// CONFIRMAÇÃO DE VÉSPERA (D-1, F4) — log de pedidos, não colunas em `applications`
+// migration: supabase/migrations/20260817000600_shift_attendance_confirmations.sql
+// DDL aprovado: .harness/spec/confirmacao-vespera/ddl-aprovado.md
+// ADR: .harness/memory-bank/decisions/ADR-20260817-confirmacao-vespera-log-evento.md
+// =============================================
+
+/** Quem originou o pedido. 'auto' = varredura D-1 (cap 1 por índice). 'manual' = botão da empresa. */
+export type AttendanceConfirmationSource = 'auto' | 'manual';
+
+/** Resposta do freela ao pedido. NULL na linha = ainda pendente. */
+export type AttendanceConfirmationResponse = 'confirmed' | 'cannot_attend';
+
+/**
+ * Espelha `public.shift_attendance_confirmations` — uma linha por PEDIDO (não por application).
+ * `request_count`/cooldown do freela+turno são derivados no client agrupando por
+ * `application_id` (ver `attendanceConfirmationService`), nunca colunas próprias.
+ */
+export interface ShiftAttendanceConfirmation {
+  id: string;
+  application_id: string;
+  job_id: string;
+  worker_id: string;
+  source: AttendanceConfirmationSource;
+  /** NULL sempre que source='auto'. uid de quem apertou "Pedir confirmação". */
+  requested_by: string | null;
+  requested_at: string;
+  /** NULL = pendente. Imutável após a primeira resposta (L8 — UPDATE atômico na RPC). */
+  response: AttendanceConfirmationResponse | null;
+  responded_at: string | null;
+}
+
+/**
+ * Outcomes das RPCs `request_attendance_confirmation`/`respond_attendance_confirmation`
+ * (20260817000700). O banco é a autoridade — o client só reage ao outcome.
+ */
+export type AttendanceConfirmationOutcome =
+  | 'requested'
+  | 'confirmed'
+  | 'cannot_attend'
+  | 'unauthenticated'
+  | 'forbidden'
+  | 'not_target'
+  | 'invalid_status'
+  | 'invalid_response'
+  | 'job_inactive'
+  | 'job_past'
+  | 'already_responded'
+  | 'not_requested'
+  | 'limit_reached'
+  | 'cooldown'
+  | 'not_found';
