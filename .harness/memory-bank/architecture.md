@@ -151,6 +151,96 @@ mantendo a máquina de estados em um lugar auditável.
 devolve o relatório que o sócio-operador já monta na mão: ele controla gasto com freela cruzando com
 nível de falta e quebra de escala.
 
+## Listas do Elenco (F2: camada organizacional)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): com o F1 resolvido (disparo 1→N primeiro-aceite),
+> a operação real ainda não é rápida o bastante — às 8h30 de abertura, o gerente não quer marcar 8 freelas
+> uma a uma, quer um atalho por função/turma que seleciona o grupo inteiro de uma vez.
+
+**Tabelas (migration `20260817000300`):**
+- `team_lists` — `(id uuid PK, company_id uuid NOT NULL, name text NOT NULL CHECK (length(trim(name)) > 0), created_by uuid, created_at timestamptz, updated_at timestamptz)`. RLS via função nova `is_company_owner(company_id)` (SECURITY INVOKER, ancoragem dupla idêntica a `is_job_owner`). SELECT/INSERT/UPDATE/DELETE todos restritos a `is_company_owner`.
+- `team_list_members` — `(id uuid PK, list_id uuid NOT NULL REFERENCES team_lists(id) ON DELETE CASCADE, worker_id uuid NOT NULL REFERENCES workers(id) ON DELETE CASCADE, added_at timestamptz)`, UNIQUE `(list_id, worker_id)`. RLS: SELECT/INSERT/DELETE restritos a `is_company_owner` do `company_id` da lista via subquery em `team_lists`. INSERT trava lista fechada (SÓ `worker_id` com `team_connections.status='accepted'`), espelhando `shift_call_targets`. Um freela pode estar em N listas; lista pode estar/ser criada vazia.
+
+**`is_company_owner(p_company_id uuid)` (SECURITY INVOKER, migração `20260817000300`):** Função paralela a `is_job_owner`, ancoragem dupla (R1/R12 da spec):
+```sql
+company_id = auth.uid() OR company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid())
+```
+INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria nada. **Contrato de manutenção:** `is_job_owner` e `is_company_owner` são um par — qualquer mudança na regra de autorização de empresa (F3 — multi-unidade/gerente) DEVE alterar ambas na mesma migration (agendado para unificação com BEGIN ATOMIC). Cada função carrega COMMENT apontando para a outra e para ADR-20260817-seam-autorizacao-empresa.md.
+
+**Grafo acíclico de policies (conhecimento reutilizável):** `team_lists` references `companies` (SELECT `USING (true)`), `team_list_members` references `team_lists` (via RLS subquery) e `companies` — mas `team_lists` NÃO referencia `team_list_members` em policy. Grafo acíclico = sem recursão 42P17 = sem SECURITY DEFINER precisado. F1 teve de criar dois DEFINERs mínimos por causa da recursão `shift_calls ↔ shift_call_targets`; F2 dispensa isso. Padrão a observar: listar dependências policy de forma orientada antes de criar função com search_path.
+
+**Uso no ShiftCallModal (R8–R11):** O modal já carrega o elenco aceito (`teamMembers`) e os excludos do turno (`excludeWorkerIds`). Listas renderizam como chips entre o grid Motivo/Expira e a barra de busca. Clique num chip calcula interseção com `available` (aceitos - excluídos). Se TODOS disponíveis da lista já estão em `selected`, clique os REMOVE; caso contrário, ADICIONA (união — não limpa seleção manual). Chip desabilitado se contagem = 0. Freela fora do elenco (team_connections não-accepted) é silenciosamente ignorado (filtro client contra `available`, nenhuma query nova, nenhum trigger de limpeza).
+
+**Organizacional puro (Article 8 intacto):** F2 não cria papel novo, não move dinheiro, não muda máquina de estados de F1. É camada de UI/DB que acelera gesto de seleção. Zero impacto em `wallets`, `escrow_transactions`, `shift_payments`.
+
+## Escala recorrente (F3: série EAGER de turnos)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): "A maior parte do volume NÃO é emergência — é cobertura de férias, 
+> folgas dominicais, escalas fixas. Sem isso, a plataforma é botão de emergência 2-3×/mês e elenco desatualizado faz falhar justamente quando importa."
+
+**Tabelas (migrations `20260817000400`–`20260817000500`):**
+- `job_series` — `(id uuid PK, company_id uuid NOT NULL, recurrence_type 'weekly'|'daily', weekdays int[], range_start_date date, range_end_date date, status 'active'|'stopped', job_template jsonb, created_at, updated_at)`. RLS via `is_company_owner(company_id)` (ancoragem dupla idêntica a F1/F2). Máximo 60 ocorrências por série (constraint SQL + trigger de statement + validação client).
+- `jobs` — duas colunas novas (nullable): `series_id uuid`, `series_occurrence_date date`. Um `jobs` com `series_id` é ocorrência materializável; sem `series_id`, é turno avulso (pull legado ou job single-shot). Índice composto `(series_id, series_occurrence_date)` para evitar datas duplicadas em uma criação lote. NÃO há FK `job_series` — a série pode ser deletada (soft-delete `status='stopped'`) sem afetar ocorrências (histórico/auditoria).
+
+**Geração EAGER:** Ao criar a série, `create_job_series` (RPC INVOKER) materializa **todos** os `jobs` de uma vez (não lazy no aceite/pull). Datas são calculadas **no cliente** (`lib/recurrence.ts`, `generateOccurrenceDates`), repassadas como array à RPC. Motivo: (1) teste determinístico sem mock de servidor; (2) UI mostra "isso vai criar N turnos" antes de confirmar; (3) limpa o conceito ("serie" é só config; "ocorrência" é turno concreto). A RPC roda em transação única: ou todas as ocorrências são criadas ou nenhuma é (Article 8 intacto — `INSERT jobs` não move saldo).
+
+**Soft delete de turno (`status='deleted'`):** Cancelamento de ocorrência futura = `UPDATE jobs SET status='deleted'` nunca `DELETE`. Razão: `DELETE` em cascata apagaria `shift_calls` (perdia métrica `first_claim_at`/ROI), `escrow_transactions` (perdia razão/auditoria, não devolvia saldo) e seria rejeitado por `shift_payments` RESTRICT (aborta operação em lote). O valor `'deleted'` já está espalhado nos consumidores (`.neq('status','deleted')`), nenhum CHECK vigente o bloqueia. RPC `update_job_series_future` e `stop_job_series` usam `status='deleted'` para ocorrências futuras, nunca DELETE. Metadado `deleted_at` é imutável (documentação de quando foi macio).
+
+**Operações em massa (RPCs SECURITY DEFINER):** `update_job_series_future` (edita N ocorrências futuras), `stop_job_series` (para série inteira) são DEFINER com `search_path=''` porque predicados incluem ancoragem dupla (`is_company_owner`) — se rodassem INVOKER, RLS simples de `applications` faria contagem de "qual será tocável" mentir (efeito: feature mostraria "vou alterar 10" mas alteraria 3). Padrão: cliente monta parâmetros, RPC decide "quem é tocável" atomicamente sob DEFINER, devolve `outcome` estruturado com contagem de afetados.
+
+**Pré-visualização com `p_dry_run`:** `previewUpdateFutureOccurrences` e `previewStopSeries` (client) chamam as **mesmas** RPCs passando `p_dry_run=true`. Nenhuma escrita; mesmo predicado; desvio só no statement mutante (SKIP UPDATE/DELETE). Padrão: nunca calcular impacto no client (RLS simples mente); trazer do banco, sempre.
+
+**Capítulo conhecimento de F1:** Ambas RPCs de transição de turno (`claim_shift_slot` em F1, `stop_job_series` em F3) travam o **mesmo objeto** (`jobs FOR UPDATE`). Quem para a série primeiro faz a outra ler `status='deleted'` e cair no ramo "série parada" — ordem de serialização está segura.
+
+**Ocorrência de série é `jobs` normal:** `series_id` é só etiqueta; `applications`, `shift_calls`, `shift_payments`, `escrow_transactions` apontam para `jobs.id` como sempre. Agenda, Chamado de Turno, e convite direto não sabem que série existe. EAGER venceu lazy por causa dos 3 FKs — materializamos tudo no início, eliminamos carregamento assíncrono e máquinas de estado implícitas.
+
+## Confirmação de Véspera (F4: descoberta de furo com 12h de antecedência)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): a quebra das 8h30 (turno aberto, ninguém aparece)
+> **nasce de gente que não apareceu**. F1 ataca o sintoma (preencher rápido depois da falha); F4 ataca a causa
+> (descobrir o furo com 12h de antecedência em vez de 2h30 antes da hora).
+
+**Tabelas (migrations `20260817000600`):**
+- `shift_attendance_confirmations` — tabela-evento: `(id uuid PK, job_id uuid NOT NULL, worker_id uuid NOT NULL, request_sent_at timestamptz, worker_responded_at timestamptz, response text, confirmation_status text, metadata jsonb, created_at)`. Índice composto `(job_id, worker_id)` sem UNIQUE (várias tentativas permitidas). RLS **SELECT-only** (não há UPDATE/INSERT via client — tudo por RPC DEFINER).
+
+**Helpers SECURITY DEFINER (migração `20260817000600`):**
+- `job_local_date(job_id uuid) → date` — retorna data local do turno convertida do UTC `job.start_date` via fuso `settings.app_timezone` (ou 'America/Sao_Paulo' default). Usado por cron para saber "é hoje 20h se eu enviar confirmação agora?". Problema: cron roda sem sessão (`auth.uid()` NULL), logo não pode depender de policy de SELECT simples em `jobs`. Solução: **`SECURITY DEFINER` obrigatório** (predicado sem sessão = deve ter DEFINER).
+- `job_is_active(job_id uuid) → boolean` — retorna true se turno não foi deletado (`status <> 'deleted'`), não está no passado, e tem freelas candidatos. Também SECURITY DEFINER (mesma razão: cron lê sem sessão).
+
+**Gatilho de tentativa (trigger, migração `20260817000600`):**
+- `trg_notify_worker_on_attendance_request` (BEFORE INSERT ON shift_attendance_confirmations) — SECURITY DEFINER, insere notificação bilateral (`worker` recebe, `company` também avisada).
+
+**RPCs de mutação (migração `20260817000700`, todas SECURITY DEFINER + search_path=''):**
+- `request_attendance_confirmation(job_id, worker_id)` — empresa pede confirmação de presença ao freela para turno de amanhã (7 dias no máximo). Insere linha em `shift_attendance_confirmations` + dispara notificação.
+- `respond_attendance_confirmation(confirmation_id, response_text)` — freela responde (ex.: "Confirmo" / "Não consigo"). Seta `worker_responded_at` + `response` + `confirmation_status`.
+- `request_attendance_confirmations_due` — RPC de leitura (SECURITY DEFINER, STABLE): retorna array de `job_id` que precisam confirmação "por hoje até 20h". Usado pela UI worker em `MyJobs` (R2/R3) para destacar "⚠️ Confirme presença em X turno(s)".
+
+**Agendador (migração `20260817000800`, `pg_cron`) — MANDATÓRIO para cumprir promessa**
+```sql
+IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+  SELECT cron.schedule(
+    'request_attendance_confirmations_7d',
+    '20 * * * *',                 -- 20h UTC (madrugada Brasil, alcance máximo antes de 8h30)
+    $$SELECT public.batch_request_attendance_confirmations_7d();$$
+  );
+END IF;
+```
+**Proteção graceful:** `IF EXISTS` garante que migração passa sem erro se pg_cron não instalado. **Mas a feature é incompleta sem cron** — a promessa ("descobrir furo 12h antes") depende do alcance proativo. Sem agendador: empresa teria de lembrar de apertar botão manual na véspera = **comportamento humano que F4 existe para substituir** (feedback do evaluator: "ALTO" blocker). RPC `batch_request_attendance_confirmations_7d` (SECURITY DEFINER) roda diariamente às 20h UTC (coordenada) alcançando **freelas que não abriram o app** — diferencial vs. F1.
+
+**Pre-requisito:** ops habilita `pg_cron` como passo de validação em produção. Não é "TODO futuro" — é gate de entrega.
+
+**Modelo de dados (por quê tabela-evento e não coluna):**
+Confirmação de véspera é uma **tentativa**, não o contrato. Uma vaga pode ter 10 freelas, cada um recebe N tentativas (reenvios se não responder). Adicionar colunas de tentativa em `applications` levaria a:
+- Duplicação de lógica de notificação
+- Histórico perdido (N tentativas em uma coluna `jsonb` é não-consultável)
+- Máquina de estados em dois lugares (`applications.status` + `applications.attendance_attempt_status`)
+
+`shift_attendance_confirmations` é **evento**: cada linha = uma tentativa. Reutilizável para futuro (webhook de SMS, retry com backoff, análise de padrão de não-aparecimento).
+
+**Dual-flow:** empresa pode clicar manualmente "Pedir Confirmação" (bloqueia no clique) OU cron dispara automaticamente 20h antes. Clique é fallback; automação é padrão. Diferencia de F1 (`expire-invites` é housekeeping de máquina de estados, não core da promessa).
+
+**Padrão: ✓ Tentativa é evento, contrato é linha** + **Escolha de timing depende do alcance necessário** — padrões catalogados em `patterns.md`.
+
 ## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
 **Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).

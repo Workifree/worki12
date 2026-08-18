@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -11,7 +11,25 @@ import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
-import type { ReviewDirection } from '../types';
+import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
+import type {
+    ReviewDirection,
+    ShiftAttendanceConfirmation,
+    AttendanceConfirmationResponse,
+    AttendanceConfirmationOutcome,
+} from '../types';
+
+// Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
+// 'confirmed'/'cannot_attend'/'already_responded'/'unauthenticated' têm tratamento dedicado no handler;
+// aqui só os outcomes de negação/erro que viram texto de toast direto.
+const CONFIRMATION_RESPONSE_MESSAGES: Partial<Record<AttendanceConfirmationOutcome, string>> = {
+    not_target: 'Você não tem permissão para responder este pedido.',
+    forbidden: 'Você não tem permissão para responder este pedido.',
+    invalid_status: 'Este turno não está mais disponível para confirmação.',
+    invalid_response: 'Resposta inválida. Tente novamente.',
+    not_requested: 'Este pedido de confirmação não está mais disponível.',
+    not_found: 'Não foi possível localizar este pedido.',
+};
 
 type Step = { label: string; status: 'complete' | 'active' | 'pending' }
 
@@ -114,6 +132,27 @@ export default function MyJobs() {
 
     // Hook de convites push
     const { pendingInvites, loading: invitesLoading, respondingId, respond } = useWorkerInvites();
+
+    // Confirmação de véspera (D-1) — pedidos pendentes (`response IS NULL`) endereçados a este
+    // freela. Fetch independente do `fetchJobs` (mesmo padrão de `useWorkerInvites`): a tela não
+    // precisa esperar o histórico completo carregar para mostrar o card de confirmação.
+    const [pendingConfirmations, setPendingConfirmations] = useState<ShiftAttendanceConfirmation[]>([]);
+    const [confirmationsLoading, setConfirmationsLoading] = useState(true);
+    const [respondingConfirmationId, setRespondingConfirmationId] = useState<string | null>(null);
+    // R7/A3/A4 (requisito duro, não superado pelo ddl-aprovado.md): depois de responder, o card
+    // NÃO some — troca os botões por um badge ("Confirmado"/"Avisou que não vai"), pra o freela
+    // conseguir conferir "será que eu respondi?" sem precisar lembrar. `getMyPendingConfirmations`
+    // só devolve `response IS NULL` (não existe leitor de "já respondidos" neste território — o
+    // service é território de outro agente), então este mapa é a fonte da verdade da UI depois do
+    // clique: mantemos a linha original em `pendingConfirmations` (nunca removida) e sobrepomos
+    // aqui o resultado real. Efeito colateral aceito conscientemente: o badge é POR SESSÃO —
+    // sobrevive a troca de aba/navegação dentro do mesmo carregamento da página, mas um F5 real
+    // (remonta o componente, refaz `getMyPendingConfirmations`) não traz de volta uma confirmação
+    // já respondida, porque ela deixou de ser "pendente" no servidor. R7 pede a transição visível
+    // pós-clique (que isto cobre); não pede histórico permanente entre recarregamentos.
+    const [respondedConfirmations, setRespondedConfirmations] = useState<
+        Record<string, AttendanceConfirmationResponse | 'already_responded'>
+    >({});
 
     const fetchJobs = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -261,6 +300,72 @@ export default function MyJobs() {
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
+
+    const fetchConfirmations = useCallback(async () => {
+        try {
+            const rows = await AttendanceConfirmationService.getMyPendingConfirmations();
+            setPendingConfirmations(rows);
+        } catch (err) {
+            logError('MyJobs.fetchConfirmations', err);
+        } finally {
+            setConfirmationsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchConfirmations();
+    }, [fetchConfirmations]);
+
+    // Resposta em UM toque, direto no clique — sem modal, sem navegação (R7/A3/A4). O card
+    // continua na tela: `respondedConfirmations` sobrepõe o botão por um badge (ver comentário
+    // do state acima) — troca de VISUAL, não desaparecimento.
+    const handleRespondConfirmation = async (
+        confirmation: ShiftAttendanceConfirmation,
+        response: AttendanceConfirmationResponse,
+    ) => {
+        setRespondingConfirmationId(confirmation.id);
+        try {
+            const result = await AttendanceConfirmationService.respondConfirmation(confirmation.application_id, response);
+
+            if (result.outcome === 'confirmed' || result.outcome === 'cannot_attend') {
+                // Captura o valor JÁ NARROWED antes da closure do setState: `result.outcome`
+                // dentro de `(prev) => ({...})` perde a narrowing do `if` (TS não propaga
+                // narrowing de propriedade para dentro de funções aninhadas) e volta a ser o
+                // union inteiro de AttendanceConfirmationOutcome — variável local resolve.
+                const confirmedOutcome = result.outcome;
+                addToast(
+                    response === 'confirmed'
+                        ? 'Presença confirmada! Bom turno.'
+                        : 'Empresa avisada que você não vai poder ir.',
+                    'success',
+                );
+                setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: confirmedOutcome }));
+                return;
+            }
+            // already_responded não é erro — é informação: duplo toque/retry não deve assustar
+            // o freela com um toast vermelho. Não sabemos qual foi a resposta REAL já gravada
+            // (a RPC não devolve isso em já_respondido) — badge neutro, não um confirmed/cannot_attend
+            // de palpite.
+            if (result.outcome === 'already_responded') {
+                addToast('Você já respondeu a este pedido.', 'info');
+                setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: 'already_responded' }));
+                return;
+            }
+            if (result.outcome === 'unauthenticated') {
+                navigate('/login');
+                return;
+            }
+            addToast(
+                CONFIRMATION_RESPONSE_MESSAGES[result.outcome] ?? result.error ?? 'Não foi possível registrar sua resposta.',
+                'error',
+            );
+        } catch (err) {
+            logError('MyJobs.handleRespondConfirmation', err);
+            addToast('Erro ao registrar resposta. Tente novamente.', 'error');
+        } finally {
+            setRespondingConfirmationId(null);
+        }
+    };
 
     // Avaliação obrigatória pós-pagamento: assim que o turno é concluído/pago pela
     // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
@@ -458,6 +563,81 @@ export default function MyJobs() {
             <header>
                 <h2 className="text-4xl font-black uppercase tracking-tighter">Meus Turnos</h2>
             </header>
+
+            {/* Confirmação de véspera (D-1) — card destacado, resposta em UM toque, sempre visível
+                no topo (fora das abas): o turno é amanhã, não pode depender do freela estar na aba certa.
+                Cruza `pendingConfirmations` (application_id) com os turnos já carregados (`in_progress`/
+                `scheduled`) para exibir empresa/data/horário/local sem uma query extra. */}
+            {!confirmationsLoading && pendingConfirmations.length > 0 && (
+                <div className="flex flex-col gap-4">
+                    {pendingConfirmations.map((confirmation) => {
+                        const job = [...jobs.in_progress, ...jobs.scheduled].find(
+                            (j) => j.id === confirmation.application_id,
+                        );
+                        if (!job) return null;
+                        const isResponding = respondingConfirmationId === confirmation.id;
+                        // R7/A3/A4: depois de responder, os botões viram um badge — o card não some
+                        // (ver comentário de `respondedConfirmations` acima).
+                        const localResponse = respondedConfirmations[confirmation.id];
+
+                        return (
+                            <div
+                                key={confirmation.id}
+                                className="bg-white border-2 border-black rounded-2xl p-6 shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]"
+                            >
+                                <div className="flex items-center gap-2 mb-3">
+                                    <CalendarClock size={18} className="text-primary" />
+                                    <span className="text-xs font-black uppercase text-primary">
+                                        Confirma seu turno de amanhã?
+                                    </span>
+                                </div>
+                                <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
+                                <p className="text-sm font-bold text-gray-500 mb-3">{job.company_name}</p>
+                                <div className="flex flex-wrap gap-2 mb-5">
+                                    <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+                                        <Clock size={14} /> {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
+                                    </span>
+                                    <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+                                        <MapPin size={14} /> {job.location}
+                                    </span>
+                                </div>
+                                {localResponse === 'confirmed' ? (
+                                    <span className="flex items-center justify-center gap-2 w-full bg-primary-light text-primary px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                        <ThumbsUp size={18} /> Confirmado
+                                    </span>
+                                ) : localResponse === 'cannot_attend' ? (
+                                    <span className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border-2 border-red-200 px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                        <ThumbsDown size={18} /> Avisou que não vai
+                                    </span>
+                                ) : localResponse === 'already_responded' ? (
+                                    <span className="flex items-center justify-center gap-2 w-full bg-gray-100 text-gray-600 px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                        Você já respondeu
+                                    </span>
+                                ) : (
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => void handleRespondConfirmation(confirmation, 'confirmed')}
+                                            disabled={isResponding}
+                                            className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                                        >
+                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <ThumbsUp size={18} />}
+                                            Sim, vou
+                                        </button>
+                                        <button
+                                            onClick={() => void handleRespondConfirmation(confirmation, 'cannot_attend')}
+                                            disabled={isResponding}
+                                            className="flex-1 bg-white hover:bg-red-50 text-red-600 border-2 border-red-200 hover:border-red-400 px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                                        >
+                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <ThumbsDown size={18} />}
+                                            Não vou poder
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Tabs — Convites PRIMEIRO */}
             <div className="flex gap-2 border-b-2 border-gray-200 pb-1 overflow-x-auto scrollbar-hide">

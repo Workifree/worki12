@@ -21,7 +21,7 @@
   TanStack React Query 5.90.20 está no `package.json` e um `QueryClient` é montado em `App.tsx`, mas
   **as páginas NÃO usam `useQuery` na prática.** Seguir o padrão existente (useState/useEffect) ao
   implementar features novas, salvo decisão explícita de migrar.
-- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push).
+- **Services de negócio:** `walletService` (escrow), `paymentMethodService` (cartão on-file), **`paymentRecordService`** (modo A — registro de pagamento externo + agendamento, sem mover saldo), `teamConnectionService` (equipe), `shiftInviteService` (convites push), **`teamListService`** (agrupamento organizacional de elenco — F2), **`jobSeriesService`** (série de turnos EAGER — F3).
 - **Toda query autenticada começa com** `supabase.auth.getUser()` → redireciona para `/login` se `null`.
 - **Backend:** Supabase (PostgREST + Realtime + Auth + Storage + Edge Functions Deno)
 - **Supabase JS:** 2.91.0 — client em `frontend/src/lib/supabase.ts` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
@@ -40,6 +40,7 @@
 - **Ícones:** Lucide React 0.562.0
 - **QR code:** `qrcode.react` 4.2.0 (geração em `<QRCodeSVG>` para links de convite); **`html5-qrcode` 2.3.8** (leitura de QR/Worki ID via câmera, aba QR em team connections)
 - **Util:** `clsx` + `tailwind-merge` + `class-variance-authority`; datas via `date-fns`
+- **Recurrence (F3):** `frontend/src/lib/recurrence.ts` — função pura `generateOccurrenceDates(params)` que calcula array de datas de uma série (diária/semanal). Usa componentes locais (nunca `toISOString()`). `referenceDate` injetável para testes determinísticos. Constante `MAX_SERIES_OCCURRENCES=60`.
 - **Fonte:** Inter (sans-serif), pesos pesados (`font-black`, `uppercase`)
 - **Componentes novos (Slice 4):**
   - **`ProfileReviews`** — lista avaliações recebidas (estrelas + comentário). Props: `reviewedId`, `reviewerRole` ('company' | 'worker'). Filtra por `direction` inverso (worker que avalia company = direction='company'). Neo-brutalista com border 2px + sombra offset.
@@ -77,6 +78,7 @@
 | `delete-account` | exclusão de conta | normal |
 | `send-notification` | enviar notificação | normal |
 | `expire-invites` | marcar convites expirados como declined (batch automático) | normal |
+| `attendance-confirmation-service` | (futuro) reconciliação de respostas de presença | normal |
 
 ## Banco de dados
 
@@ -108,23 +110,51 @@
   - **`20260816120000_workers_select_by_relationship`** — policy SELECT em `workers` trocada de `USING (true)` para `USING (public.can_view_worker_profile(id))`. Razão: `workers` contém dados sensíveis (CPF, telefone, PIX key); qualquer conta autenticada podia varrer a base inteira. Agora restrita a: (1) self (freela lê próprio perfil), (2) elenco via `team_connections` status 'pending'/'accepted', (3) vínculo operacional via `applications` em `jobs` da empresa. Função SECURITY DEFINER evita recursão de RLS. ADR-20260816-workers-select-por-vinculo.md.
 - **Policy adicional (20260623000200):**
   - **`notifications` INSERT** — `WITH CHECK (auth.uid() = user_id)` destrava alerta in-app inserido pelo cliente (`spendLimitService.evaluateSpendAlert`).
-- Tabelas principais: `workers`, `companies`, `jobs`, `applications`, `wallets`, `wallet_transactions`,
-  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for).
+- Tabelas principais: `workers`, `companies`, `jobs` (estendida com `series_id`, `series_occurrence_date`, `status` soft-delete), `applications`, `wallets`, `wallet_transactions`,
+  `escrow_transactions`, `notifications`, `analytics_events`, `payment_methods`, **`company_spend_limits`** (nova), **`company_monthly_revenue`** (nova), **`shift_payments`** (estendida com scheduled + scheduled_for), **`job_series`** (F3 — config de série recorrente), **`shift_calls`**, **`shift_call_targets`** (F1 — chamado de turno primeiro-aceite), **`team_lists`**, **`team_list_members`** (F2 — listas do elenco), **`shift_attendance_confirmations`** (F4 — tabela-evento de confirmação de véspera).
 - **Estado do banco em produção:** **`supabase/migrations/APLICACAO-2026-08-16.md`** registra o estado real de 16/08/2026 (revisão pré-piloto), incluindo divergências entre timestamps de aplicação vs. nome de arquivo, verificações executadas, e lacunas declaradas. Este é o censo oficial — o repositório de migrations é referência de schema, mas não é a fonte da verdade do estado atual de produção (políticas podem ter sido ligadas/desligadas manualmente pelo dashboard).
 - **RPCs de agregados do worker (Slice 4):**
   - **`recompute_worker_aggregates(uuid)`** — recomputa `xp`, `level`, `completed_jobs_count`, `earnings_total`. SECURITY DEFINER, service_role only, idempotente. Fórmula: `xp = completed_jobs_count*100 + bônus_perfil` (foto +50, especialidades +75).
   - **`recompute_my_aggregates()`** — wrapper auth-scoped para cliente recomputar próprios agregados após editar perfil. GRANT EXECUTE TO authenticated.
   - **Trigger `trg_worker_completion_aggregates`** (AFTER INSERT/UPDATE status ON applications WHEN →'completed') — chama `recompute_worker_aggregates(worker_id)` (SECURITY DEFINER).
   - **Landmark:** trigger legado `award_xp_on_job_completion` NÃO era DEFINER → RLS bloqueava UPDATE do freela quando empresa concluía turno (causa real de "XP não sobe") = **foi removido**.
+- **Escala recorrente (F3 — Onda 1, Revisão Piloto):**
+  - **`20260817000400_job_series.sql`** — tabela `job_series` (config de série: recurrence_type, weekdays[], range, job_template, status='active'|'stopped'). Colunas novas em `jobs`: `series_id uuid`, `series_occurrence_date date` (nullable, só preenchida para ocorrências). RLS via `is_company_owner(company_id)` (ancoragem dupla, padrão F1/F2). Máximo 60 ocorrências por série (CHECK SQL + trigger de statement + validação client). 2 triggers guardas: `limit_series_occurrences` (statement), `validate_series_configuration` (row). RPCs SECURITY DEFINER (search_path=''):
+    - `create_job_series` (INVOKER) — cria série + materializa N `jobs` em transação única (datas vêm do client via `lib/recurrence.ts`).
+    - `update_job_series_future` — edita ocorrências futuras sem freela ativo. Param `p_dry_run` para pré-visualização.
+    - `stop_job_series` — marca série como stopped, soft-deleta ocorrências futuras (`status='deleted'`). Param `p_dry_run`.
+  - **`20260817000500_claim_shift_slot_job_status.sql`** — `claim_shift_slot` (RPC F1) passa a checar `jobs.status <> 'deleted'` antes de permitir aceite (defesa contra série parada).
+  - **Dados: Soft delete de turno:** Cancelamento/exclusão via `UPDATE jobs SET status='deleted'` + `deleted_at`, **nunca `DELETE`**. Preserva `shift_calls` (métrica ROI), `escrow_transactions` (auditoria), evita RESTRICT em `shift_payments`. Padrão reutilizável.
+  - **Padrão: Operações em massa DEFINER:** RPCs de alteração em lote (`update_job_series_future`, `stop_job_series`) usam SECURITY DEFINER porque predicados incluem ancoragem dupla (INVOKER veria RLS simples, contagem mentira). Sempre: lógica de seleção no banco, client monta parâmetros, RPC ramifica e devolve `outcome` estruturado.
 - **Chat:** o frontend lê/escreve a tabela **`Conversation`** (capital C — ex.: `supabase.from('Conversation')`
   em `hooks/useJobApplication.ts`, `pages/company/CompanyJobCandidates.tsx`). Existe também uma tabela
   `messages` no DB, mas **o chat do frontend usa `Conversation`** — não confundir. RLS ligada em produção a partir de **20260816** (`enable_rls_conversation_message`); antes era desligada — `anon` podia listar todas as conversas. UPDATE em `Message` (campo `read_at`) ficou quebrado até essa migration (query afetava 0 linhas, silenciosamente).
+- **Confirmação de Véspera (F4 — Onda 1, Revisão Piloto):**
+  - **`20260817000600_shift_attendance_confirmations.sql`** — tabela-evento `shift_attendance_confirmations` (id uuid PK, job_id, worker_id, request_sent_at, worker_responded_at, response text, confirmation_status text, metadata jsonb, created_at). Índice composto `(job_id, worker_id)` sem UNIQUE (múltiplas tentativas permitidas). RLS **SELECT-only**; INSERT/UPDATE via RPC DEFINER. Trigger `notify_worker_on_attendance_request` (SECURITY DEFINER) dispara notificação ao receber requisição.
+  - **Helpers SECURITY DEFINER (migração 20260817000600, usados por cron/triggers):**
+    - `job_local_date(job_id uuid) → date` — retorna data local do turno (UTC convertido por fuso em `settings.app_timezone`). Consulta `jobs` sem depender de RLS do invoker. SECURITY DEFINER obrigatório (cron roda sem sessão).
+    - `job_is_active(job_id uuid) → boolean` — retorna true se turno não foi deletado, não está no passado, tem freelas. SECURITY DEFINER obrigatório.
+  - **`20260817000700_attendance_confirmation_rpcs.sql`** — RPCs SECURITY DEFINER:
+    - `request_attendance_confirmation(job_id uuid, worker_id uuid)` — empresa pede confirmação ao freela para turno de até 7 dias. Insere em `shift_attendance_confirmations` + notificação bilateral.
+    - `respond_attendance_confirmation(confirmation_id uuid, response_text text)` — freela responde (Confirmo/Não consigo). Seta `worker_responded_at`, `response`, `confirmation_status`.
+    - `request_attendance_confirmations_due(company_id uuid) → TABLE(job_id uuid, worker_id uuid, ...)` — retorna confirmações pendentes para a empresa (leitura). Usado por UI worker (`MyJobs`) para destacar "⚠️ Confirme presença em X turno(s)".
+  - **`20260817000800_schedule_attendance_confirmations.sql`** — agendador Postgres (protegido, **MANDATÓRIO para promessa**):
+    ```sql
+    -- Valida extensão antes de agendar (graceful fallback)
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+      SELECT cron.schedule('request_attendance_confirmations_7d', '20 * * * *', $$SELECT batch_request_attendance_confirmations_7d();$$);
+    END IF;
+    ```
+    RPC `batch_request_attendance_confirmations_7d` (SECURITY DEFINER) roda todo dia 20h UTC (madrugada Brasil, máximo alcance). **pg_cron disponível (1.6.4) mas não instalado em produção** — é pré-requisito de entrega (não TODO de backlog). Feature sem cron: empresa clica manualmente = comportamento humano que F4 existe para **substituir** (feedback architect/evaluator). Clique é fallback; automação é padrão. Runbook: ops habilita pg_cron antes de validar F4.
+  - **Padrão: Tabela-evento RLS SELECT-only** — `shift_attendance_confirmations` permite só leitura via PostgREST; mutation via RPCs DEFINER. Evita escrita direta do client e garante auditoria. Ver `patterns.md` §Tentativa é evento.
+  - **Padrão: Escolha de timing depende do alcance necessário** — expiração preguiçosa (F1) funciona sem agendador; cron-dependent (F4) é obrigatório. Ver `patterns.md` §Escolha de timing.
+  - **Padrão: SECURITY DEFINER para consumidor sem sessão** — helpers `job_local_date`, `job_is_active` são DEFINER porque cron/triggers os chamam sem `auth.uid()`. Se fossem INVOKER, RLS simples em `jobs` retornaria NULL silenciosamente. Ver `patterns.md` §Predicado sem sessão.
 
 ## Qualidade & testes
 
 - **ESLint** 9 flat config (`frontend/eslint.config.js`): `@eslint/js`, `typescript-eslint`,
   `react-hooks`, `react-refresh`
-- **Unit:** Vitest 4.0.18 + Testing Library (jsdom) — setup em `frontend/src/test/setup.ts`, co-located em `__tests__/`
+- **Unit:** Vitest 4.0.18 + Testing Library (jsdom) — setup em `frontend/src/test/setup.ts`, co-located em `__tests__/`. **⚠️ `TZ: 'America/Sao_Paulo'` em `vitest.config.ts` (obrigatório para testes de data — CI roda UTC)**
 - **E2E:** Playwright 1.58.2 — `frontend/playwright.config.ts`
 - **Logger:** `frontend/src/lib/logger.ts` (`logError`/`logWarn` + Sentry); validadores em `lib/validation.ts`
   (CPF/CNPJ/email/senha)

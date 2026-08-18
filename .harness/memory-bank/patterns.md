@@ -189,6 +189,96 @@ criado late porque precisa de validação do worker). Capture é "cobrei de verd
 Permite retry + fallback (se authorize falha, convida novamente; se capture falha, refaz). Idempotência por
 `reference_id` estável em wallet_transactions.
 
+## ⚠️ Cancelamento é SOFT DELETE (`status='deleted'`), nunca `DELETE`
+
+Turno cancelado = `UPDATE jobs SET status='deleted'`. Nunca `DELETE` do banco.
+
+**Razão:** DELETE em cascata mata:
+- `shift_calls` cascata → perde métrica `first_claim_at` (tempo de preenchimento, prova de ROI).
+- `escrow_transactions` cascata → apaga razão/auditoria, não devolve saldo (quebra Article 8).
+- `shift_payments` RESTRICT → aborta toda operação em lote se qualquer freela tem pagamento registrado.
+
+O valor `'deleted'` já está espalhado no codebase (`.neq('status','deleted')` em consumidores); nenhum CHECK vigente o bloqueia.
+Usar a mesma coluna/valor que já existe evita drift. Metadado `deleted_at` é imutável para auditoria.
+
+**Padrão:** Toda operação de exclusão em massa (`update_job_series_future`, `stop_job_series`) usa `status='deleted'`, nunca DELETE real. RPC DEFINER executa a guarda.
+
+## ⚠️ Predicado de segurança lido sob RLS falha aberto
+
+Uma política que âncora só em `jobs.company_id = auth.uid()` é "âncora simples". Se uma query usa NOT EXISTS/NÃO ENCONTROU,
+a RLS simples torna a condição **verdadeira falsa** — a linha fica invisível e a subquery pensa que "não existe".
+
+**Exemplo:** `applications` policy de INSERT acessa `jobs.company_id`; `jobs` tem RLS simples. Se empresa X tenta convidar freela Y para job Z e a policy de `jobs` diz "empresa X não é dona", então `NOT EXISTS (SELECT ... FROM jobs WHERE ...)` retorna verdadeiro = INSERT é permitido silenciosamente, criando convite fantasma. Queremos falhar explícito.
+
+**Defesa:** Operações em massa ("alterar 20 turnos futuros") NUNCA exploram RLS simples no client. Usam RPC **SECURITY DEFINER** com autorização explícita no próprio Postgres. RPCs com DEFINER contornam a RLS do invoker e decidem tudo num lugar auditável.
+
+**Padrão:** Check-then-act em massa = RPC DEFINER, nunca loop no client. Mesma disciplina de `walletService` (operações financeiras são RPCs).
+
+## ⚠️ `p_dry_run` como padrão de pré-visualização
+
+Quando a UI precisa mostrar "isso vai afetar N linhas" antes de uma ação destrutiva, **duplicar o predicado no client é proibido** (mente sob RLS).
+
+**Correto:** Adicionar parâmetro `p_dry_run boolean` na própria RPC. Mesma lógica, mesmo predicado, mesmo lugar — skip só o statement mutante:
+```sql
+IF NOT p_dry_run THEN
+  UPDATE jobs SET status='deleted' WHERE (predicado de seleção);
+END IF;
+RETURN jsonb_build_object('outcome', 'preview', 'would_cancel', affected_count);
+```
+
+**Padrão:** `previewUpdateFutureOccurrences` e `previewStopSeries` chamam as mesmas RPCs com `p_dry_run=true`. Mantém predicado único (nunca copia lógica), zero duplicação de risco.
+
+## ⚠️ `TZ` fixo no vitest é obrigatório
+
+O CI roda em UTC (offset=0); entre 21h, 23h e 23h59 em BRT (UTC-3, offset=-3), conversões de data podem dar resultados idênticos
+em UTC quando diferem em local — qualquer regressão de fuso passa verde no CI.
+
+**Correto:** Configurar `vitest.config.ts`:
+```ts
+const config: defineConfig = {
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    env: { TZ: 'America/Sao_Paulo' }
+  }
+}
+```
+
+**Padrão:** O guarda existia na máquina do dev (BRT) e faltava no CI. F3 descobriu via teste regressivo. Sempre fixar TZ em testes de data.
+
+## ⚠️ Índice único NÃO protege duplo-clique se a chave inclui id gerado
+
+UNIQUE `(series_id, series_occurrence_date)` não dedupe operações duplas porque `series_id` é **gerado pela própria requisição**.
+Duas submissões idênticas (duplo-clique rápido) criam dois `job_series` com IDs diferentes; o índice nunca colide entre eles.
+
+**Defesa real:** UI (`disabled={loading}` no botão) + token de sessão no client. Índice UNIQUE é defesa contra **datas duplicadas dentro do mesmo lote**,
+não contra duplo-clique de botão.
+
+**Conhecimento reutilizável:** Se a chave de dedupe contém algo gerado na própria operação, ela não dedupe operações.
+Chaves estáveis (`user_id:reference_id` em `wallet_transactions`) já existem; novas aplicações devem seguir o padrão.
+
+## ⚠️ Ordem de serialização entre RPCs concorrentes via lock na mesma linha
+
+`stop_job_series` e `claim_shift_slot` (ambas de F1/F3) são seguras entre si porque ambas travam o **mesmo objeto** (`jobs FOR UPDATE`).
+
+Executando concorrentemente:
+- Quem executa `stop_job_series` primeiro seta `jobs.status='deleted'`.
+- Quem executa `claim_shift_slot` depois lê a linha nova e cai no ramo "série parada" (retorna erro estruturado).
+- Nenhuma race condition; nenhuma corrupção de estado.
+
+**Padrão:** Operações concorrentes em massa = travar a **mesma entidade** (jobs, não série — a série é só config). Lock no recurso escasso.
+
+## ⚠️ Ocorrência de série é `jobs` pura, sem wrapper
+
+`jobs` com `series_id` é ocorrência. Sem `series_id`, é turno avulso (pull legado). Mas não há tabela separada `series_occurrences`.
+
+**Razão:** 3 FKs (`shift_calls`, `applications`, `shift_payments`) apontam para `jobs.id`. Criar wrapper adicionaria migrations (FK novas),
+mudança de todas as policies (filtrar por `jobs.id`), refactor do ciclo inteiro de check-in/checkout. EAGER evita isso: materializamos `jobs` direto,
+sem camada de indireção.
+
+**Contrato:** Agenda (`groupJobsByDay`), Chamado de Turno (`ShiftCallService`), Convite direto (`shiftInviteService`) não sabem que série existe.
+`series_id` é só etiqueta; lógica de recurso/timeline roda em `jobs` como sempre.
+
 ## Service pattern: PaymentMethodService (sem React Query, direto supabase + invokeFunction)
 
 ```ts
@@ -421,6 +511,298 @@ return { success: true };
 **Razão:** DELETE/UPDATE sob RLS que não casa com a cláusula USING retorna PostgREST status 204 (sem erro). Padrão obrigatório
 em toda operação destrutiva guardada por RLS. Exemplo real: `teamConnectionService.removeFromTeam()` (migração `20260816000000`)
 impede DELETE de linhas `status='blocked'` bloqueadas pelo worker — precisa de `.select()` para saber se foi negado.
+
+## ⚠️ GRANT UPDATE (coluna) é aditivo — exige REVOKE antes (F2 — Listas do Elenco)
+
+**Problema:** `ALTER TABLE t ADD COLUMN c; GRANT UPDATE (c) ON t TO authenticated;` NÃO retira privilégio de UPDATE da tabela inteira.
+Se `authenticated` já tinha `UPDATE` de toda a tabela, o GRANT de coluna fica **adormecido** — update de outra coluna passa.
+A restrição só vale se forem feitos, **nesta ordem**:
+```sql
+REVOKE UPDATE ON <tabela> FROM authenticated;      -- (1) revoga de tabela inteira
+GRANT UPDATE (<coluna_1>, <coluna_2>) ON <tabela> TO authenticated;  -- (2) reconstrói só as colunas permitidas
+```
+
+Sem (1), (2) é noop — a table-level GRANT ganha. **Ordem importa porque REVOKE sem lista de colunas revoga TANTO o privilégio de tabela QUANTO todos os de coluna**.
+
+**Manifesta em runtime no `.update()`:** Uma chamada como `.update({ name: 'novo', other_col: 'valor' })` que inclua uma coluna não-permitida devolve `42501` (permission denied). A **mensagem não menciona coluna** — parece erro de RLS puro, não de GRANT. O padrão de teste correto é:
+```ts
+expect(supabase.from('tabela').update({ name: 'x' })).resolves.toBeDefined();  // ✓ só coluna permitida
+expect(supabase.from('tabela').update({ name: 'x', forbidden: 'y' })).rejects.toThrow('42501');  // ✗ inclui coluna proibida
+```
+
+**Precedentes:** `20260311300000_restrict_wallet_update_columns.sql` (pattern histórico, wallet_id imutável), e F2 usa o mesmo padrão para `company_id` em `team_lists`.
+
+---
+
+## Sem transação entre chamadas PostgREST — ordenação crítica de INSERT/DELETE (F2 — diff de membros)
+
+Operação `setMembers(listId, workerIds)` computa diff: workers-a-adicionar (INSERT) vs. workers-a-remover (DELETE).
+
+**Ordem obrigatória:** INSERT primeiro, depois DELETE. Se DELETE falhar, os dados novos já foram inseridos — falha parcial é detectável.
+Invertida (DELETE então INSERT), um DELETE que falha deixa linhas órfãs sem INSERT para compensar.
+
+```ts
+// ✓ CORRETO — INSERT antes de DELETE
+const toAdd = newSet.filter(id => !currentSet.has(id));
+for (const workerId of toAdd) {
+  const { error: addError } = await supabase.from('team_list_members').insert({ list_id: listId, worker_id: workerId });
+  if (addError) throw addError;
+}
+
+const toRemove = Array.from(currentSet).filter(id => !newSet.has(id));
+for (const workerId of toRemove) {
+  const { error: removeError } = await supabase.from('team_list_members').delete().eq('list_id', listId).eq('worker_id', workerId);
+  if (removeError) throw removeError;
+}
+```
+
+**Razão:** sem transação entre as chamadas (Supabase/PostgREST não oferece multi-statement), ordem define o estado consistente. INSERT-primeiro é padrão defensivo: se algo falha, adiciona-se dado e não remove-se (comissão vs. rollback automático).
+
+---
+
+## `.in('coluna', [])` devolve 0 linhas — pule a chamada (F2 — filtro de disponíveis)
+
+Ao calcular membros disponíveis de uma lista (aceitos no elenco E não-excluídos do turno), após intersecção:
+```ts
+const availableInList = listMembers.filter(id => available.has(id));  // Pode ser []
+
+if (availableInList.length === 0) {
+  // ✗ ERRADO — .in() com array vazio retorna 0 linhas, não erro
+  const { data } = await supabase.from('workers').select('*').in('id', availableInList);
+  // data = [] — verdade ou RLS negou? Indistinto.
+  
+  // ✓ CORRETO — pule a query
+  return [];
+}
+
+const { data } = await supabase.from('workers').select('*').in('id', availableInList);
+return data ?? [];
+```
+
+**Razão:** `.in('coluna', [])` não retorna erro — devolve 0 linhas. Como o projeto usa "0 linhas = RLS negou" como sinal em alguns padrões (DELETE/UPDATE), confundir um array legitimamente vazio com negação de acesso causa bugs silenciosos. Pular a query é explícito e eficiente.
+
+---
+
+## Par `is_job_owner` ↔ `is_company_owner` mantidos em paralelo (F2 — autorização de empresa)
+
+**Situação:** F2 introduz `is_company_owner(company_id)` paralela a `is_job_owner(job_id)`, ambas com a mesma ancoragem dupla:
+```sql
+company_id = auth.uid() OR company_id IN (SELECT id FROM companies WHERE owner_id = auth.uid())
+```
+
+Ambas são **SECURITY INVOKER** (não DEFINER), **STABLE**, com `SET search_path = ''`. Não foram unificadas porque:
+
+1. **Dependência não registrada em corpo de função SQL-as-string:** Se `is_job_owner` delegasse para `is_company_owner` em uma migration, um `DROP FUNCTION is_company_owner` (seu DOWN) quebraria `is_job_owner` **em runtime**, sem erro em tempo de DROP — tabelas que a usam em policy cai silenciosamente.
+
+2. **F3 (multi-unidade/gerente) deve unificar:** Contrato de manutenção: `is_job_owner` e `is_company_owner` são um par. Qualquer mudança na regra de autorização de empresa (adoção de multi-unidade, gerentes, etc.) DEVE alterar **ambas na mesma migration**, e ali a unificação vira naturalmente possível (delegação + BEGIN ATOMIC em PG14+ registra dependência). Cada função carrega COMMENT cruzada e referência ao ADR-20260817.
+
+**Padrão observável:** duplicação intencional quando: (a) corpo SQL como string (sem rastreamento de dependência), (b) conceitos paralelos (job vs. empresa), (c) mudança futura previsível que unifique. Não vale a pena "DRY" se o custo é quebra silenciosa de schema.
+
+---
+
+## Grafo acíclico de policies dispensa SECURITY DEFINER (F2 — `team_lists` ↔ `team_list_members`)
+
+F1 ("Chamado de Turno") precisou de dois helpers SECURITY DEFINER mínimos (`shift_call_job_id`, `is_shift_call_target`) porque as policies de `shift_calls` e `shift_call_targets` se referenciavam mutuamente — erro 42P17 em runtime.
+
+F2 tem grafo **acíclico:** `team_lists` referencia `companies` (SELECT `USING (true)`); `team_list_members` referencia `team_lists` (subquery em policy) E `companies` — mas **`team_lists` NÃO referencia `team_list_members` em nenhuma policy**. Sem aresta de volta = sem recursão = sem DEFINER precisado.
+
+**Critério de decisão:** Antes de criar função SECURITY DEFINER para desbloquear RLS:
+1. Mapear dependências policy entre tabelas (quem referencia quem em USING/WITH CHECK).
+2. Se houver ciclo (A→B→A), DEFINER é necessário. Se grafo é DAG, não.
+3. Se DAG mas policy é complexa, pode valer uma função simples por clareza (não por necessidade).
+
+Documentação do critério: ADR-20260817-seam-autorizacao-empresa.md §Grafo acíclico.
+
+---
+
+## ⚠️ Tentativa é evento, contrato é linha (F4 — Confirmação de Véspera)
+
+Confirmação de presença no turno é uma **tentativa**, não o contrato (application). Uma vaga pode ter 10 freelas;
+cada um pode receber N tentativas de confirmação (reenvios se não responder em 12h).
+
+**Padrão correto:** criar tabela-evento separada (`shift_attendance_confirmations`):
+```sql
+CREATE TABLE public.shift_attendance_confirmations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL REFERENCES jobs(id),
+  worker_id uuid NOT NULL REFERENCES workers(id),
+  request_sent_at timestamptz,
+  worker_responded_at timestamptz,
+  response text,
+  confirmation_status text,
+  metadata jsonb,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX idx_attendance_confirmations_job_worker ON public.shift_attendance_confirmations(job_id, worker_id);
+-- Sem UNIQUE — múltiplas tentativas/reenvios por (job, worker)
+-- RLS: SELECT-only. INSERT/UPDATE via RPC DEFINER.
+```
+
+**Razão anti-padrão (colunas em applications):** Adicionar `attendance_attempts jsonb` em `applications` levaria a:
+- Lógica de tentativa duplicada (INSERT notifications em dois places)
+- Histórico perdido ou não-consultável (N tentativas em coluna = sem índice = varredura)
+- Máquina de estados fragmentada (`applications.status` + `applications.attendance_attempt_status`)
+
+**Benefício:** cada linha é auditável. SQL consultável. Reutilizável futuro (retry com backoff, análise de padrão de não-aparecimento, webhook de SMS).
+
+## ⚠️ Coluna nova em `applications` nasce gravável — padrão: tabela-evento + RPC DEFINER (F4)
+
+Supabase grant via `GRANT SELECT, INSERT, UPDATE ON applications TO authenticated` é de **tabela**, não de coluna.
+Adicionar coluna nova em `applications` a faz gravável pelo client via `.update()` sem política de coluna explícita.
+
+**Problema:** se a coluna é estado crítico (ex.: tentativa de confirmação), permitir escrita direta do client quebra auditoria.
+
+**Padrão:** estado que precisa de imutabilidade/auditoria vai para **tabela-evento própria com RLS só de SELECT**:
+```sql
+ALTER TABLE applications
+  ADD COLUMN confirmation_requested_at timestamptz;  -- ✗ se precisa imutabilidade
+
+-- ✓ CORRETO — nova tabela-evento
+CREATE TABLE shift_attendance_confirmations (...)  -- RLS SELECT-only
+-- INSERT/UPDATE via RPC DEFINER (business logic no banco, não no client)
+```
+
+**Precedente histórico:** padrão de `shift_call_targets` (F1) seguiu o mesmo: tabela separada, RLS SELECT-only, mutação por RPC. Landmine corrigido em F4: descoberto em `20260817` que colunas novas nascem gravável silenciosamente.
+
+## ⚠️ Escolha de timing depende de quem precisa ser alcançado — não existe agendador em produção (F4)
+
+Worki **não tem** agendador em produção (`pg_cron` v1.6.4 está **disponível mas não instalado**; nenhum `cron.schedule` em migration,
+nenhum `crons` em `vercel.json`, nenhum `schedule` em workflows; `expire-invites` existe e nunca rodou). Há **dois caminhos legítimos**
+para features que dependem de timing — **a escolha depende de quem precisa ser alcançado**, não de preferência técnica.
+
+**Caminho 1: Expiração preguiçosa (padrão F1 — Chamado de Turno)**
+```
+Convite enviado com expiration_at → quem chegar atrasado (próxima visita) fecha o estado
+Funciona quando alguém vai INEVITAVELMENTE tocar naquele registro
+Exemplo: shift_call com status='open' → freela lê, vê data de expiração, marca como 'expired' na UI
+Custo: zero. Alcance: só quem abre o app.
+```
+
+**Caminho 2: `cron.schedule` versionado em migration (padrão F4 — Confirmação de Véspera) — MANDATÓRIO aqui**
+```
+Noite antes do turno (cron roda 20h UTC) → RPC batch alcança N freelas SEM eles abrirem app
+Necessário quando o valor depende de ALCANÇAR QUEM NÃO VAI ABRIR A TELA
+Exemplo: "confirme presença amanhã" — se esperar freela abrir o app, 8h30 já passou (quebra do turno)
+Custo: agendador em produção (pré-requisito). Alcance: proativo, sem depender do usuário.
+```
+
+**Critério de decisão — alcance necessário:** A promessa da feature decide o padrão. Se é "descobrir furo 12h antes", preguiçoso
+**não funciona** (freela descobrindo o aviso após perder o turno = comportamento humano que a feature existe para **substituir**).
+
+**ADR feedback:**
+- **Architect reprovou v1** (só botão manual): *"entrega a UI de uma feature cuja promessa não é cumprida por nenhum código do PR… 
+  o piloto atribuiria o silêncio ao produto, não à configuração ausente."*
+- **Evaluator:** ausência de pg_cron = **ALTO**. *"A feature é um botão que o gerente precisa lembrar de apertar na véspera — 
+  que é literalmente o comportamento humano que a feature existe para substituir."*
+
+**Implementação F4:**
+```sql
+IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+  SELECT cron.schedule('request_attendance_confirmations_7d', '20 * * * *', 
+    $$SELECT public.batch_request_attendance_confirmations_7d();$$);
+END IF;
+```
+Graceful: migration passa sem erro se pg_cron não está. **Mas a feature é incompleta sem cron** — é pré-requisito de entrega
+(não item de backlog). Runbook deve documentar: "ops: habilitar pg_cron antes de validar F4 em produção".
+
+**Padrão observável:** 
+- Expiração preguiçosa = funciona hoje, funciona sem config. 
+- Cron versionado = exige instalação. Escolha pelo alcance necessário, não por disponibilidade de tech.
+
+## ⚠️ `RAISE WARNING` não chega aos aplicadores via MCP (F4 — logs de migração)
+
+Migrations neste projeto são aplicadas por **MCP** (Supabase Management API, canal de aplicação da CLI). MCP engole
+`NOTICE` e `WARNING` — avisos em SQL não chegam ao runbook/logs do aplicador.
+
+**Exemplo anti-padrão (F4):**
+```sql
+-- ✗ ERRADO — aviso engolido
+IF NOT pg_extension_installed('pg_cron') THEN
+  RAISE WARNING 'pg_cron não encontrado — confirmação de véspera funcionará via frontend apenas.';
+END IF;
+```
+Aplicador nunca vê o aviso. Runbook para F4 precisa dizer explicitamente: "ops: validar se pg_cron está instalado
+com `\dx pg_cron` na sua sessão psql direto".
+
+**Defesa:** toda migration que depende de recurso externo precisa ter:
+1. **Verificação SQL em UP:** `IF EXISTS (SELECT ... FROM pg_available_extensions WHERE ...)` com graceful fallback
+2. **Runbook explícito:** instruções de validação **no arquivo da migration** como comentário (READ-ME-APLICACAO.md)
+3. **Sem RAISE** — instruções vão direto em COMMENT dentro do arquivo .sql
+
+**Padrão:** validação > aviso. Código SQL não conta com warnings chegarem a humanos.
+
+## ⚠️ Predicado consumido sem sessão precisa ser `SECURITY DEFINER` (F4 — cron lê `jobs`)
+
+Função lida por um consumidor **sem sessão** (`auth.uid()` NULL) não pode depender de RLS simples.
+
+**Exemplo (F4):** cron chama `batch_request_attendance_confirmations_7d()` → precisa ler `jobs` para saber "qual turno
+é amanhã em fuso local?". A function `job_local_date(job_id)` converte UTC para local via `settings.app_timezone`.
+
+```sql
+-- ✗ ERRADO — cron roda sem sessão, `auth.uid()` = NULL
+CREATE FUNCTION job_local_date(p_job_id uuid) RETURNS date AS $$
+  SELECT (jobs.start_date AT TIME ZONE settings.app_timezone)::date
+  FROM jobs                               -- ← policy SELECT depende de RLS
+  WHERE jobs.id = p_job_id;
+$$ LANGUAGE sql STABLE;  -- ← INVOKER padrão
+-- Resultado: quando cron chama, RLS nega acesso → retorna NULL
+
+-- ✓ CORRETO — SECURITY DEFINER ignora RLS do invoker
+CREATE FUNCTION job_local_date(p_job_id uuid) RETURNS date AS $$
+  SELECT (jobs.start_date AT TIME ZONE (SELECT value FROM settings WHERE key = 'app_timezone'))::date
+  FROM jobs                               -- ← RLS agora irrelevante
+  WHERE jobs.id = p_job_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '';
+```
+
+**Regra:** Se consumidor não tem sessão (cron, trigger, webhook desautenticado), função INVOKER que acessa tabela com RLS retorna falso → silenciosamente. Sem erro no LOG; a feature para de funcionar sem aviso. **Sempre use SECURITY DEFINER + search_path='' para funções lidas por consumidores sem sessão.**
+
+**Consequência:** função DEFINER sem `search_path = ''` é vulnável a name shadowing de schema externo.
+
+## ⚠️ Teste de mutação prova mais que teste decorativo (F4 — confirmação de presença)
+
+Teste que afirma "ordem está correta" SEM verificar estado intermediário passa falso até quando a ordem está invertida.
+
+**Exemplo real (F4):** dois testes foram quebrados ao reescrever o código:
+1. **Teste de ordem de notificações** — passava com ordem invertida porque asseverava só o DOM final (onde a ordem é indistinguível até ler o HTML inteiro). Virou `toBeTruthy()` sem validar conteúdo real.
+2. **Teste de mensagem específica** — 16 casos que diziam "mensagem contém 'X'" e verificavam `toBeTruthy()`, sem afirmar a string real.
+
+**Padrão de teste real:** bloquear a operação em `Promise.pending()` controlada e validar estado intermediário:
+```ts
+// ✗ ERRADO — afirma só resultado final
+test('notifications arrive in order', async () => {
+  await requestConfirmation(worker1);
+  await requestConfirmation(worker2);
+  // Renderiza UI... passa se worker1 ou worker2 vier primeiro
+  expect(screen.getByText('worker1')).toBeInTheDocument();  // ✓ mas worker2 primeiro? Também passa
+});
+
+// ✓ CORRETO — segura promise e valida estado intermediário
+test('notifications arrive in order', async () => {
+  let resolveNotification: Function | null = null;
+  jest.spyOn(notificationService, 'notify').mockImplementation(
+    () => new Promise(r => { resolveNotification = r; })
+  );
+
+  await requestConfirmation(worker1);
+  // Notificação de worker1 está pendente
+  expect(screen.getByText('notification: worker1')).toBeInTheDocument();  // Intermediário
+  expect(screen.queryByText('notification: worker2')).not.toBeInTheDocument();  // worker2 ainda não
+
+  resolveNotification?.();  // Libera notificação worker1
+  await waitFor(() => expect(screen.getByText('received: worker1')).toBeInTheDocument());
+
+  await requestConfirmation(worker2);
+  // worker1 recebeu, worker2 agora está pendente
+  expect(screen.getByText('notification: worker2')).toBeInTheDocument();  // Nova
+  resolveNotification?.();
+  await waitFor(() => expect(screen.getByText('received: worker2')).toBeInTheDocument());
+
+  // Ordem é verificável aqui porque capturamos transições, não só resultado final
+});
+```
+
+**Razão:** teste que só valida o **resultado final** é "teste decorativo" — prova menos que parece. Validade real = **estado intermediário** (qual vem antes, qual depende do quê). Especialmente crítico em features com timeline/notificações/máquinas de estado.
 
 ## WhatsApp como canal de notificação sem backend (aviso manual de convite)
 

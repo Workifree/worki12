@@ -10,6 +10,76 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Confirmação de Véspera — Validar Presença do Freela um Dia Antes (2026-08-18)
+
+**Freela:**
+- **Card de confirmação em "Meus Turnos":** na véspera do turno, aparece um card destacado perguntando "Você vai trabalhar amanhã?"
+- **Dois botões, um toque:** "Sim, vou" ou "Não vou poder" — resposta imutável (não pode ser mudada depois)
+- **Notificação:** sino avisa que há pedido de confirmação pendente (link direto para `/my-jobs`)
+- **Badge de status:** após responder, o card mostra um badge verde (Confirmado) ou âmbar (Avisou que não vai)
+
+**Empresa:**
+- **Resumo agregado:** tela "Presença e Pagamento" mostra no topo quantos confirmaram, quantos não responderam, quantos disseram que não vão
+- **Badge por freela:** cada linha da lista exibe o status de confirmação (Confirmado / Sem resposta / Avisou que não vai)
+- **Botão "Pedir confirmação":** dispara manualmente um pedido de confirmação a qualquer hora (não só na véspera)
+  - Máximo 2 pedidos por freela no mesmo turno
+  - Cooldown de 6 horas entre pedidos
+  - Botão desabilitado com motivo se limite foi atingido ou cooldown em vigor
+- **Notificação urgente:** quando freela avisa "não vai poder", empresa recebe alerta imediato e acesso direto à tela de turno
+- **"Dispensar e chamar substituto":** novo botão que dispensa o freela **e abre** o Chamado de Turno (F1) para reabrir a vaga na hora (não duplica telas)
+- **Bloqueio seguro:** se houver pagamento agendado/registrado para o freela, dispensa é bloqueada — é preciso estornar o pagamento antes
+
+**Aspecto técnico (operação):**
+- O pedido automático está planejado para às 18h diariamente, mas depende de configuração de servidor (`pg_cron`) que ainda não está habilitada em produção
+- Por enquanto a confirmação funciona **apenas pelo botão manual** "Pedir confirmação" que a empresa controla
+- O automático será ativado assim que a infraestrutura for configurada (não necessita mudança no app)
+
+**Integração:**
+- Sem mudança de status automática — silêncio ou "não vai poder" são só avisos; a empresa decide manualmente se dispensa ou toma ação
+- `applications.status` continua intacto; mudanças passam pelos fluxos já existentes (`dismissFromShift`, check-in/checkout)
+- Resposta da confirmação fica no histórico (dados para análise futura de confiabilidade do freela)
+
+#### Escala Recorrente — Turnos que Se Repetem (2026-08-17)
+
+**Empresa:**
+- **Criar série recorrente:** ao invés de cadastrar turnos um por um, crie uma série que gera múltiplos turnos automaticamente
+- **Dois tipos de repetição:** (1) **Toda semana** — escolha os dias que se repetem (seg, ter, etc.); (2) **Cobrir um período** — um turno por dia corrido (ideal para férias/eventos)
+- **Data final obrigatória:** toda série tem um fim — nada de recorrência infinita
+- **Máximo 60 turnos por série:** limita o tamanho das séries; a tela avisa se ultrapassar o limite
+- **Prévia ao criar:** antes de confirmar, você vê quantos turnos serão criados e a lista completa de datas
+- **Cada turno é independente:** após criada, cada turno funciona como um turno normal (edit, convite, pagamento, avaliação)
+- **Convidar para a série inteira:** escolha um freela e convide-o para todas as ocorrências futuras ainda abertas (em paralelo, sem digitar cada uma)
+- **Aviso de sobrecarga:** se convidar alguém para tantos turnos que ultrapasse o limite semanal configurado, a tela avisa (a decisão é sua)
+- **Editar os futuros:** altere título, função, descrição, requisitos, briefing, local, horário, vagas para todas as ocorrências futuras abertas, de uma vez (o valor fica travado)
+- **Cancelar a série:** encerre a série — ela para de gerar novos turnos e remove as ocorrências futuras ainda abertas
+- **Prévia antes de aplicar:** tanto para edição quanto cancelamento, a tela mostra quantos turnos serão afetados e quantos ficarão (porque já têm freela ou chamado)
+- **Proteção de freelas confirmados:** turnos com freela já contratado ou chamado aberto NUNCA são alterados ou cancelados em massa — segurança contra quebra de compromisso
+- **Série é imutável:** após criar, não dá para mudar tipo/dias/datas — crie uma nova se precisar de padrão diferente
+
+#### Chamado de Turno — Disparo 1→N com Primeiro-Aceite (2026-08-17)
+
+**Empresa:**
+- **Novo modelo de convite:** em vez de convidar freela por freela e segurar a vaga por horas, a empresa dispara um turno para vários freelas do Elenco **ao mesmo tempo**
+- **Quem aceitar primeiro fica com a vaga:** o chamado fecha automaticamente quando a vaga é preenchida; os demais recebem notificação sem qualquer punição
+- **Opções de expiração:** 30 minutos, 1 hora, **2 horas (padrão)**, 6 horas, 24 horas, ou até o horário de início do turno
+- **Motivo do chamado:** empresa marca por que precisa chamar (falta de freela, demissão/quebra de escala, pico previsto, evento, férias, folga, reforço)
+- **Métrica de performance:** a tela do turno mostra em quanto tempo a primeira vaga foi preenchida (ex: "6 minutos" em vez de "2 horas")
+- **Visão em tempo real:** painel mostra quantos responderam, quantos recusaram, quantos ainda estão aguardando
+- **Cancelar chamado:** empresa pode parar de procurar a qualquer momento — o chamado encerra e ninguém perde reputação
+- **Convite tradicional ainda funciona:** para chamar apenas um freela, a interface é a mesma (é um chamado com um alvo)
+
+#### Listas do Elenco — Organizar Freelas por Função (2026-08-17)
+
+**Empresa:**
+- **Nova tela "Listas do Elenco":** salvar grupos de freelas por função/tipo ("Cozinha", "Salão", "Chapa", "Limpeza", etc.)
+- **Criar/editar/excluir listas:** interface simples de nomear e marcar freelas
+- **Um freela em várias listas:** o mesmo freela pode estar em "Cozinha" E "Limpeza"
+- **Criar lista vazia:** salvar uma lista sem membros e preenchê-la depois é válido
+- **Usar listas no chamado:** ao disparar um turno, clicar num chip de lista **adiciona todos os freelas daquele grupo** à seleção
+- **Marcar/desmarcar:** clicar novamente no chip remove só aquele grupo (não desfaz os freelas marcados à mão)
+- **Excluir lista não remove ninguém:** quando você exclui uma lista, os freelas continuam no Elenco — apenas a categorização é removida
+- **Disponibilidade na hora:** no moment do chamado, os chips mostram **quantos da lista estão realmente disponíveis** para aquele turno (quem já está alocado ou saiu do Elenco não é contado)
+
 #### Revisão Pré-Piloto (Onda 3) — 2026-08-16
 
 **Agenda de Turnos por Dia (Empresa):**

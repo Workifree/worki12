@@ -83,6 +83,9 @@ e push (convite) coexistem: pull = worker se candidata; push = empresa convida c
 worker clica, autoriza (`/convite/:token`), entra na equipe accepted. Slice 1 também suporta convite por telefone (Worki ID) 
 e QR (v1.1).
 
+**Lista do Elenco (team_lists)** — Agrupamento organizacional de membros do elenco por função/turma/departamento. 
+Tabelas `team_lists` (nome, company_id) + `team_list_members` (list_id, worker_id). Zero consentimento, zero dinheiro — é puro organizacional da empresa. Atalho no `ShiftCallModal` para seleção rápida: clique no chip "Cozinha (5)" seleciona todo o grupo de uma vez (primeiro-clique soma; segundo-clique remove). Membro que sai do elenco é silenciosamente filtrado no cálculo do chip. Feature F2 (Listas salvas do elenco). RLS via `is_company_owner(company_id)`.
+
 **Postpago (Slice 2)** — Modelo de pagamento para turno via convite push: empresa cadastra cartão on-file (tokenização Asaas),
 convida freela (sem reserva de saldo antecipado); no aceite, nada muda; na conclusão, autoriza um hold (pré-autorização)
 no cartão, depois captura o pagamento transferindo o valor ao worker. Coexiste com prepago (pull legado).
@@ -159,3 +162,23 @@ real de "XP não sobe") = foi removido.
 Ao criar turno, pré-preenche a descrição; empresa ajusta/incrementa por turno (ex.: "camisa verde"). Operacional, NÃO toca saldo.
 
 **Meus Recebimentos** — Página do worker (`/recebimentos`, `MeusRecebimentos.tsx`) que exibe todos os `shift_payments` registrados pela empresa (modo A — pagamento externo). Agrupa por status: `scheduled` (promessas), `recorded` sem confirmação do worker, `recorded` confirmado, `voided`. **NÃO exibe saldo** (Article 8) — é histórico de auditoria/comprovantes. Rota substitui a antiga `/wallet` (removida). **Limitação:** sem notificação push quando empresa registra novo pagamento — worker descobre ao abrir a página.
+
+**Série de turnos / Escala recorrente (F3)** — Modelo de turno **recorrente** (diário ou semanal) que materializa múltiplas ocorrências (`jobs`) de uma vez (EAGER generation). Tabela `job_series` armazena config (recorrência, intervalo, template); cada ocorrência é um `jobs` normal com `series_id` + `series_occurrence_date`. Limite: 60 ocorrências por série (CHECK SQL). Operações: criar série (RPC `create_job_series`), editar futuras ocorrências (`update_job_series_future`), parar série (`stop_job_series`). Cancelamento de ocorrência = soft delete (`status='deleted'`), nunca DELETE real. Usado para cobertura de férias/folgas fixas (Onda 1 — Revisão Piloto). ADR-20260817-serie-eager-e-cancelamento-suave.md.
+
+**Geração EAGER de ocorrências** — Cálculo de datas de série no **client** (função pura `generateOccurrenceDates` em `lib/recurrence.ts`) e materialização de `jobs` em **uma transação única** no banco (RPC `create_job_series`). Alternativa rejected: lazy (gerar sob demanda ao aceitar convite) — teria re-orquestrado aplicação/shift_calls/shift_payments em múltiplas transações. EAGER simplifica: UI mostra contagem real de turnos ANTES de confirmar, histórico é direto (não há "série sem ocorrências"), testes são determinísticos.
+
+**Soft delete de turno** — Cancelamento/exclusão de `jobs` = `UPDATE status='deleted'`, nunca `DELETE` da linha. Preserva `shift_calls` (métrica de ROI), `escrow_transactions` (auditoria), evita erro RESTRICT em `shift_payments`. Padrão reutilizável.
+
+**`p_dry_run` (parâmetro RPC)** — Flag em RPCs de operação em massa (`update_job_series_future`, `stop_job_series`) que executa o predicado de seleção SEM executar UPDATE/DELETE. Retorna contagem de "serio afetado" para pré-visualização na UI. Mesma RPC, mesmo predicado, skip só do statement mutante — nunca duplicar lógica no client.
+
+**Máximo de ocorrências por série** — 60 turnos (constraint CHECK `length(array_agg(...)) <= 60` em trigger de statement, validação client em `lib/recurrence.ts` `MAX_SERIES_OCCURRENCES`, e revalidação RPC DEFINER). Limita consumo de storage e UI.
+
+**`generateOccurrenceDates(params)`** — Função pura em `lib/recurrence.ts` que calcula array de `YYYY-MM-DD` de uma série. Parâmetros: recorrência ('weekly'|'daily'), dias da semana (se weekly), intervalo de datas, `referenceDate` injetável (default `new Date()`). Usa componentes locais (`getFullYear`, `getMonth`, `getDate`, `getDay`) — nunca `toISOString()` (viaja em meia-noite perto de BRT). Determinístico se `referenceDate` fixo (crítico para testes).
+
+**Confirmação de Véspera / Confirmação de Presença (F4)** — Feature de descoberta de furo com antecedência. Empresa envia pedido de confirmação: "Você comparece no turno de amanhã?" Freela responde (Confirmo/Não consigo). Tabela-evento: `shift_attendance_confirmations` (request_sent_at, worker_responded_at, response, confirmation_status). Cada linha = uma tentativa (reenvios permitidos). RLS SELECT-only; INSERT/UPDATE via RPCs `request_attendance_confirmation`, `respond_attendance_confirmation`. **Promessa depende de agendador:** cron dispara 20h antes (alcança freelas que não abriram app). Clique manual é fallback. Sem cron, feature fracassa (empresa tem de lembrar — comportamento humano que F4 existe para substituir).
+
+**Tabela-evento** — Tabela que registra uma sequência de tentativas/eventos, não o contrato. Linha = uma tentativa. Exemplo: `shift_attendance_confirmations` (várias tentativas de confirmação pro mesmo freela no mesmo turno). Contrasta com linhas de contrato (`applications`, `shift_payments`) que são únicas/imutáveis. Padrão em Worki: tentativas/logs vão em tabelas-evento; contratos em tabelas de linha única. Motivação: auditoria consultável + reutilizável futuro (retry, análise de padrão).
+
+**Cron.schedule (PG Cron)** — Agendador Postgres via extensão `pg_cron`. Sintaxe: `SELECT cron.schedule('job_name', 'cronexpression', 'SQL');`. Em Worki: **disponível (1.6.4) mas não instalado em produção**. Migrações o usam com proteção graceful `IF EXISTS pg_extension('pg_cron')`. **Escolha de timing depende do alcance necessário:** expiração preguiçosa (F1) funciona sem cron; cron-dependent (F4) é **pré-requisito de entrega** — sem ele, promessa não é cumprida. Ver `patterns.md` §Escolha de timing.
+
+**helpers SECURITY DEFINER lidos por consumidor sem sessão (F4)** — Função Postgres que é consultada por um processo sem autenticação (ex.: cron, trigger de background) não pode depender de RLS simples. Exemplos: `job_local_date(job_id)` (cron pergunta "qual turno é amanhã?"), `job_is_active(job_id)` (cron filtra turnos ativos). Ambas SECURITY DEFINER + search_path='' — contornam RLS do invoker que não tem sessão. Landmine: função INVOKER retorna silenciosamente NULL quando RLS nega, sem erro no log.

@@ -8,14 +8,82 @@ import { useCompanyInvites, useShiftCalls } from '../../hooks/useShiftInvites';
 import { ShiftCallModal } from '../../components/team/ShiftCallModal';
 import { ShiftCallsPanel } from '../../components/team/ShiftCallsPanel';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
+import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone, Bell, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
 import { todayLocalDate, formatDateOnly } from '../../lib/dateUtils';
-import type { Application, PaymentSource, ShiftPayment, TeamMember } from '../../types';
+import type {
+    Application,
+    PaymentSource,
+    ShiftPayment,
+    TeamMember,
+    ShiftAttendanceConfirmation,
+    AttendanceConfirmationOutcome,
+} from '../../types';
+
+// ---------------------------------------------------------------------------
+// Confirmação de véspera (D-1) — helpers puros (module scope, sem estado de componente),
+// mesmo padrão de `isInviteExpired`/`isInviteCancelledUnanswered` abaixo.
+// ---------------------------------------------------------------------------
+
+/** Janela de anti-spam da RPC `request_attendance_confirmation` (ver ddl-aprovado.md). */
+const CONFIRMATION_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const CONFIRMATION_REQUEST_CAP = 2;
+
+interface ConfirmationSummary {
+    response: ShiftAttendanceConfirmation['response'];
+    requestCount: number;
+    lastRequestedAt: string | null;
+}
+
+/**
+ * Reduz as N linhas de `shift_attendance_confirmations` de uma application (1 auto + até 1
+ * manual, ou 2 manuais) num resumo único para a UI. A resposta (quando existe) é sempre a MESMA
+ * em todas as linhas da application — a RPC `respond_attendance_confirmation` grava na primeira
+ * `response IS NULL` e é idempotente por linha, mas o pedido em si pode ter sido feito 1x ou 2x.
+ */
+function summarizeConfirmation(rows: ShiftAttendanceConfirmation[] | undefined): ConfirmationSummary {
+    if (!rows || rows.length === 0) return { response: null, requestCount: 0, lastRequestedAt: null };
+    const responded = rows.find((r) => r.response !== null);
+    const lastRequestedAt = rows.reduce<string | null>(
+        (max, r) => (!max || r.requested_at > max ? r.requested_at : max),
+        null,
+    );
+    return { response: responded?.response ?? null, requestCount: rows.length, lastRequestedAt };
+}
+
+/** ms restantes de cooldown (0 = já pode pedir de novo). Espelha a checagem da RPC, só para UX
+ * (o servidor é a fonte de verdade final — ver `handleRequestConfirmation`). */
+function confirmationCooldownRemainingMs(lastRequestedAt: string | null): number {
+    if (!lastRequestedAt) return 0;
+    const elapsed = Date.now() - new Date(lastRequestedAt).getTime();
+    return Math.max(0, CONFIRMATION_COOLDOWN_MS - elapsed);
+}
+
+function formatCooldownRemaining(ms: number): string {
+    const totalMinutes = Math.ceil(ms / (60 * 1000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0) return `${hours}h${minutes > 0 ? ` ${minutes}min` : ''}`;
+    return `${Math.max(1, minutes)}min`;
+}
+
+/** Mensagens humanas para os outcomes de NEGAÇÃO/erro de `request_attendance_confirmation`.
+ * 'requested' e 'cooldown' têm tratamento dedicado no handler (o segundo precisa do `retryAfter`). */
+const CONFIRMATION_REQUEST_MESSAGES: Partial<Record<AttendanceConfirmationOutcome, string>> = {
+    forbidden: 'Você não tem permissão para pedir confirmação neste turno.',
+    invalid_status: 'Este freela não está mais contratado para este turno.',
+    job_inactive: 'Este turno não está mais ativo.',
+    job_past: 'Este turno já passou.',
+    already_responded: 'Este freela já respondeu — não é necessário pedir de novo.',
+    limit_reached: 'Limite de 2 pedidos de confirmação atingido para este freela.',
+    unauthenticated: 'Sessão expirada. Faça login novamente.',
+    not_found: 'Não foi possível localizar este pedido.',
+};
 
 /**
  * Convite expirado sem resposta do freela (R8 — expiração deriva na leitura, sem escrever no
@@ -149,6 +217,15 @@ export default function CompanyJobCandidates() {
     // "Dispensar deste turno" — hired/in_progress, exige confirmação explícita (onda 3).
     const [dismissApp, setDismissApp] = useState<Application | null>(null);
     const [dismissing, setDismissing] = useState(false);
+    // Confirmação de véspera (F4, blocker 3 do ddl-aprovado.md): quando true, o modal de
+    // dispensa encadeia a abertura do Chamado de Turno (F1) LOGO DEPOIS do dispensar ter sucesso
+    // — nunca antes (senão o turno continua cheio e o chamado fecha sozinho como 'filled').
+    const [dismissThenCall, setDismissThenCall] = useState(false);
+
+    // Confirmação de véspera (D-1) — linhas de `shift_attendance_confirmations` deste turno,
+    // agrupadas por application_id (1 auto + até 1 manual por freela).
+    const [confirmationsByApp, setConfirmationsByApp] = useState<Record<string, ShiftAttendanceConfirmation[]>>({});
+    const [requestingConfirmationId, setRequestingConfirmationId] = useState<string | null>(null);
 
     // Modal "Registrar pagamento" (modo A)
     const [paymentModalApp, setPaymentModalApp] = useState<Application | null>(null);
@@ -281,6 +358,19 @@ export default function CompanyJobCandidates() {
             const byWorker: Record<string, ShiftPayment> = {};
             payments.forEach((p) => { byWorker[p.worker_id] = p; });
             setPaymentByWorker(byWorker);
+
+            // Confirmação de véspera (D-1) — try/catch isolado: uma falha aqui não pode derrubar
+            // o carregamento dos candidatos (checagem/pagamento continuam funcionando sem isso).
+            try {
+                const confirmationRows = await AttendanceConfirmationService.getConfirmationsForJob(id);
+                const byApp: Record<string, ShiftAttendanceConfirmation[]> = {};
+                confirmationRows.forEach((row) => {
+                    (byApp[row.application_id] ??= []).push(row);
+                });
+                setConfirmationsByApp(byApp);
+            } catch (confirmationError) {
+                logError('CompanyJobCandidates.fetchConfirmations', confirmationError);
+            }
         } catch (error) {
             logError('CompanyJobCandidates', error);
         } finally {
@@ -359,6 +449,14 @@ export default function CompanyJobCandidates() {
 
     // "Dispensar deste turno" (onda 3) — hired/in_progress, gesto sério: exige confirmação
     // explícita no modal (dismissApp) antes de chamar o service.
+    //
+    // F4 (blocker 3 do ddl-aprovado.md): quando `dismissThenCall` está marcado, o CTA que trouxe
+    // até aqui foi "Dispensar e chamar substituto" — SÓ DEPOIS do dispensar ter sucesso é que o
+    // Chamado de Turno (F1) abre. Nunca na ordem inversa: `claim_shift_slot` conta ocupação como
+    // hired/in_progress/completed, então abrir o chamado com o freela ainda 'hired' faria o
+    // próprio chamado se fechar sozinho como 'filled' e notificar "vaga preenchida" para gente
+    // que nunca teve chance. `await fetchCandidates()` (não fire-and-forget) garante que
+    // `excludeWorkerIds` já reflete o status 'cancelled' antes do modal do F1 montar.
     const handleDismissFromShift = async () => {
         if (!dismissApp) return;
         setDismissing(true);
@@ -369,10 +467,47 @@ export default function CompanyJobCandidates() {
                 return;
             }
             addToast('Freela dispensado deste turno.', 'success');
+            const shouldOpenCallModal = dismissThenCall;
             setDismissApp(null);
-            fetchCandidates();
+            setDismissThenCall(false);
+            await fetchCandidates();
+            if (shouldOpenCallModal) {
+                setCallModalOpen(true);
+            }
         } finally {
             setDismissing(false);
+        }
+    };
+
+    // "Pedir confirmação" (F4) — disparo manual, fallback/lembrete ao lote automático D-1
+    // (`request_attendance_confirmations_due`, fora do frontend). A RPC valida tudo de novo no
+    // servidor (teto de 2 pedidos + cooldown de 6h) — os cálculos locais (`confirmationCooldownRemainingMs`)
+    // só desabilitam o botão preventivamente; o outcome do servidor é sempre a última palavra.
+    const handleRequestConfirmation = async (applicationId: string) => {
+        setRequestingConfirmationId(applicationId);
+        try {
+            const result = await AttendanceConfirmationService.requestConfirmation(applicationId);
+            if (result.outcome === 'requested') {
+                addToast('Pedido de confirmação enviado ao freela.', 'success');
+                fetchCandidates();
+                return;
+            }
+            if (result.outcome === 'cooldown') {
+                const retryLabel = result.retryAfter
+                    ? ` Disponível ${formatDistanceToNow(new Date(result.retryAfter), { addSuffix: true, locale: ptBR })}.`
+                    : '';
+                addToast(`Aguarde o intervalo de 6h entre pedidos.${retryLabel}`, 'info');
+                return;
+            }
+            addToast(
+                CONFIRMATION_REQUEST_MESSAGES[result.outcome] ?? result.error ?? 'Não foi possível pedir confirmação.',
+                'error',
+            );
+        } catch (err) {
+            logError('CompanyJobCandidates.handleRequestConfirmation', err);
+            addToast('Erro ao pedir confirmação.', 'error');
+        } finally {
+            setRequestingConfirmationId(null);
         }
     };
 
@@ -975,6 +1110,62 @@ export default function CompanyJobCandidates() {
                 onCancel={(callId) => void cancelCall(callId)}
             />
 
+            {/* Confirmação de véspera (F4) — resumo agregado do turno (A7). Só conta quem está
+                de fato no turno (hired/in_progress); convites pendentes/cancelados/históricos
+                não entram na conta. Some quando ninguém nesse grupo foi sequer perguntado ainda
+                (revisão pós-evaluator): um turno daqui a três semanas, sem nenhum pedido de
+                confirmação disparado, NÃO deve ler "0 confirmados · N sem resposta" — isso
+                sugeriria freelas ignorando um pedido que nunca existiu. `noResponse` (perguntado,
+                silêncio) e `notAsked` (nunca perguntado) são buckets DISTINTOS, espelhando o
+                mesmo gate (`requestCount > 0`) já usado no badge por linha (nunca replicado
+                condição a condição — ver `summarizeConfirmation`). */}
+            {(() => {
+                const activeCandidates = candidates.filter(
+                    (app) => app.status === 'hired' || app.status === 'in_progress',
+                );
+                const summary = activeCandidates.reduce(
+                    (acc, app) => {
+                        const { response, requestCount } = summarizeConfirmation(confirmationsByApp[app.id]);
+                        if (response === 'confirmed') acc.confirmed += 1;
+                        else if (response === 'cannot_attend') acc.cannotAttend += 1;
+                        else if (requestCount > 0) acc.noResponse += 1;
+                        else acc.notAsked += 1;
+                        return acc;
+                    },
+                    { confirmed: 0, cannotAttend: 0, noResponse: 0, notAsked: 0 },
+                );
+                // Nenhuma confirmação foi pedida para NINGUÉM deste turno ainda — o painel não
+                // tem nada verdadeiro a reportar (todo mundo cairia em "notAsked"), então some
+                // por inteiro em vez de mostrar um resumo tecnicamente correto mas enganoso.
+                const hasAnyConfirmationActivity = summary.confirmed + summary.cannotAttend + summary.noResponse > 0;
+                if (activeCandidates.length === 0 || !hasAnyConfirmationActivity) return null;
+                return (
+                    <div className="bg-white border-2 border-black rounded-2xl p-4 mb-6 flex flex-wrap items-center gap-3">
+                        <span className="text-xs font-black uppercase text-gray-400 flex items-center gap-1.5">
+                            <CalendarClock size={14} /> Confirmação de véspera
+                        </span>
+                        <span className="text-xs font-black bg-primary-light text-primary px-3 py-1.5 rounded-xl">
+                            {summary.confirmed} confirmado{summary.confirmed !== 1 ? 's' : ''}
+                        </span>
+                        {summary.noResponse > 0 && (
+                            <span className="text-xs font-black bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+                                {summary.noResponse} sem resposta
+                            </span>
+                        )}
+                        {summary.cannotAttend > 0 && (
+                            <span className="text-xs font-black bg-red-50 text-red-600 px-3 py-1.5 rounded-xl">
+                                {summary.cannotAttend} não {summary.cannotAttend === 1 ? 'vem' : 'vêm'}
+                            </span>
+                        )}
+                        {summary.notAsked > 0 && (
+                            <span className="text-xs font-black bg-gray-50 text-gray-400 px-3 py-1.5 rounded-xl border border-gray-200">
+                                {summary.notAsked} não perguntado{summary.notAsked !== 1 ? 's' : ''}
+                            </span>
+                        )}
+                    </div>
+                );
+            })()}
+
             {/* Candidates List */}
             <div className="space-y-4">
                 {loading ? (
@@ -1219,6 +1410,65 @@ export default function CompanyJobCandidates() {
                                                             {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
                                                             {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
 
+                                                            {/* Confirmação de véspera (F4) — badge de status + "Pedir confirmação" (A7/A9/A10). */}
+                                                            {(() => {
+                                                                const { response, requestCount, lastRequestedAt } = summarizeConfirmation(
+                                                                    confirmationsByApp[app.id],
+                                                                );
+                                                                const cooldownMs = confirmationCooldownRemainingMs(lastRequestedAt);
+                                                                const canRequest =
+                                                                    response === null && requestCount < CONFIRMATION_REQUEST_CAP && cooldownMs === 0;
+                                                                const isRequesting = requestingConfirmationId === app.id;
+                                                                const disabledReason =
+                                                                    response !== null
+                                                                        ? null
+                                                                        : requestCount >= CONFIRMATION_REQUEST_CAP
+                                                                            ? 'Limite de 2 pedidos atingido'
+                                                                            : cooldownMs > 0
+                                                                                ? `Aguarde ${formatCooldownRemaining(cooldownMs)}`
+                                                                                : null;
+
+                                                                return (
+                                                                    <>
+                                                                        {response === 'confirmed' && (
+                                                                            <span className="text-xs font-black text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                                <ThumbsUp size={13} /> Confirmou presença
+                                                                            </span>
+                                                                        )}
+                                                                        {response === 'cannot_attend' && (
+                                                                            <span className="text-xs font-black text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                                <ThumbsDown size={13} /> Avisou que não vai
+                                                                            </span>
+                                                                        )}
+                                                                        {response === null && requestCount > 0 && (
+                                                                            <span className="text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                                                                <Bell size={12} /> Sem resposta
+                                                                            </span>
+                                                                        )}
+                                                                        {response === null && (
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); void handleRequestConfirmation(app.id); }}
+                                                                                disabled={!canRequest || isRequesting}
+                                                                                title={disabledReason ?? 'Envia um lembrete de confirmação para o freela'}
+                                                                                className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-blue-50 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                {isRequesting ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
+                                                                                Pedir confirmação
+                                                                            </button>
+                                                                        )}
+                                                                        {/* `title` (tooltip nativo) some em touch — o contexto real do
+                                                                            gerente no chão de loja. A10 pede o motivo VISÍVEL, não só
+                                                                            hover-only. Linha própria (`w-full`) dentro do flex-wrap para
+                                                                            não brigar de espaço com os botões/badges vizinhos. */}
+                                                                        {disabledReason && (
+                                                                            <span className="w-full text-[10px] font-bold text-gray-400 uppercase">
+                                                                                {disabledReason}
+                                                                            </span>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })()}
+
                                                             {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
                                                                 "Dispensar" é para ANTES do turno acontecer. `hasAttendedShift` (mesmo
                                                                 predicado usado por shiftInviteService.dismissFromShift — nunca replicado
@@ -1227,15 +1477,34 @@ export default function CompanyJobCandidates() {
                                                                 app (o caminho canônico do modo A). Sem qualquer um dos três, dispensar
                                                                 deixaria um turno trabalhado sem pagamento e sem recibo, e a application
                                                                 'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
-                                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar). */}
-                                                            {!hasAttendedShift(app) && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); setDismissApp(app); }}
-                                                                    className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
-                                                                >
-                                                                    <UserX size={14} /> Dispensar
-                                                                </button>
-                                                            )}
+                                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar).
+
+                                                                F4 (blocker 3 do ddl-aprovado.md): com sinal de risco vindo da confirmação
+                                                                de véspera ("não vai poder" OU pedido sem resposta), o botão vira
+                                                                "Dispensar e chamar substituto" — dispara o MESMO modal de confirmação,
+                                                                mas marcado (`dismissThenCall`) para encadear o Chamado de Turno (F1) só
+                                                                DEPOIS do dispensar ter sucesso. Sem sinal de risco, continua o
+                                                                "Dispensar" simples de sempre — não muda o comportamento de turnos que
+                                                                nunca usaram a confirmação de véspera. */}
+                                                            {!hasAttendedShift(app) && (() => {
+                                                                const { response, requestCount } = summarizeConfirmation(confirmationsByApp[app.id]);
+                                                                const hasRiskSignal = response === 'cannot_attend' || (response === null && requestCount > 0);
+                                                                return hasRiskSignal ? (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(true); }}
+                                                                        className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-blue-600 hover:border-blue-600 transition-colors flex items-center gap-1"
+                                                                    >
+                                                                        <Megaphone size={14} /> Dispensar e chamar substituto
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(false); }}
+                                                                        className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
+                                                                    >
+                                                                        <UserX size={14} /> Dispensar
+                                                                    </button>
+                                                                );
+                                                            })()}
                                                         </>
                                                     )}
 
@@ -1485,15 +1754,27 @@ export default function CompanyJobCandidates() {
                 </div>
             )}
 
-            {/* Modal "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação explícita */}
+            {/* Modal "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação explícita.
+                F4: quando aberto via "Dispensar e chamar substituto" (`dismissThenCall`), o texto
+                avisa o passo seguinte automático (abrir o F1), mas o gesto em si continua sendo
+                UMA confirmação só — dispensar e chamar substituto é uma decisão manual explícita
+                da empresa, só dividida em dois passos técnicos (blocker 3 do ddl-aprovado.md). */}
             {dismissApp && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">Dispensar Freela</h2>
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">
+                            {dismissThenCall ? 'Dispensar e Chamar Substituto' : 'Dispensar Freela'}
+                        </h2>
                         <p className="text-gray-600 font-medium mb-3">
                             {dismissApp.worker?.full_name || 'Este freela'} já foi contratado para este turno e está
                             contando com ele. Ao dispensar, o turno sai da agenda dele imediatamente.
                         </p>
+                        {dismissThenCall && (
+                            <p className="text-gray-600 font-medium mb-3">
+                                Em seguida, a tela de Chamado de Turno abre automaticamente para você chamar um
+                                substituto do elenco.
+                            </p>
+                        )}
                         <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
                             <p className="text-xs font-bold text-yellow-800">
                                 O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
@@ -1502,7 +1783,7 @@ export default function CompanyJobCandidates() {
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setDismissApp(null)}
+                                onClick={() => { setDismissApp(null); setDismissThenCall(false); }}
                                 disabled={dismissing}
                                 className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
                             >
@@ -1513,7 +1794,9 @@ export default function CompanyJobCandidates() {
                                 disabled={dismissing}
                                 className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {dismissing ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</> : 'Confirmar Dispensa'}
+                                {dismissing
+                                    ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</>
+                                    : dismissThenCall ? 'Confirmar e Chamar Substituto' : 'Confirmar Dispensa'}
                             </button>
                         </div>
                     </div>
