@@ -189,6 +189,96 @@ criado late porque precisa de validação do worker). Capture é "cobrei de verd
 Permite retry + fallback (se authorize falha, convida novamente; se capture falha, refaz). Idempotência por
 `reference_id` estável em wallet_transactions.
 
+## ⚠️ Cancelamento é SOFT DELETE (`status='deleted'`), nunca `DELETE`
+
+Turno cancelado = `UPDATE jobs SET status='deleted'`. Nunca `DELETE` do banco.
+
+**Razão:** DELETE em cascata mata:
+- `shift_calls` cascata → perde métrica `first_claim_at` (tempo de preenchimento, prova de ROI).
+- `escrow_transactions` cascata → apaga razão/auditoria, não devolve saldo (quebra Article 8).
+- `shift_payments` RESTRICT → aborta toda operação em lote se qualquer freela tem pagamento registrado.
+
+O valor `'deleted'` já está espalhado no codebase (`.neq('status','deleted')` em consumidores); nenhum CHECK vigente o bloqueia.
+Usar a mesma coluna/valor que já existe evita drift. Metadado `deleted_at` é imutável para auditoria.
+
+**Padrão:** Toda operação de exclusão em massa (`update_job_series_future`, `stop_job_series`) usa `status='deleted'`, nunca DELETE real. RPC DEFINER executa a guarda.
+
+## ⚠️ Predicado de segurança lido sob RLS falha aberto
+
+Uma política que âncora só em `jobs.company_id = auth.uid()` é "âncora simples". Se uma query usa NOT EXISTS/NÃO ENCONTROU,
+a RLS simples torna a condição **verdadeira falsa** — a linha fica invisível e a subquery pensa que "não existe".
+
+**Exemplo:** `applications` policy de INSERT acessa `jobs.company_id`; `jobs` tem RLS simples. Se empresa X tenta convidar freela Y para job Z e a policy de `jobs` diz "empresa X não é dona", então `NOT EXISTS (SELECT ... FROM jobs WHERE ...)` retorna verdadeiro = INSERT é permitido silenciosamente, criando convite fantasma. Queremos falhar explícito.
+
+**Defesa:** Operações em massa ("alterar 20 turnos futuros") NUNCA exploram RLS simples no client. Usam RPC **SECURITY DEFINER** com autorização explícita no próprio Postgres. RPCs com DEFINER contornam a RLS do invoker e decidem tudo num lugar auditável.
+
+**Padrão:** Check-then-act em massa = RPC DEFINER, nunca loop no client. Mesma disciplina de `walletService` (operações financeiras são RPCs).
+
+## ⚠️ `p_dry_run` como padrão de pré-visualização
+
+Quando a UI precisa mostrar "isso vai afetar N linhas" antes de uma ação destrutiva, **duplicar o predicado no client é proibido** (mente sob RLS).
+
+**Correto:** Adicionar parâmetro `p_dry_run boolean` na própria RPC. Mesma lógica, mesmo predicado, mesmo lugar — skip só o statement mutante:
+```sql
+IF NOT p_dry_run THEN
+  UPDATE jobs SET status='deleted' WHERE (predicado de seleção);
+END IF;
+RETURN jsonb_build_object('outcome', 'preview', 'would_cancel', affected_count);
+```
+
+**Padrão:** `previewUpdateFutureOccurrences` e `previewStopSeries` chamam as mesmas RPCs com `p_dry_run=true`. Mantém predicado único (nunca copia lógica), zero duplicação de risco.
+
+## ⚠️ `TZ` fixo no vitest é obrigatório
+
+O CI roda em UTC (offset=0); entre 21h, 23h e 23h59 em BRT (UTC-3, offset=-3), conversões de data podem dar resultados idênticos
+em UTC quando diferem em local — qualquer regressão de fuso passa verde no CI.
+
+**Correto:** Configurar `vitest.config.ts`:
+```ts
+const config: defineConfig = {
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    env: { TZ: 'America/Sao_Paulo' }
+  }
+}
+```
+
+**Padrão:** O guarda existia na máquina do dev (BRT) e faltava no CI. F3 descobriu via teste regressivo. Sempre fixar TZ em testes de data.
+
+## ⚠️ Índice único NÃO protege duplo-clique se a chave inclui id gerado
+
+UNIQUE `(series_id, series_occurrence_date)` não dedupe operações duplas porque `series_id` é **gerado pela própria requisição**.
+Duas submissões idênticas (duplo-clique rápido) criam dois `job_series` com IDs diferentes; o índice nunca colide entre eles.
+
+**Defesa real:** UI (`disabled={loading}` no botão) + token de sessão no client. Índice UNIQUE é defesa contra **datas duplicadas dentro do mesmo lote**,
+não contra duplo-clique de botão.
+
+**Conhecimento reutilizável:** Se a chave de dedupe contém algo gerado na própria operação, ela não dedupe operações.
+Chaves estáveis (`user_id:reference_id` em `wallet_transactions`) já existem; novas aplicações devem seguir o padrão.
+
+## ⚠️ Ordem de serialização entre RPCs concorrentes via lock na mesma linha
+
+`stop_job_series` e `claim_shift_slot` (ambas de F1/F3) são seguras entre si porque ambas travam o **mesmo objeto** (`jobs FOR UPDATE`).
+
+Executando concorrentemente:
+- Quem executa `stop_job_series` primeiro seta `jobs.status='deleted'`.
+- Quem executa `claim_shift_slot` depois lê a linha nova e cai no ramo "série parada" (retorna erro estruturado).
+- Nenhuma race condition; nenhuma corrupção de estado.
+
+**Padrão:** Operações concorrentes em massa = travar a **mesma entidade** (jobs, não série — a série é só config). Lock no recurso escasso.
+
+## ⚠️ Ocorrência de série é `jobs` pura, sem wrapper
+
+`jobs` com `series_id` é ocorrência. Sem `series_id`, é turno avulso (pull legado). Mas não há tabela separada `series_occurrences`.
+
+**Razão:** 3 FKs (`shift_calls`, `applications`, `shift_payments`) apontam para `jobs.id`. Criar wrapper adicionaria migrations (FK novas),
+mudança de todas as policies (filtrar por `jobs.id`), refactor do ciclo inteiro de check-in/checkout. EAGER evita isso: materializamos `jobs` direto,
+sem camada de indireção.
+
+**Contrato:** Agenda (`groupJobsByDay`), Chamado de Turno (`ShiftCallService`), Convite direto (`shiftInviteService`) não sabem que série existe.
+`series_id` é só etiqueta; lógica de recurso/timeline roda em `jobs` como sempre.
+
 ## Service pattern: PaymentMethodService (sem React Query, direto supabase + invokeFunction)
 
 ```ts

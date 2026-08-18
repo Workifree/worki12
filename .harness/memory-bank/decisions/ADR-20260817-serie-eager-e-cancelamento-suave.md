@@ -185,8 +185,17 @@ dependa da RLS de `jobs` (relevante quando a Fase 3 apertar o SELECT de `jobs`).
 - Nenhuma cascata de FK é exercida: `first_claim_at`, `escrow_transactions` e `shift_payments`
   sobrevivem a qualquer cancelamento, individual ou em massa.
 - O índice único parcial `(series_id, series_occurrence_date) WHERE series_id IS NOT NULL AND
-  status <> 'deleted'` torna a criação resistente a duplo-clique: a segunda submissão falha em vez de
-  criar 60 turnos-fantasma. Mesmo formato do UNIQUE parcial de `shift_payments` (ADR-20260816).
+  status <> 'deleted'` impede DUAS ocorrências no MESMO dia DENTRO DA MESMA série (datas
+  duplicadas no mesmo lote de `create_job_series`). Mesmo formato do UNIQUE parcial de
+  `shift_payments` (ADR-20260816).
+  **Correção (revisão pós-implementação, F3):** a formulação original desta linha dizia que o
+  índice "torna a criação resistente a duplo-clique" — isso é FACTUALMENTE INCORRETO e foi
+  removido daqui. `create_job_series` cria um `job_series` NOVO (id gerado por `gen_random_uuid()`)
+  a cada chamada; duas submissões idênticas (duplo-clique) geram DUAS séries com `series_id`
+  diferentes, e o índice — chaveado por `(series_id, series_occurrence_date)` — nunca colide
+  entre séries distintas. Resultado real de um duplo-clique: 2 séries e 2N turnos, sem erro
+  nenhum. A proteção contra duplo-clique hoje é só de UI (`disabled={loading}` no botão de
+  submit) — ver `20260817000400_job_series.sql` para o texto corrigido e a análise completa.
 - `job_series` imutável por privilégio de coluna elimina a classe de bugs molde↔instância sem
   trigger de imutabilidade (mais barato que `enforce_shift_payment_immutability`).
 - Zero contato com `wallets`, `escrow_transactions`, `wallet_transactions`, `shift_payments` ou

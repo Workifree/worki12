@@ -173,6 +173,27 @@ INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria 
 
 **Organizacional puro (Article 8 intacto):** F2 não cria papel novo, não move dinheiro, não muda máquina de estados de F1. É camada de UI/DB que acelera gesto de seleção. Zero impacto em `wallets`, `escrow_transactions`, `shift_payments`.
 
+## Escala recorrente (F3: série EAGER de turnos)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): "A maior parte do volume NÃO é emergência — é cobertura de férias, 
+> folgas dominicais, escalas fixas. Sem isso, a plataforma é botão de emergência 2-3×/mês e elenco desatualizado faz falhar justamente quando importa."
+
+**Tabelas (migrations `20260817000400`–`20260817000500`):**
+- `job_series` — `(id uuid PK, company_id uuid NOT NULL, recurrence_type 'weekly'|'daily', weekdays int[], range_start_date date, range_end_date date, status 'active'|'stopped', job_template jsonb, created_at, updated_at)`. RLS via `is_company_owner(company_id)` (ancoragem dupla idêntica a F1/F2). Máximo 60 ocorrências por série (constraint SQL + trigger de statement + validação client).
+- `jobs` — duas colunas novas (nullable): `series_id uuid`, `series_occurrence_date date`. Um `jobs` com `series_id` é ocorrência materializável; sem `series_id`, é turno avulso (pull legado ou job single-shot). Índice composto `(series_id, series_occurrence_date)` para evitar datas duplicadas em uma criação lote. NÃO há FK `job_series` — a série pode ser deletada (soft-delete `status='stopped'`) sem afetar ocorrências (histórico/auditoria).
+
+**Geração EAGER:** Ao criar a série, `create_job_series` (RPC INVOKER) materializa **todos** os `jobs` de uma vez (não lazy no aceite/pull). Datas são calculadas **no cliente** (`lib/recurrence.ts`, `generateOccurrenceDates`), repassadas como array à RPC. Motivo: (1) teste determinístico sem mock de servidor; (2) UI mostra "isso vai criar N turnos" antes de confirmar; (3) limpa o conceito ("serie" é só config; "ocorrência" é turno concreto). A RPC roda em transação única: ou todas as ocorrências são criadas ou nenhuma é (Article 8 intacto — `INSERT jobs` não move saldo).
+
+**Soft delete de turno (`status='deleted'`):** Cancelamento de ocorrência futura = `UPDATE jobs SET status='deleted'` nunca `DELETE`. Razão: `DELETE` em cascata apagaria `shift_calls` (perdia métrica `first_claim_at`/ROI), `escrow_transactions` (perdia razão/auditoria, não devolvia saldo) e seria rejeitado por `shift_payments` RESTRICT (aborta operação em lote). O valor `'deleted'` já está espalhado nos consumidores (`.neq('status','deleted')`), nenhum CHECK vigente o bloqueia. RPC `update_job_series_future` e `stop_job_series` usam `status='deleted'` para ocorrências futuras, nunca DELETE. Metadado `deleted_at` é imutável (documentação de quando foi macio).
+
+**Operações em massa (RPCs SECURITY DEFINER):** `update_job_series_future` (edita N ocorrências futuras), `stop_job_series` (para série inteira) são DEFINER com `search_path=''` porque predicados incluem ancoragem dupla (`is_company_owner`) — se rodassem INVOKER, RLS simples de `applications` faria contagem de "qual será tocável" mentir (efeito: feature mostraria "vou alterar 10" mas alteraria 3). Padrão: cliente monta parâmetros, RPC decide "quem é tocável" atomicamente sob DEFINER, devolve `outcome` estruturado com contagem de afetados.
+
+**Pré-visualização com `p_dry_run`:** `previewUpdateFutureOccurrences` e `previewStopSeries` (client) chamam as **mesmas** RPCs passando `p_dry_run=true`. Nenhuma escrita; mesmo predicado; desvio só no statement mutante (SKIP UPDATE/DELETE). Padrão: nunca calcular impacto no client (RLS simples mente); trazer do banco, sempre.
+
+**Capítulo conhecimento de F1:** Ambas RPCs de transição de turno (`claim_shift_slot` em F1, `stop_job_series` em F3) travam o **mesmo objeto** (`jobs FOR UPDATE`). Quem para a série primeiro faz a outra ler `status='deleted'` e cair no ramo "série parada" — ordem de serialização está segura.
+
+**Ocorrência de série é `jobs` normal:** `series_id` é só etiqueta; `applications`, `shift_calls`, `shift_payments`, `escrow_transactions` apontam para `jobs.id` como sempre. Agenda, Chamado de Turno, e convite direto não sabem que série existe. EAGER venceu lazy por causa dos 3 FKs — materializamos tudo no início, eliminamos carregamento assíncrono e máquinas de estado implícitas.
+
 ## Cancelamento de turno (Slice 5: notificação obrigatória — bidirecional desde 20260816)
 
 **Antes (até 20260714):** só o worker podia cancelar turno após aceite (status `hired` | `in_progress` → `cancelled`).

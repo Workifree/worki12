@@ -1,4 +1,4 @@
-import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -8,8 +8,17 @@ import { useToast } from '../../contexts/ToastContext';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger'
-import { groupJobsByDay, formatDateOnly, type DayBucketKey } from '../../lib/jobScheduling';
-import type { TeamMember } from '../../types';
+import { groupJobsByDay, formatDateOnly, parseDateOnly, type DayBucketKey } from '../../lib/jobScheduling';
+import { todayLocalDate } from '../../lib/dateUtils';
+import EditSeriesModal, { type SeriesJobSnapshot } from '../../components/company/EditSeriesModal';
+import CancelSeriesModal from '../../components/company/CancelSeriesModal';
+import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
+import type { TeamMember, RecurrenceType } from '../../types';
+
+// Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1). Selo discreto na agenda
+// ("Série · toda quinta") deriva o dia da própria `series_occurrence_date` da ocorrência — uma
+// série pode marcar mais de um dia da semana, mas cada linha da agenda é sempre UM dia fixo.
+const WEEKDAY_FULL_LABELS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 // ---------------------------------------------------------------------------
 // Modelo push (pivô "Meu Elenco"): a vaga não recebe candidatos/visitas — a
@@ -85,6 +94,15 @@ interface Job {
     work_start_time?: string | null;
     work_end_time?: string | null;
     freela?: FreelaSummary | null;
+    // Escala Recorrente (F3) — presentes quando o turno é uma ocorrência de série.
+    series_id?: string | null;
+    series_occurrence_date?: string | null;
+    seriesRecurrenceType?: RecurrenceType | null;
+    category?: string;
+    description?: string;
+    requirements?: string;
+    briefing?: string | null;
+    slots?: number;
 }
 
 function formatTimeRange(job: Job): string | null {
@@ -92,6 +110,28 @@ function formatTimeRange(job: Job): string | null {
     const start = job.work_start_time?.slice(0, 5) || '--:--';
     const end = job.work_end_time?.slice(0, 5) || '--:--';
     return `${start}–${end}`;
+}
+
+// Selo discreto da agenda: "toda quinta" (semanal) ou "bloco de dias" (cobertura/férias).
+function seriesBadgeLabel(job: Job): string {
+    if (job.seriesRecurrenceType === 'daily') return 'bloco de dias';
+    if (job.series_occurrence_date) {
+        const weekday = WEEKDAY_FULL_LABELS[parseDateOnly(job.series_occurrence_date).getDay()];
+        return `toda ${weekday}`;
+    }
+    return 'recorrente';
+}
+
+// Ocorrências desta série ainda "livres" para o atalho "Convidar para a série" (R10): abertas,
+// sem freela ativo, hoje ou no futuro. A checagem forte (sem chamado aberto/freela ativo) é
+// feita pela RPC/policy no disparo por-ocorrência — este filtro é só a lista de candidatos.
+// `occurrenceDate` viaja junto (não só o id) porque o InviteSeriesModal agrupa por semana
+// corrida local para o aviso de risco de R10/A7.
+function futureOpenSeriesTargets(jobs: Job[], seriesId: string): InviteSeriesTarget[] {
+    const today = parseDateOnly(todayLocalDate());
+    return jobs
+        .filter((j) => j.series_id === seriesId && j.status === 'open' && !j.freela && j.start_date && parseDateOnly(j.start_date) >= today)
+        .map((j) => ({ jobId: j.id, occurrenceDate: j.series_occurrence_date ?? j.start_date!.slice(0, 10) }));
 }
 
 interface JobRowProps {
@@ -103,11 +143,14 @@ interface JobRowProps {
     setInviteJobId: (id: string | null) => void;
     handleStatusChange: (id: string, status: string) => void;
     setDeleteJobId: (id: string | null) => void;
+    onEditSeries: (job: Job) => void;
+    onCancelSeries: (seriesId: string) => void;
+    onInviteSeries: (seriesId: string) => void;
 }
 
 // Uma linha da agenda: horário + função + freela (nome/avatar/estado) visíveis sem clicar.
 // Turno sem freela atrelado "grita" — buraco de escala é o problema nº1 da operação diária.
-function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobId, handleStatusChange, setDeleteJobId }: JobRowProps) {
+function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobId, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
     const timeRange = formatTimeRange(job);
     const isNearTerm = bucketKey === 'today' || bucketKey === 'tomorrow';
     const canInvite = job.status === 'open' || job.status === 'paused';
@@ -130,6 +173,11 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                         {urgentGap && (
                             <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
                                 <AlertTriangle size={11} /> Sem freela
+                            </span>
+                        )}
+                        {job.series_id && (
+                            <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-500" title="Este turno faz parte de uma série recorrente">
+                                <Repeat size={11} /> Série · {seriesBadgeLabel(job)}
                             </span>
                         )}
                     </div>
@@ -227,6 +275,28 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                                 >
                                     <Edit2 size={16} /> Editar
                                 </button>
+                                {job.series_id && (
+                                    <>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onInviteSeries(job.series_id!); }}
+                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                        >
+                                            <Repeat size={16} /> Convidar para a série
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onEditSeries(job); }}
+                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                        >
+                                            <Edit2 size={16} /> Editar os futuros
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onCancelSeries(job.series_id!); }}
+                                            className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                        >
+                                            <XCircle size={16} /> Cancelar a série
+                                        </button>
+                                    </>
+                                )}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -278,6 +348,11 @@ export default function CompanyJobs() {
     const [pastExpanded, setPastExpanded] = useState(initialFilter === 'closed');
     const { addToast } = useToast();
 
+    // Ações de série (F3, R11/R10) — cada uma abre seu próprio modal de confirmação.
+    const [editSeriesJob, setEditSeriesJob] = useState<SeriesJobSnapshot | null>(null);
+    const [cancelSeriesId, setCancelSeriesId] = useState<string | null>(null);
+    const [inviteSeriesTarget, setInviteSeriesTarget] = useState<{ seriesId: string; targets: InviteSeriesTarget[] } | null>(null);
+
     // Elenco da empresa + action de convite reaproveitados (mesmos de CompanyCreateJob).
     const { teamMembers, loading: teamLoading } = useCompanyTeam();
     const { invite, invitingWorkerId } = useCompanyInvites(inviteJobId);
@@ -328,9 +403,22 @@ export default function CompanyJobs() {
                     });
                 });
 
+                // Selo de série (F3): 1 query em lote para o tipo de recorrência das séries
+                // presentes nesta página — não em N queries por linha.
+                const seriesIds = Array.from(new Set(jobsData.map(j => j.series_id).filter((id): id is string => !!id)));
+                let seriesTypeById: Record<string, RecurrenceType> = {};
+                if (seriesIds.length > 0) {
+                    const { data: seriesRows } = await supabase
+                        .from('job_series')
+                        .select('id, recurrence_type')
+                        .in('id', seriesIds);
+                    seriesTypeById = Object.fromEntries((seriesRows || []).map(s => [s.id, s.recurrence_type as RecurrenceType]));
+                }
+
                 const jobsWithFreela = jobsData.map(job => ({
                     ...job,
-                    freela: summarizeFreela(byJob[job.id] || [])
+                    freela: summarizeFreela(byJob[job.id] || []),
+                    seriesRecurrenceType: job.series_id ? (seriesTypeById[job.series_id] ?? null) : null,
                 }));
 
                 setJobs(jobsWithFreela);
@@ -402,6 +490,34 @@ export default function CompanyJobs() {
             setInviteJobId(null);
             fetchJobs();
         }
+    };
+
+    // Ações de série (F3) — cada uma abre o modal correspondente; a lista completa dos
+    // campos vem do próprio job já carregado (a query já usa `select('*')`, sem round-trip extra).
+    const openEditSeries = (job: Job) => {
+        if (!job.series_id) return;
+        setEditSeriesJob({
+            id: job.id,
+            series_id: job.series_id,
+            title: job.title,
+            category: job.category ?? '',
+            description: job.description ?? '',
+            requirements: job.requirements ?? '',
+            briefing: job.briefing ?? null,
+            location: job.location ?? null,
+            work_start_time: job.work_start_time ?? null,
+            work_end_time: job.work_end_time ?? null,
+            slots: job.slots ?? 1,
+        });
+    };
+
+    const openInviteSeries = (seriesId: string) => {
+        const targets = futureOpenSeriesTargets(jobs, seriesId);
+        if (targets.length === 0) {
+            addToast('Todas as ocorrências futuras desta série já têm freela.', 'info');
+            return;
+        }
+        setInviteSeriesTarget({ seriesId, targets });
     };
 
     // Muda o filtro e reflete no URL (mantém deep-link/back consistentes).
@@ -537,6 +653,9 @@ export default function CompanyJobs() {
                                             setInviteJobId={setInviteJobId}
                                             handleStatusChange={handleStatusChange}
                                             setDeleteJobId={setDeleteJobId}
+                                            onEditSeries={openEditSeries}
+                                            onCancelSeries={setCancelSeriesId}
+                                            onInviteSeries={openInviteSeries}
                                         />
                                     ))}
                                 </div>
@@ -622,6 +741,29 @@ export default function CompanyJobs() {
                     )}
                 </div>
             </div>
+        )}
+
+        {/* Escala Recorrente (F3) — ações de série (R10/R11) */}
+        {editSeriesJob && (
+            <EditSeriesModal
+                job={editSeriesJob}
+                onClose={() => setEditSeriesJob(null)}
+                onApplied={fetchJobs}
+            />
+        )}
+        {cancelSeriesId && (
+            <CancelSeriesModal
+                seriesId={cancelSeriesId}
+                onClose={() => setCancelSeriesId(null)}
+                onCancelled={fetchJobs}
+            />
+        )}
+        {inviteSeriesTarget && (
+            <InviteSeriesModal
+                targets={inviteSeriesTarget.targets}
+                onClose={() => setInviteSeriesTarget(null)}
+                onDone={fetchJobs}
+            />
         )}
         </>
     );
