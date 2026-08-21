@@ -460,11 +460,143 @@ Exibe: nome, logo, capa, setor, descrição, endereço, briefing padrão, avalia
 ou do cabeçalho do chat, **antes de aceitar** o convite — assimetria de confiança que equilibra o fluxo push.
 Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get_profile_reviews` com mascaramento de nomes de avaliadores).
 
+## Guarda de risco de vínculo (F5: configurável por empresa)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): operação sabe que a lei pode não gostar de "mesma pessoa, mesma empresa, muitos dias na semana". Feature não bloqueia — avisa. Empresa configura o limite; Worki informa.
+
+**Configuração por empresa:**
+- `companies.link_risk_alert_enabled` (boolean, default true) — avisar ou não
+- `companies.link_risk_alert_threshold` (integer, default 2, range 1..7) — a partir de quantos turnos na mesma semana
+
+**RPC `count_worker_shifts_by_week` (SECURITY DEFINER, `search_path=''`):**
+- Parâmetro: `p_worker_ids uuid[]`, `p_anchor_job_id uuid`, `p_range_start date`, `p_range_end date`
+- Devolve: array de `(worker_id, week_start date, shift_count int)`
+- Semana corrida: domingo–sábado, data local `America/Sao_Paulo` (não UTC)
+- Conta DESTA empresa (ancoragem dupla via `is_job_owner`), NUNCA cross-company (privacidade + produto)
+- Exclui soft-deleted (`jobs.status <> 'deleted'`), exclui o próprio turno-alvo se `p_anchor_job_id` fornecido
+- **Porquê SECURITY DEFINER:** (1) fuso é pergunta de data local; (2) ancoragem dupla de empresa; (3) SELECT futuro de `jobs` será apertado (Fase 3); (4) F3 reutiliza a mesma RPC para contagem de intervalo
+
+**Componentes de UI:**
+- `ShiftCallModal` (F1 — disparo 1→N): aviso em R5 (antes de disparar)
+- `InviteSeriesModal` (F3 — série EAGER): aviso na pré-visualização de toda a série + por semana
+
+**Princípio:** avisa, nunca bloqueia. Inserção/update de `applications` prossegue. Erro de leitura (RPC falha) degrada para "sem aviso" + log (never break the feature). ADR-20260818-guarda-vinculo-contagem-no-banco.md.
+
+## Termo de prestação de serviço com aceite eletrônico (F6: modo A pós-turno)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão, jurista): recibo de pagamento precisa de termo de serviço assinado por ambos para cobrir a empresa juridicamente.
+
+**Tabela `service_terms`:**
+- Relação 1:1 com `shift_payments` (FK `shift_payment_id` NOT NULL UNIQUE)
+- Campos: `job_id`, `worker_id`, `company_id` (denormalizados para RLS + snapshot), `term_version`, `term_text`, `amount` (cópia de `shift_payments.amount`, NÃO SALDO), `accepted_at`, `accepted_ip`, `accepted_user_agent`
+- UNIQUE `(id, job_id, worker_id, company_id)` na parent `shift_payments` para garantir denormalizados casam
+
+**Máquina de estados do termo:**
+- Rascunho: `accepted_at IS NULL`, term_text é renderização atual (pode divergir se config mudou)
+- Aceite: RPC `accept_service_term` re-renderiza term_text + grava `accepted_at + accepted_ip + accepted_user_agent` **em um UPDATE** (atomicamente)
+- Congelado: Depois do aceite, `term_text` é imutável (trigger `enforce_service_term_immutability`, SECURITY DEFINER). Nem service_role consegue mudar.
+
+**Função de renderização `render_service_term_text` (SECURITY INVOKER):**
+- Monta o texto HTML que o freela lê
+- 4 seções: turno (data, hora, local, duração), equipamento/segurança, cláusulas de trabalho, cláusula de não-responsabilidade Worki (congelada no texto)
+- Testa conteúdo do worker (CPF, nome, email) — se missing, texto diz "não informado" (não bloqueia aceite, UI avisa)
+
+**Componente `ServiceTermSection`:**
+- Renderiza o termo (ler) + checkbox "Concordo com os termos"
+- Quando em `shift_payment.status='recorded'` (pagamento confirmado), libera confirmar recebimento E aceitar termo **no mesmo gesto** (gate de leitura + concordância)
+- Implementação: o aceite + confirmação foram desacoplados no DB, acoplados na UI (contrato de UI; ver ADR)
+
+**Princípio:** Aceite e confirmação de recebimento = UX de um gesto (gate de leitura + checkbox), DB de dois eventos (term + shift_payment). Congelar no aceite garante "o que assinaram" é documentado. ADR-20260818-termo-congelado-no-aceite.md.
+
+## Disponibilidade declarada do freela (F7: grade de dias da semana)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): "Alguns freelas só trabalham terça a sexta. É informação que muda, que a gente usa pra não convidar em vão."
+
+**Coluna `workers.availability_days` (jsonb):**
+- Array de inteiros 0–6 (segunda–domingo, convenção ISO `getDay()`)
+- Exemplo: `[1,2,3,4,5]` = terça a sábado (dias uteis brasileiros); `null` = sem restrição
+- Validação SQL: `CHECK (availability_days <@ ARRAY[0,1,2,3,4,5,6]::int[])`
+- Limite de cardinalidade: 7 (máximo — sem efeito; tautologia no CHECK)
+
+**Uso:**
+- `ShiftCallModal` (F1) + `InviteSeriesModal` (F3): mostrar badge de indisponibilidade se freela não trabalha naquele dia
+- Filtro client (nenhuma RPC): se `jobs.start_date` cai em dia não-permitido, exibir ícone ou desabilitar seleção (UX futura)
+
+**Padrão:** Grade JSONB com validação semântica no banco (CHECK por containment), exibição mascarada no client. Sem consentimento/sem impacto em saldo — é marcação descritiva (Article 8 intacto). ADR-20260821-disponibilidade-grade-jsonb.md.
+
+## Certificações e capacitações (F8: metadados de validação perecível)
+
+> Entrevista 17/08/2026 (sócio fitness): "Freelas treinam internamente. Worki precisa saber quem foi treinado em que, quando vence, quem conferiu." Piloto: só metadado, sem upload.
+
+**Duas tabelas com modelos DIFERENTES — não são simétricas.** A distinção é de autoria: a certificação
+é **do freela** (ele declara, uma empresa confere); o treinamento é **da empresa** (ela declara que deu
+a um freela dela).
+
+- `worker_certifications`: `id, worker_id, title, issuer, registration_number, issued_at, expires_at,
+  verified_by_company_id, verified_at, verified_note, notified_expired_at, created_at, updated_at`.
+  **Quem confere é a EMPRESA** (`verified_by_company_id → companies`), nunca outro freela.
+- `worker_trainings`: `id, company_id, worker_id, title, completed_at, note, created_by, created_at,
+  revoked_at, revoked_reason`. Treinamento **não se apaga, se revoga com motivo** — não há policy de
+  DELETE nem `GRANT DELETE`.
+- **Validade é derivada em query** (`isCertificationExpired`), nunca status congelado que envelhece
+  errado com o relógio. Certificação vencida continua visível, marcada.
+- **Sem upload de arquivo na v1** (ADR-20260821): o arquivo não compra verdade — a conferência é visual
+  sobre o documento original, e o caso crítico do piloto (treinamento interno) não tem documento nenhum.
+  Guardar o PDF adicionaria custódia de CPF/foto/assinatura, estrearia o primeiro bucket privado e a
+  primeira signed URL, em cima de um `delete-account` já quebrado. Adiar é reversível; adiantar não.
+- **Dado de saúde é vetado** (atestado, ASO, exame, vacina, laudo — LGPD art. 5º, II), com cinco defesas:
+  ausência de upload, tetos de caracteres, `COMMENT ON TABLE`, item em `debitos-pre-piloto.md` e a copy
+  no formulário — a única que fala com a pessoa no momento em que ela digita.
+
+**Guarda `DS8` — congelar conferência de conteúdo antigo (achado F8):**
+- Coluna `verified_by/verified_at` zera quando `NEW.* IS DISTINCT FROM OLD.*` (qualquer mudança em conteúdo) — conferência é sobre conteúdo **atual** (descrita em ADR)
+- Defesa: âncora em `OLD` (o que está sendo reescrito), não em `NEW` (o que vai se tornar). Padrão: "de quem é o que está sendo destruído?", não "para onde vai?"
+
+**Três furos de RLS que a spec original tinha — TODOS CORRIGIDOS no gate, antes de qualquer código:**
+
+1. **Auto-atribuição de treinamento pelo freela.** A policy proposta (`company_id = auth.uid() AND
+   can_view_worker_profile(worker_id)`) era satisfeita por um freela passando o **próprio uuid** como
+   `company_id`: `can_view_worker_profile(self)` é true no primeiro ramo, e `is_company_owner` tem o
+   mesmo ramo `p_company_id = auth.uid()`. A pessoa se certificaria sozinha — exatamente o que a spec
+   declarava impossível.
+   **Correção aplicada:** FK `company_id REFERENCES public.companies(id)` (uuid de freela vive em
+   `workers`, não lá, então a FK barra antes do CHECK), mais `CHECK (worker_id <> company_id)` e
+   `created_by = auth.uid()` na policy `wt_insert_company`.
+2. **Ator sem sessão no trigger de UPDATE.** A spec mandava rejeitar "qualquer outro ator", o que
+   quebraria o cron de vencimento e o `delete-account` — ambos rodam como service_role com
+   `auth.uid()` NULL.
+   **Correção aplicada:** ramo (c) explícito para sessão nula, limitado a limpar `verified_*` e marcar
+   `notified_*`; nunca cria conferência. `anon` não alcança (sem GRANT, sem policy).
+3. **Vazamento entre empresas no SELECT de `worker_trainings`.** Usar `can_view_worker_profile` ali
+   responde à pergunta errada: ela diz "posso ver este freela?", não "posso ver este registro?" — a
+   empresa B com vínculo próprio leria o treinamento interno da empresa A.
+   **Correção aplicada:** `wt_select` usa `worker_id = auth.uid() OR is_company_owner(company_id)` —
+   ancorado no registro, não na pessoa.
+
+**Aviso de vencimento:** função `notify_certification_expiries()` (SECURITY DEFINER) + colunas
+`notified_*` na própria linha da certificação, agendada por `pg_cron` (`'10 22 * * *'`, degradando com
+`RAISE WARNING` se a extensão faltar — mesmo padrão do F4). **Não** há tabela-evento separada de alertas.
+
+**Padrão:** metadado perecível sem arquivo de prova; a conferência é visual sobre o documento original,
+e é **do conferente** — só quem conferiu desfaz ou altera (DS8). ADRs:
+`ADR-20260821-certificacoes-metadado-sem-arquivo.md`, `ADR-20260821-conferencia-de-certificacao-e-do-conferente.md`.
+
 ## Estado do banco de produção (Onda 1 — Revisão Piloto)
 
-As migrations da Onda 1 (revisão pré-piloto) foram aplicadas em produção (`vrklakcbkcsonarmhqhp`) no dia 16/08/2026.
-Ver `supabase/migrations/APLICACAO-2026-08-16.md` para: divergência de timestamp entre repositório e histórico do banco,
-verificações executadas contra dados reais, e lacunas declaradas (ramo de vínculo operacional não exercitado, funções legadas fora do escopo).
+As migrations da Onda 1 e as de **F1–F4** (`20260817000000`–`20260817000800`) foram aplicadas em
+produção (`vrklakcbkcsonarmhqhp`). Ver `supabase/migrations/APLICACAO-2026-08-16.md` para: divergência
+de timestamp entre repositório e histórico do banco, verificações executadas contra dados reais e
+lacunas declaradas.
+
+> ⚠️ **As migrations de F5–F8 NÃO estão aplicadas** (`20260817000900` risco de vínculo,
+> `20260817001100` termos, `20260817001200` disponibilidade, `20260817001300` certificações). Estão
+> escritas, revisadas e aprovadas, mas o acesso ao banco (MCP Supabase) está desautenticado desde
+> 21/08/2026. **Não presuma que o schema em produção contém essas tabelas e colunas.**
+>
+> **Ordem de deploy obrigatória:** migration antes do frontend. O `select` de `listTeamMembers` pede
+> `availability_days` e o `handleSave` do Profile grava a coluna — sem ela, o PostgREST devolve `42703`
+> e derruba o roster inteiro do `ShiftCallModal` (elenco vazio, sem mensagem de erro) **e** o
+> salvamento completo do perfil do freela (nome, cidade, bio e PIX vão junto).
 
 Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 

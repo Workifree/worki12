@@ -5,6 +5,15 @@
 // USER & PROFILE
 // =============================================
 
+// F7 — disponibilidade declarada pelo freela (grade dia × período).
+// Espelha o CHECK `workers_availability_days_shape` (migration 20260817001200):
+// chave = dia da semana '0'(domingo)..'6'(sábado), MESMA convenção de `job_series.weekdays`;
+// valor = subconjunto (até 3, sem duplicata efetiva) de ['manha','tarde','noite'].
+// Ver `.harness/spec/disponibilidade-freela/ddl-aprovado.md` e ADR-20260821.
+export type AvailabilityPeriod = 'manha' | 'tarde' | 'noite';
+export type AvailabilityWeekday = '0' | '1' | '2' | '3' | '4' | '5' | '6';
+export type AvailabilityDays = Partial<Record<AvailabilityWeekday, AvailabilityPeriod[]>>;
+
 export interface WorkerProfile {
   id: string;
   full_name: string;
@@ -28,6 +37,11 @@ export interface WorkerProfile {
   earnings_total?: number;
   experience_years?: number;
   availability?: string;
+  // F7 — opcional porque nem toda query traz a coluna; `| null` porque "nunca declarou" é um
+  // valor de verdade (condição do CTA de adoção), distinto de "coluna não pedida no select".
+  // Fonte da verdade para ordenação/ranking automático; `availability` (acima) é legado só de
+  // exibição, sem dia da semana — nunca fazer backfill de um para o outro (ver migration).
+  availability_days?: AvailabilityDays | null;
   recommendation_score?: number;
   location?: string;
   joined_at?: string;
@@ -50,6 +64,15 @@ export interface CompanyProfile {
   reviews_count?: number;
   onboarding_completed?: boolean;
   owner_id?: string;
+  /**
+   * Guarda de risco de vínculo (F5, `supabase/migrations/20260817000900_link_risk_guard.sql`).
+   * Opcionais: nem toda query traz a coluna (`select('id, name')`, etc.). Ler como `!== false`
+   * quando o significado for "aviso ligado" — `undefined` NÃO é `false` (LM-6, ddl-aprovado.md).
+   * Fonte canônica de leitura é a RPC `my_link_risk_config()` (sempre devolve os dois campos),
+   * não um `select('*')` avulso.
+   */
+  link_risk_alert_enabled?: boolean;
+  link_risk_alert_threshold?: number;
 }
 
 // =============================================
@@ -89,6 +112,12 @@ export interface Job {
    * Uma posição preenchida = uma application hired/in_progress/completed.
    */
   slots?: number;
+  /**
+   * Requisito de certificação do turno — texto livre, ADVISORY (F8, migration
+   * 20260817001300). Aparece como UMA linha de aviso no topo do ShiftCallModal;
+   * NUNCA filtra freela, nunca bloqueia seleção/disparo. `null`/undefined = sem requisito.
+   */
+  certification_requirement?: string | null;
   candidates_count?: number;
   views?: number;
   company_id?: string;
@@ -812,3 +841,138 @@ export type AttendanceConfirmationOutcome =
   | 'limit_reached'
   | 'cooldown'
   | 'not_found';
+
+// =============================================
+// TERMO DE PRESTAÇÃO DE SERVIÇO (F6) — aceite eletrônico, 1:1 com shift_payments
+// migration: supabase/migrations/20260817001100_service_terms.sql
+// DDL aprovado: .harness/spec/termo-prestacao/ddl-aprovado.md
+// ADR: .harness/memory-bank/decisions/ADR-20260818-termo-congelado-no-aceite.md
+// =============================================
+
+/**
+ * Espelha `public.service_terms`. REGISTRO DECLARATÓRIO entre empresa e freela — a Worki
+ * NÃO é parte, não valida e não garante validade jurídica (a cláusula está DENTRO de
+ * `term_text`, item 4 do render). NÃO move saldo (Article 8): `amount` é cópia declaratória
+ * de `shift_payments.amount`, não é saldo, não entra em soma alguma.
+ *
+ * `term_text` é RASCUNHO enquanto `accepted_at IS NULL` (o freela precisa ler o que vai
+ * assinar) e CONGELA no aceite: `accept_service_term` re-renderiza com os dados vigentes e
+ * grava `term_text` + `accepted_at` no MESMO UPDATE. Depois disso é imutável para TODOS os
+ * papéis (trigger `enforce_service_term_immutability`), inclusive `service_role`/owner —
+ * a única exceção é a anonimização LGPD (`anonymized_at` NULL → timestamp).
+ *
+ * NÃO existe coluna `status`: o estado do termo é a presença de `accepted_at`, e nada mais.
+ * Não adicionar `validated_by`, `company_accepted_at`, `signature_hash`, `is_valid` etc. —
+ * qualquer campo que sugira que o Worki valida/garante o termo é violação da fronteira
+ * jurídica (ver DDL aprovado §1 pergunta 5).
+ */
+export interface ServiceTerm {
+  id: string;
+  shift_payment_id: string;
+  job_id: string;
+  worker_id: string;
+  company_id: string;
+  /** 'modelo-worki-v1' — MODELO (sugestão), não "termo oficial da Worki". */
+  term_version: string;
+  /** Rascunho enquanto accepted_at é null; snapshot CONGELADO desde o aceite depois. */
+  term_text: string;
+  /** Cópia declaratória de shift_payments.amount. NÃO é saldo — nenhuma RPC financeira. */
+  amount: number;
+  created_at: string;
+  /** null = pendente. Único estado do termo — não existe coluna `status`. */
+  accepted_at: string | null;
+  /**
+   * BEST-EFFORT e FALSIFICÁVEL — primeiro elemento de x-forwarded-for, que o próprio
+   * cliente pode forjar (proxies fazem append, não sobrescrevem). Pode vir null (fora do
+   * PostgREST, GUC ausente, parse falhou). Nunca rotular como "IP verificado" na UI.
+   */
+  accepted_ip: string | null;
+  /** BEST-EFFORT. Header user-agent truncado em 512 chars. Pode vir null. Indício, não prova. */
+  accepted_user_agent: string | null;
+  /**
+   * Única transição que permite reescrever term_text após o aceite (alavanca LGPD).
+   * NULL->timestamp, one-way, fechada ao client (sem policy de UPDATE para authenticated).
+   * Por DEFAULT não é usada: termo assinado é retido como prova (ADR-20260818).
+   */
+  anonymized_at: string | null;
+}
+
+/**
+ * Outcomes da RPC `accept_service_term` (20260817001100). O banco é a autoridade — o
+ * client só reage ao outcome, nunca decide localmente se o aceite deveria ter passado.
+ */
+export type ServiceTermAcceptOutcome =
+  | 'accepted'
+  | 'already_accepted'
+  | 'unauthenticated'
+  | 'not_found'
+  | 'forbidden'
+  | 'payment_voided'
+  | 'missing_cpf';
+
+// ---------------------------------------------------------------------------
+// F8 — Certificações e capacitações (migration 20260817001300).
+// DDL aprovado (fonte normativa): .harness/spec/certificacoes/ddl-aprovado.md
+// ADR: .harness/memory-bank/decisions/ADR-20260821-certificacoes-metadado-sem-arquivo.md
+//
+// Dois objetos, não um com `type`: `worker_trainings` (interno, a empresa é dona do
+// registro) e `worker_certifications` (externo, o freela é dono do documento). v1 SEM
+// ARQUIVO (D1 do gate) — nenhum campo `document_path`/bucket. Validade é DERIVADA, nunca
+// coluna de status — ver `isCertificationExpired` em `lib/dateUtils.ts`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Treinamento INTERNO: a empresa declara que treinou o freela (ex.: "treinamento Divino
+ * Fogão", "boas práticas RDC 216"). Sem emissor externo, sem validade. Visível só para a
+ * empresa que registrou e para o próprio freela (A15) — nunca para outra empresa.
+ * Registro de auditoria: revoga-se (`revoked_at`/`revoked_reason`), nunca se apaga/edita.
+ */
+export interface WorkerTraining {
+  id: string;
+  company_id: string;
+  worker_id: string;
+  title: string;
+  /** Data de conclusão (`YYYY-MM-DD`), nunca no futuro (trigger valida no INSERT). */
+  completed_at: string;
+  note?: string | null;
+  created_by: string;
+  created_at: string;
+  /** Revogação one-way — empresa desfaz um registro feito por engano. Nunca reescreve. */
+  revoked_at?: string | null;
+  revoked_reason?: string | null;
+}
+
+/**
+ * Certificação EXTERNA do freela (CREF, manipulação de alimentos, curso técnico).
+ * AUTO-DECLARADA pelo próprio freela. Uma empresa com vínculo pode CONFERIR visualmente
+ * — sempre ATRIBUÍDA a uma empresa nomeada + data (`verified_by_company_id`/`verified_at`
+ * são par: nulos juntos ou preenchidos juntos, CHECK no banco). O Worki NUNCA atesta —
+ * proibido exibir selo genérico de "verificado" na UI.
+ *
+ * v1 SEM ARQUIVO (D1): não existe `document_path` nem bucket. `registration_number`
+ * substitui o documento (é público/conferível na fonte pelo próprio operador).
+ *
+ * Vencimento é DERIVADO, nunca coluna de status — usar `isCertificationExpired(expires_at)`
+ * (`lib/dateUtils.ts`), nunca comparar `expires_at` inline numa tela.
+ *
+ * `notified_30d_at`/`notified_expired_at` são livro-caixa do AGENDADOR (fora do GRANT
+ * UPDATE do client) — não renderizar como se fossem status de validade.
+ */
+export interface WorkerCertification {
+  id: string;
+  worker_id: string;
+  title: string;
+  issuer?: string | null;
+  registration_number?: string | null;
+  issued_at?: string | null;
+  expires_at?: string | null;
+  /** Par travado por CHECK no banco: nulo/preenchido sempre junto de verified_at. */
+  verified_by_company_id?: string | null;
+  verified_at?: string | null;
+  verified_note?: string | null;
+  /** Livro-caixa do agendador (F8 R9) — NÃO é status de validade. Só o cron escreve. */
+  notified_30d_at?: string | null;
+  notified_expired_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}

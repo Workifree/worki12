@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Loader2, Megaphone, Users, Search, AlertTriangle } from 'lucide-react';
+import { X, Loader2, Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { TeamListService } from '../../services/teamListService';
+import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import {
   ShiftCallService,
   CALL_EXPIRY_PRESETS,
@@ -11,6 +12,9 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
 import type { TeamMember, ShiftCallReason, Job, TeamListWithMembers } from '../../types';
+import { DEFAULT_LINK_RISK_THRESHOLD } from '../company/seriesWeekRisk';
+import { getWeekdayIndex } from '../../lib/dateUtils';
+import { periodForTime, isWorkerAvailableFor } from '../../lib/availability';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -34,10 +38,33 @@ import type { TeamMember, ShiftCallReason, Job, TeamListWithMembers } from '../.
 // desde que a lista foi criada é filtrado em silêncio contra o `available` já calculado abaixo,
 // sem query nova e sem erro visível. Zero listas cadastradas = zero mudança visual (comportamento
 // intacto).
+//
+// F5 (Guarda de risco de vínculo) somou o selo "Já Nx esta semana": `my_link_risk_config()` é
+// buscada em PARALELO com o elenco (mesmo `Promise.all` — LM-9, evita um round-trip serial às
+// 8h30) e a contagem por freela (`countForShift`) é resolvida DEPOIS, em estado PRÓPRIO
+// (`riskCounts`/`riskLoading`) — nunca no `loadingTeam` único do modal (LM-10): a lista do elenco
+// nunca espera o selo. O selo só aparece para membros SELECIONADOS (fato, nunca conclusão
+// jurídica — R7); "desligado" (`enabled=false`) apenas some da tela, não impede a contagem de já
+// ter sido pedida (LM-9 relaxa a A5 original).
+//
+// F7 (Disponibilidade declarada) ORDENA, nunca filtra: quem casou com o dia+período do turno vem
+// primeiro; quem não casou e quem nunca declarou ficam no MESMO patamar visual (sem selo, sem
+// prioridade — só a ordem relativa estável do `Array.prototype.sort`). Landmine central (DDL
+// §3.5, LM-7): `available` NUNCA é reordenado nem mutado — `availableWorkerIdsKey` (F5, acima) é
+// derivado dele e é dependência do efeito que dispara `countForShift`; reordenar em lugar mudaria
+// essa chave e redispararia a RPC da F5 a cada render. `ordered` é um memo NOVO, cópia de
+// `available`, e a ordenação depende só de dado SÍNCRONO (`job.start_date`/`work_start_time` +
+// `member.worker.availability_days`, que já chega junto do roster) — nunca de `riskCounts`/
+// `riskLoading`, ou a lista pularia na tela quando a RPC da F5 aterrissasse depois do primeiro
+// paint. Selo (contorno, nunca fill — o card selecionado já pinta o fundo de verde) mora num
+// CONTÊINER de sinais na linha do cargo (R10), não solto — é o mesmo contêiner que a F8
+// (certificações) vai usar como vizinho, sem precisar refazer o layout das duas linhas anteriores.
 // ---------------------------------------------------------------------------
 
 export interface ShiftCallModalProps {
-  job: Pick<Job, 'id' | 'title' | 'start_date' | 'work_start_time'> & { slots?: number };
+  job: Pick<Job, 'id' | 'title' | 'start_date' | 'work_start_time' | 'certification_requirement'> & {
+    slots?: number;
+  };
   /** Freelas que já estão no turno (contratados ou já chamados) — não aparecem para seleção. */
   excludeWorkerIds?: string[];
   onClose: () => void;
@@ -60,18 +87,29 @@ export function ShiftCallModal({
   // `null` = "até o início do turno"; número = horas.
   const [expiryHours, setExpiryHours] = useState<number | null>(DEFAULT_CALL_EXPIRY_HOURS);
   const [dispatching, setDispatching] = useState(false);
+  // F5: config da guarda de vínculo (busca em paralelo, nunca em série — LM-9) e contagem por
+  // freela (estado próprio, nunca segura a lista do elenco — LM-10).
+  const [riskConfig, setRiskConfig] = useState<LinkRiskConfig | null>(null);
+  const [riskCounts, setRiskCounts] = useState<Map<string, number> | null>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       setLoadingTeam(true);
-      const [teamList, teamLists] = await Promise.all([
+      // `allSettled`, não `all`: a config de risco (F5) é um "extra" sobre o carregamento do
+      // elenco (F1) — se `LinkRiskService.getConfig()` falhar por qualquer motivo (o contrato do
+      // service já degrada sozinho, mas isto é defesa em profundidade), a lista do elenco não
+      // pode travar em `loadingTeam=true` para sempre por causa de uma feature acessória.
+      const [teamResult, listsResult, configResult] = await Promise.allSettled([
         TeamConnectionService.listTeamMembers(),
         TeamListService.listLists(),
+        LinkRiskService.getConfig(),
       ]);
       if (!active) return;
-      setMembers(teamList);
-      setLists(teamLists);
+      setMembers(teamResult.status === 'fulfilled' ? teamResult.value : []);
+      setLists(listsResult.status === 'fulfilled' ? listsResult.value : []);
+      setRiskConfig(configResult.status === 'fulfilled' ? configResult.value : null);
       setLoadingTeam(false);
     })();
     return () => {
@@ -85,6 +123,128 @@ export function ShiftCallModal({
     () => members.filter((member) => !excluded.has(member.worker.id)),
     [members, excluded],
   );
+
+  // F5-08 (mutação sobrevivente/nit): `available` é um array NOVO a cada render sempre que o pai
+  // (`CompanyJobCandidates` etc.) passa `excludeWorkerIds` como array literal — mesmo quando o
+  // CONTEÚDO não mudou. Se o efeito abaixo dependesse do array em si, a RPC de contagem
+  // redispararia a cada re-render do pai. Uma chave-string (primitivo, comparado por VALOR, não
+  // por referência) estabiliza a dependência sem perder a checagem de conteúdo.
+  const availableWorkerIdsKey = useMemo(
+    () => available.map((member) => member.worker.id).join(','),
+    [available],
+  );
+
+  // F7 — dia da semana + período do turno, derivados de dado JÁ presente na tela (job passado
+  // via prop), síncrono, zero query nova. `getWeekdayIndex` (não `new Date(iso).getDay()` cru)
+  // evita o off-by-one de fuso documentado em `lib/dateUtils.ts` (LM-4 do DDL). `periodForTime`
+  // aceita `HH:MM` e `HH:MM:SS` (LM-5).
+  const weekday = useMemo(() => getWeekdayIndex(job.start_date), [job.start_date]);
+  const shiftPeriod = useMemo(() => periodForTime(job.work_start_time), [job.work_start_time]);
+
+  // F7 — quem, dentro de `available`, declarou disponibilidade para este dia+período. Vazio
+  // quando o horário do turno não resolve em período conhecido (`shiftPeriod === null`) — nesse
+  // caso ninguém é destacado, nunca um grupo inventado.
+  const matchingAvailabilityIds = useMemo(
+    () =>
+      new Set(
+        shiftPeriod === null
+          ? []
+          : available
+              .filter((member) =>
+                isWorkerAvailableFor(member.worker.availability_days, weekday, shiftPeriod),
+              )
+              .map((member) => member.worker.id),
+      ),
+    [available, weekday, shiftPeriod],
+  );
+
+  // F7 — `ordered` é uma CÓPIA de `available`, nunca `available` em si (LM-7): reordenar em lugar
+  // mudaria `availableWorkerIdsKey` (F5, acima) e redispararia `countForShift` a cada render.
+  // Sem sinal (`matchingAvailabilityIds` vazio), devolve `available` pela MESMA referência — evita
+  // re-render de filhos memoizados e mantém a ordem idêntica quando não há o que priorizar.
+  // `Array.prototype.sort` é estável (ES2019+): dentro de cada grupo (match / sem match) a ordem
+  // relativa não muda — quem não declarou e quem declarou outro período ficam exatamente no mesmo
+  // patamar, sem diferenciação de ordem entre eles.
+  const ordered = useMemo(() => {
+    if (matchingAvailabilityIds.size === 0) return available;
+    return [...available].sort(
+      (a, b) =>
+        Number(matchingAvailabilityIds.has(b.worker.id)) -
+        Number(matchingAvailabilityIds.has(a.worker.id)),
+    );
+  }, [available, matchingAvailabilityIds]);
+
+  // F5 — LM-9/LM-10/LM-11: dispara SÓ depois que o elenco + a config chegaram (a lista já
+  // renderizou nesse ponto; este efeito nunca segura `loadingTeam`), com `p_worker_ids` restrito
+  // a quem está VISÍVEL no modal (`available` já exclui `excludeWorkerIds` — nunca conta quem nem
+  // aparece no chamado). `enabled !== false` trata `undefined` como ligado (LM-6/fail-safe) —
+  // config ainda não resolvida não é motivo pra pular a contagem. Os casos "não precisa buscar"
+  // (desligado / elenco vazio) ficam de fora do efeito de propósito — nada de `setState` síncrono
+  // no corpo do efeito por um motivo que já é conhecido no MESMO render (`riskCountsEffective`
+  // abaixo resolve isso via derivação, não via estado).
+  useEffect(() => {
+    if (loadingTeam || riskConfig?.enabled === false || available.length === 0) {
+      // F5-06 (mutação sobrevivente): se as deps mudarem para este ramo (ex.: config chega
+      // DEPOIS e desliga a guarda) enquanto uma busca anterior deixou `riskLoading=true`, o aviso
+      // "Verificando frequência da semana..." ficaria preso na tela para sempre. Cosmético, mas
+      // sem custo — sempre reseta.
+      setRiskLoading(false);
+      return;
+    }
+    let active = true;
+    setRiskLoading(true);
+    void (async () => {
+      // Defesa em profundidade (mesmo raciocínio do efeito acima): o contrato do service já
+      // devolve Map vazio em erro, mas nunca deixar uma rejeição inesperada prender o selo em
+      // "carregando" para sempre — o disparo do chamado não pode depender disto (A7).
+      const counts = await LinkRiskService.countForShift(
+        job.id,
+        available.map((member) => member.worker.id),
+      ).catch(() => new Map<string, number>());
+      if (!active) return;
+      setRiskCounts(counts);
+      setRiskLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+    // `availableWorkerIdsKey` (não `available`) de propósito — ver comentário acima (F5-08).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingTeam, riskConfig, availableWorkerIdsKey, job.id]);
+
+  const riskThreshold = riskConfig?.threshold ?? DEFAULT_LINK_RISK_THRESHOLD;
+  const riskEnabled = riskConfig?.enabled !== false;
+  // Deriva o valor efetivo em vez de sincronizar via `setState` no efeito acima: desligado ⇒
+  // `null` (nenhum selo); elenco vazio ⇒ Map vazia (nada a mostrar, sem esperar rede); caso
+  // contrário, o que o efeito buscou (ainda `null` enquanto `riskLoading`). `useMemo` evita criar
+  // um `Map` novo a cada render (identidade estável para os `useMemo`/`useEffect` que dependem
+  // deste valor).
+  const riskCountsEffective = useMemo(() => {
+    if (!riskEnabled) return null;
+    if (available.length === 0) return new Map<string, number>();
+    return riskCounts;
+  }, [riskEnabled, available, riskCounts]);
+
+  // R7 — fato, nunca conclusão jurídica: agrupa os SELECIONADOS cuja contagem prospectiva
+  // (existente + este chamado) ultrapassa o limite, por N (podem ter Ns diferentes no mesmo
+  // chamado). Só entra aqui quem está marcado — R6.1.
+  const riskyByCount = useMemo(() => {
+    if (!riskCountsEffective) return [];
+    const groups = new Map<number, string[]>();
+    selected.forEach((workerId) => {
+      const member = members.find((m) => m.worker.id === workerId);
+      if (!member) return;
+      const prospective = (riskCountsEffective.get(workerId) ?? 0) + 1;
+      if (prospective > riskThreshold) {
+        const names = groups.get(prospective) ?? [];
+        names.push(member.worker.full_name || 'Freela');
+        groups.set(prospective, names);
+      }
+    });
+    return Array.from(groups.entries())
+      .map(([count, names]) => ({ count, names }))
+      .sort((a, b) => a.count - b.count);
+  }, [riskCountsEffective, riskThreshold, selected, members]);
 
   // R9/R10/R11: contagem e seleção do chip são calculadas contra `available` (já exclui
   // excludeWorkerIds), não contra o total de membros salvos na lista — filtra em silêncio
@@ -102,15 +262,18 @@ export function ShiftCallModal({
     return map;
   }, [lists, availableWorkerIds]);
 
+  // F7: itera `ordered` (não `available`) — a ordenação por disponibilidade sobrevive ao filtro
+  // de busca. Seleção, chips de lista, contagem (F5) e o próprio filtro de busca continuam sobre
+  // `available`/`member.worker` como antes; só a ORDEM de exibição muda.
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return available;
-    return available.filter((member) => {
+    if (!term) return ordered;
+    return ordered.filter((member) => {
       const name = (member.worker.full_name ?? '').toLowerCase();
       const role = (member.worker.primary_role ?? '').toLowerCase();
       return name.includes(term) || role.includes(term);
     });
-  }, [available, search]);
+  }, [ordered, search]);
 
   const slots = job.slots ?? 1;
   const allVisibleSelected = visible.length > 0 && visible.every((m) => selected.has(m.worker.id));
@@ -206,6 +369,19 @@ export function ShiftCallModal({
 
         {/* Corpo */}
         <div className="p-6 overflow-y-auto flex-1">
+          {/* F8 — aviso ADVISORY (nunca trava, R11): o turno tem um requisito de certificação
+              declarado pela empresa. Uma linha, sem filtrar/desabilitar ninguém na lista abaixo —
+              a decisão de quem chamar continua inteiramente da empresa. */}
+          {job.certification_requirement && (
+            <div className="flex items-start gap-2 text-xs font-bold text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 mb-4">
+              <Award size={14} className="flex-shrink-0 mt-0.5" />
+              <span>
+                Este turno pede: {job.certification_requirement}. É só um aviso — não filtra nem
+                impede a seleção de ninguém.
+              </span>
+            </div>
+          )}
+
           {/* Motivo + janela */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
             <div>
@@ -305,6 +481,14 @@ export function ShiftCallModal({
             </button>
           </div>
 
+          {/* F5 — estado PRÓPRIO, nunca segura a lista abaixo (LM-10): só um aviso discreto de
+              que os selos de frequência ainda estão chegando. */}
+          {riskLoading && (
+            <p className="text-[11px] font-bold text-gray-400 mb-2" aria-live="polite">
+              Verificando frequência da semana...
+            </p>
+          )}
+
           {/* Lista do elenco */}
           {loadingTeam && (
             <div className="space-y-2 animate-pulse">
@@ -333,6 +517,21 @@ export function ShiftCallModal({
           {!loadingTeam &&
             visible.map((member) => {
               const isSelected = selected.has(member.worker.id);
+              // F5 — selo é fato, não parecer jurídico (R7): só para quem está SELECIONADO e cuja
+              // contagem prospectiva (existente + este chamado) ultrapassa o limite configurado.
+              // Fica na linha do NOME de propósito — a linha do cargo é do contêiner de sinais da
+              // F7 (disponibilidade declarada), construído logo abaixo.
+              const prospectiveCount = riskCountsEffective
+                ? (riskCountsEffective.get(member.worker.id) ?? 0) + 1
+                : 0;
+              const showRiskBadge =
+                isSelected && riskCountsEffective !== null && prospectiveCount > riskThreshold;
+              // F7: sinal na linha do CARGO (R10), nunca na do nome (reservada à F5). Contorno,
+              // nunca fill (LM-10) — o card selecionado já pinta o fundo de `bg-primary-light`, e
+              // um pill verde preenchido sumiria nele. Ausência de sinal (não declarou, ou
+              // declarou outro período) não recebe NENHUMA marca — mesmo patamar visual, sem
+              // penalização (A3/A4 do DDL).
+              const showAvailabilityBadge = matchingAvailabilityIds.has(member.worker.id);
               return (
                 <label
                   key={member.worker.id}
@@ -361,11 +560,36 @@ export function ShiftCallModal({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-black text-sm truncate">{member.worker.full_name}</p>
-                    {member.worker.primary_role && (
-                      <p className="text-xs font-bold text-gray-500 truncate">
-                        {member.worker.primary_role}
-                      </p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="font-black text-sm truncate">{member.worker.full_name}</p>
+                      {showRiskBadge && (
+                        <span className="inline-flex items-center gap-1 flex-shrink-0 text-[10px] font-black uppercase text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5">
+                          <AlertTriangle size={10} /> Já {prospectiveCount}x esta semana com você
+                        </span>
+                      )}
+                    </div>
+                    {(member.worker.primary_role || showAvailabilityBadge) && (
+                      <div className="flex items-center gap-2 min-w-0">
+                        {member.worker.primary_role && (
+                          <p className="text-xs font-bold text-gray-500 truncate">
+                            {member.worker.primary_role}
+                          </p>
+                        )}
+                        {/* F7 — contêiner de sinais da linha secundária: vazio quando não há
+                            selo, para a F8 (certificações) entrar como vizinho sem refazer o
+                            layout das duas linhas (LM-10 do DDL). */}
+                        <span className="inline-flex items-center gap-1 flex-shrink-0">
+                          {showAvailabilityBadge && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-primary border border-primary rounded-pill px-2 py-0.5"
+                              title="Disponível para este dia e período, segundo a grade que este freela declarou"
+                              aria-label="Freela declarou disponibilidade para este turno"
+                            >
+                              <CalendarCheck2 size={10} /> Disponível
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </label>
@@ -375,6 +599,27 @@ export function ShiftCallModal({
 
         {/* Rodapé */}
         <div className="p-6 pt-4 border-t-2 border-black">
+          {/* F5 — banner só se pelo menos 1 SELECIONADO está com aviso; fato + config +
+              devolução da decisão, nunca conclusão jurídica (R7). Nunca desabilita o disparo
+              (A7) — mesma área do aviso de vagas incompletas, os dois podem coexistir. */}
+          {riskyByCount.length > 0 && (
+            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50 mb-3">
+              <AlertTriangle size={16} className="text-yellow-700 flex-shrink-0 mt-0.5" />
+              <div className="text-xs font-bold text-yellow-800 space-y-1">
+                {riskyByCount.map(({ count, names }) => (
+                  <p key={count}>
+                    Atenção: {names.join(', ')} já teria{names.length > 1 ? 'm' : ''} {count}ª vez
+                    confirmada em turnos da sua empresa nesta semana (dom–sáb) com este chamado.
+                  </p>
+                ))}
+                <p>
+                  Sua empresa configurou o aviso a partir de {riskThreshold}x/semana. A decisão de
+                  chamar é sua — consulte seu contador/jurídico se tiver dúvida sobre frequência e
+                  risco de vínculo.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Aviso honesto: selecionar menos gente que o número de vagas não preenche o turno.
               É melhor dizer isso ANTES do disparo do que o gerente descobrir no dia. */}
           {selected.size > 0 && selected.size < slots && (

@@ -78,6 +78,45 @@ export function localDateToTimestamp(dateStr: string): string {
  * Ele vai aparecer no painel do turno, no relatório de operação e no BI; formatar diferente em
  * cada lugar faria a mesma medida parecer três medidas.
  */
+/**
+ * Índice do dia da semana (0=domingo .. 6=sábado) de uma data "date-only" (`YYYY-MM-DD`),
+ * calculado em horário LOCAL — nunca `getUTCDay()`.
+ *
+ * Extraído de `ShiftCallModal` (F7 — Disponibilidade declarada, BLOCKER da revisão de frontend):
+ * o cálculo já vivia inline como `parseDateOnly(job.start_date).getDay()`. Centralizar aqui evita
+ * uma segunda convenção de "dia da semana" concorrente com `job_series.weekdays` — mesma
+ * convenção 0=domingo usada por `isWorkerAvailableFor` (`lib/availability.ts`) e pela recorrência
+ * (`lib/recurrence.ts`).
+ *
+ * Reusa `parseDateOnly` (não reimplementa o parse) — mesma proteção contra o off-by-one de fuso
+ * documentado no cabeçalho deste arquivo: `new Date("YYYY-MM-DD")` cru seria interpretado como
+ * meia-noite UTC e recuaria o dia em 1 no fuso brasileiro.
+ */
+export function getWeekdayIndex(dateOnly: string): number {
+    return parseDateOnly(dateOnly).getDay();
+}
+
+/**
+ * Predicado ÚNICO de "certificação vencida" (F8 — migration 20260817001300).
+ *
+ * Espelha, no client, o MESMO predicado usado no SQL (`ddl-aprovado.md` §D2):
+ *   expires_at IS NOT NULL AND expires_at < (now() AT TIME ZONE 'America/Sao_Paulo')::date
+ *
+ * `expiresAt` chega como `YYYY-MM-DD` (ou timestamp — `parseDateOnly` corta a parte da
+ * hora). Compara com `todayLocalDate()`, NUNCA com `new Date().toISOString().slice(0,10)`
+ * — isso usaria UTC e erraria o dia entre ~21h e 00h no Brasil (o mesmo bug documentado no
+ * cabeçalho deste arquivo). `vitest.config.ts` fixa `TZ=America/Sao_Paulo` de propósito:
+ * não mockar o fuso nos testes desta função.
+ *
+ * Nunca materializar isto em coluna/estado cacheado — é sempre recalculado, porque
+ * vencimento é função do relógio, não um fato gravável (D2 do gate).
+ */
+export function isCertificationExpired(expiresAt: string | null | undefined): boolean {
+    if (!expiresAt) return false;
+    const expiryDateOnly = expiresAt.split('T')[0];
+    return expiryDateOnly < todayLocalDate();
+}
+
 export function formatDurationShort(fromIso: string, toIso: string): string {
   const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
   if (!Number.isFinite(ms) || ms < 0) return '—';

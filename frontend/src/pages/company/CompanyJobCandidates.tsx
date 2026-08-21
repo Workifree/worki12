@@ -177,6 +177,8 @@ export default function CompanyJobCandidates() {
 
     const [candidates, setCandidates] = useState<Application[]>([]);
     const [jobTitle, setJobTitle] = useState('');
+    // F8 — advisory, nunca trava: repassado ao ShiftCallModal como banner de uma linha (R11).
+    const [jobCertificationRequirement, setJobCertificationRequirement] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [ratingModalOpen, setRatingModalOpen] = useState(false);
     const [selectedApp, setSelectedApp] = useState<Application | null>(null);
@@ -300,12 +302,13 @@ export default function CompanyJobCandidates() {
             // Fetch Job Title (only if owned by this company)
             const { data: job, error: jobError } = await supabase
                 .from('jobs')
-                .select('title, budget, location, start_date, work_start_time, work_end_time, slots')
+                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement')
                 .eq('id', id)
                 .eq('company_id', user.id)
                 .single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);
+            setJobCertificationRequirement(job.certification_requirement ?? null);
             setJobBudget(job.budget ?? 0);
             setJobSlots(job.slots ?? 1);
             setJobLocation(job.location ?? '');
@@ -2164,6 +2167,7 @@ export default function CompanyJobCandidates() {
                         title: jobTitle,
                         start_date: jobStartDate,
                         work_start_time: jobStartTime ?? undefined,
+                        certification_requirement: jobCertificationRequirement,
                         slots: jobSlots,
                     }}
                     excludeWorkerIds={[...workerIdsInShift, ...workerIdsPendingCall]}

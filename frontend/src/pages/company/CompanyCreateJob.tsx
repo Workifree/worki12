@@ -43,6 +43,9 @@ export default function CompanyCreateJob() {
         description: '',
         requirements: '',
         briefing: '',
+        // F8 — requisito de certificação do turno. Texto livre, ADVISORY (avisa, nunca trava):
+        // aparece só como banner no ShiftCallModal, nunca filtra nem desabilita ninguém.
+        certification_requirement: '',
         location: '',
         budget: '',
         budget_type: 'daily', // hourly, daily, project — postpago v1 = fixo por turno
@@ -107,6 +110,7 @@ export default function CompanyCreateJob() {
                     description: data.description,
                     requirements: data.requirements,
                     briefing: data.briefing || '',
+                    certification_requirement: data.certification_requirement || '',
                     location: data.location || '',
                     budget: data.budget?.toString() || '',
                     budget_type: data.budget_type,
@@ -291,6 +295,8 @@ export default function CompanyCreateJob() {
                 description: formData.description,
                 requirements: formData.requirements,
                 briefing: formData.briefing,
+                // F8 — advisory, nunca trava (jobs.certification_requirement, texto livre ≤200).
+                certification_requirement: formData.certification_requirement.trim() || null,
                 location: formData.location,
                 budget: budgetAmount,
                 budget_type: formData.budget_type,
@@ -441,6 +447,27 @@ export default function CompanyCreateJob() {
                                     placeholder="Ex: Uniforme preto obrigatório. Cardápio fixo do bar. Início pontual às 18h..."
                                     value={formData.briefing}
                                     onChange={(e) => setFormData({ ...formData, briefing: e.target.value })}
+                                />
+                            </div>
+
+                            {/* F8 — advisory, nunca trava: aparece como banner no chamado de turno,
+                                nunca filtra nem desabilita a seleção de ninguém. */}
+                            <div className="space-y-2">
+                                <label htmlFor="certification-requirement" className="text-xs font-bold uppercase tracking-wide">
+                                    Certificação Exigida (opcional)
+                                </label>
+                                <p className="text-xs text-gray-400 font-bold">
+                                    Ex: CREF válido, curso de manipulação de alimentos. É só um aviso — não filtra nem bloqueia freelas.
+                                </p>
+                                <input
+                                    id="certification-requirement"
+                                    type="text"
+                                    aria-label="Certificação Exigida (opcional)"
+                                    maxLength={200}
+                                    className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all"
+                                    placeholder="Ex: CREF válido"
+                                    value={formData.certification_requirement}
+                                    onChange={(e) => setFormData({ ...formData, certification_requirement: e.target.value })}
                                 />
                             </div>
                         </div>

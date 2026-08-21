@@ -23,6 +23,15 @@ vi.mock('../../services/analytics', () => ({
   },
 }))
 
+// F8 — o painel de certificações/treinamentos tem cobertura própria
+// (`components/company/WorkerCertificationsPanel.test.tsx`); aqui só verificamos a FIAÇÃO:
+// que a página passa o `workerId` certo (o `id` da rota), nunca vazio/errado.
+vi.mock('../../components/company/WorkerCertificationsPanel', () => ({
+  default: ({ workerId }: { workerId: string }) => (
+    <div data-testid="worker-certifications-panel">{workerId}</div>
+  ),
+}))
+
 // Mock useNavigate
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -346,5 +355,52 @@ describe('WorkerPublicProfile — visibilidade de contato/pagamento (R1, defesa 
         screen.getByText('Perfil indisponível — este freela não faz parte do seu elenco.'),
       ).toBeInTheDocument()
     })
+  })
+})
+
+describe('WorkerPublicProfile — F8 (fiação do painel de certificações/treinamentos)', () => {
+  it('renderiza o painel com o worker_id da rota quando o perfil carrega', async () => {
+    const workerChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({ data: WORKER_DATA_WITH_REVIEWS, error: null }),
+    })
+    const reviewsChain = buildChain({
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+    const historyChain = buildChain({
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'workers') return workerChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'reviews') return reviewsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return historyChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent('worker-42')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('worker-certifications-panel')).toHaveTextContent('worker-42')
+    })
+  })
+
+  it('NÃO renderiza o painel quando o perfil é indisponível (RLS esconde a linha)', async () => {
+    const workerChain = buildChain({
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    })
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'workers') return workerChain as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+
+    renderComponent()
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Perfil indisponível — este freela não faz parte do seu elenco.'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('worker-certifications-panel')).not.toBeInTheDocument()
   })
 })

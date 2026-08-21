@@ -49,6 +49,9 @@ vi.mock('../lib/validation', () => ({
     return clean.length === 11 || clean.length === 14
   },
   formatCpfCnpj: (value: string) => value,
+  // `handleSave` sempre chama isto (mesmo quando o freela não tocou no PIX) — faltava no mock e
+  // nenhum teste anterior batia em `handleSave` para revelar a lacuna (F7 é o primeiro a salvar).
+  normalizePixKeyForStorage: (_type: string, value: string) => value,
 }))
 
 import { supabase } from '../lib/supabase'
@@ -78,13 +81,24 @@ const WORKER_DATA = {
 }
 
 function buildChain(overrides: Record<string, unknown> = {}) {
+  // `select('id')` é o ÚLTIMO elo da cadeia de `handleSave`/`handleUpload` (awaited direto, sem
+  // `.single()` depois — ver Profile.tsx `handleSave`) e precisa resolver a Promise ali mesmo;
+  // já `select('*')` (fetch inicial) só encadeia para `.eq().single()`. Diferenciar pelo argumento
+  // deixa o MESMO mock servir os dois fluxos sem um segundo builder.
   const chain: Record<string, unknown> = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
+    select: vi.fn((cols?: string) =>
+      cols === 'id' ? Promise.resolve({ data: [{ id: 'worker-1' }], error: null }) : chain,
+    ),
+    eq: vi.fn(() => chain),
     single: vi.fn().mockResolvedValue({ data: WORKER_DATA, error: null }),
-    update: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: WORKER_DATA, error: null }),
+    update: vi.fn(() => chain),
   }
-  return { ...chain, ...overrides }
+  // Aplica overrides NO PRÓPRIO objeto `chain` (não numa cópia) — `select`/`eq`/`update` fecham
+  // sobre esta referência para se auto-encadear; uma cópia com overrides por cima (`{...chain,
+  // ...overrides}`) deixaria `.eq().single()` resolvendo com o `single` ORIGINAL, não o override.
+  Object.assign(chain, overrides)
+  return chain
 }
 
 function setupMocks() {
@@ -262,5 +276,94 @@ describe('Profile — logout (R3/R4)', () => {
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Não foi possível sair. Tente novamente.', 'error')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// F7 — Disponibilidade declarada pelo freela (grade dia × período).
+// Contrato normativo: `.harness/spec/disponibilidade-freela/ddl-aprovado.md` §3.6.
+// LM-8: `null` e `{}` não podem coexistir como "não declarou" — a poda é obrigatória.
+// ---------------------------------------------------------------------------
+describe('Profile — disponibilidade declarada (F7)', () => {
+  it('sem grade salva: mostra CTA de adoção, nunca uma grade vazia sem contexto', async () => {
+    setupMocks()
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    expect(screen.getByText(/você ainda não declarou sua disponibilidade/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /declarar disponibilidade/i })).toBeInTheDocument()
+  })
+
+  it('CTA de adoção entra em modo de edição (mesmo gesto de "Editar Perfil")', async () => {
+    setupMocks()
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: /declarar disponibilidade/i }))
+
+    expect(screen.getByRole('button', { name: /^salvar$/i })).toBeInTheDocument()
+  })
+
+  it('marca um dia+período e salva: grava a chave como array, nunca `{}` vazio', async () => {
+    setupMocks()
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: /editar perfil/i }))
+
+    // Sexta (weekday '5') período Noite — mesmo par usado no ShiftCallModal.test.tsx.
+    fireEvent.click(screen.getByRole('button', { name: /sex — noite/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^salvar$/i }))
+
+    await waitFor(() => {
+      const chain = vi.mocked(supabase.from).mock.results[0]?.value as { update: ReturnType<typeof vi.fn> }
+      expect(chain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ availability_days: { '5': ['noite'] } }),
+      )
+    })
+  })
+
+  it('marca e desmarca o mesmo slot: grava `availability_days: null`, NUNCA `{}` (LM-8)', async () => {
+    setupMocks()
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    fireEvent.click(screen.getByRole('button', { name: /editar perfil/i }))
+
+    const slot = screen.getByRole('button', { name: /sex — noite/i })
+    fireEvent.click(slot) // marca
+    fireEvent.click(slot) // desmarca — dia some da grade local
+    fireEvent.click(screen.getByRole('button', { name: /^salvar$/i }))
+
+    await waitFor(() => {
+      const chain = vi.mocked(supabase.from).mock.results[0]?.value as { update: ReturnType<typeof vi.fn> }
+      expect(chain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ availability_days: null }),
+      )
+    })
+  })
+
+  it('grade já declarada aparece como resumo em modo de visualização, sem CTA de adoção', async () => {
+    const mockAddToast = vi.fn()
+    vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
+    vi.mocked(useNavigate).mockReturnValue(vi.fn())
+    vi.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: { id: 'worker-1' } },
+      error: null,
+    } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+    vi.mocked(supabase.from).mockReturnValue(
+      buildChain({
+        single: vi.fn().mockResolvedValue({
+          data: { ...WORKER_DATA, availability_days: { '5': ['noite', 'tarde'] } },
+          error: null,
+        }),
+      }) as unknown as ReturnType<typeof supabase.from>,
+    )
+
+    renderComponent()
+    await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
+
+    expect(screen.queryByRole('button', { name: /declarar disponibilidade/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/sex: noite, tarde/i)).toBeInTheDocument()
   })
 })

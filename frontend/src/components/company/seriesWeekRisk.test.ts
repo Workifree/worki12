@@ -53,16 +53,18 @@ function targetsOn(...dates: string[]): InviteSeriesTarget[] {
     return dates.map((occurrenceDate, i) => ({ jobId: `job-${i}`, occurrenceDate }))
 }
 
+const NO_PREEXISTING = new Map<string, number>()
+
 describe('InviteSeriesModal — weeksOverThreshold (R10/A7, aviso não-bloqueante)', () => {
     it('não sinaliza nada quando nenhuma semana ultrapassa o limite', () => {
         const targets = targetsOn('2026-08-16', '2026-08-23', '2026-08-30') // 1 por semana
-        expect(weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD)).toEqual([])
+        expect(weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, NO_PREEXISTING)).toEqual([])
     })
 
     it('sinaliza a semana que ultrapassa o limite, com a contagem certa', () => {
         // 3 ocorrências na semana de 16/08 (dom, seg, sáb) — acima do limite padrão de 2.
         const targets = targetsOn('2026-08-16', '2026-08-17', '2026-08-22', '2026-08-23')
-        const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD)
+        const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, NO_PREEXISTING)
 
         expect(risky).toHaveLength(1)
         expect(risky[0]).toEqual({ weekStart: '2026-08-16', count: 3 })
@@ -70,7 +72,7 @@ describe('InviteSeriesModal — weeksOverThreshold (R10/A7, aviso não-bloqueant
 
     it('exatamente no limite NÃO sinaliza (é ">", não ">=")', () => {
         const targets = targetsOn('2026-08-16', '2026-08-17') // 2 = DEFAULT_LINK_RISK_THRESHOLD
-        expect(weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD)).toEqual([])
+        expect(weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, NO_PREEXISTING)).toEqual([])
     })
 
     it('sinaliza múltiplas semanas de risco, ordenadas cronologicamente', () => {
@@ -78,9 +80,39 @@ describe('InviteSeriesModal — weeksOverThreshold (R10/A7, aviso não-bloqueant
             '2026-08-30', '2026-08-31', '2026-09-01', // semana de 30/08: 3
             '2026-08-16', '2026-08-17', '2026-08-18', // semana de 16/08: 3
         )
-        const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD)
+        const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, NO_PREEXISTING)
 
         expect(risky.map((w) => w.weekStart)).toEqual(['2026-08-16', '2026-08-30'])
         expect(risky.every((w) => w.count === 3)).toBe(true)
+    })
+
+    // F5 — refactor de unificação (`ddl-aprovado.md` §3): a carga preexistente do freela
+    // (outros turnos/séries já confirmados naquela semana) soma às ocorrências-alvo ANTES de
+    // comparar com o limite — é a metade do número que faltava antes do refactor.
+    describe('carga preexistente (existingByWeek) — unificação com a guarda de vínculo (F5)', () => {
+        it('soma a carga preexistente e sinaliza uma semana que sozinha (só a série) não sinalizaria', () => {
+            const targets = targetsOn('2026-08-16') // 1 ocorrência-alvo na semana de 16/08
+            const existing = new Map([['2026-08-16', 2]]) // freela já tem 2 confirmados naquela semana
+            const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, existing)
+
+            expect(risky).toHaveLength(1)
+            expect(risky[0]).toEqual({ weekStart: '2026-08-16', count: 3 })
+        })
+
+        it('carga preexistente de uma semana não vaza para outra semana', () => {
+            const targets = targetsOn('2026-08-16', '2026-08-23') // 1 por semana, nenhuma sozinha ultrapassa
+            const existing = new Map([['2026-08-16', 5]]) // só a semana de 16/08 tem carga
+            const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, existing)
+
+            expect(risky).toHaveLength(1)
+            expect(risky[0]).toEqual({ weekStart: '2026-08-16', count: 6 })
+        })
+
+        it('Map vazio (freela sem carga preexistente) se comporta como antes do refactor', () => {
+            const targets = targetsOn('2026-08-16', '2026-08-17', '2026-08-22')
+            const risky = weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD, new Map())
+
+            expect(risky).toEqual([{ weekStart: '2026-08-16', count: 3 }])
+        })
     })
 })
