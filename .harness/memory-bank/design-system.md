@@ -117,3 +117,6 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 | `BottomNav` | `frontend/src/components/BottomNav.tsx` | navegação mobile |
 | `EscrowStatusBadge` | `frontend/src/components/EscrowStatusBadge.tsx` | status de escrow padronizado |
 | `ProtectedRoute` | `frontend/src/components/ProtectedRoute.tsx` | guard + TOS gate modal |
+| `ServiceTermSection` | `frontend/src/components/ServiceTermSection.tsx` | renderização de termo + checkbox de concordância (F6) |
+| `MyCertificationsSection` | `frontend/src/components/MyCertificationsSection.tsx` | grid de certificações do freela (F8) |
+| `WorkerCertificationsPanel` | `frontend/src/components/company/WorkerCertificationsPanel.tsx` | painel da empresa com certificações da equipe (F8) |

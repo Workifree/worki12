@@ -18,9 +18,17 @@ const mockMaybeSingle = vi.fn();
 // em acceptConnection/blockConnection (1 nível de .eq()). Objeto do 1º .eq() suporta os dois
 // formatos (mais um .eq() OU .maybeSingle() direto) para não colidir com o caso acima.
 const mockFetchMaybeSingle = vi.fn();
-const mockSelectEq2 = vi.fn(() => ({ maybeSingle: mockMaybeSingle }));
+// select(`*, worker:workers (...)`).eq('company_id', ...).eq('status', 'accepted').order(...) —
+// listTeamMembers. `.order()` resolve a promise diretamente (sem `.maybeSingle()`/`.single()`).
+// Regressão real (F7): o embed `worker:workers (...)` deixou de listar `availability_days` no
+// select, e `ShiftCallModal` parou de destacar disponibilidade — SEM nenhum teste quebrar, porque
+// todo teste da F7 mocka `listTeamMembers` e fabrica `availability_days` na mão. Por isso o teste
+// abaixo não mocka o retorno da função: ele assere a STRING literal passada a `.select(...)`, que
+// é o único lugar onde a ausência da coluna quebra silenciosamente em produção.
+const mockOrder = vi.fn().mockResolvedValue({ data: [], error: null });
+const mockSelectEq2 = vi.fn(() => ({ maybeSingle: mockMaybeSingle, order: mockOrder }));
 const mockSelectEq1 = vi.fn(() => ({ eq: mockSelectEq2, maybeSingle: mockFetchMaybeSingle }));
-const mockSelect = vi.fn(() => ({ eq: mockSelectEq1 }));
+const mockSelect = vi.fn((query: string) => { void query; return { eq: mockSelectEq1 }; });
 
 // insert(...).select().single() — criação da conexão no addToTeam quando ainda não existe.
 const mockInsertSingle = vi.fn();
@@ -76,6 +84,7 @@ describe('TeamConnectionService', () => {
     vi.clearAllMocks();
     mockDeleteSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
     mockUpdateSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
+    mockOrder.mockResolvedValue({ data: [], error: null });
     vi.mocked(supabase.auth.getUser).mockResolvedValue({
       data: { user: { id: 'owner-123' } },
       error: null,
@@ -342,6 +351,16 @@ describe('TeamConnectionService', () => {
 
       expect(result.success).toBe(true);
       expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listTeamMembers', () => {
+    it('seleciona availability_days no embed de workers (regressão F7: sem isso o selo de disponibilidade fica decorativo, sem quebrar nenhum teste)', async () => {
+      await TeamConnectionService.listTeamMembers();
+
+      expect(mockSelect).toHaveBeenCalled();
+      const selectArg = mockSelect.mock.calls[0][0] as string;
+      expect(selectArg).toContain('availability_days');
     });
   });
 

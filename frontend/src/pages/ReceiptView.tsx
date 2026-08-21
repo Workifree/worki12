@@ -6,9 +6,9 @@ import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
 import { formatDateOnly } from '../lib/dateUtils';
-import { useToast } from '../contexts/ToastContext';
 import PageMeta from '../components/PageMeta';
-import { ArrowLeft, Printer, CheckCircle, Clock, MapPin, AlertTriangle, Loader2, LogIn, LogOut } from 'lucide-react';
+import ServiceTermSection from '../components/ServiceTermSection';
+import { ArrowLeft, Printer, Clock, MapPin, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 
@@ -69,7 +69,6 @@ function formatWorkedHours(hours: number): string {
 export default function ReceiptView() {
     const { jobId } = useParams<{ jobId: string }>();
     const navigate = useNavigate();
-    const { addToast } = useToast();
     // ADR-20260816 — filtro de EXIBIÇÃO (qual freela, quando o turno tem mais de um), NUNCA
     // autorização: a RLS de `shift_payments` (sp_select_participants) decide o que a sessão
     // pode ver. Um `worker` alheio não vaza nada — `getReceipt` simplesmente não acha a linha.
@@ -79,7 +78,6 @@ export default function ReceiptView() {
     const [loading, setLoading] = useState(true);
     const [receipt, setReceipt] = useState<ShiftPaymentReceipt | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [confirming, setConfirming] = useState(false);
     // Chegada/saída reais do turno — trazidas do recibo pra ser um documento de conferência,
     // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
     const [attendance, setAttendance] = useState<ShiftAttendance | null>(null);
@@ -132,25 +130,6 @@ export default function ReceiptView() {
             logError('ReceiptView: fetchReceipt', error);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleConfirmReceipt = async () => {
-        if (!receipt) return;
-        setConfirming(true);
-        try {
-            const result = await PaymentRecordService.confirmReceiptByWorker(receipt.payment.id);
-            if (!result.success) {
-                addToast(result.error || 'Não foi possível confirmar o recebimento.', 'error');
-                return;
-            }
-            addToast('Recebimento confirmado!', 'success');
-            fetchReceipt();
-        } catch (error) {
-            logError('ReceiptView: handleConfirmReceipt', error);
-            addToast('Erro ao confirmar recebimento.', 'error');
-        } finally {
-            setConfirming(false);
         }
     };
 
@@ -335,33 +314,6 @@ export default function ReceiptView() {
                     </div>
                 )}
 
-                {/* Confirmação bilateral do freela — não bloqueia ciclo/avaliação. Só existe
-                    para pagamento EFETIVADO ('recorded'); 'scheduled' ainda não tem nada a
-                    confirmar (é uma promessa, não um recebimento). */}
-                {!isScheduled && (
-                    <div className="border-t-2 border-black pt-6 mb-6">
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-3">Confirmação de recebimento</span>
-                        {payment.worker_confirmed_at ? (
-                            <div className="flex items-center gap-2 bg-primary-light text-primary font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
-                                <CheckCircle size={18} />
-                                Recebimento confirmado em {format(new Date(payment.worker_confirmed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                            </div>
-                        ) : isWorkerViewer ? (
-                            <button
-                                onClick={handleConfirmReceipt}
-                                disabled={confirming}
-                                className="print:hidden bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {confirming ? <><Loader2 size={16} className="animate-spin" /> Confirmando...</> : 'Confirmar Recebimento'}
-                            </button>
-                        ) : isCompanyViewer ? (
-                            <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
-                                Aguardando confirmação do freela
-                            </p>
-                        ) : null}
-                    </div>
-                )}
-
                 {isScheduled && (
                     <div className="border-t-2 border-black pt-6 mb-6">
                         <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
@@ -369,6 +321,22 @@ export default function ReceiptView() {
                             recebimento fica disponível quando o pagamento for efetivado.
                         </p>
                     </div>
+                )}
+
+                {/* Termo de prestação de serviço (F6) + confirmação de recebimento — mesmo
+                    componente (R8/A2/A3: confirmar exige aceitar o termo antes, então os dois
+                    fluxos precisam compartilhar estado). Só existe para pagamento efetivado
+                    ('recorded'); o trigger de geração não dispara em 'scheduled' (A8), e a
+                    confirmação de recebimento também não faz sentido para uma promessa ainda
+                    não paga. */}
+                {!isScheduled && (
+                    <ServiceTermSection
+                        shiftPaymentId={payment.id}
+                        isWorkerViewer={isWorkerViewer}
+                        isCompanyViewer={isCompanyViewer}
+                        workerConfirmedAt={payment.worker_confirmed_at ?? null}
+                        onConfirmed={fetchReceipt}
+                    />
                 )}
 
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-gray-400 border-t-2 border-black pt-4">

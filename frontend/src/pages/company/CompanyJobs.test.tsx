@@ -41,7 +41,14 @@ const JOB_DATA = {
   status: 'open',
   location: 'São Paulo',
   created_at: new Date().toISOString(),
-  start_date: '2026-08-20',
+  // RELATIVO ao relógio, nunca uma data absoluta. `CompanyJobs` chama `groupJobsByDay` SEM
+  // `referenceDate` (usa `new Date()`), e o bucket "Anteriores" nasce RECOLHIDO — uma data
+  // fixa no futuro vira passado com o tempo, o turno some da tela e estes testes quebram
+  // sozinhos, sem ninguém ter tocado no código. Foi o que aconteceu: '2026-08-20' era futuro
+  // quando este arquivo foi escrito. É a mesma regra que o bloco de `groupJobsByDay` mais
+  // abaixo já enuncia ("NUNCA `new Date()` real") — lá resolvida por injeção de referência,
+  // aqui impossível porque o componente não expõe esse parâmetro.
+  start_date: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10),
 }
 
 // jobs: `.update({status}).eq('id',id).select('id')` — `.select('id')` obrigatório (patterns.md).

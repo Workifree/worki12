@@ -486,7 +486,8 @@ export const TeamConnectionService = {
             completed_jobs_count,
             city,
             phone,
-            pix_key
+            pix_key,
+            availability_days
           )
         `,
         )

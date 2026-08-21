@@ -10,6 +10,61 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Aviso de Risco de Vínculo — Alertar sobre Frequência Semanal do Freela (2026-08-18)
+
+**Empresa:**
+- **Configuração:** novo campo no perfil da empresa — escolha de 1 a 7 quantas vezes você quer ser avisada ao convidar o mesmo freela na mesma semana (padrão: 2)
+- **Aviso na lista:** ao montar um chamado de turno ou convidar para uma série, freelas que já passaram do seu limite aparecem com um **selo de aviso** ao lado do nome
+- **Aviso é só informação:** o selo não bloqueia a seleção — você continua podendo convidar; a decisão é sua
+- **Contagem só desta empresa:** o limite considera **apenas turnos com você** — o Worki não conta trabalhos que o freela faz para outros negócios
+- **Na série inteira:** ao convidar alguém para múltiplas ocorrências, o sistema mostra a contagem projetada para cada semana (carga preexistente + ocorrências novas)
+
+#### Termo de Prestação de Serviço — Aceite Eletrônico do Pagamento (2026-08-18)
+
+**Freela:**
+- **Novo na confirmação de recebimento:** ao receber um pagamento registrado, o app gera um termo declaratório (modelo sugerido pelo Worki, com os dados do turno)
+- **Ler e concordar:** antes de confirmar que recebeu, você **deve** ler o termo inteiro e marcar a caixa "Li e concordo com os termos acima"
+- **Um gesto:** a confirmação de recebimento e o aceite do termo acontecem no mesmo clique — não há caminho para confirmar sem aceitar o termo
+- **Termo congelado:** uma vez aceito, o termo fica congelado com a data e a hora — se os dados da empresa ou do turno mudarem depois, o documento que você assinou permanece intacto
+- **Se o CPF está faltando:** o aceite será bloqueado com a mensagem "Seu cadastro está sem um CPF válido" — neste caso, fale com a empresa ou com o suporte do Worki para regularizar
+
+**Empresa:**
+- **Recibo do pagamento:** quando você registra um pagamento, o termo é gerado automaticamente e aparece no recibo junto com o comprovante
+- **Você vê o status:** o recibo mostra se o freela já aceitou o termo ou se ainda está pendente
+
+**Nota importante:** o Worki apenas registra o aceite entre as partes — o app não valida, não garante e não é parte deste termo. A responsabilidade tributária (recolhimento de impostos) é da pessoa que recebeu o pagamento, conforme declarado no próprio termo.
+
+#### Disponibilidade da Semana — Freela Declara Melhor Horário (2026-08-18)
+
+**Freela:**
+- **Novo no perfil:** seção "Minha Disponibilidade" onde você marca em quais dias e períodos (manhã, tarde, noite) costuma estar disponível para trabalhar
+- **Não é compromisso:** é uma declaração de quando você **costuma** estar livre — não é uma agenda nem um bloqueio; você continua podendo recusar qualquer turno
+- **Destaque no chamado:** quando uma empresa dispara um chamado de turno, quem declarou disponibilidade para aquele dia e período aparece **destacado** e no topo da lista
+- **Sem punição:** se você não declarou nada, não aparece destacado — mas continua podendo aceitar o turno normalmente
+- **Convite para completar:** enquanto você não tiver declarado nada, há um aviso no painel "Meus Turnos" convidando você a informar sua disponibilidade (opcional)
+
+#### Certificações e Capacitações — Registrar Documentos de Qualificação (2026-08-18)
+
+**Freela:**
+- **Novo no perfil:** seção "Certificações e Treinamentos" onde você registra:
+  - **Certificações externas** (CREF, manipulação de alimentos, cursos técnicos): nome, órgão emissor, número de registro, data de emissão e validade
+  - Sem upload de arquivo — o número de registro é o que vale (você o confere na fonte oficial quando precisar)
+  - Certificações vencidas continuam aparecendo, marcadas como vencidas (não são apagadas)
+- **Conferência pela empresa:** quando uma empresa tem vínculo com você, ela pode **confirmar que viu** o documento original (assinando manualmente o registro digital)
+  - Uma vez confirmada, a empresa vê um ícone verde ao lado
+  - **Se você alterar o número ou validade** de uma certificação já confirmada, a conferência cai — a empresa terá que conferir de novo (porque ela verificou aquele conteúdo, não a linha do banco)
+  - Só a empresa que conferiu pode desfazer a própria conferência
+
+**Empresa:**
+- **Ver certificações:** no Elenco ou ao convidar, você consegue ver as certificações de quem tem vínculo com você
+- **Marcar como conferida:** depois de ver o documento original (físico ou digital), clique em "Confirmar que vi" — fica registrado quando você conferiu
+- **Usar como filtro nos chamados:** ao criar um turno, você pode informar que uma certificação é obrigatória — o app exibe um aviso destacado no chamado, mas **não bloqueia** ninguém (a decisão é sua na hora de convidar)
+- **Treinamentos internos:** você também pode registrar treinamentos que você mesma deu ao freela (ex.: "Treinamento de Segurança Alimentar" com data de conclusão)
+  - Treinamentos são visíveis só para você e para o próprio freela (não aparecem para outra empresa)
+  - Você pode revogar um registro se tiver registrado por engano (aparece um aviso de revogação, não é apagado)
+
+**Não registre aqui:** documentos de saúde (atestado, exame) — as certificações são só para qualificação profissional.
+
 #### Confirmação de Véspera — Validar Presença do Freela um Dia Antes (2026-08-18)
 
 **Freela:**

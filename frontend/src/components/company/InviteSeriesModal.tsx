@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Loader2, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { ShiftCallService } from '../../services/shiftCallService';
+import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import type { TeamMember } from '../../types';
 
@@ -32,6 +33,15 @@ interface InviteSeriesModalProps {
  * ocorrência ainda sem freela, todos para o mesmo freela escolhido. É estritamente o mesmo
  * resultado de convidar ocorrência por ocorrência à mão (A7) — só em lote, em lotes de
  * `INVITE_BATCH_SIZE` para não disparar dezenas de requisições simultâneas de uma vez.
+ *
+ * F5 (guarda de vínculo, `ddl-aprovado.md` §3) — refactor de unificação: o aviso de frequência
+ * ANTES era calculado uma única vez, worker-independente, contando SÓ as ocorrências desta
+ * série — metade do número que a empresa precisa ver. Agora é por freela: uma única chamada
+ * `LinkRiskService.countForRange()` para o elenco inteiro (mesmo carregamento de
+ * `useCompanyTeam`, não uma RPC por membro) devolve a carga preexistente de cada um, e o selo
+ * aparece na linha de CADA freela na lista, calculado com `weeksOverThreshold(targets,
+ * threshold, existingByWeek)`. Nunca bloqueia o botão "Convidar" (A7) — é informação, a decisão
+ * é da empresa (R7).
  */
 export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSeriesModalProps) {
     const { addToast } = useToast();
@@ -40,8 +50,67 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [result, setResult] = useState<{ invited: number; failed: number } | null>(null);
 
+    // F5 — estado PRÓPRIO da guarda de vínculo: nunca segura a lista do elenco (mesmo princípio
+    // de LM-10 do `ShiftCallModal`). `riskByWorker`: workerId -> (weekStart -> contagem
+    // preexistente naquela semana), montado a partir da chave composta `${workerId}|${weekStart}`
+    // do contrato de `countForRange`.
+    const [riskConfig, setRiskConfig] = useState<LinkRiskConfig | null>(null);
+    const [riskByWorker, setRiskByWorker] = useState<Map<string, Map<string, number>>>(new Map());
+
     const targetJobIds = useMemo(() => targets.map((t) => t.jobId), [targets]);
-    const riskyWeeks = useMemo(() => weeksOverThreshold(targets, DEFAULT_LINK_RISK_THRESHOLD), [targets]);
+
+    useEffect(() => {
+        if (teamLoading || teamMembers.length === 0 || targets.length === 0) return;
+        let active = true;
+        void (async () => {
+            const dates = targets.map((t) => t.occurrenceDate).slice().sort();
+            const rangeStart = dates[0];
+            const rangeEnd = dates[dates.length - 1];
+            // `allSettled`: a lista de convite (useCompanyTeam) já renderiza independente deste
+            // efeito — mas uma rejeição inesperada aqui não pode deixar `riskConfig`/`riskByWorker`
+            // pendurados num estado inconsistente (defesa em profundidade, mesmo raciocínio do
+            // `ShiftCallModal`).
+            //
+            // F5-11 (nit, registrado como decisão — não corrigido): diferente do `ShiftCallModal`
+            // (que só dispara `countForShift` DEPOIS de saber que `enabled !== false`), aqui
+            // `getConfig()` e `countForRange()` disparam juntos SEMPRE, mesmo quando a config
+            // acabaria dizendo "desligado" — 1 chamada "desperdiçada" por abertura do modal quando
+            // a empresa desliga o aviso. Gating explícito exigiria esperar a config responder
+            // ANTES de disparar a contagem (2 idas ao servidor em série) — a MESMA troca que o
+            // LM-9 rejeitou para o `ShiftCallModal` (e este modal, ao contrário daquele, não tem
+            // pressa das 8h30, mas também não é gratuito reintroduzir serialização). Mantido
+            // assimétrico de propósito.
+            const [configResult, countsResult] = await Promise.allSettled([
+                LinkRiskService.getConfig(),
+                LinkRiskService.countForRange(
+                    teamMembers.map((m) => m.worker.id),
+                    rangeStart,
+                    rangeEnd,
+                ),
+            ]);
+            if (!active) return;
+            const config = configResult.status === 'fulfilled' ? configResult.value : null;
+            const counts = countsResult.status === 'fulfilled' ? countsResult.value : new Map<string, number>();
+            setRiskConfig(config);
+            const byWorker = new Map<string, Map<string, number>>();
+            counts.forEach((count, key) => {
+                const [workerId, weekStart] = key.split('|');
+                if (!workerId || !weekStart) return;
+                const forWorker = byWorker.get(workerId) ?? new Map<string, number>();
+                forWorker.set(weekStart, count);
+                byWorker.set(workerId, forWorker);
+            });
+            setRiskByWorker(byWorker);
+        })();
+        return () => {
+            active = false;
+        };
+    }, [teamLoading, teamMembers, targets]);
+
+    // `enabled !== false` trata config ainda não resolvida (undefined) como ligada — LM-6:
+    // "undefined não é false", fail-safe na direção de mostrar o aviso, não escondê-lo.
+    const riskEnabled = riskConfig?.enabled !== false;
+    const riskThreshold = riskConfig?.threshold ?? DEFAULT_LINK_RISK_THRESHOLD;
 
     const handleInvite = async (workerId: string) => {
         setInviting(true);
@@ -90,22 +159,6 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                             série ainda sem freela.
                         </p>
 
-                        {/* R10/A7 — aviso NÃO-bloqueante, factual (nunca conclusão jurídica): o app
-                            informa a contagem, quem decide é a empresa. */}
-                        {riskyWeeks.length > 0 && (
-                            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-amber-300 bg-amber-50 mb-4">
-                                <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                                <div className="text-xs font-bold text-amber-800 space-y-1">
-                                    {riskyWeeks.map((w) => (
-                                        <p key={w.weekStart}>
-                                            Este freela ficaria com {w.count} turnos na semana de {weekRangeLabel(w.weekStart)} —
-                                            acima do limite de {DEFAULT_LINK_RISK_THRESHOLD} por semana configurado para o seu negócio.
-                                        </p>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
                         {teamLoading && (
                             <div className="space-y-3 animate-pulse">
                                 {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
@@ -123,35 +176,70 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                             <div className="space-y-3 max-h-72 overflow-y-auto">
                                 {teamMembers.map((member: TeamMember) => {
                                     const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
+                                    // F5 — por freela (R10/A7): soma a carga preexistente DESTE freela
+                                    // às ocorrências-alvo da série antes de comparar com o limite.
+                                    const existingByWeek = riskByWorker.get(member.worker.id) ?? new Map<string, number>();
+                                    const riskyWeeks = riskEnabled
+                                        ? weeksOverThreshold(targets, riskThreshold, existingByWeek)
+                                        : [];
                                     return (
-                                        <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
-                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                                                {avatarUrl ? (
-                                                    <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
-                                                        {member.worker.full_name[0]?.toUpperCase()}
-                                                    </div>
-                                                )}
+                                        <div key={member.connection.id} className="p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                    {avatarUrl ? (
+                                                        <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
+                                                            {member.worker.full_name[0]?.toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
+                                                    {/* Linha do cargo — reservada para o selo verde de disponibilidade
+                                                        da F7 (spec pronta, ainda não construída). O selo de risco de
+                                                        vínculo (amarelo) NÃO entra aqui, de propósito. */}
+                                                    {member.worker.primary_role && (
+                                                        <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleInvite(member.worker.id)}
+                                                    disabled={inviting}
+                                                    className="min-h-[44px] bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                                >
+                                                    {inviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                                                    {inviting && progress ? `${progress.done}/${progress.total}` : inviting ? '...' : 'Convidar'}
+                                                </button>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
-                                                {member.worker.primary_role && (
-                                                    <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
-                                                )}
-                                            </div>
-                                            <button
-                                                onClick={() => handleInvite(member.worker.id)}
-                                                disabled={inviting}
-                                                className="min-h-[44px] bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                                            >
-                                                {inviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                                                {inviting && progress ? `${progress.done}/${progress.total}` : inviting ? '...' : 'Convidar'}
-                                            </button>
+
+                                            {/* R10/A7 — aviso NÃO-bloqueante, factual (nunca conclusão jurídica):
+                                                o app informa a contagem por semana, quem decide é a empresa. */}
+                                            {riskyWeeks.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                                    {riskyWeeks.map((w) => (
+                                                        <span
+                                                            key={w.weekStart}
+                                                            className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
+                                                        >
+                                                            <AlertTriangle size={10} className="flex-shrink-0" />
+                                                            Ficaria {w.count}x com você na sem. {weekRangeLabel(w.weekStart)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
                             </div>
+                        )}
+
+                        {teamMembers.length > 0 && riskEnabled && (
+                            <p className="text-[11px] font-bold text-gray-400 mt-3">
+                                Sua empresa avisa a partir de {riskThreshold}x na mesma semana (dom–sáb) para o
+                                mesmo freela. A decisão de convidar é sua — consulte seu contador/jurídico se
+                                tiver dúvida sobre frequência e risco de vínculo.
+                            </p>
                         )}
                     </>
                 )}

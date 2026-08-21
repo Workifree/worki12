@@ -884,11 +884,50 @@ primeira execução), o que faz a diferença passar despercebida quando se mistu
 frontend-reviewer, evaluator) sem ninguém detectar — porque nenhum desses gates executa SQL.
 Só apareceu na primeira aplicação real.
 
-**Regra:** dentro de uma migration, a ordem é sempre (1) tabelas, (2) funções que as leem,
-(3) triggers, (4) policies, (5) `ENABLE RLS`, (6) grants. Uma função `LANGUAGE sql` que só lê
-tabelas pré-existentes (ex.: `is_job_owner` sobre `jobs`/`companies`) pode vir antes.
+**Regra:** dentro de uma migration, a ordem é sempre (1) tabelas + colunas + constraints, (2) índices, (3) funções `LANGUAGE sql` que as leem, (4) funções `LANGUAGE plpgsql`, (5) triggers, (6) policies, (7) `ENABLE RLS`, (8) grants. Uma função `LANGUAGE sql` que só lê tabelas pré-existentes (ex.: `is_job_owner` sobre `jobs`/`companies`) pode vir antes (seção 3). Funções que referenciam colunas novas (`my_link_risk_config` lê `companies.link_risk_alert_*`) DEVEM vir depois da seção 1.
 
 **Corolário de processo:** revisão de agente não substitui execução. Migration não aplicada é
 migration não verificada — nenhuma quantidade de revisão de código pega erro de ordem de DDL.
+
+## ⚠️ Defeito na spec pega mais cedo que revisor de código (F5, F6, F8)
+
+Padrão transversal descoberto em leva F5–F8: **o defeito estava na spec, não na implementação**. Builder seguiu requisito com exatidão e produziu algo quebrado. Revisor de código (frontend-reviewer, security-reviewer, evaluator) checou o código contra a spec — aprovaram. Defeito só apareceu quando spec foi relida para ADR/memory-bank.
+
+**Exemplos:**
+1. **F5 (guarda de risco):** spec não definia se contava cross-company (sim/não muda segurança + privacidade). Builder escolheu conservador (DESTA empresa); achado na revisão de spec.
+2. **F6 (termo):** spec não definia se o termo congela no RASCUNHO ou no ACEITE. Builder congelou no rascunho (terá mudanças estruturais de config). Achado: deve congelar no aceite (atomicamente com `accepted_at`). ADR após implementação.
+3. **F8 (certificações):** spec tinha 3 furos críticos de RLS (auto-atribuição freela, ator sem sessão, vazamento cross-company). Código seguiu spec exatamente. Adiado pós-piloto.
+
+**Padrão:** Revisar o **requisito** antes de mandar implementar pega mais defeitos que revisar o **código** depois. Especialmente crítico em features com segurança (RLS, contagem), jurídicas (termos), ou de privacidade (cross-company). Decisão de processo: fase de clarificação (harness-clarifier) precisa validar spec-completude além de spec-ambiguidade.
+
+## Contagem de recurso escasso por dimensão temporal mora no banco (F5)
+
+Operação "quantos turnos este freela tem nesta semana com esta empresa?" depende de:
+1. **Fuso local** — `jobs.start_date` é timestamptz (UTC). "Semana" é dom-sáb em `America/Sao_Paulo`, não UTC.
+2. **Ancoragem dupla** — `jobs.company_id` pode ser id ou uuid do dono. Política de `applications.SELECT` filtra só `owner_id`, portanto contagem parcial. Função `is_job_owner` traz o superconjunto; duplicar inline é manutenção futura arriscada.
+3. **Mutação de READ futura** — Fase 3 do ADR-20260816 vai apertar `jobs.SELECT` (`can_view_job`). Contagem no client pendurada no `USING (true)` de hoje mudaria semântica em silêncio.
+4. **Reutilização entre features** — Mesma contagem serve F5 (`ShiftCallModal`, uma semana) e F3 (`InviteSeriesModal`, intervalo de série). UMA implementação de "o que conta".
+
+**Defesa:** RPC SECURITY DEFINER que devolve (worker_id, week_start date, shift_count int). Client chama, NÃO recalcula. RLS simples mente; DEFINER desacopla da policy muda. ADR-20260818-guarda-vinculo-contagem-no-banco.md.
+
+## Congelamento de conteúdo mutável após aceite eletrônico (F6)
+
+Termo de serviço é **rascunho** (`accepted_at IS NULL`, `term_text` renderizado com dados atuais) até freela ler e concordar. No aceite, **congela**: `accept_service_term` RPC re-renderiza uma última vez + grava `term_text + accepted_at + IP + User-Agent` **em um UPDATE**.
+
+**Porquê atomicamente:** se congelar em transação separada, `term_text` de rascunho e `accepted_at` de aceite divergem. Cenário: freela lê, empresa muda config entre leitura e clique, RPC corre, congela "config nova". Freela assinou o quê?
+
+**Defesa pós-congelamento:** Trigger `enforce_service_term_immutability` — `term_text` **imutável para TODOS** (nem service_role, nem owner). Nem sequer retraço de jurídica consegue mudar o que foi assinado.
+
+**Princípio jurídico:** A Worki **não é parte** do termo e não valida nada. Cláusula "Worki não valida / não garante" mora **dentro do texto congelado**, não em coluna `is_valid` (que se perde em refatoração). Requisito de UI → texto impressão congelada. ADR-20260818-termo-congelado-no-aceite.md.
+
+## Conferência perecível — zerar validação se conteúdo muda (F8)
+
+Um freela pode atualizar certificação/treinamento **após** ter sido conferenciada (verificada). Exemplo: "treinado em soldagem pelo SENAI (conferido 10/ago)" → "atualizo a data de expiração"  → agora o que vale? A conferência antiga sobre conteúdo modificado = sem valor.
+
+**Defesa (trigger `zero_verification_on_content_change`):** campos `verified_by, verified_at` zeram se **qualquer coluna de conteúdo muda** (testado com `NEW.* IS DISTINCT FROM OLD.*`). A conferência é sobre conteúdo **atual**, não histórico.
+
+**Âncora em OLD, não NEW:** a pergunta certa é "de quem é o que está sendo destruído" (coloca a âncora em OLD), não "para onde vai" (NEW). Landmine evitado em F4 (`confirm_request_at IS NULL` como guarda) e F8 identificado (DELETE em `team_connections` status='blocked').
+
+**Padrão:** sempre que conteúdo é mutável E tem um campo de validação, trigger valida: se conteúdo muda → validação zera. Consulta: "qual trigger em qual tabela?" → procure `NEW.* IS DISTINCT FROM OLD.*`. ADR-20260821-certificacoes-metadado-sem-arquivo.md, ADR-20260821-conferencia-de-certificacao-e-do-conferente.md.
 
 

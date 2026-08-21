@@ -103,12 +103,23 @@ R3), agregada em `Map<worker_id, count>` no client — não uma query por membro
    Nunca desabilita o botão de disparo, nunca exige confirmação extra.
 
 **R7 — Texto: fato, não parecer jurídico.**
+
+> QUALIFICADOR DE ESCOPO acrescentado em 21/08/2026 (achado `C-RISK-SCOPE-HONESTY` do evaluator).
+> A redacao original dizia apenas "Já {N}x esta semana". A contagem, porem, cobre **somente turnos
+> desta empresa** — a RPC filtra por `is_job_owner`, e isso esta correto: contar entre empresas
+> vazaria relacao comercial de terceiros, e risco de vinculo e por empregador, entao o numero
+> por empresa e justamente a metrica decisoria certa.
+>
+> O defeito estava no rotulo, nao no numero: "3x esta semana" e lido pelo gerente como a semana do
+> freela, quando e a semana dele COM AQUELA EMPRESA. Um numero parcial lido como total da falsa
+> seguranca exatamente na decisao que o aviso existe para informar. Todas as quatro superficies
+> (selo, banner, chip da serie, texto de configuracao) passam a declarar o escopo.
 O texto NUNCA afirma que a frequência "gera vínculo" (afirmação jurídica que a tese proíbe) e NUNCA
 posiciona o Worki como proteção trabalhista/CLT. Só informa o fato numérico e devolve a decisão à
 empresa. Copy fixado:
 
-- Selo por membro: `"Já {N}x esta semana"`
-- Banner: `"Atenção: {lista de nomes} já teria(m) {N}ª vez confirmada nesta semana (dom–sáb) com
+- Selo por membro: `"Já {N}x esta semana com você"`
+- Banner: `"Atenção: {lista de nomes} já teria(m) {N}ª vez confirmada em turnos da sua empresa nesta semana (dom–sáb) com
   este chamado. Sua empresa configurou o aviso a partir de {threshold}x/semana. A decisão de chamar
   é sua — consulte seu contador/jurídico se tiver dúvida sobre frequência e risco de vínculo."`
 

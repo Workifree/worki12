@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,6 +8,7 @@ import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import ProfileReviews from '../../components/ProfileReviews';
+import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
 
 interface Company {
     name: string;
@@ -21,7 +22,11 @@ interface Company {
     cover_url?: string;
     rating_average?: number;
     reviews_count?: number;
-    [key: string]: string | number | null | undefined;
+    /** F5 (guarda de vínculo) — LM-6: `undefined` (coluna ainda não migrada / não veio no select)
+     *  NÃO é `false`. Ler sempre via `!== false`, nunca `if (company.link_risk_alert_enabled)`. */
+    link_risk_alert_enabled?: boolean;
+    link_risk_alert_threshold?: number;
+    [key: string]: string | number | boolean | null | undefined;
 }
 
 export default function CompanyProfile() {
@@ -61,7 +66,10 @@ export default function CompanyProfile() {
         address: '',
     });
 
-    const editableFields = ['name', 'industry', 'description', 'website', 'email', 'address', 'default_briefing'] as const;
+    const editableFields = [
+        'name', 'industry', 'description', 'website', 'email', 'address', 'default_briefing',
+        'link_risk_alert_enabled', 'link_risk_alert_threshold',
+    ] as const;
     const isDirty = isEditing && editableFields.some(
         field => (company[field] || '') !== (initialCompanyRef.current[field] || '')
     );
@@ -121,14 +129,35 @@ export default function CompanyProfile() {
                 address: company.address,
             };
 
-            // Tenta salvar com o briefing padrão; se a coluna ainda não foi migrada no
-            // banco, refaz sem ela (deploy do frontend nunca quebra a edição do perfil).
+            // F5 (guarda de vínculo): CHECK real mora no banco (1..7) — este clamp é só UX,
+            // nunca a validação de verdade.
+            const clampedThreshold = Math.min(
+                7,
+                Math.max(1, Math.round(company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD)),
+            );
+            const riskPayload = {
+                link_risk_alert_enabled: company.link_risk_alert_enabled !== false,
+                link_risk_alert_threshold: clampedThreshold,
+            };
+
+            // Tenta salvar com o briefing padrão + a config da guarda de vínculo (F5); se
+            // alguma dessas colunas ainda não foi migrada no banco, refaz em camadas cada vez
+            // mais "básicas" (deploy do frontend nunca quebra a edição do perfil INTEIRO —
+            // LM-5: um deploy adiantado da guarda de vínculo não pode derrubar logo/capa/endereço).
             // .select('id') obrigatório (patterns.md — UPDATE sob RLS negado em silêncio).
             let { data, error } = await supabase
                 .from('companies')
-                .update({ ...basePayload, default_briefing: company.default_briefing })
+                .update({ ...basePayload, default_briefing: company.default_briefing, ...riskPayload })
                 .eq('id', userId)
                 .select('id');
+
+            if (error && /link_risk_alert_(enabled|threshold)/i.test(error.message || '')) {
+                ({ data, error } = await supabase
+                    .from('companies')
+                    .update({ ...basePayload, default_briefing: company.default_briefing })
+                    .eq('id', userId)
+                    .select('id'));
+            }
 
             if (error && /default_briefing/i.test(error.message || '')) {
                 ({ data, error } = await supabase.from('companies').update(basePayload).eq('id', userId).select('id'));
@@ -652,6 +681,108 @@ export default function CompanyProfile() {
                     <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
                     </p>
+                )}
+            </div>
+
+            {/* F5 — Guarda de risco de vínculo trabalhista: aviso configurável, nunca bloqueia
+                (decisão do owner). Mesmo padrão de tela/card do Briefing Padrão acima. */}
+            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                    <h3 className="text-xl font-black uppercase flex items-center gap-2">
+                        <ShieldAlert size={20} /> Preferências
+                    </h3>
+                    {!isEditing && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="text-xs font-black uppercase text-gray-400 hover:text-black flex items-center gap-1 transition-colors flex-shrink-0"
+                        >
+                            <Pencil size={14} /> Editar
+                        </button>
+                    )}
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                    O Worki nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
+                    chamar continua sua; consulte seu contador/jurídico se tiver dúvida.
+                </p>
+
+                {isEditing ? (
+                    <>
+                        <label className="flex items-center justify-between gap-4 min-h-[44px] py-2 cursor-pointer">
+                            <span>
+                                <span className="block font-black text-sm uppercase">
+                                    Avisar sobre frequência do mesmo freela
+                                </span>
+                                <span className="block text-xs font-bold text-gray-500 mt-0.5">
+                                    Mostra um selo (não bloqueia) quando um freela do elenco passaria do
+                                    limite de vezes na mesma semana (dom–sáb).
+                                </span>
+                            </span>
+                            <span
+                                className={`relative inline-flex items-center h-7 w-12 rounded-pill border-2 border-black flex-shrink-0 transition-colors ${
+                                    company.link_risk_alert_enabled !== false ? 'bg-primary' : 'bg-gray-200'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={company.link_risk_alert_enabled !== false}
+                                    onChange={(e) =>
+                                        setCompany(prev => ({ ...prev, link_risk_alert_enabled: e.target.checked }))
+                                    }
+                                    aria-label="Avisar sobre frequência do mesmo freela"
+                                    className="sr-only"
+                                />
+                                <span
+                                    className={`inline-block w-5 h-5 bg-white border-2 border-black rounded-full transform transition-transform ${
+                                        company.link_risk_alert_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
+                                    }`}
+                                />
+                            </span>
+                        </label>
+
+                        <div className={`mt-2 ${company.link_risk_alert_enabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
+                            <label htmlFor="link-risk-threshold" className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">
+                                Avisar a partir de quantas vezes por semana
+                            </label>
+                            <input
+                                id="link-risk-threshold"
+                                name="link_risk_alert_threshold"
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={7}
+                                step={1}
+                                value={company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}
+                                onChange={(e) => {
+                                    const raw = Number(e.target.value);
+                                    const clamped = Number.isFinite(raw) ? Math.min(7, Math.max(1, Math.round(raw))) : 1;
+                                    setCompany(prev => ({ ...prev, link_risk_alert_threshold: clamped }));
+                                }}
+                                disabled={company.link_risk_alert_enabled === false}
+                                className="w-24 font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                                Padrão: {DEFAULT_LINK_RISK_THRESHOLD}. Mínimo 1, máximo 7 vezes na mesma semana (dom–sáb).
+                            </p>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
+                        <div>
+                            <p className="font-black text-sm uppercase">Avisar sobre frequência do mesmo freela</p>
+                            <p className="text-xs font-bold text-gray-500 mt-0.5">
+                                {company.link_risk_alert_enabled !== false
+                                    ? `Avisando a partir de ${company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}x na mesma semana (dom–sáb), contando só turnos da sua empresa.`
+                                    : 'Aviso desligado.'}
+                            </p>
+                        </div>
+                        <span
+                            className={`px-3 py-1.5 rounded-pill border-2 border-black font-black uppercase text-xs flex-shrink-0 ${
+                                company.link_risk_alert_enabled !== false ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-500'
+                            }`}
+                        >
+                            {company.link_risk_alert_enabled !== false ? 'Ligado' : 'Desligado'}
+                        </span>
+                    </div>
                 )}
             </div>
 

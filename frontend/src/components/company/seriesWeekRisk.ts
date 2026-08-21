@@ -1,11 +1,16 @@
 import { parseDateOnly, formatDateOnly } from '../../lib/dateUtils';
 
 /**
- * Limite (número de turnos na MESMA semana corrida dom-sáb) a partir do qual o aviso não-
- * bloqueante de R10/A7 aparece no `InviteSeriesModal`. Constante NOMEADA e ÚNICA — nunca `2`
- * literal espalhado pelo JSX. F5 (guarda de vínculo, `.harness/spec/guarda-vinculo/spec.md`)
- * troca este valor fixo por configuração por empresa (`companies.link_risk_alert_threshold`);
- * até lá, este é o único ponto a editar.
+ * FALLBACK (não mais "o limite") do aviso não-bloqueante de R10/A7 no `InviteSeriesModal` e do
+ * selo de F5 (guarda de vínculo, `.harness/spec/guarda-vinculo/ddl-aprovado.md`) no
+ * `ShiftCallModal`. Desde F5, o limite REAL é configurável por empresa
+ * (`companies.link_risk_alert_threshold`, lido via `LinkRiskService.getConfig()` /
+ * `my_link_risk_config()`); esta constante só entra em jogo quando aquela config ainda não
+ * respondeu (RPC não resolvida) ou a coluna ainda não existe no banco (deploy adiantado — ver
+ * LM-5 em `ddl-aprovado.md`). Seu valor tem de continuar igual ao `DEFAULT` da coluna no banco —
+ * a coluna já carrega esse acoplamento no `COMMENT` da migration
+ * `20260817000900_link_risk_guard.sql`. Nunca `2` literal espalhado pelo JSX — sempre esta
+ * constante.
  */
 export const DEFAULT_LINK_RISK_THRESHOLD = 2;
 
@@ -42,19 +47,30 @@ export function localWeekStartKey(dateStr: string): string {
 /**
  * R10/A7 — sinalização (não-bloqueante) de "mais de N turnos na mesma semana para o mesmo
  * freela": agrupa as ocorrências-alvo por semana corrida local e devolve as semanas que
- * ultrapassam o limite. Independe de QUAL freela é escolhido na lista — o disparo em lote vai
- * para o mesmo conjunto de turnos não importa quem receba o convite, então o aviso é calculado
- * uma vez, antes de qualquer seleção.
+ * ultrapassam o limite.
+ *
+ * Refactor F5 (unificação com a guarda de vínculo, `ddl-aprovado.md` §3): esta função contava SÓ
+ * as ocorrências da própria série, worker-independente — metade do número que a empresa
+ * precisa ver, porque ignorava a carga preexistente do freela (turnos avulsos, outras séries,
+ * chamados já aceitos). Agora recebe `existingByWeek` — a contagem preexistente DAQUELE freela
+ * por semana (chave = `localWeekStartKey`), tipicamente vinda de
+ * `LinkRiskService.countForRange()` — e soma às ocorrências-alvo antes de comparar com o
+ * limite. Por isso passou a ser calculada POR FREELA (depois da seleção), não mais uma vez antes
+ * de qualquer seleção: cada freela do elenco tem sua própria carga preexistente.
  */
-export function weeksOverThreshold(targets: InviteSeriesTarget[], threshold: number): WeekRisk[] {
+export function weeksOverThreshold(
+    targets: InviteSeriesTarget[],
+    threshold: number,
+    existingByWeek: Map<string, number>,
+): WeekRisk[] {
     const counts = new Map<string, number>();
     targets.forEach((t) => {
         const key = localWeekStartKey(t.occurrenceDate);
         counts.set(key, (counts.get(key) ?? 0) + 1);
     });
     return Array.from(counts.entries())
-        .filter(([, count]) => count > threshold)
-        .map(([weekStart, count]) => ({ weekStart, count }))
+        .map(([weekStart, count]) => ({ weekStart, count: count + (existingByWeek.get(weekStart) ?? 0) }))
+        .filter(({ count }) => count > threshold)
         .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
 }
 

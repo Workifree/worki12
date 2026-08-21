@@ -8,6 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import { logError } from '../../lib/logger'
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import WorkerCertificationsPanel from '../../components/company/WorkerCertificationsPanel';
 import type { TeamConnectionStatus } from '../../types';
 
 export default function WorkerPublicProfile() {
@@ -435,6 +436,10 @@ export default function WorkerPublicProfile() {
                     </div>
                 </div>
             </div>
+
+            {/* F8 — certificações auto-declaradas do freela + treinamentos internos registrados
+                pela empresa. `id` é garantido aqui: `!profile` já retornou acima. */}
+            {id && <WorkerCertificationsPanel workerId={id} />}
 
         </div>
     );

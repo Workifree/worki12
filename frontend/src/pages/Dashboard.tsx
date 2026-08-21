@@ -5,11 +5,12 @@ import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
 import {
     Clock, Star, TrendingUp, Award, Zap,
-    ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight
+    ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight, CalendarClock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useWorkerStores } from '../hooks/useTeamConnections';
+import { normalizeAvailabilityGrade } from '../lib/availability';
 
 interface NextJobData {
     status: string;
@@ -155,6 +156,16 @@ export default function Dashboard() {
     const completedQuests = quests.filter(q => q.done).length;
     const totalQuests = quests.length;
 
+    // F7 — R14/A10: CTA de adoção da grade de disponibilidade, visível SÓ enquanto o freela nunca
+    // declarou nada. `normalizeAvailabilityGrade` (não uma checagem ingênua `=== null`) é o único
+    // jeito correto de responder isso: o CHECK do banco aceita `{}` (containment de objeto vazio
+    // é sempre verdadeiro — achado do security-reviewer), então uma grade gravada como `{}` por
+    // qualquer caminho tem de contar como "nunca declarou", igual a `null` literal. A função já
+    // poda dias sem nenhum período marcado e devolve `null` nesse caso (mesma regra usada para
+    // decidir o que é gravado no banco em `Profile.tsx`), então reusá-la aqui garante que CTA e
+    // gravação nunca discordem sobre o que é "vazio".
+    const hasNoDeclaredAvailability = normalizeAvailabilityGrade(worker.availability_days) === null;
+
     const primaryInvite = pendingInvites[0];
     const primaryInviteCompany = (primaryInvite?.job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
     const primaryInviteTitle = primaryInvite?.job?.title ?? 'Novo turno';
@@ -192,6 +203,24 @@ export default function Dashboard() {
                         className="bg-black hover:bg-white hover:text-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors whitespace-nowrap flex-shrink-0"
                     >
                         Ver Convite{pendingInvites.length > 1 ? `s (${pendingInvites.length})` : ''}
+                    </button>
+                </section>
+            )}
+
+            {/* --- CTA: DECLARAR DISPONIBILIDADE (F7 — R14/A10) --- */}
+            {hasNoDeclaredAvailability && (
+                <section className="bg-white p-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <CalendarClock size={20} className="text-primary flex-shrink-0" />
+                        <p className="text-sm font-bold text-gray-700 min-w-0">
+                            Declare sua disponibilidade para receber chamados mais certeiros.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => navigate('/profile')}
+                        className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase text-xs transition-colors whitespace-nowrap flex-shrink-0"
+                    >
+                        Declarar agora
                     </button>
                 </section>
             )}

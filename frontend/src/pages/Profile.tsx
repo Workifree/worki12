@@ -1,8 +1,9 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight } from 'lucide-react';
+import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
+import MyCertificationsSection from '../components/MyCertificationsSection';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -10,6 +11,20 @@ import { getPasswordStrength, validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, nor
 import { logError } from '../lib/logger';
 import { QRCodeSVG } from 'qrcode.react';
 import { TeamConnectionService } from '../services/teamConnectionService';
+import { normalizeAvailabilityGrade } from '../lib/availability';
+import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../types';
+
+// F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
+// × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
+// `AvailabilityDays` gravada em `workers.availability_days` (DDL `.harness/spec/disponibilidade-freela/ddl-aprovado.md`).
+const AVAILABILITY_WEEKDAYS: AvailabilityWeekday[] = ['0', '1', '2', '3', '4', '5', '6'];
+const AVAILABILITY_PERIODS: AvailabilityPeriod[] = ['manha', 'tarde', 'noite'];
+const AVAILABILITY_WEEKDAY_LABELS: Record<AvailabilityWeekday, string> = {
+    '0': 'Dom', '1': 'Seg', '2': 'Ter', '3': 'Qua', '4': 'Qui', '5': 'Sex', '6': 'Sáb',
+};
+const AVAILABILITY_PERIOD_LABELS: Record<AvailabilityPeriod, string> = {
+    manha: 'Manhã', tarde: 'Tarde', noite: 'Noite',
+};
 
 // Tipo de chave PIX — não persistido (a coluna `workers.pix_key` guarda só o valor,
 // mesmo padrão do `WorkerOnboarding`). Serve só para escolher a máscara/validação
@@ -66,6 +81,7 @@ interface WorkerProfile {
     earnings_total: number | null;
     experience_years: string | null;
     availability: string | string[] | null;
+    availability_days?: AvailabilityDays | null;
     updated_at?: Date;
 }
 
@@ -111,6 +127,12 @@ export default function Profile() {
     // Tipo de chave PIX selecionado na edição — não persistido, só orienta máscara/validação.
     const [pixKeyType, setPixKeyType] = useState<PixKeyType>('cpf');
 
+    // F7 — grade de disponibilidade em edição. `{}` é só o estado transitório do formulário;
+    // NUNCA é o que se grava (ver `handleSave` — `normalizeAvailabilityGrade` poda para `null`
+    // quando vazia, LM-8 do DDL: `null` e `{}` não podem coexistir como "não declarou").
+    const [availabilityGrade, setAvailabilityGrade] = useState<AvailabilityDays>({});
+    const initialAvailabilityGradeRef = useRef<AvailabilityDays>({});
+
     // Track initial form data for dirty detection
     const initialFormDataRef = useRef<FormData>({
         full_name: '',
@@ -129,7 +151,8 @@ export default function Profile() {
         formData.bio !== initialFormDataRef.current.bio ||
         formData.pix_key !== initialFormDataRef.current.pix_key ||
         formData.primary_role !== initialFormDataRef.current.primary_role ||
-        formData.roles !== initialFormDataRef.current.roles
+        formData.roles !== initialFormDataRef.current.roles ||
+        JSON.stringify(availabilityGrade) !== JSON.stringify(initialAvailabilityGradeRef.current)
     );
 
     // Warn user about unsaved changes before leaving
@@ -222,6 +245,9 @@ export default function Profile() {
                 setFormData(loadedFormData);
                 initialFormDataRef.current = loadedFormData;
                 setPixKeyType(guessPixKeyType(loadedFormData.pix_key));
+                const loadedGrade: AvailabilityDays = data.availability_days ?? {};
+                setAvailabilityGrade(loadedGrade);
+                initialAvailabilityGradeRef.current = loadedGrade;
                 setStats({
                     completedJobs: data.completed_jobs_count || 0,
                     totalEarnings: data.earnings_total || 0,
@@ -357,6 +383,22 @@ export default function Profile() {
         }
     };
 
+    // F7 — liga/desliga um único slot (dia × período) da grade em edição. Poda a chave do dia
+    // quando o último período dela é removido, para o objeto local nunca acumular `{ "2": [] }"
+    // (a poda final para NULL acontece em `handleSave`, via `normalizeAvailabilityGrade`).
+    const toggleAvailabilitySlot = (day: AvailabilityWeekday, period: AvailabilityPeriod) => {
+        setAvailabilityGrade(prev => {
+            const current = prev[day] ?? [];
+            const nextPeriods = current.includes(period)
+                ? current.filter(p => p !== period)
+                : [...current, period];
+            const next = { ...prev };
+            if (nextPeriods.length === 0) delete next[day];
+            else next[day] = nextPeriods;
+            return next;
+        });
+    };
+
     const handleSave = async () => {
         if (!profile) return;
         // Só valida a chave PIX se o freela de fato mexeu nela nesta edição. Um valor legado
@@ -372,6 +414,9 @@ export default function Profile() {
             setLoading(true);
             const rolesArray = formData.roles.split(',').map(r => r.trim()).filter(r => r.length > 0);
 
+            // F7 — `normalizeAvailabilityGrade` poda dias sem período e devolve `null` (SQL NULL)
+            // quando a grade fica vazia — NUNCA `{}` (LM-8 do DDL: duas representações de "vazio"
+            // quebrariam o CTA `availability_days IS NULL` do Dashboard).
             const updates = {
                 full_name: formData.full_name,
                 city: formData.city,
@@ -380,6 +425,7 @@ export default function Profile() {
                 pix_key: normalizePixKeyForStorage(pixKeyType, formData.pix_key),
                 primary_role: formData.primary_role,
                 roles: rolesArray,
+                availability_days: normalizeAvailabilityGrade(availabilityGrade),
                 updated_at: new Date()
             };
 
@@ -398,6 +444,10 @@ export default function Profile() {
 
             setProfile({ ...profile, ...updates });
             initialFormDataRef.current = { ...formData };
+            // F7 — a grade em edição vira o novo "baseline" (não o valor normalizado gravado:
+            // `{}` local continua representando "nada marcado" na UI de edição; a poda para
+            // `null` só importa no que vai pro banco, feita acima em `updates`).
+            initialAvailabilityGradeRef.current = { ...availabilityGrade };
             setIsEditing(false);
             addToast('Perfil atualizado com sucesso!', 'success');
 
@@ -813,6 +863,95 @@ export default function Profile() {
                             </div>
                         </div>
                     </div>
+
+                    {/* F7 — Disponibilidade declarada: grade dia × período. É SINAL, NUNCA TRAVA
+                        (DDL §1): só ordena quem a empresa vê primeiro no Chamado de Turno, nunca
+                        filtra nem bloqueia ninguém. Distinta do campo legado "Disponibilidade"
+                        acima (sem dia da semana, write-once do onboarding) — só esta grade
+                        responde "disponível nesta terça de manhã?". */}
+                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
+                        <h3 className="text-xl font-black uppercase mb-1 flex items-center gap-2">
+                            <CalendarClock size={20} /> Disponibilidade da Semana
+                        </h3>
+                        <p className="text-sm text-gray-500 font-medium mb-4">
+                            Marque os dias e períodos em que você topa trabalhar. As empresas do seu
+                            elenco te veem primeiro nos chamados de turno que casam com sua grade.
+                        </p>
+
+                        {isEditing ? (
+                            <div className="space-y-2">
+                                {AVAILABILITY_WEEKDAYS.map((day) => (
+                                    <div
+                                        key={day}
+                                        className="flex items-center gap-2"
+                                        role="group"
+                                        aria-label={`Disponibilidade de ${AVAILABILITY_WEEKDAY_LABELS[day]}`}
+                                    >
+                                        <span className="w-10 shrink-0 text-xs font-black uppercase text-gray-500">
+                                            {AVAILABILITY_WEEKDAY_LABELS[day]}
+                                        </span>
+                                        <div className="flex gap-2 flex-1">
+                                            {AVAILABILITY_PERIODS.map((period) => {
+                                                const active = (availabilityGrade[day] ?? []).includes(period);
+                                                return (
+                                                    <button
+                                                        key={period}
+                                                        type="button"
+                                                        onClick={() => toggleAvailabilitySlot(day, period)}
+                                                        aria-pressed={active}
+                                                        aria-label={`${AVAILABILITY_WEEKDAY_LABELS[day]} — ${AVAILABILITY_PERIOD_LABELS[period]}`}
+                                                        className={`min-h-11 flex-1 rounded-xl border-2 border-black font-black uppercase text-[11px] transition-colors ${
+                                                            active
+                                                                ? 'bg-primary text-white'
+                                                                : 'bg-white text-gray-500 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {AVAILABILITY_PERIOD_LABELS[period]}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                                <p className="text-xs text-gray-400 pt-2">
+                                    Deixe um dia sem nenhum período marcado se você não sabe ainda — isso é
+                                    diferente de "indisponível".
+                                </p>
+                            </div>
+                        ) : Object.keys(profile.availability_days ?? {}).length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
+                                    <span
+                                        key={day}
+                                        className="bg-primary-light text-primary px-3 py-2 rounded-pill font-bold text-xs uppercase border border-primary/30"
+                                    >
+                                        {AVAILABILITY_WEEKDAY_LABELS[day]}: {(profile.availability_days?.[day] ?? [])
+                                            .map((p) => AVAILABILITY_PERIOD_LABELS[p])
+                                            .join(', ')}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-start gap-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4">
+                                <p className="text-sm font-bold text-gray-500">
+                                    Você ainda não declarou sua disponibilidade. Declare para aparecer
+                                    primeiro nos chamados de turno do seu elenco.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditing(true)}
+                                    className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors min-h-11"
+                                >
+                                    Declarar disponibilidade
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* F8 — Repositório de certificações: o freela cadastra/edita/remove a própria
+                        certificação externa. v1 SEM ARQUIVO (ADR-20260821) — só metadado +
+                        número de registro. */}
+                    <MyCertificationsSection />
 
                     {/* Avaliações recebidas de empresas */}
                     {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
