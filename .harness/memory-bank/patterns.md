@@ -1260,3 +1260,45 @@ têm `_`.
 
 **Teste de sanidade barato, que teria pego na hora:** rodar o predicado junto do `position(...)` na
 mesma linha. Divergiram? O predicado está errado, não o dado.
+
+---
+
+## ✓ `regclass::text` — correto para EXECUTAR, errado para COMPARAR
+
+**Origem:** 22/08/2026. O mesmo defeito apareceu **duas vezes em arquivos independentes** no mesmo
+dia — `20260821000000` (LGPD) e `20260821001100` (F13) —, escrito por autores diferentes, e a
+segunda vez **derrubou uma aplicação em produção**.
+
+`conrelid::regclass::text` **omite o schema** quando ele está no `search_path`, e o das migrations
+do Supabase está. Sai `jobs`, não `public.jobs`.
+
+**Quando isso é bug.** Comparando contra literal:
+```sql
+AND con.conrelid::regclass::text <> ALL (ARRAY['public.jobs', ...])   -- ✗ nunca casa
+```
+Nada casa, `<> ALL` é sempre verdadeiro, e a asserção acusa **todas** as tabelas — inclusive as que
+estão na própria allow-list. Foi exatamente a mensagem de erro em produção: HALT listando as 14
+tabelas já classificadas. Forma correta, determinística e independente de `search_path`:
+```sql
+JOIN pg_class cl ON cl.oid = con.conrelid
+JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+AND format('%I.%I', ns.nspname, cl.relname) <> ALL (v_lista)
+```
+`%I` ainda cita corretamente identificador com maiúscula, como `public."Message"`.
+
+**Quando NÃO é bug.** Quando o nome vai ser **executado**:
+```sql
+EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);   -- ✓ correto
+```
+Aqui é auto-consistente: o mesmo `search_path` que renderizou o nome também o resolve. A migration
+de LGPD usa as **duas** formas, e hoje as duas estão certas pelo motivo certo — não uniformize.
+
+**A regra:** `regclass::text` é uma **projeção dependente de sessão**. Serve para falar com o banco;
+não serve para comparar com texto que você escreveu. A pergunta a fazer é "este nome vai ser
+EXECUTADO ou CONFERIDO?".
+
+**Por que passou duas vezes:** os dois casos eram asserções `fail-closed` que **nunca tinham sido
+executadas** — as migrations não haviam sido aplicadas. Asserção não rodada não é asserção; é
+intenção. Junto com o `_` do `LIKE`, o `HAVING` sem `GROUP BY` e o `CHECK` de comprimento passando
+por enum, são quatro guardas do mesmo dia que **pareciam** funcionar. Nenhum foi pego por revisão de
+código: todos foram pegos ao **executar o predicado contra o catálogo real** antes de confiar nele.
