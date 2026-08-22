@@ -1302,3 +1302,25 @@ executadas** — as migrations não haviam sido aplicadas. Asserção não rodad
 intenção. Junto com o `_` do `LIKE`, o `HAVING` sem `GROUP BY` e o `CHECK` de comprimento passando
 por enum, são quatro guardas do mesmo dia que **pareciam** funcionar. Nenhum foi pego por revisão de
 código: todos foram pegos ao **executar o predicado contra o catálogo real** antes de confiar nele.
+
+---
+
+## ✗ Antipadrão: `git add -A` com agente escrevendo na mesma árvore
+
+**Quem cometeu:** o orquestrador — **duas vezes** na mesma leva (21 e 22/08/2026).
+
+Commitar com `-A` enquanto um subagente edita arquivos no mesmo diretório varre o trabalho **em
+andamento** dele para dentro de um commit que fala de outra coisa. Na primeira vez entrou um ADR
+pela metade; na segunda, quatro arquivos de frontend de uma feature diferente foram para um commit
+de migration.
+
+Não corrompe nada — o agente continua com os arquivos no disco e segue trabalhando. O dano é de
+histórico: o commit passa a misturar assuntos, `git log` deixa de contar a verdade sobre quando cada
+mudança nasceu, e um `revert` daquele commit derruba trabalho alheio junto.
+
+**Regra:** enquanto houver agente ativo escrevendo, commitar **por caminho explícito**
+(`git add <arquivo>`), nunca `-A`. Se for inevitável usar `-A`, rodar `git status` antes e conferir
+que só aparece o que você tocou.
+
+**Sinal:** o próprio `git commit` lista os arquivos. Se aparecer arquivo que você não editou nesta
+tarefa, o commit está errado — desfazer é barato antes do push, caro depois.
