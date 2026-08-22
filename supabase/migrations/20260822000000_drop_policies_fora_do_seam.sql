@@ -35,14 +35,15 @@
 -- Falha fechado: so remove se o substituto do seam estiver mesmo no lugar.
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
+    -- Contagem explicita, e nao `HAVING count(*) = 3` dentro de EXISTS: o HAVING sem GROUP BY
+    -- ate funciona aqui, mas so porque `policyname` e UNIQUE por tabela em Postgres -- uma
+    -- invariante externa que o proximo leitor teria de conhecer para confiar no guarda. Guarda
+    -- que depende de premissa nao escrita e guarda que alguem copia para onde a premissa nao vale.
+    IF (SELECT count(*) FROM pg_policies
          WHERE schemaname = 'public' AND tablename = 'jobs'
            AND policyname IN ('jobs_insert_company_owner',
                               'jobs_update_company_owner',
-                              'jobs_delete_company_owner')
-        HAVING count(*) = 3
-    ) THEN
+                              'jobs_delete_company_owner')) <> 3 THEN
         RAISE EXCEPTION
           'ASSERCAO: as tres policies de jobs pelo seam nao estao todas presentes. Aplicar '
           '20260818100200 antes. Remover a legada agora tiraria acesso da empresa. HALT.';
