@@ -70,9 +70,14 @@ DROP POLICY IF EXISTS "Company owner can view own company" ON public.companies;
 --       WITH CHECK (company_id IN (SELECT id FROM public.companies WHERE owner_id = auth.uid()));
 --   CREATE POLICY "Company owner can view own company" ON public.companies FOR SELECT
 --       USING (owner_id = auth.uid());
--- VERIFICACAO pos-aplicacao (Q3 do contrato) — precisa devolver ZERO linhas:
+-- VERIFICACAO pos-aplicacao (Q3 do contrato) — precisa devolver ZERO linhas.
+-- ⚠️ USAR strpos, NUNCA LIKE. Em LIKE o `_` e CURINGA de um caractere, entao '%owner_id%'
+--    significa "owner" + QUALQUER caractere + "id" e casa com `is_company_owner(id)` — ou seja,
+--    com TODA policy corretamente migrada para o seam. O guarda acusaria exatamente o estado bom.
+--    (Descoberto em 22/08/2026 rodando esta propria verificacao: `qual` = 'is_company_owner(id)'
+--     dava LIKE = true e position('owner_id' in qual) = 0 ao mesmo tempo.)
 --   SELECT tablename, policyname FROM pg_policies
 --    WHERE schemaname='public' AND tablename IN ('companies','jobs')
---      AND coalesce(qual,'')||coalesce(with_check,'') LIKE '%owner_id%'
+--      AND strpos(coalesce(qual,'')||coalesce(with_check,''), 'owner_id') > 0
 --      AND policyname <> 'Users can create their company';
 -- ============================================================================
