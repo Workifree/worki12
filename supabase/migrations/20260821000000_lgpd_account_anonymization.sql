@@ -145,9 +145,16 @@ DECLARE
         -- NÃO é "adicionar para fazer passar" — a decisão já estava escrita em §2.1 "Demais
         -- tabelas": RETIDAS, chaves pseudônimas + timestamps, sem conteúdo pessoal, sustentando
         -- o BI e a integridade referencial de `shift_payments`. O que faltava era o NOME aqui.
-        -- (As irmãs `shift_calls`/`shift_call_targets`/`shift_attendance_confirmations` NÃO
-        --  aparecem porque penduram em `jobs`, não em workers/companies — a asserção só enxerga
-        --  dependência DIRETA das duas âncoras, e é assim que deve ser.)
+        -- ⚠️ CORREÇÃO 2026-08-22 — a primeira versão deste comentário dizia que as irmãs
+        --    `shift_calls`/`shift_call_targets`/`shift_attendance_confirmations` não aparecem
+        --    aqui "porque penduram em `jobs`". Isso é FALSO, e foi conferido no catálogo de
+        --    produção: `shift_calls.company_id`, `shift_calls.created_by`,
+        --    `shift_call_targets.worker_id` e `shift_attendance_confirmations.worker_id` são
+        --    uuid NU, SEM FK nenhuma. Elas somem da asserção (c) pela ausência TOTAL de FK —
+        --    exatamente o ponto cego descrito em §2.1.1 — e quem as cobre é a varredura (d),
+        --    via `v_classified_tables`. O framing antigo era pior que o erro: ensinava que
+        --    "dependência transitiva por `jobs`" estaria coberta. Não estaria — `jobs` também
+        --    nunca é apagada (§2.1.0), então nada cascateia de lá tampouco.
         'public.applications',                -- RETIDA (§2.1) — worker_id pseudônimo
         'public.jobs'                         -- RETIDA (§2.1) — company_id pseudônimo
     ];
