@@ -264,7 +264,15 @@ DECLARE
         -- varredura a absolveu -- aqui, desta vez, repo e catalogo coincidem.
         'shift_calls.reason',                       -- CHECK: falta|demissao|...|outro
         'shift_calls.status',                       -- CHECK: open|filled|cancelled|expired
-        'shift_calls.origin'                        -- CHECK: 'team' | 'sos'
+        'shift_calls.origin',                       -- CHECK: 'team' | 'sos'
+        -- PROMOVIDAS em 22/08 (Hh5 EXECUTADA): estas tres NAO tinham CHECK nenhum e viviam na
+        -- classe fraca por dependerem de constante de frontend. `20260822000400` criou os CHECKs
+        -- em producao, entao a garantia passou do `CompanyCreateJob.tsx` para o BANCO -- que e o
+        -- que o Article 4 exige. Agora (b3) as vigia: derrubar o CHECK passa a HALTar a migration
+        -- em vez de fazer esta classificacao mentir em silencio.
+        'jobs.status',                              -- CHECK: open|paused|deleted
+        'jobs.budget_type',                         -- CHECK: hourly|daily|project
+        'applications.status'                       -- CHECK: 13 valores (ver 20260822000400)
     ];
 
     -- RETIDAS por DECISAO ESCRITA ou por observacao do dado. Evidencia mais fraca que v_enum_text
@@ -277,27 +285,26 @@ DECLARE
         -- jobs: rótulo, enums em coluna text, e os dois RETIDOS por decisão (§2.1)
         'jobs.title',            -- RETIDO por decisão: rótulo operacional, congelado no term_text
         'jobs.location',         -- RETIDO por decisão: idem. Endereços reais — risco em §5.3
-        -- ⚠️ SEIS COLUNAS SEM ENFORCEMENT NENHUM NO BANCO (conferido em pg_constraint, 22/08):
-        --    jobs.scope, jobs.status, jobs.type, jobs.category, jobs.budget_type e
-        --    applications.status NAO TEM CHECK NENHUM. O que as mantem com cara de enum e CODIGO DE
-        --    FRONTEND -- `CompanyCreateJob.tsx` grava 'on-site'/'freelance'/'daily' como
-        --    CONSTANTES e `category` vem de selecao validada.
-        --    Chama-las de "enum" e impreciso e envelhece mal: Article 4 da constitution diz que
-        --    filtro no client e so UX e que a defesa dura e o banco. Um PATCH direto via
-        --    PostgREST (a empresa dona do turno passa na policy de UPDATE) escreve o que quiser
-        --    nelas HOJE. Logo a frase honesta nao e "sao enums", e "sao CONSTANTES DO CLIENTE,
-        --    sem enforcement no banco" -- risco declarado em ddl-aprovado §5.3, e proposta de
-        --    CHECK adiada para leva propria (§5.5 Hh5): adicionar CHECK em `jobs.status` vivo
-        --    exige varrer os valores existentes antes, e isso e migration com risco proprio.
-        --    NAO redigir nenhuma delas: `status` e maquina de estados (todo consumidor faz
-        --    `.neq('status','deleted')`) e as demais sustentam filtro, horario e BI.
-        'jobs.scope',                                   -- constante do cliente: 'on-site'
-        'jobs.type', 'jobs.budget_type',                -- constantes: 'freelance' / 'daily'
+        -- ⚠️ ATUALIZADO 22/08 (Hh5 EXECUTADA). Antes, SEIS colunas aqui nao tinham enforcement
+        --    nenhum no banco. Tres GANHARAM CHECK (`20260822000400`) e SUBIRAM para v_enum_text:
+        --    jobs.status, jobs.budget_type, applications.status.
+        --
+        --    As que FICAM sao classe fraca DEFINITIVA, nao pendencia:
+        --    `jobs.scope` e `jobs.type` tem valores ORFAOS em producao -- 'hybrid' e 'full-time' --
+        --    que nao existem em NENHUMA linha do repositorio: nem viva, nem morta, nem em teste,
+        --    nem em backend_legacy/, nem em frontend-angular-backup/. Foram gravados por uma UI
+        --    que nao esta mais no git. E `CompanyCreateJob.tsx` faz ROUND-TRIP na edicao (le a
+        --    linha e regrava os mesmos campos), entao um CHECK que os omitisse quebraria "editar
+        --    turno" em toda linha legada. Como nao ha como provar que sao os unicos orfaos, e as
+        --    duas nao tem UI, uniao de tipo nem seletor, sao TAXONOMIA ABERTA -- mesma natureza
+        --    de `jobs.category`, nao "enum ainda sem CHECK".
+        --
+        --    NAO redigir nenhuma delas: sustentam filtro, horario e BI, e `jobs.status` e maquina
+        --    de estados (todo consumidor faz `.neq('status','deleted')`).
+        'jobs.scope',                                   -- TAXONOMIA ABERTA (ver acima)
+        'jobs.type',                                    -- TAXONOMIA ABERTA (ver acima)
         'jobs.category',                                -- selecao validada no client
-        'jobs.status',                                  -- maquina de estados (client + RPCs)
-        'jobs.work_start_time', 'jobs.work_end_time',   -- horario 'HH:MM', formato do client
-        -- applications
-        'applications.status'                           -- idem: maquina de estados, sem CHECK
+        'jobs.work_start_time', 'jobs.work_end_time'    -- horario 'HH:MM', formato do client
         -- `shift_calls` nao tem mais coluna aqui: reason/status/origin foram PROMOVIDAS para
         -- v_enum_text (CHECK conferido no catalogo) e `message` e REDIGIDA. Inventario das cinco
         -- tabelas fechado em 22/08: 25 colunas textuais distintas, nenhuma sem classificacao.
