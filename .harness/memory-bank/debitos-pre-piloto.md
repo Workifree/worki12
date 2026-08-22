@@ -115,7 +115,18 @@ Quando `/profile` ganhar campo de CPF, o critério A3 da spec `termo-prestacao` 
 original (toast "Complete seu CPF no perfil" + link). Enquanto não ganhar, a mensagem honesta é a
 correta. Os dois itens andam juntos — não reverter A3 sozinho.
 
-## 9. 🔴 PRÉ-EXISTENTE — `reviews` é varrível por qualquer conta autenticada
+## 9. ✅ RESOLVIDO — `reviews` era varrível por qualquer conta autenticada
+> ✅ **RESOLVIDO e CONFERIDO NO CATÁLOGO em 22/08/2026** (não no histórico de migrations, que já
+> mentiu neste projeto — a consulta foi `pg_policies` / `pg_get_functiondef` contra produção).
+>
+> `reviews` tem hoje **uma única** policy de SELECT:
+> `reviews_select_related → (reviewer_id = auth.uid() OR reviewed_id = auth.uid() OR can_view_reviews_of(reviewed_id))`.
+> A permissiva antiga (`USING (true)`) não existe mais. Aplicado por `20260821000100` +
+> `20260821000200` — **foram precisas duas migrations** porque o `DROP POLICY` da primeira mirava
+> três nomes inexistentes e passou em silêncio, deixando a permissiva viva; policies de SELECT se
+> combinam por `OR`, então a restritiva não restringia nada. Só apareceu ao consultar `pg_policies`
+> depois de aplicar.
+
 
 **Origem:** gate do F12 (badges). **Não introduzido por nenhuma feature desta leva — está em produção.**
 
@@ -264,7 +275,19 @@ honesta; a segunda preserva o dado com a ressalva.
 
 **Gate:** decidir antes de ligar o SOS — depois, o número já terá sido lido como comparável.
 
-## 15. 🔴🔴 EM PRODUÇÃO — o uuid do freela é credencial de PII
+## 15. ✅ RESOLVIDO — o uuid do freela era credencial de PII
+> ✅ **RESOLVIDO e CONFERIDO NO CATÁLOGO em 22/08/2026** (não no histórico de migrations, que já
+> mentiu neste projeto — a consulta foi `pg_policies` / `pg_get_functiondef` contra produção).
+>
+> `can_view_worker_profile` **não tem mais o ramo `'pending'`**: o predicado vivo é
+> `tc.status = 'accepted'`. As ocorrências da palavra "pending" no corpo são apenas o comentário que
+> explica a remoção e proíbe reintroduzi-la. `list_team_connection_cards()` existe (projeção fechada
+> de 6 campos, nenhum PII) e `get_profile_reviews` anula `reviewer_id` para terceiro. Aplicado por
+> `20260821000300`.
+>
+> ⚠️ Ao reconferir isto, **não** teste com `prosrc LIKE '%pending%'`: dá falso positivo no
+> comentário. Foi o que aconteceu nesta própria reconferência. Leia o predicado.
+
 
 **Origem:** gate do `avatar_url` na F10 (21/08/2026). **Não foi introduzido por nenhuma feature
 desta leva.** ADR: `ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii.md`.
