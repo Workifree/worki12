@@ -169,7 +169,27 @@ deploy fecha o par.
 
 ---
 
-## F13 (multi-unidade) — portão de pré-voo RODADO em produção (22/08)
+## 🔴 PRODUÇÃO ESTÁ À FRENTE DO `main` — prioridade ao fechar a branch
+
+Seis migrations **aplicadas em produção** existem apenas na branch `feat/multi-unidade` (worktree),
+não em `supabase/migrations/` do `main`:
+
+`20260818100000` · `20260818100100` · `20260818100200` · `20260818100300` ·
+`20260821001000` · `20260821001100`
+
+Consequências reais, já sentidas hoje:
+1. Reproduzir o `main` do zero **não** reconstrói o banco de produção.
+2. Um revisor de outra migration foi procurar `20260821001000` — que define o corpo vigente de
+   `list_team_connection_cards` — e **não achou**. Teve de inferir o corpo cruzando a migration
+   anterior com prosa do memory-bank. Reversibilidade que depende de arqueologia não é
+   reversibilidade.
+
+Não é erro de aplicação: é o custo de aplicar a partir de uma branch de feature antes do merge.
+**Ação:** assim que o frontend da Fase 4 entrar, mergear `feat/multi-unidade` em `main` e conferir
+que as seis aparecem lá. Até então, todo DOWN escrito no `main` precisa ser **literal**, sem citar
+arquivo que só existe na branch.
+
+## F13 (multi-unidade) — Fases 0/1/2 E 3 APLICADAS (22/08)
 
 **Q0 (BLOQUEANTE) = 0 em todas as cinco linhas.** Nenhum `jobs`/`team_connections`/`shift_payments`/
 `team_lists`/`job_series` ancorado em empresa inexistente. O narrowing da D3 não tira acesso de ninguém.
@@ -353,3 +373,25 @@ worktree só saem arquivos de F13. Mas o arquivo existe nos dois lugares com con
 
 **Ao fechar a branch:** trazer `main` para dentro dela antes de qualquer aplicação futura a partir
 do worktree, e conferir que o arquivo de LGPD ficou igual ao do principal.
+
+## F13 Fase 3 aplicada (22/08) — com o mesmo bug do `regclass`, achado e corrigido
+
+`20260818100300` (RPCs de convite de gerente) aplicou de primeira. Cria `generate_invite_token`,
+`invite_company_manager`, `accept_manager_invite`, `revoke_company_manager` e `get_my_companies`.
+**Não** cria `list_company_managers` — a spec a menciona, o arquivo não a define. Registrado para
+quem for construir a tela: ou ela vem de outro lugar, ou a tela lista por `select` direto.
+
+`20260821001100` (guarda exaustiva do DELETE da casca vazia) **falhou na primeira tentativa**, com o
+**mesmo defeito de `regclass::text`** que já tínhamos corrigido na migration de LGPD — segunda
+ocorrência independente, em arquivo de outro autor, no mesmo dia. A asserção comparava
+`conrelid::regclass::text` (que sai sem schema) contra literais `'public.x'`, então acusou **as 14
+tabelas que estavam na própria allow-list**. Corrigido com `format('%I.%I', ns.nspname, cl.relname)`,
+validado em modo leitura contra produção (zero linhas), e aplicado.
+
+Estado final conferido no catálogo: `accept_manager_invite` com **14** `NOT EXISTS` (eram 6),
+`anon` sem EXECUTE, `authenticated` com.
+
+**Distinção que ficou clara e vale guardar:** `regclass::text` é **correto** quando o nome vai ser
+EXECUTADO (`format('ALTER TABLE %s ...')`), porque o mesmo `search_path` que o renderiza também o
+resolve; o defeito existe só na **COMPARAÇÃO contra literal**. A migration de LGPD usa as duas
+formas e as duas estão certas — não uniformizar.
