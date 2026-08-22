@@ -1392,7 +1392,11 @@ SELECT schemaname, tablename, policyname,
                        'job_series','shift_attendance_confirmations','service_terms',
                        'worker_trainings','organizations','organization_members','company_members')
  ORDER BY p.tablename, p.policyname;
--- Criterio: nenhuma linha de empresa contem a string 'owner_id' inline. Toda autorizacao de
+-- Criterio: nenhuma linha de empresa contem a string 'owner_id' inline.
+-- ⚠️ Ao automatizar este criterio, use `strpos(expr,'owner_id') > 0` e NAO `expr LIKE '%owner_id%'`.
+--    Em LIKE, `_` e curinga de um caractere: '%owner_id%' casa com `is_company_owner(id)`, isto e,
+--    com toda policy JA migrada para o seam. O guarda acusaria precisamente o estado correto.
+--    (Pego em 22/08/2026 ao rodar o Q3 depois de aplicar a Fase 2.) Toda autorizacao de
 -- empresa aparece como is_company_owner / is_job_owner / is_organization_operator.
 
 -- Q4 (POS, = A11) — a dependencia do par ficou registrada.

@@ -294,10 +294,13 @@ foi decidido*. O que não pode existir é dependência **não decidida**.
 | `worker_company_badge_prefs` | **DELETE** (`worker_id` **ou** `company_id`) *(emenda 2026-08-21)* | Confirmado DELETE — **mas o DELETE sozinho é uma regressão de privacidade** e é isso que a emenda corrige. A linha é o **opt-out do freela** ("não mostre que trabalhei na empresa X"); o badge em si é derivado de `applications`/`jobs`/`reviews`, todos RETIDOS. Apagar o veto sem mais nada **ressuscita** o badge que ele suprimia, para toda empresa que ainda passa em `can_view_worker_profile` pelo ramo `applications`. Por isso o DELETE só é aceito **acompanhado** de `workers.badges_hidden = true` (ver tabela `workers`), que é a chave-mestra e fecha a seção inteira num ponto só. **DELETE e a flag andam juntos ou nenhum dos dois vai.** |
 | `notifications` | **DELETE** (`user_id`) | Títulos e mensagens contêm nome, valor e link. |
 | `payment_methods` (empresa) | **DELETE** | Token de cartão. **Também revogar no Asaas** — §4.1(3b). |
-| `applications`, `shift_calls`, `shift_call_targets`, `shift_attendance_confirmations`, `jobs` | **RETIDOS** | Chaves pseudônimas + timestamps. Nenhum conteúdo pessoal. Sustentam o BI e a integridade de `shift_payments`. Art. 7º, IX (legítimo interesse) sobre dado pseudônimo. |
+| `shift_call_targets`, `shift_attendance_confirmations` | **RETIDOS** | Chaves pseudônimas + timestamps, **e só isso** (conferido coluna a coluna). Sustentam o BI e a métrica `first_claim_at`. Art. 7º, IX (legítimo interesse) sobre dado pseudônimo. |
+| `jobs` | **LINHA RETIDA, TEXTO LIVRE REDIGIDO** — `briefing`, `description`, `requirements` → marcador `'[CONTEUDO REMOVIDO …]'`. Predicado: `company_id = ANY(<empresas do titular>)`. `title`, `location` e todo o resto **RETIDOS**. *(emenda 2026-08-22)* | **Correção de uma incoerência do próprio contrato, não classificação nova.** A versão anterior desta linha declarava `jobs` retida porque "nenhum conteúdo pessoal" — e isso é **falso**: `briefing` é texto livre da empresa, da **mesma classe** de `companies.default_briefing`, que esta rotina **APAGA** por "pode conter nomes", e de `job_series.job_template`, que esta rotina **DELETA** dizendo "mesma classe de `default_briefing`". E `create_job_series` (20260817000400) escreve `jobs.briefing` **copiando `job_template` literalmente**: a rotina apagava o molde e guardava as cópias. `description`/`requirements` são o mesmo campo de texto livre por outro nome — distinguir um do outro seria arbitrário. **A linha não pode sair** (âncora de `shift_payments`/`service_terms`, BI, integridade), então sai o **conteúdo**: é exatamente o padrão de `ADR-20260821-expurgo-de-conteudo-nao-de-linha`, aplicado agora fora do expurgo por prazo. **Marcador e não `NULL`:** `title`/`location` provam que este schema tem coluna textual `NOT NULL`, a lista vai crescer, e um `NULL` em coluna `NOT NULL` estouraria **dentro** da transação destrutiva; o marcador também explica o vazio para a contraparte em vez de parecer defeito. **`title`/`location` ficam, e é decisão escrita:** não são narrativa livre, são o rótulo operacional e o local que o **freela — terceiro que continua na plataforma** — lê no próprio recibo; e ambos já estão **congelados** dentro de `service_terms.term_text` aceito, que é RETIDO INTEGRALMENTE como prova. Apagar aqui não elimina a informação e degrada o registro de terceiro sobre transação encerrada. Risco residual em §5.3. |
+| `applications` | **LINHA RETIDA, `cover_letter` REDIGIDA** (marcador). Predicado: `worker_id = <titular>` — **só o ramo freela**. *(emenda 2026-08-22)* | `cover_letter` é texto que o **freela escreveu sobre si mesmo** (nome, telefone, histórico) no fluxo pull legado. Zero valor fiscal ou probatório — quem prova a transação é `service_terms`/`shift_payments`. **Sem ramo empresa:** o texto pertence ao freela; a empresa que sai não apaga o que o freela escreveu. Hoje há 0 linhas preenchidas em produção, mas a coluna existe e a UI escreve nela — classificar depois de haver dado seria classificar tarde. |
+| `shift_calls` | **LINHA RETIDA, `message` REDIGIDA** (marcador). **Dois** predicados: `company_id = ANY(<empresas>)` **ou** `created_by = <titular>`. *(emenda 2026-08-22)* | Texto livre que a empresa (ou o **gerente** dela) escreveu no disparo 1→N — mesma classe do `message` de `worker_referrals`, que esta rotina **DELETA**. **O predicado tem de ser explícito e duplo:** `shift_calls.company_id` e `created_by` são `uuid` **nu, sem FK** (conferido no catálogo de produção — §2.1.1), então nada aqui é alcançado por cascata; e `created_by` é a **única** forma de chegar ao texto escrito pelo **gerente**, cuja unidade pertence a outro dono e portanto nunca aparece em `v_company_ids`. `reason` é enum e fica. |
 | `reviews` | **RETIDAS** | O texto pertence ao autor e descreve a contraparte (reputação de terceiro). A autoria degrada sozinha: `get_profile_reviews` resolve o nome **ao vivo** em `workers`, e a lápide `'[Conta Deletada]'` faz `mask_display_name` devolver `NULL`. É por isso que `reviewer_name` nunca foi desnormalizado (20260816130000). |
 | `wallets`, `wallet_transactions`, `escrow_transactions` | **INTOCADAS — Article 8/9** | Nenhum `UPDATE` de saldo, nenhum `DELETE` de linha de razão. A rotina **recusa** rodar se houver saldo > 0 ou escrow ativo. |
-| `company_members` (F13) | **SOFT-REMOVE** — `status='removed'` + `invited_email = NULL` + `invite_token = NULL`. Dois predicados: `user_id = <titular>` **ou** `company_id = ANY(<empresas do titular>)`. *(emenda 2026-08-22)* | **A classificação é decisão de produto, não manutenção de lista.** As três opções e por que só uma sobra: **(a) DELETE** — a própria F13 já recusou apagar este vínculo (`revoke_company_manager`: "NUNCA DELETE"; `ON DELETE RESTRICT` em `company_id`), e a rotina de LGPD não pode ser a porta dos fundos que faz o que a RPC do produto proíbe. Some o registro de quem operou a unidade e quando, enquanto os turnos, convites e pagamentos criados por essa pessoa **continuam existindo**, pendurados na unidade, sem referência de autoria. **(b) RETER** — errado e sem discussão: `status='active'` é autorização operacional; quem pediu exclusão não pode seguir com alcance sobre a unidade. **(c) SOFT-REMOVE** — fecha o acesso e preserva a trilha. É o que fica. **O que sai é PII, não a linha:** `invited_email` é e-mail de pessoa natural — dado pessoal **direto**, não pseudônimo, e é *o* item de PII desta tabela; `invite_token` é credencial portadora e um convite pendente de conta excluída não pode continuar resgatável. **O que fica é pseudônimo:** `user_id`/`created_by` são uuid apontando para uma lápide — mesma régua já aceita em `worker_certifications.verified_by_company_id`; `invited_at`/`accepted_at` são a trilha que justifica o soft. **O segundo predicado não é simetria decorativa:** quando a **empresa** sai, seus gerentes são terceiros que continuam na plataforma — a unidade virou lápide (ninguém opera lápide) e o e-mail deles perde a base que o sustentava. |
+| `company_members` (F13) | **SOFT-REMOVE** — `status='removed'` + `invited_email = NULL` + `invite_token = NULL`. **TRÊS** predicados: `user_id = <titular>` **ou** `company_id = ANY(<empresas do titular>)` **ou** (`status='invited' AND created_by = <titular>`). *(emenda 2026-08-22; 3º predicado na revisão do mesmo dia)* | **A classificação é decisão de produto, não manutenção de lista.** As três opções e por que só uma sobra: **(a) DELETE** — a própria F13 já recusou apagar este vínculo (`revoke_company_manager`: "NUNCA DELETE"; `ON DELETE RESTRICT` em `company_id`), e a rotina de LGPD não pode ser a porta dos fundos que faz o que a RPC do produto proíbe. Some o registro de quem operou a unidade e quando, enquanto os turnos, convites e pagamentos criados por essa pessoa **continuam existindo**, pendurados na unidade, sem referência de autoria. **(b) RETER** — errado e sem discussão: `status='active'` é autorização operacional; quem pediu exclusão não pode seguir com alcance sobre a unidade. **(c) SOFT-REMOVE** — fecha o acesso e preserva a trilha. É o que fica. **O que sai é PII, não a linha:** `invited_email` é e-mail de pessoa natural — dado pessoal **direto**, não pseudônimo, e é *o* item de PII desta tabela; `invite_token` é credencial portadora e um convite pendente de conta excluída não pode continuar resgatável. **O que fica é pseudônimo:** `user_id`/`created_by` são uuid apontando para uma lápide — mesma régua já aceita em `worker_certifications.verified_by_company_id`; `invited_at`/`accepted_at` são a trilha que justifica o soft. **O segundo predicado não é simetria decorativa:** quando a **empresa** sai, seus gerentes são terceiros que continuam na plataforma — a unidade virou lápide (ninguém opera lápide) e o e-mail deles perde a base que o sustentava. **O terceiro predicado fecha um buraco que a abertura do portão para a classe gerente/sócio (§2.5) tornou alcançável:** quem emite convite de gerente é o **operador de rede** (`invite_company_manager` exige `is_organization_operator`), logo ele convida para unidades **irmãs**, que **não** estão em `v_company_ids`. Sem ele, a exclusão apagaria a credencial e deixaria linhas `status='invited'` com `invited_email` **de terceiro** e `invite_token` **vivo** (índice único, validade de 7 dias), assinadas por uma conta que não existe mais — credencial portadora resgatável emitida por ninguém. **E ele é restrito a `status='invited'` de propósito:** a linha **ativa** pertence ao **gerente**, terceiro que continua operando uma unidade de **outro** dono; ali `created_by` é só a trilha de quem convidou, e derrubar o acesso dele porque o convidante saiu seria dano a terceiro. É a **simetria exata** do predicado de `organization_members`, que já carregava este ramo com esta justificativa — a assimetria era o defeito. |
 | `organization_members` (F13) | **SOFT-REMOVE** — `status='removed'` + `invited_email = NULL` + `invite_token = NULL`. Predicados: `user_id = <titular>` **ou** (`status='invited' AND created_by = <titular>`). **Sem ramo por `company_id`.** *(emenda 2026-08-22)* | Mesma régua de `company_members`, com uma diferença que **não pode ser copiada errado**: a organização pertence também às unidades **irmãs, de outros sócios**. Excluir a conta de um sócio **não** desliga os demais — por isso não existe predicado por empresa aqui. O segundo predicado cobre o convite **ainda pendente** emitido por quem está saindo: um convite de rede assinado por uma conta que deixou de existir não deve continuar aceitável, e carrega o e-mail de um terceiro. Esta tabela **não tem FK nenhuma** para `workers`/`companies`/`auth.users` — foi por isso que passou despercebida; ver §2.1.1. |
 | `organizations` (F13) | **RETIDA** (nada a fazer — declarado, não esquecido) *(emenda 2026-08-22)* | `name` é o nome da **rede**, compartilhado com as unidades irmãs de outros sócios: apagar ou branquear seria dano a terceiro. `created_by` é uuid pseudônimo apontando para lápide (régua de `verified_by_company_id`). Não há coluna de contato. **Mas a retenção só é segura junto com a GUARDA 4** (§2.5): sem ela, fechar os `organization_members` do último dono deixaria a rede **órfã** — ninguém passa em `is_organization_operator`, e os dois `ON DELETE RESTRICT` (`companies.organization_id` e `organization_members.organization_id`) impedem qualquer limpeza. Rede inoperável **e** inapagável. |
 | `companies.organization_id` (F13) | **RETIDA** *(emenda 2026-08-22)* | FK pseudônima para a rede, que sobrevive por causa das irmãs. Além disso a Fase 1 da F13 põe `NOT NULL` nesta coluna — branquear seria inexpressável. |
@@ -654,6 +657,31 @@ COMMENT ON COLUMN public.service_terms.anonymized_at IS
 > banco **antes** da F13), e as asserções **(d)/(e)** — estão escritos em
 > `supabase/migrations/20260821000000_lgpd_account_anonymization.sql`, que é a **cópia normativa**
 > desses trechos. Não duplicados aqui para não criar duas fontes divergentes do mesmo corpo.
+>
+> **Revisão 2026-08-22 (mesma regra, quatro deltas a mais).** Também vivem só no arquivo da
+> migration, pela mesma razão:
+> 1. **Reconhecimento da classe GERENTE/SÓCIO** (`v_is_member`), sob `to_regclass` — no-op
+>    enquanto a F13 não subir. **Muda o D4 do ADR-20260822** e o §4.4: o reconhecimento fica
+>    **aqui**, não na migration da F13. Motivo decisivo: em replay de CI a F13 (`20260818100000`)
+>    roda **antes** desta, então um `CREATE OR REPLACE anonymize_account` lá seria **sobrescrito**
+>    por esta migration e o reconhecimento **sumiria em CI e existiria em produção** — a doença de
+>    §2.1.2 e do D5, de novo. O corpo da função tem **um** dono.
+> 2. **Terceiro predicado de `company_members`** (`status='invited' AND created_by = titular`) —
+>    ver §2.1.
+> 3. **Redação de texto livre** em `jobs`, `applications` e `shift_calls` — ver §2.1, e a
+>    asserção **(a2)** de §2.2, que exige que essas colunas existam **e sejam textuais** antes de
+>    a transação destrutiva começar.
+> 4. **`v_counts` nasce com todas as chaves em zero** e o retorno ganha **`is_member`**. Chave
+>    **ausente** e chave **zero** são fatos diferentes: para a classe gerente o retorno era
+>    `is_worker=false`, `company_ids=[]` e as chaves de domínio **sumidas** — indistinguível de
+>    "bug, as âncoras não resolveram".
+>
+> ⚠️ **Drift declarado (pré-existente, não introduzido nesta revisão):** os blocos SQL de §2.2 e
+> §2.5 são o baseline de 21/08 e **não** contêm as emendas de 22/08 — inclusive a correção D5 de
+> `regclass::text`, que aqui ainda aparece na forma **quebrada**. Enquanto a migration não for
+> aplicada, o arquivo `.sql` é a fonte de verdade do **corpo**; esta seção continua normativa para
+> a **classificação** (§2.1) e para as **decisões**. Ressincronizar os blocos é tarefa própria e
+> vai ao humano (§5.5).
 
 ```sql
 -- =============================================
@@ -2089,24 +2117,44 @@ Duas leituras possíveis, e uma delas é um vazamento:
 - ✅ `not_found` é **falha**: a Edge Function responde 400 e **não** chama `deleteUser`. O gerente
   que pede exclusão precisa de um caminho que **existe** — não de um que falha em silêncio.
 
-**Consequência para quem implementar a F13 (não é escopo deste gate, é dependência dela):** a F13
-precisa fechar essa lacuna, e a costura já está pronta — `anonymize_account` executa o bloco de
-`company_members`/`organization_members` sob `to_regclass`, então o corpo já age assim que as
-tabelas existirem. O que falta é o **reconhecimento**: a RPC precisa deixar de devolver `not_found`
-para quem tem `company_members`/`organization_members`. Emenda mínima, a ser feita **na migration da
-F13** (que ordena depois desta) e não aqui, porque depende de tabelas que aqui podem não existir:
+Mas **as duas leituras acima tratam do lado da Edge Function.** Deixar o contrato só nisso fecharia o
+furo de **segurança** (credencial apagada com vínculo ativo) às custas de abrir um furo de
+**direito**: o gerente ficaria **permanentemente impedido** de excluir a própria conta — dentro da
+rotina que existe justamente para cumprir o art. 18, VI. O portão correto é **reconhecer a classe**,
+não recusá-la.
+
+#### 4.4.1 Onde mora o reconhecimento — **revisão 2026-08-22 do D4**
+
+> **Decisão revisada: o reconhecimento fica na migration de LGPD (`20260821000000`), guardado por
+> `pg_catalog.to_regclass`, e NÃO na migration da F13.**
+
+A versão anterior deste parágrafo mandava fazer a emenda "na migration da F13, que ordena depois
+desta". **Isso só é verdade em produção.** Em replay do zero (CI/staging) a F13 é `20260818100000`
+e roda **antes** de `20260821000000`: um `CREATE OR REPLACE FUNCTION public.anonymize_account` na
+F13 seria **sobrescrito** pela migration de LGPD logo em seguida, e o reconhecimento **existiria em
+produção e sumiria em CI**. É literalmente o defeito que §2.1.2 e o D5 do ADR-20260822 existem para
+matar — reintroduzido pela recomendação do próprio ADR.
+
+Regra que fica: **o corpo de `anonymize_account` tem um único dono, a migration que o define.**
+Fronteira com feature futura se resolve com `to_regclass` (execução dinâmica, no-op enquanto a
+tabela não existir), não com reescrita da função a partir de outra leva. Implementado assim:
 
 ```sql
--- na F13, DEPOIS de criar as tabelas de membership:
--- em anonymize_account, a condição de not_found passa a ser
---   NOT v_is_worker
---   AND cardinality(v_company_ids) = 0
---   AND NOT EXISTS (SELECT 1 FROM public.company_members      WHERE user_id = p_user_id)
---   AND NOT EXISTS (SELECT 1 FROM public.organization_members WHERE user_id = p_user_id)
+-- em anonymize_account, ANTES do not_found (guardado por to_regclass — a tabela pode não existir):
+--   IF pg_catalog.to_regclass('public.company_members') IS NOT NULL THEN
+--       EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.company_members WHERE user_id = $1)'
+--          INTO v_is_member USING p_user_id;
+--   END IF;   -- idem organization_members
+--   IF NOT v_is_worker AND cardinality(v_company_ids) = 0 AND NOT v_is_member THEN ... not_found
 ```
 
-Enquanto a F13 não subir, a classe não existe em produção — mas a ordem de replay em CI já a cria, e
-o E2E de exclusão de conta de gerente é **critério de aceite da F13**, não desta leva.
+O que **não** muda: `not_found` continua sendo **falha** para a Edge Function (400, sem
+`deleteUser`) — agora significando de verdade "não existe titular". O que a F13 herda: o **E2E de
+exclusão de conta de gerente** continua sendo **critério de aceite dela**, porque só lá a classe
+passa a existir. O que a F13 **não** faz mais: tocar no corpo desta função.
+
+E o reconhecimento **não vem sozinho** — abrir o portão tornou alcançável o buraco do
+`created_by` em `company_members` (terceiro predicado, §2.1). Portão e predicado sobem juntos.
 
 ---
 

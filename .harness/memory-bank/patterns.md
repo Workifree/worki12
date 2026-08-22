@@ -1228,3 +1228,35 @@ memória: `pg_constraint`, `pg_policies`, `pg_proc` ou o arquivo que cria o obje
 
 **Sinal de alerta na própria escrita:** as palavras "porque", "só", "e é assim que deve ser" num
 comentário sobre ausência. Se a frase justifica um vazio, ela precisa de fonte.
+
+---
+
+## ✓ Padrão: `_` é curinga no `LIKE` — busca de identificador usa `strpos`, não `LIKE`
+
+**Origem:** 22/08/2026, rodando o Q3 da F13 ("nenhuma policy de empresa com `owner_id` inline")
+contra produção.
+
+O critério foi automatizado como `coalesce(qual,'')||coalesce(with_check,'') LIKE '%owner_id%'`.
+Ele acusou `companies_update_operator`, cuja expressão é `is_company_owner(id)` — sem `owner_id`
+nenhum. A mesma linha devolvia, ao mesmo tempo:
+
+```
+qual = 'is_company_owner(id)'   LIKE '%owner_id%' = true   position('owner_id' in qual) = 0
+```
+
+**Causa:** em `LIKE`, `_` casa **um caractere qualquer**. `'%owner_id%'` não procura `owner_id`,
+procura `owner` + *qualquer caractere* + `id`. E `is_company_own**er(id)**` tem exatamente isso.
+
+**Por que é perigoso e não só chato:** o guarda acusava **justamente as policies certas**. Toda
+policy migrada para o seam chama `is_company_owner(...)` e portanto casa. Um guarda que grita no
+estado bom é pior que guarda nenhum: ou some no ruído, ou leva alguém a "consertar" o que está
+correto. Mesma família do `regclass::text` sem schema (achado no mesmo dia): mecanismo que parece
+funcionar, nunca foi conferido contra dado real, e mente na direção que ninguém checa.
+
+**Regra:** procurar nome de coluna, função ou identificador dentro de expressão de catálogo
+(`pg_policies.qual`, `pg_get_expr`, `prosrc`) usa `strpos(expr, 'nome') > 0`. Se `LIKE` for
+necessário, escapar: `LIKE '%owner\_id%' ESCAPE '\'`. Vale para todo identificador SQL — quase todos
+têm `_`.
+
+**Teste de sanidade barato, que teria pego na hora:** rodar o predicado junto do `position(...)` na
+mesma linha. Divergiram? O predicado está errado, não o dado.

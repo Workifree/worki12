@@ -35,15 +35,19 @@
 --       "anonimização" (§0.4: é eliminação parcial + retenção justificada sobre chave pseudônima;
 --       não é anonimização no sentido do art. 5º, XI).
 --
---   (3) EMENDA 2026-08-22 — CLASSE DE USUÁRIO NÃO COBERTA: o GERENTE da F13. Depois de
---       `accept_manager_invite`, a casca de `companies` do gerente é APAGADA (20260818100300),
---       e ele nunca teve linha em `workers`. Logo `anonymize_account` devolve `not_found` para
---       ele — é a ÚNICA classe de usuário do produto que a rotina não reconhece. A Edge Function
---       (§4) NÃO pode tratar `not_found` como "nada a fazer, siga para o deleteUser": isso
---       apagaria a credencial deixando `company_members` ACTIVE com `invited_email` intacto.
---       Contrato: `not_found` é FALHA, e a Edge Function aborta ANTES do deleteUser.
---       Enquanto a F13 não subir, esta classe não existe em produção — mas a ordem de replay em
---       CI já a cria. Ver ddl-aprovado §4.4.
+--   (3) EMENDA 2026-08-22 — CLASSE DE USUÁRIO GERENTE (F13): RECONHECIDA AQUI, não na F13.
+--       Depois de `accept_manager_invite`, a casca de `companies` do gerente é APAGADA
+--       (20260818100300), e ele nunca teve linha em `workers`: as duas âncoras da rotina dão
+--       vazio e ela devolveria `not_found` para um titular LEGÍTIMO. O portão foi aberto no §5
+--       (`v_is_member`), guardado por `to_regclass` — no-op enquanto a F13 não subir.
+--       ⚠️ REVISÃO 2026-08-22 do D4 do ADR-20260822: pôr esse reconhecimento "na migration da
+--       F13" era IMPLEMENTÁVEL SÓ EM PRODUÇÃO. Em CI a F13 (20260818100000) roda ANTES desta;
+--       um `CREATE OR REPLACE anonymize_account` lá seria SOBRESCRITO por esta migration e o
+--       reconhecimento SUMIRIA — exatamente a doença "dois ambientes falhando de formas
+--       diferentes" que a §2.1.2 e o D5 existem para matar. O corpo da função tem UM dono: esta
+--       migration. Ver ddl-aprovado §2.5/§4.4 e ADR-20260822 D4 (revisado).
+--       O contrato da Edge Function NÃO muda: `not_found` continua sendo FALHA, e ela aborta
+--       ANTES do deleteUser — agora `not_found` significa mesmo "não existe titular".
 --
 -- Até (1), (2) e (3): esta migration pode ir ao banco, mas a Edge Function `delete-account` NÃO
 -- deve ser liberada ao usuário final. Ver `.harness/spec/lgpd-producao/ddl-aprovado.md` §0.3.1,
@@ -143,8 +147,15 @@ DECLARE
         -- EMENDA 2026-08-22 (2) — achadas pela PRÓPRIA asserção (c) depois que o conserto do
         -- `regclass::text` acima a fez funcionar de verdade: ela acusou `applications` e `jobs`.
         -- NÃO é "adicionar para fazer passar" — a decisão já estava escrita em §2.1 "Demais
-        -- tabelas": RETIDAS, chaves pseudônimas + timestamps, sem conteúdo pessoal, sustentando
-        -- o BI e a integridade referencial de `shift_payments`. O que faltava era o NOME aqui.
+        -- tabelas": a LINHA é RETIDA (chave pseudônima + timestamps), sustentando o BI e a
+        -- integridade referencial de `shift_payments`. O que faltava era o NOME aqui.
+        -- ⚠️ EMENDA 2026-08-22 (3) — "RETIDA" NÃO é mais "nada a fazer". A justificativa antiga
+        --    dizia "nenhum conteúdo pessoal", e isso era FALSO: `jobs.briefing/description/
+        --    requirements`, `applications.cover_letter` e `shift_calls.message` são TEXTO LIVRE.
+        --    A rotina apagava o MOLDE (`companies.default_briefing`, `job_series.job_template`)
+        --    e retinha as CÓPIAS — `create_job_series` (20260817000400) copia `job_template`
+        --    literalmente para `jobs.briefing`. Agora a linha fica e o TEXTO sai (redação com
+        --    marcador), no padrão de ADR-20260821-expurgo-de-conteudo-nao-de-linha. Ver §2.1.
         -- ⚠️ CORREÇÃO 2026-08-22 — a primeira versão deste comentário dizia que as irmãs
         --    `shift_calls`/`shift_call_targets`/`shift_attendance_confirmations` não aparecem
         --    aqui "porque penduram em `jobs`". Isso é FALSO, e foi conferido no catálogo de
@@ -204,6 +215,17 @@ DECLARE
         'requested_by','responded_by','closed_by','accepted_by'
     ];
 
+    -- EMENDA 2026-08-22 — colunas de TEXTO LIVRE em tabela RETIDA que a rotina REDIGE (§2.1,
+    -- "Demais tabelas"). Mesma régua da asserção (a): a rotina não escreve às cegas em coluna
+    -- que talvez não exista. `qualificada.coluna`, split no ponto.
+    v_redacted_text text[] := ARRAY[
+        'jobs.briefing',            -- cópia literal de job_series.job_template (20260817000400)
+        'jobs.description',
+        'jobs.requirements',
+        'applications.cover_letter',-- texto do FREELA sobre si mesmo
+        'shift_calls.message'       -- texto da EMPRESA no disparo 1→N
+    ];
+
     v_col     text;
     v_unknown text;
 BEGIN
@@ -221,6 +243,24 @@ BEGIN
                         WHERE table_schema = 'public' AND table_name = 'companies'
                           AND column_name = v_col) THEN
             RAISE EXCEPTION 'ASSERCAO: public.companies.% nao existe. HALT -> architect (ddl-aprovado 2.1).', v_col;
+        END IF;
+    END LOOP;
+
+    -- (a2) EMENDA 2026-08-22 — as colunas de texto livre que a rotina REDIGE precisam existir
+    --      E ser de tipo textual. Se `jobs.requirements` for `text[]` em algum ambiente, a
+    --      atribuição de um marcador `text` falharia EM RUNTIME, dentro da transação destrutiva,
+    --      depois de metade da conta já ter sido anonimizada. Falha aqui, antes, e fechado.
+    FOREACH v_col IN ARRAY v_redacted_text LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns c
+             WHERE c.table_schema = 'public'
+               AND c.table_name   = split_part(v_col, '.', 1)
+               AND c.column_name  = split_part(v_col, '.', 2)
+               AND c.data_type IN ('text', 'character varying', 'character')
+        ) THEN
+            RAISE EXCEPTION
+              'ASSERCAO (a2): public.% nao existe ou nao e textual. A rotina de LGPD pretende '
+              'REDIGIR esta coluna (ddl-aprovado 2.1, "Demais tabelas"). HALT -> architect.', v_col;
         END IF;
     END LOOP;
 
@@ -513,7 +553,21 @@ DECLARE
     v_is_worker     boolean;
     v_company_ids   uuid[];
     v_balance       numeric;
-    v_counts        jsonb := '{}'::jsonb;
+    -- EMENDA 2026-08-22: `v_counts` NASCE com todas as chaves em zero. Antes, as chaves de
+    -- domínio viviam dentro de `IF v_is_worker` / `IF cardinality(...) > 0` e simplesmente NÃO
+    -- APARECIAM no retorno para quem não é freela nem dono de empresa (a classe GERENTE, por
+    -- exemplo). "Chave ausente" e "chave zero" são fatos diferentes: a primeira é indistinguível
+    -- de "as âncoras não resolveram, isto é um bug". Quem lê o retorno (Edge Function, auditoria,
+    -- suporte) precisa ver a rotina declarar que olhou e não achou nada.
+    v_counts        jsonb := jsonb_build_object(
+        'service_terms', 0, 'worker_certifications', 0, 'worker_trainings', 0,
+        'team_list_members', 0, 'team_lists', 0, 'company_spend_limits', 0,
+        'company_monthly_revenue', 0, 'job_series', 0, 'worker_trainings_company', 0,
+        'team_connections', 0, 'worker_referrals', 0, 'worker_company_badge_prefs', 0,
+        'company_members', 0, 'organization_members', 0, 'notifications', 0,
+        'payment_methods', 0, 'applications_redacted', 0, 'jobs_redacted', 0,
+        'shift_calls_redacted', 0, 'workers', 0, 'companies', 0
+    );
     v_n             integer;
     v_txt           text;          -- EMENDA 2026-08-22 (GUARDA 4, fronteira F13)
     v_is_member     boolean := false;  -- EMENDA 2026-08-22 (classe GERENTE/SOCIO, fronteira F13)
@@ -522,6 +576,14 @@ DECLARE
     c_redacted      constant text :=
         '[TERMO REMOVIDO — a conta do titular foi excluida a pedido dele (LGPD art. 18, VI). '
         'Este termo nao havia sido aceito e, portanto, nao possui valor probatorio.]';
+    -- EMENDA 2026-08-22 — marcador de redacao de TEXTO LIVRE em linha RETIDA.
+    -- Marcador e nao NULL, por tres razoes: (1) `jobs.title`/`location` mostram que este schema
+    -- tem coluna textual NOT NULL, e a lista de redacao vai crescer -- um NULL em coluna NOT NULL
+    -- estouraria DENTRO da transacao destrutiva; (2) a UI da contraparte (recibo, MyJobs) explica
+    -- o vazio em vez de parecer defeito; (3) e o mesmo padrao de c_redacted / '[Conta Deletada]'.
+    c_redacted_text constant text :=
+        '[CONTEUDO REMOVIDO — a conta de quem escreveu este texto foi excluida a pedido do '
+        'titular (LGPD art. 18, VI).]';
 BEGIN
     IF p_user_id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'invalid_input');
@@ -738,9 +800,26 @@ BEGIN
     -- `worker_certifications.verified_by_company_id`; e `invited_at`/`accepted_at`, que sao a
     -- trilha de auditoria que justifica o soft.
     --
-    -- DOIS predicados: (1) a pessoa que sai era gerente de unidades alheias -> perde o acesso;
+    -- TRES predicados: (1) a pessoa que sai era gerente de unidades alheias -> perde o acesso;
     -- (2) a EMPRESA que sai tinha gerentes que CONTINUAM na plataforma -> a unidade virou
-    -- lapide, ninguem opera lapide, e o e-mail desses terceiros perde a base que o sustentava.
+    -- lapide, ninguem opera lapide, e o e-mail desses terceiros perde a base que o sustentava;
+    -- (3) EMENDA 2026-08-22 (C-LGPD-GATE-INVITES) -- convite AINDA PENDENTE emitido por quem
+    -- esta saindo, em unidade que NAO e dele.
+    --
+    -- Por que (3) e obrigatorio e nao existia: quem emite convite de gerente e o operador de
+    -- REDE (`invite_company_manager` exige `is_organization_operator`), logo ele convida para
+    -- unidades IRMAS, que NAO estao em `v_company_ids`. Sem este ramo, abrir o portao para a
+    -- classe gerente/socio (acima) tornou ALCANCAVEL um buraco real: a conta e apagada e ficam
+    -- para tras linhas `status='invited'` com `invited_email` DE TERCEIRO e `invite_token` VIVO
+    -- (indice unico, 7 dias), assinadas por uma conta que nao existe mais. Credencial portadora
+    -- resgatavel emitida por ninguem.
+    --
+    -- Por que SO `status='invited'` (e nao `created_by` em qualquer status): a linha ATIVA
+    -- pertence ao GERENTE, um terceiro que continua na plataforma operando uma unidade que e de
+    -- OUTRO dono. `created_by` ali e so a trilha de quem convidou; derrubar o acesso dele porque
+    -- o convidante saiu seria dano a terceiro -- a mesma razao pela qual `organization_members`
+    -- nao tem ramo por empresa. Simetria EXATA com o predicado de `organization_members` abaixo,
+    -- que ja carregava este ramo com esta justificativa.
     IF pg_catalog.to_regclass('public.company_members') IS NOT NULL THEN
         EXECUTE $q$
             UPDATE public.company_members cm
@@ -748,7 +827,9 @@ BEGIN
                                  THEN 'removed' ELSE cm.status END,
                    invited_email = NULL,
                    invite_token  = NULL
-             WHERE (cm.user_id = $1 OR cm.company_id = ANY ($2))
+             WHERE (cm.user_id = $1
+                    OR cm.company_id = ANY ($2)
+                    OR (cm.status = 'invited' AND cm.created_by = $1))
                AND (cm.status IN ('invited', 'active')
                     OR cm.invited_email IS NOT NULL
                     OR cm.invite_token  IS NOT NULL)
@@ -796,6 +877,61 @@ BEGIN
         GET DIAGNOSTICS v_n = ROW_COUNT;
         v_counts := v_counts || jsonb_build_object('payment_methods', v_n);
     END IF;
+
+    -- ---- EMENDA 2026-08-22: TEXTO LIVRE em tabela RETIDA (C-LGPD-CLASS-JOBS/APPLICATIONS) ----
+    -- A linha FICA (ancora de shift_payments, BI, integridade referencial); o TEXTO SAI. E o
+    -- padrao de ADR-20260821-expurgo-de-conteudo-nao-de-linha, aplicado agora tambem fora do
+    -- expurgo por prazo. Corrige uma INCOERENCIA do proprio contrato: a rotina apagava
+    -- `companies.default_briefing` ("texto da empresa, pode conter nomes") e DELETAVA
+    -- `job_series` ("job_template carrega o briefing -- mesma classe"), mas RETINHA as copias
+    -- materializadas em `jobs.briefing` -- que `create_job_series` (20260817000400) escreve
+    -- copiando `job_template` LITERALMENTE. Apagar o molde e guardar as copias nao e decisao,
+    -- e descuido; e a §5.3 nao registrava esta classe (registrava `shift_payments.note`,
+    -- `reviews.comment` e `verified_note`, que sao exatamente a mesma familia).
+    --
+    -- O que NAO e redigido, e por que (decisao escrita, nao omissao):
+    --   `jobs.title` / `jobs.location` -- nao sao narrativa livre: sao o rotulo operacional e o
+    --   local do estabelecimento que a CONTRAPARTE (o freela, que continua na plataforma) le no
+    --   proprio recibo e no `service_terms.term_text` ACEITO, que e RETIDO INTEGRALMENTE como
+    --   prova. Apagar aqui nao elimina a informacao (ela esta congelada no termo) e degrada o
+    --   registro de um terceiro sobre uma transacao encerrada. Risco residual em §5.3.
+    IF v_is_worker THEN
+        -- Texto que o FREELA escreveu SOBRE SI MESMO na candidatura (pull legado). Zero valor
+        -- fiscal; `service_terms`/`shift_payments` e que provam a transacao.
+        UPDATE public.applications a
+           SET cover_letter = c_redacted_text
+         WHERE a.worker_id = p_user_id
+           AND a.cover_letter IS NOT NULL
+           AND a.cover_letter IS DISTINCT FROM c_redacted_text;
+        GET DIAGNOSTICS v_n = ROW_COUNT;
+        v_counts := v_counts || jsonb_build_object('applications_redacted', v_n);
+    END IF;
+
+    IF cardinality(v_company_ids) > 0 THEN
+        UPDATE public.jobs j
+           SET briefing     = CASE WHEN j.briefing     IS NULL THEN NULL ELSE c_redacted_text END,
+               description  = CASE WHEN j.description  IS NULL THEN NULL ELSE c_redacted_text END,
+               requirements = CASE WHEN j.requirements IS NULL THEN NULL ELSE c_redacted_text END
+         WHERE j.company_id = ANY (v_company_ids)
+           AND (   (j.briefing     IS NOT NULL AND j.briefing     IS DISTINCT FROM c_redacted_text)
+                OR (j.description  IS NOT NULL AND j.description  IS DISTINCT FROM c_redacted_text)
+                OR (j.requirements IS NOT NULL AND j.requirements IS DISTINCT FROM c_redacted_text));
+        GET DIAGNOSTICS v_n = ROW_COUNT;
+        v_counts := v_counts || jsonb_build_object('jobs_redacted', v_n);
+    END IF;
+
+    -- `shift_calls.message`: texto que a empresa (ou o GERENTE dela) escreveu no disparo 1->N.
+    -- DOIS predicados, e o segundo e obrigatorio: `shift_calls.company_id` NAO TEM FK (uuid nu,
+    -- conferido no catalogo de producao -- §2.1.1), entao nada aqui e resolvido por cascata; e
+    -- `created_by` e a UNICA forma de alcancar o texto escrito pelo GERENTE, cuja unidade
+    -- pertence a outro dono e portanto nunca aparece em `v_company_ids`.
+    UPDATE public.shift_calls sc
+       SET message = c_redacted_text
+     WHERE (sc.company_id = ANY (v_company_ids) OR sc.created_by = p_user_id)
+       AND sc.message IS NOT NULL
+       AND sc.message IS DISTINCT FROM c_redacted_text;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || jsonb_build_object('shift_calls_redacted', v_n);
 
     -- ---- LÁPIDE: workers ----
     IF v_is_worker THEN
@@ -852,6 +988,10 @@ BEGIN
         'outcome',       'anonymized',
         'user_id',       p_user_id,
         'is_worker',     v_is_worker,
+        -- EMENDA 2026-08-22 (C-LGPD-RETURN-CLASSE): sem esta chave, o retorno da classe
+        -- GERENTE/SOCIO era `is_worker=false` + `company_ids=[]` -- indistinguivel de "bug: as
+        -- ancoras nao resolveram". Quem le precisa saber POR QUE a rotina aceitou o titular.
+        'is_member',     v_is_member,
         'company_ids',   to_jsonb(v_company_ids),
         'anonymized_at', v_now,
         'counts',        v_counts
@@ -869,7 +1009,13 @@ COMMENT ON FUNCTION public.anonymize_account(uuid) IS
     'EMENDA 2026-08-22 (F13): fecha company_members/organization_members por SOFT-REMOVE '
     '(status=removed + purga de invited_email/invite_token), NUNCA DELETE — o vinculo de operacao '
     'e trilha de auditoria. Recusa com outcome=sole_organization_owner se a exclusao deixaria uma '
-    'organizacao com unidades de TERCEIROS sem nenhum dono ativo. ADR-20260822.';
+    'organizacao com unidades de TERCEIROS sem nenhum dono ativo. Reconhece a classe GERENTE/'
+    'SOCIO (sem linha em workers/companies) — o corpo desta funcao tem UM dono, esta migration, '
+    'nunca a da F13 (que ordena antes em replay e seria sobrescrita). ADR-20260822. '
+    'EMENDA 2026-08-22 (2): REDIGE texto livre em linha RETIDA — jobs.briefing/description/'
+    'requirements, applications.cover_letter e shift_calls.message viram marcador; a LINHA fica '
+    '(ancora de shift_payments/BI), o TEXTO sai. jobs.title/location sao RETIDOS de proposito '
+    '(o termo aceito ja os congela como prova e a contraparte le no proprio recibo).';
 
 REVOKE ALL ON FUNCTION public.anonymize_account(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
@@ -949,6 +1095,34 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 --      re-executar o bloco DO da seção 1 ⇒ silêncio. Qualquer nome que apareça é tabela nova
 --      criada por outra feature sem classificação — HALT correto, NÃO adicionar à lista sem
 --      escrever a decisão em ddl-aprovado §2.1.
+--
+-- V18. EMENDA 2026-08-22 — convite de gerente EMITIDO pelo titular em unidade IRMÃ morre junto
+--      (C-LGPD-GATE-INVITES). Cenário: sócio de rede convida gerente para a unidade B, que NÃO
+--      está em `v_company_ids` dele; depois pede exclusão.
+--      SELECT status, invited_email, invite_token FROM public.company_members
+--       WHERE created_by='<uuid-do-socio>' AND company_id='<unidade-irma>';
+--      ⇒ status='removed', invited_email NULL, invite_token NULL. E o link do convite
+--        (/convite-gerente/<token>) deixa de resolver.
+--      E o CONTRAPONTO, que é o que prova que o predicado não é largo demais:
+--      SELECT status FROM public.company_members
+--       WHERE created_by='<uuid-do-socio>' AND status='active' AND user_id<>'<uuid-do-socio>';
+--      ⇒ CONTINUA 'active'. Gerente em exercício é terceiro; não perde acesso porque quem o
+--        convidou saiu.
+-- V19. EMENDA 2026-08-22 — texto livre de tabela RETIDA foi redigido, e a linha ficou:
+--      SELECT count(*) AS linhas, count(*) FILTER (WHERE briefing LIKE '[CONTEUDO REMOVIDO%')
+--        FROM public.jobs WHERE company_id='<cid>' AND briefing IS NOT NULL;
+--      ⇒ linhas = igual a antes (nada apagado) e TODAS redigidas.
+--      SELECT cover_letter FROM public.applications WHERE worker_id='<uuid>'
+--       AND cover_letter IS NOT NULL;  ⇒ só o marcador.
+--      SELECT message FROM public.shift_calls WHERE company_id='<cid>' OR created_by='<uuid>';
+--       ⇒ só o marcador (ou NULL onde já era NULL).
+--      E o que NÃO pode ter mudado: SELECT title, location FROM public.jobs WHERE id='<jid>'
+--       ⇒ INALTERADOS (retidos de propósito — §2.1 e §5.3).
+--      Idempotência: rodar `anonymize_account` de novo ⇒ counts *_redacted = 0.
+-- V20. EMENDA 2026-08-22 — classe GERENTE é reconhecida e o retorno diz por quê:
+--      SELECT public.anonymize_account('<uuid-de-gerente-sem-workers-sem-companies>');
+--      ⇒ outcome='anonymized', is_worker=false, company_ids=[], **is_member=true**, e `counts`
+--        com TODAS as chaves presentes (zeros onde não havia nada) — nunca chave ausente.
 --
 -- V12. Ocorrências de série SOBREVIVERAM ao DELETE de job_series (não há FK):
 --      SELECT count(*) FROM public.jobs WHERE series_id='<serie-da-empresa>'; ⇒ igual a antes.
