@@ -581,6 +581,151 @@ a um freela dela).
 e é **do conferente** — só quem conferiu desfaz ou altera (DS8). ADRs:
 `ADR-20260821-certificacoes-metadado-sem-arquivo.md`, `ADR-20260821-conferencia-de-certificacao-e-do-conferente.md`.
 
+## Indicação entre empresas (F10: "Já trabalhou com" em loop consentido)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): freelas pulam entre empresas do rede própria, trazendo histórico de confiança. A feature autoriza uma empresa **apresentar** um freela a outra.
+
+**Regra central:** empresa **B apresenta** freela **X** a empresa **A**; só o **"sim" do próprio X** cria a conexão em `team_connections`. O uuid de X nunca sai antes do aceite — com ele em mãos, **A teria caminho lateral** para convidar X direto, contornando o consentimento.
+
+**Tabela nova `worker_referrals`:**
+- Quem indica (B), para quem (A), e quem (X) são os três pontos
+- Status: `awaiting_worker | accepted | declined | cancelled | expired` (SEM `blocked_by_*` de propósito — fatos privados do X colapsam em respostas genéricas)
+- Prazo de 14 dias; índice único parcial em `(worker_id, requesting_company_id) WHERE status='awaiting_worker'` evita duplicata pendente
+- RLS SELECT-only; INSERT/UPDATE/DELETE exclusivos de RPCs SECURITY DEFINER
+
+**Coluna nova `workers.accepts_referrals` (boolean, default true):**
+- Opt-out do freela (R7 da spec). Escrita exclusiva do próprio freela.
+
+**Alteração do CHECK de `team_connections.source`:**
+- Ganhou valor `'referral'` (era `qr|link|phone`). O aceite cria a conexão com esse source.
+
+**Veto do freela é indelével:** a guardarama de 20260816000000 (DELETE em conexão bloqueada) se estende para indicação — quatro caminhos (A já bloqueada, freela bloqueia depois, bloqueio nasce entre criação e aceite, aceite tenta escrever por cima) com defesas de trigger (proativa) + lock `FOR UPDATE` (reativa).
+
+**Tetos de anti-abuso (constantes na RPC, ajustáveis sem schema):**
+- T1: 20 indicações por empresa indicadora em 24h
+- T2: 3 indicações do mesmo par (B, X) em 30 dias
+- T3: 5 indicações `awaiting_worker` simultâneas para o MESMO X de TODAS as empresas
+
+**RPCs (SECURITY DEFINER, search_path=''):**
+- `create_worker_referral` — B indica X a A; checa veto, opt-out, vinculo, tetos; devolve `{outcome, referral_id}` (nunca lista)
+- `accept_worker_referral` — X aceita, cria/promove `team_connections` com `source='referral'`; serializa contra bloqueio
+- `decline_worker_referral` — X recusa, NEUTRA (sem penalidade)
+- `cancel_worker_referral` — B retira a indicação pendente
+- `get_worker_referral_card` — vitrine pré-aceite (projeção fechada de 6 campos, sem uuid)
+- `list_worker_referral_cards()` — caixa de entrada de A, SEM parâmetro
+
+**Ciclo de vida:** indicação sobrevive a X sair do elenco de B (gratuidade da recusa); morre se X bloqueia B; CASCADE em deleção de conta.
+
+**Padrão:** Destinatário nunca é enumerado (pool não sai); pré-aceite é vitrine mínima; veto pluralista (trigger + lock serializa).
+
+## SOS — Descoberta de freelas em urgência (F11: alcance 1→N fora do elenco, opt-in)
+
+> Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): "Quando preciso rápido, 4 horas, não quero ficar preso ao elenco — quero ligar pra cidade inteira."
+
+**Promessa:** empresa abre turno com `origin='sos'`, RPC calcula pool **internamente**, dispara convites sem entregar a lista.
+
+**Colunas novas:**
+- `workers.discoverable_for_sos` (boolean, default false) — opt-in explícito do freela
+- `shift_calls.origin` (text, `'team'|'sos'`) — default `'team'`; client só escreve `'team'` (policy), `'sos'` nasce exclusivo de `create_sos_call`
+- `shift_call_targets.origin` (text, `'team'|'sos'`) — cópia de `shift_calls.origin` via trigger BEFORE INSERT (denormalizado para evitar recursão de policy 42P17)
+
+**Trigger `sync_shift_call_target_origin` (BEFORE INSERT, SECURITY DEFINER):**
+- Copia origin do chamado para o alvo, ignorando o que o cliente mandou. Load-bearing: o WITH CHECK da policy de INSERT avalia após o trigger, sobre o valor real.
+
+**Normalizador `normalize_city(text)** (IMMUTABLE):**
+- Trim + lower + translate de acentos (sem extensão `unaccent`). Retorna NULL para vazio — NULL nunca casa com NULL (falha segura em comparação de cidade).
+
+**Três policies reescritas (F1):**
+- `shift_calls_insert_company`: client só escreve `origin='team'`
+- `shift_call_targets_select`: SOS mostra só os aceitos (`response='accepted'`); team mostra todos
+- `shift_call_targets_insert`: client só insere `origin='team'`; alvo de SOS nasce dentro da RPC
+
+**Cota (R10):** 1 SOS aberto + 3 SOS em 7 dias por empresa. **Varredura de expirados ANTES da cota** — chamado vencido trancaria cota permanentemente.
+
+**Pool (R1–R4, R11) — NUNCA devolvido à empresa:**
+- Mesma cidade (normalizada)
+- Histórico ≥3 turnos
+- Avaliação ≥4.0 ou sem avaliação
+- Opt-in explícito
+- Fora do elenco (em QUALQUER status)
+- Sem relação com THIS turno
+- Cota por freela: <2 SOS em 7 dias
+- Máximo 30; ORDER BY histórico (desempate, não ranking)
+
+**RPCs (SECURITY DEFINER, search_path=''):**
+- `sos_call_eligibility(job_id)` — botão deveria aparecer? (STABLE, leitura só)
+- `create_sos_call(job_id, reason, message)` — abre chamado, calcula pool, insere alvos e notificações; devolve `{outcome, call_id, targets_count, expires_at}` (**nunca a lista**)
+
+**Lock advisory por DONO** (não por turno) — serializa cotas entre SOS simultâneos de turnos diferentes.
+
+**Janela de urgência:** 4 horas antes do turno (R8.2, não configurável — cada empresa definindo é gatilho da banalização).
+
+**Notificação com consentimento informado** (R4): explica opt-in, explica como desligar. Freela tem DADO para decidir *por que* foi alcançado (não "aleatório").
+
+**Textos em `claim_shift_slot` e `decline_shift_call` ramificados por `origin`** — quem perde a corrida de SOS não entra no elenco (C7 do ADR).
+
+**Padrão:** Pool internamente, vitrine mínima, consentimento explícito, descoberta sem enumeração.
+
+## Badges das empresas (F12: histórico visível, bisturi de privacidade)
+
+> Onda 1 — Revisão Piloto: "Já trabalhou com" = comprovação de confiança. Freela esconde empresa inteira ou por empresa.
+
+**Princípio:** badge é **derivado** de `applications.status='completed'` + `jobs` + `reviews` — **nunca materializado**. Reputação materializada envelhece errado (estorno, LGPD, troca de logo).
+
+**Colunas novas:**
+- `workers.badges_hidden` (boolean, default false) — chave-mestra: oculta seção inteira (terceiro recebe ZERO badges; o dono vê todos com `hidden=true` para reverter)
+
+**Tabela nova `worker_company_badge_prefs`:**
+- Bisturi (badge por empresa): `(worker_id, company_id, hidden, updated_at)`
+- RLS SELECT-only (só o dono lê)
+- Sem policy de INSERT/UPDATE/DELETE (toda escrita via RPC DEFINER)
+
+**RPC `get_worker_company_badges(worker_id)** (SECURITY DEFINER):**
+- Devolve array derivado com 8 colunas fixas: id/nome/logo da empresa, contagem, data, nota, contagem de notas, hidden
+- **NUNCA devolve:** cpf, phone, pix_key, birth_date, email, valor de turno, título de vaga, endereço, CNPJ
+- Visível para próprio freela OU para quem passa em `can_view_worker_profile` E `badges_hidden=false`
+- Terceiro recebe conjunto vazio (não EXCEPTION — nunca oráculo de existência)
+- Dono vê os ocultos com `hidden=true` para poder reexibir
+- Ordem **cronológica** — nunca por nota (score/ranking exige ADR próprio, rejeitado em spec)
+
+**RPC `set_worker_badge_visibility(company_id, hidden)** (SECURITY DEFINER):**
+- Escrita única da preferência. Requer turno concluído com AQUELA empresa (guard DS3)
+- Retorna boolean (não detalhes) — sucesso ou ignorado
+- Devolve false sem gravar quando sem histórico
+- Idempotente: upsert via ON CONFLICT
+
+**Uso em UI:**
+- Página `CompanyBadges` (novo componente, reutilizável). Chips clicáveis toggle hidden.
+- Perfil público `/empresa/:id`: badges com logo e contagem — o freela vê prova social antes de aceitar convite.
+
+**Padrão:** Derivado canonicamente, nunca materializado; prefs separadas para reexibição.
+
+## Segurança PII — `uuid` de freela deixa de ser credencial (DS-PII, migração 20260821000300)
+
+**Problema:** `can_view_worker_profile` (20260816120000) concedia leitura de CPF/PIX/data_nascimento para `team_connections.status='pending'` — estado que **a empresa escreve unilateralmente** (`tc_insert_company` só exige ser dona). Conhecer o uuid = ter autorização; uuid virava credencial.
+
+**Três correções (todas BLOQUEANTES):**
+
+1. **DS-PII-1:** `can_view_worker_profile` **perde ramo `'pending'`**. Ficam: (0) self, (1) elenco **ACCEPTED**, (2) vínculo operacional via `applications`. Política: 'pending' = "quero"; 'accepted' = "pode".
+
+2. **DS-PII-2:** `can_view_worker_profile` esvazia o embed `worker:workers(...)` de `listAllConnections` para linhas pending (RLS nega → PostgREST devolve `worker: null`). Cartão fica sem nome. **RPC nova `list_team_connection_cards()`** (SECURITY DEFINER, SEM parâmetro):
+   - Projeção FECHADA: id, full_name, avatar_url, primary_role, rating_average, city (**NENHUM PII**)
+   - Cobre TODAS as conexões (pending + accepted + blocked)
+   - Autorização: ancoragem dupla sobre `auth.uid()`
+
+3. **DS-PII-3:** `get_profile_reviews` entregava `reviewer_id` cru. Com `p_direction='company'`, avaliadores são freelas: nome mascarado ("Carlos S."), mas uuid ao lado — mesma classe de vazamento. **`reviewer_id` passa a sair NULL quando:** avaliador é freela E caller não é o dono do perfil avaliado (MESMO predicado que já mascarava nome). Com `p_direction='worker'` (avaliador é empresa, dado público), segue saindo.
+
+**Padrão:** Identificador nunca é credencial de acesso; consentimento é explícito + bilateral.
+
+## Estado do banco de produção (Onda 1 — Revisão Piloto, atualizado 21/08/2026)
+
+As migrations de F1–F8 + F10–F12 + DS-PII (`20260817000000`–`20260821000300`) estão **escritas e aprovadas**.
+
+
+> Verificar em produção (`vrklakcbkcsonarmhqhp`) antes de assegurar que o schema atual contém estas mudanças.
+
+Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
+
 ## Estado do banco de produção (Onda 1 — Revisão Piloto)
 
 As migrations da Onda 1 e as de **F1–F4** (`20260817000000`–`20260817000800`) foram aplicadas em
@@ -588,15 +733,33 @@ produção (`vrklakcbkcsonarmhqhp`). Ver `supabase/migrations/APLICACAO-2026-08-
 de timestamp entre repositório e histórico do banco, verificações executadas contra dados reais e
 lacunas declaradas.
 
-> ⚠️ **As migrations de F5–F8 NÃO estão aplicadas** (`20260817000900` risco de vínculo,
-> `20260817001100` termos, `20260817001200` disponibilidade, `20260817001300` certificações). Estão
-> escritas, revisadas e aprovadas, mas o acesso ao banco (MCP Supabase) está desautenticado desde
-> 21/08/2026. **Não presuma que o schema em produção contém essas tabelas e colunas.**
+> ✅ **VERIFICADO CONTRA O CATÁLOGO em 21/08/2026** (não contra o `{"success": true}` da migration,
+> nem contra o histórico do repositório — os dois já mentiram nesta sessão).
 >
-> **Ordem de deploy obrigatória:** migration antes do frontend. O `select` de `listTeamMembers` pede
-> `availability_days` e o `handleSave` do Profile grava a coluna — sem ela, o PostgREST devolve `42703`
-> e derruba o roster inteiro do `ShiftCallModal` (elenco vazio, sem mensagem de erro) **e** o
-> salvamento completo do perfil do freela (nome, cidade, bio e PIX vão junto).
+> **APLICADAS e confirmadas em produção:**
+> - `20260817000900` (F5 risco de vínculo), `001100` (F6 termos), `001200` (F7 disponibilidade),
+>   `001300` (F8 certificações) — colunas, tabelas e cron conferidos um a um.
+> - `20260821000100` + `000200` (dívida #9 — `reviews` escopado por vínculo). **Exigiu duas
+>   tentativas:** as colunas são `uuid` e não `text` como as migrations legadas declaram, e o
+>   `DROP POLICY` mirava um nome inexistente, deixando a policy permissiva viva. Hoje `reviews`
+>   tem **uma única** policy de SELECT.
+> - `20260821000300` (DS-PII) — `can_view_worker_profile` sem o ramo `'pending'`,
+>   `list_team_connection_cards()` DEFINER sem parâmetro, `get_profile_reviews` anulando
+>   `reviewer_id` para terceiro. `anon` sem EXECUTE nas três.
+>
+> **ESCRITAS, APROVADAS e NÃO aplicadas** (confirmado: os objetos não existem no banco):
+> `20260817001400` (F12 badges), `001500` (F10 indicação), `001600` (F11 SOS),
+> `20260821000000` (anonimização — **bloqueada por decisão do owner**, ver H1/H2 em
+> `.harness/ESTADO-DA-LEVA.md`).
+>
+> **Ordem de deploy obrigatória:** migration antes do frontend. Coluna que o `select` pede e não
+> existe devolve `42703` e derruba a **query inteira**, não só o campo — no F7 isso derrubaria o
+> roster do `ShiftCallModal` **e** o salvamento completo do perfil do freela.
+>
+> ⚠️ **Esta seção já esteve errada duas vezes.** Estado de produção é a informação mais difícil de
+> manter honesta no memory-bank, porque muda **fora** do repositório: nenhum teste, lint ou build a
+> valida. Quem for atualizá-la **consulta o catálogo** (`information_schema`, `pg_policies`,
+> `pg_proc`, `cron.job`) — não o histórico de migrations e não o relato de quem aplicou.
 
 Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 

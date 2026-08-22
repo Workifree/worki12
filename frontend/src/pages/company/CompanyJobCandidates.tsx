@@ -7,6 +7,7 @@ import { TeamConnectionService } from '../../services/teamConnectionService';
 import { useCompanyInvites, useShiftCalls } from '../../hooks/useShiftInvites';
 import { ShiftCallModal } from '../../components/team/ShiftCallModal';
 import { ShiftCallsPanel } from '../../components/team/ShiftCallsPanel';
+import { SosCallButton } from '../../components/team/SosCallButton';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
@@ -1097,12 +1098,26 @@ export default function CompanyJobCandidates() {
                 {/* O gesto de 8h30: um clique, vários freelas, quem aceitar primeiro leva.
                     Some quando o turno já está completo — não há vaga para disputar. */}
                 {filledCount < jobSlots && (
-                    <button
-                        onClick={() => setCallModalOpen(true)}
-                        className="bg-black hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors flex-shrink-0"
-                    >
-                        <Megaphone size={16} /> Chamar Freelas
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                            onClick={() => setCallModalOpen(true)}
+                            className="bg-black hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors flex-shrink-0"
+                        >
+                            <Megaphone size={16} /> Chamar Freelas
+                        </button>
+                        {/* F11 — SOS: fallback do chamado ao Elenco. Só habilita quando o Elenco
+                            já esgotou e o turno começa em menos de 4h (RPC reverifica tudo). */}
+                        {id && (
+                            <SosCallButton
+                                jobId={id}
+                                refreshKey={`${calls.length}-${filledCount}`}
+                                onDispatched={() => {
+                                    refreshCalls();
+                                    void fetchCandidates();
+                                }}
+                            />
+                        )}
+                    </div>
                 )}
             </div>
 

@@ -9,6 +9,7 @@ import { logError } from '../../lib/logger'
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import WorkerCertificationsPanel from '../../components/company/WorkerCertificationsPanel';
+import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 
 export default function WorkerPublicProfile() {
@@ -436,6 +437,10 @@ export default function WorkerPublicProfile() {
                     </div>
                 </div>
             </div>
+
+            {/* F12 — selos das empresas onde este freela já trabalhou (a empresa que olha vê só o
+                que o portão de vínculo permite, e nunca selos que o freela ocultou). */}
+            {id && <CompanyBadges workerId={id} mode="view" />}
 
             {/* F8 — certificações auto-declaradas do freela + treinamentos internos registrados
                 pela empresa. `id` é garantido aqui: `!profile` já retornou acima. */}

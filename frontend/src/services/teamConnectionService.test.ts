@@ -67,6 +67,8 @@ const mockFrom = vi.fn((table: string) => {
   };
 });
 
+const mockRpc = vi.fn();
+
 vi.mock('../lib/supabase', () => ({
   supabase: {
     auth: {
@@ -76,6 +78,7 @@ vi.mock('../lib/supabase', () => ({
       }),
     },
     from: (table: string) => mockFrom(table),
+    rpc: (fn: string, args?: unknown) => mockRpc(fn, args),
   },
 }));
 
@@ -351,6 +354,61 @@ describe('TeamConnectionService', () => {
 
       expect(result.success).toBe(true);
       expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listAllConnections (DS-PII-2 — via RPC list_team_connection_cards, sem embed direto)', () => {
+    it('chama a RPC list_team_connection_cards e devolve os items em caso de sucesso', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          outcome: 'ok',
+          items: [
+            {
+              id: 'conn-1',
+              company_id: 'comp-1',
+              worker_id: 'worker-1',
+              status: 'pending',
+              source: 'qr',
+              created_at: new Date().toISOString(),
+              worker: {
+                id: 'worker-1',
+                full_name: 'Ana Souza',
+                avatar_url: null,
+                primary_role: 'Garçom',
+                rating_average: 4.8,
+                city: 'São Paulo',
+              },
+            },
+          ],
+        },
+        error: null,
+      });
+
+      const result = await TeamConnectionService.listAllConnections();
+
+      expect(mockRpc).toHaveBeenCalledWith('list_team_connection_cards', undefined);
+      expect(result).toHaveLength(1);
+      // Regressão que DS-PII-1 causaria: o cartão de convite PENDING continua com nome —
+      // a RPC roda como owner e projeta o card mesmo quando a policy de `workers` negaria
+      // o embed direto (status='pending' não concede mais leitura desde DS-PII-1).
+      expect(result[0].status).toBe('pending');
+      expect(result[0].worker?.full_name).toBe('Ana Souza');
+    });
+
+    it('devolve lista vazia (sem lançar) quando a RPC retorna erro', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+
+      const result = await TeamConnectionService.listAllConnections();
+
+      expect(result).toEqual([]);
+    });
+
+    it('devolve lista vazia quando a RPC devolve outcome != "ok" (ex.: unauthenticated)', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { outcome: 'unauthenticated' }, error: null });
+
+      const result = await TeamConnectionService.listAllConnections();
+
+      expect(result).toEqual([]);
     });
   });
 

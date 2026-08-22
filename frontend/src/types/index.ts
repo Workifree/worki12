@@ -48,6 +48,89 @@ export interface WorkerProfile {
   created_at?: string;
   updated_at?: string;
   onboarding_completed?: boolean;
+  // F12 — chave-mestra de badges (migration 20260817001400). `undefined` = coluna não pedida no
+  // select; distinto de `false` (visível). Ver `.harness/spec/badges-empresas/ddl-aprovado.md` DS2.
+  badges_hidden?: boolean;
+  // F10 — opt-out de indicação entre empresas (migration 20260817001500). Default true (opt-in
+  // implícito — Suposição 3 da spec). Escrita só pelo próprio freela. Ver ddl-aprovado.md §1.
+  accepts_referrals?: boolean;
+  // F11 — opt-in EXPLÍCITO para ser alcançado por SOS (migration 20260817001600). Default false
+  // (o oposto de accepts_referrals: aqui ninguém entra sem pedir). Escrita só pelo próprio
+  // freela. Ver .harness/spec/sos-descoberta/ddl-aprovado.md §1 e ADR-20260821.
+  discoverable_for_sos?: boolean;
+}
+
+// =============================================
+// INDICAÇÃO DE FREELA ENTRE EMPRESAS (F10) — .harness/spec/troca-freelas/ddl-aprovado.md
+// Vocabulário é requisito: "indicação"/"indicar"/"indicado por". NUNCA troca/emprestar/
+// transferir/ceder/repassar em nome de tipo, campo, string de UI ou rota.
+// =============================================
+export type WorkerReferralStatus =
+  | 'awaiting_worker' | 'accepted' | 'declined' | 'cancelled' | 'expired';
+
+/** Shape da tabela `worker_referrals` (migration 20260817001500). Sem policy de UPDATE/DELETE —
+ *  toda transição passa por RPC. A empresa destino só lê a própria linha após `status='accepted'`
+ *  (RLS `wr_select_requesting_company`) — antes disso, use `WorkerReferralCard` via RPC. */
+export interface WorkerReferral {
+  id: string;
+  worker_id: string;
+  referring_company_id: string;
+  requesting_company_id: string;
+  status: WorkerReferralStatus;
+  message?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  expires_at: string;
+  responded_at?: string | null;
+}
+
+/** Projeção fechada devolvida por `get_worker_referral_card` / `list_worker_referral_cards`.
+ *  NUNCA estender com cpf/phone/pix_key/birth_date sem novo gate do architect (ddl-aprovado.md §3). */
+export interface WorkerReferralCard {
+  referral_id: string;
+  status: WorkerReferralStatus;
+  message?: string | null;
+  created_at: string;
+  expires_at: string;
+  referring_company: { id: string; name: string; logo_url?: string | null };
+  /** `null` enquanto `status !== 'accepted'` — por design (ddl-aprovado.md §5, D2 do ADR). Nenhum
+   *  fluxo de UI pode depender deste campo antes do aceite. */
+  worker_id: string | null;
+  card: {
+    full_name: string;
+    avatar_url?: string | null;
+    rating_average?: number | null;
+    reviews_count?: number | null;
+    primary_role?: string | null;
+    roles?: string[] | null;
+  };
+}
+
+// =============================================
+// BADGES DE EMPRESAS (F12) — .harness/spec/badges-empresas/ddl-aprovado.md
+// Shape do retorno de `get_worker_company_badges` (migration 20260817001400). Badge é DERIVADO
+// em query (applications.status='completed' + jobs + reviews) — nenhuma tabela armazena isto.
+// =============================================
+export interface CompanyBadge {
+  company_id: string;
+  company_name: string;
+  company_logo_url?: string | null;
+  shifts_count: number;
+  /** ISO-8601 UTC (a RPC já formata via to_char — ver DS6). */
+  last_shift_at: string;
+  /** null = a empresa nunca avaliou. NUNCA renderizar como "0 estrelas". */
+  avg_rating: number | null;
+  reviews_count: number;
+  /** Só vem `true` na visão do próprio freela (mode='manage'); terceiros nunca recebem linha oculta. */
+  hidden: boolean;
+}
+
+/** Shape da tabela `worker_company_badge_prefs` (opt-out por empresa, bisturi de DS2). */
+export interface WorkerCompanyBadgePref {
+  worker_id: string;
+  company_id: string;
+  hidden: boolean;
+  updated_at: string;
 }
 
 export interface CompanyProfile {
@@ -221,6 +304,13 @@ export const SHIFT_CALL_REASON_LABELS: Record<ShiftCallReason, string> = {
 export type ShiftCallStatus = 'open' | 'filled' | 'cancelled' | 'expired';
 
 /**
+ * F11 — 'team' = chamado ao Elenco (F1). 'sos' = alcance ampliado fora do Elenco, nascido
+ * exclusivamente dentro de `create_sos_call`. O cliente só consegue escrever 'team' — a policy
+ * de INSERT de `shift_calls` recusa qualquer outro valor. Ver ddl-aprovado.md §1.
+ */
+export type ShiftCallOrigin = 'team' | 'sos';
+
+/**
  * Resposta de um alvo do chamado.
  * 'closed' = a vaga encheu (ou o chamado foi cancelado/expirou) antes deste alvo responder.
  * NÃO é recusa e NÃO é punição — o freela segue elegível ao mesmo turno se a vaga reabrir.
@@ -250,6 +340,8 @@ export interface ShiftCall {
   closed_at?: string | null;
   /** Primeiro aceite. (first_claim_at - created_at) = tempo de preenchimento. */
   first_claim_at?: string | null;
+  /** F11 — 'team' (F1) ou 'sos' (alcance fora do Elenco). Migration 20260817001600. */
+  origin?: ShiftCallOrigin;
   // --- joins opcionais para UI ---
   targets?: ShiftCallTarget[];
   job?: Partial<Job>;
@@ -263,6 +355,12 @@ export interface ShiftCallTarget {
   notified_at: string;
   responded_at?: string | null;
   response?: ShiftCallTargetResponse | null;
+  /**
+   * F11 — cópia denormalizada de `shift_calls.origin`, gravada pelo trigger
+   * `trg_sync_shift_call_target_origin` (migration 20260817001600). Para 'sos', a empresa só
+   * enxerga a linha quando `response === 'accepted'` — a RLS não devolve o pool antes do aceite.
+   */
+  origin?: ShiftCallOrigin;
   // --- joins opcionais para UI ---
   worker?: Partial<WorkerProfile>;
   call?: ShiftCall;
@@ -322,6 +420,53 @@ export interface PendingInvite {
   reason?: ShiftCallReason;
   message?: string | null;
   job?: Partial<Job>;
+}
+
+// =============================================
+// SOS — DESCOBERTA EM URGÊNCIA (F11)
+// .harness/spec/sos-descoberta/ddl-aprovado.md · ADR-20260821-sos-abertura-controlada-do-grafo
+// =============================================
+
+/**
+ * Todos os `outcome` possíveis de `create_sos_call` (migration 20260817001600). O botão é UX;
+ * a RPC reverifica tudo — todo `outcome` de recusa deve ter mensagem específica na UI (contrato
+ * §4.5 do ddl-aprovado.md: nunca esconder o botão como única guarda).
+ */
+export type SosOutcome =
+  | 'created'
+  | 'pool_empty'
+  | 'quota_exceeded'
+  | 'not_urgent'
+  | 'already_filled'
+  | 'team_not_tried'
+  | 'team_call_still_open'
+  | 'company_city_missing'
+  | 'job_started'
+  | 'job_deleted'
+  | 'invalid_reason'
+  | 'forbidden'
+  | 'not_found'
+  | 'unauthenticated';
+
+/** Retorno de `create_sos_call`. NUNCA traz a lista de alvos — só a contagem (D1 do ADR). */
+export interface SosCallRpcResult {
+  outcome: SosOutcome;
+  call_id?: string;
+  targets_count?: number;
+  expires_at?: string;
+  limit?: 'open' | 'week';
+}
+
+/**
+ * Retorno de `sos_call_eligibility` — alimenta SÓ o botão "Chamar fora do Elenco" (R8/R9). Não
+ * devolve nada sobre o pool (nem tamanho): saber "há N pessoas elegíveis" antes de disparar
+ * seria uma prévia do alcance, que o ADR-20260821 proíbe.
+ */
+export interface SosEligibility {
+  eligible: boolean;
+  reason: string;
+  quota_week_left?: number;
+  missing_slots?: number;
 }
 
 // =============================================
@@ -975,4 +1120,243 @@ export interface WorkerCertification {
   notified_expired_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// =============================================
+// ANALYTICS DE OPERAÇÃO (F9) — painel `/company/operacao`
+// =============================================
+// Somente-leitura (Article 8 intacto). Ver `.harness/spec/analytics-operacao/prd.md`.
+//
+// D6 (PRD) eleva "estado vazio honesto" a requisito de arquitetura: cada bloco devolve um union
+// type com 3 estados possíveis do SERVICE (o 4º estado, `loading`, é responsabilidade da UI —
+// o service é síncrono-por-chamada, nunca fica "em voo" no seu próprio retorno):
+//   - 'sem-fonte': zero linhas na fonte no período. UI: mensagem acionável, NUNCA "0%"/"R$ 0,00".
+//   - 'amostra-insuficiente': há linhas, mas abaixo do mínimo de confiança (ex.: recebidos < 2).
+//     UI: "—" + nota do porquê.
+//   - 'ok': há fonte suficiente — inclui o caso zero-real (zero é resultado válido, não vazio).
+// Ver D6 do PRD para a tabela completa dos 4 estados (o 4º, 'loading', mora no componente).
+export type AnalyticsBlockState = 'sem-fonte' | 'amostra-insuficiente' | 'ok';
+
+/** Bloco de métrica com estado explícito — nunca colapsar 'sem-fonte' em 'ok' com zeros. */
+export type MetricBlock<T> =
+  | { state: 'sem-fonte' }
+  | { state: 'amostra-insuficiente' }
+  | ({ state: 'ok' } & T);
+
+/**
+ * Comparação vs. o período anterior de MESMA DURAÇÃO (só nos 4 cards de resumo — R5–R8).
+ * `previous: null` quando o período anterior não tinha fonte (não dá para calcular variação).
+ * `percentChange: null` quando `previous` é `null` OU `previous === 0` (divisão por zero evitada
+ * — variação "infinita" não é exibível como percentual).
+ */
+export interface PeriodDelta {
+  current: number;
+  previous: number | null;
+  percentChange: number | null;
+}
+
+/** R5 — Card Gasto absoluto. União shift_payments (modo A) + escrow_transactions (modos B/C, D8). */
+export interface SpendSummary {
+  totalAmount: number;
+  delta: PeriodDelta;
+  /**
+   * D8 — pares (job_id, worker_id) presentes nas DUAS fontes (shift_payments E escrow) no
+   * período. `shift_payments` sempre vence (modo A é o registro declarado pela empresa); esta
+   * contagem é só para a UI rotular o conflito, nunca para somar duas vezes.
+   */
+  conflictingRowsCount: number;
+}
+
+/** R6 — Card Contratações. */
+export interface HiresSummary {
+  count: number;
+  /**
+   * D6 — vagas criadas no período (denominador de contexto). Sem isto, `count: 0` renderizava
+   * "0" nu — indistinguível de erro/sem-dado ao olho, mesmo sendo zero-real válido (empresa criou
+   * vagas mas nenhuma virou contratação). Com o denominador, a tela mostra "0 de N vagas criadas".
+   */
+  jobsCreatedCount: number;
+  delta: PeriodDelta;
+}
+
+/**
+ * R7 — Card Custo por hora (D2b/D2c). `costPerHour: null` quando o denominador (horas) é 0 —
+ * a UI mostra "—", nunca `Infinity`/`NaN`.
+ */
+export interface CostPerHourSummary {
+  costPerHour: number | null;
+  totalSpend: number;
+  totalHours: number;
+  /** Turnos `completed` no período (denominador de "X de Y usaram estimativa"). */
+  shiftsCount: number;
+  /** Turnos sem NENHUMA hora real (checkin/checkout de nenhuma fonte) que caíram para `estimated_hours`. */
+  estimatedHoursShiftsCount: number;
+  /** D2c — turnos descartados do cálculo por duração > `MAX_PLAUSIBLE_SHIFT_HOURS` (marcação inconsistente). */
+  inconsistentDurationShiftsCount: number;
+  /**
+   * Turnos `completed` sem NENHUMA fonte de hora: nem marcação de ponto (checkin/checkout, D2a)
+   * nem `estimated_hours` cadastrado. Sem este contador, `costPerHour: null` (denominador zero)
+   * renderizava "—" mudo, sem nenhuma das duas legendas condicionais (que dependem de
+   * `estimatedHoursShiftsCount`/`inconsistentDurationShiftsCount` > 0) — violava D6 linha 3 ("—"
+   * + nota do porquê é obrigatório, nunca "—" sozinho).
+   */
+  noHoursSourceShiftsCount: number;
+  delta: PeriodDelta;
+}
+
+/**
+ * R8 — Card Razão horas realizadas ÷ previstas (D2b, estrito). Turno sem hora real é excluído do
+ * numerador E do denominador (nunca cai para `estimated_hours` como se fosse realizado — isso
+ * empurraria a razão para 1,00 artificialmente). `ratio: null` quando o denominador é 0.
+ */
+export interface HoursRatioSummary {
+  ratio: number | null;
+  realizedHours: number;
+  estimatedHours: number;
+  /** Turnos excluídos por `estimated_hours` nulo (não cadastrado). */
+  excludedNoEstimateCount: number;
+  /** Turnos excluídos por ausência de marcação de ponto em ambas as fontes. */
+  excludedNoAttendanceCount: number;
+  delta: PeriodDelta;
+}
+
+/** R9 — Card Tempo médio de preenchimento do chamado (`first_claim_at − created_at`). */
+export interface FillTimeStats {
+  averageMs: number;
+  /** Já formatado via `formatDurationMs` — a UI não reformata. */
+  averageLabel: string;
+  /** Quantos chamados entraram na média (têm `first_claim_at` preenchido no período). */
+  sampleCount: number;
+}
+
+/** R10 — Bloco Chamados × preenchimento. `expired` sempre presente, mesmo 0 (nunca omitido). */
+export interface CallsByStatus {
+  open: number;
+  filled: number;
+  expired: number;
+  cancelled: number;
+  total: number;
+}
+
+/** R11 — Bloco Motivo da quebra, uma linha por `ShiftCallReason` presente no período. */
+export interface CallsByReasonRow {
+  reason: ShiftCallReason;
+  total: number;
+  filled: number;
+  expired: number;
+}
+
+/**
+ * R12 — Tabela Aceite por freela. `acceptanceRate: null` quando `received < 2` (amostra mínima —
+ * nunca 0%/100% precipitado de 1 chamado). Ordenação SEMPRE alfabética por nome — nunca por
+ * métrica (R17/D4: proibido virar ranking).
+ */
+export interface WorkerAcceptanceRow {
+  workerId: string;
+  workerName: string;
+  /** D5.3 — unidade de origem da linha; hoje sempre 1 valor (piloto), preparado para F13. */
+  companyId: string;
+  received: number;
+  accepted: number;
+  declined: number;
+  /** Chamado fechado ('closed') ou expirado antes deste alvo responder — NÃO é recusa. */
+  noResponse: number;
+  acceptanceRate: number | null;
+}
+
+/**
+ * R13–R15 — Tabela por freela de presença: no-show, cancelamentos, pontualidade.
+ * `cancelledCount` carrega rótulo fixo na UI ("não distingue quem cancelou" — R14, sem
+ * `cancelled_by` persistido). `punctualityRate`/`lateCount` só fazem sentido com
+ * `checkinsWithScheduleCount >= 2` (R15); abaixo disso, `punctualityRate` é `null`.
+ */
+export interface WorkerAttendanceRow {
+  workerId: string;
+  workerName: string;
+  /** D5.3 */
+  companyId: string;
+  /** A7' — no-show corrigido: turno já deveria ter terminado (D7) e sem checkin em nenhuma fonte. */
+  noShowCount: number;
+  /** Turnos excluídos do no-show por falta de `work_start_time` E `work_end_time` (D7). */
+  noShowExcludedNoScheduleCount: number;
+  /** R14 — combinado empresa+freela, rótulo fixo obrigatório na UI. */
+  cancelledCount: number;
+  punctualCount: number;
+  lateCount: number;
+  /** Denominador de `punctualityRate` — turnos com checkin registrado E `work_start_time` cadastrado. */
+  checkinsWithScheduleCount: number;
+  punctualityRate: number | null;
+}
+
+/**
+ * R16 — Card Desempenho por freela. NUNCA combinar `ratingAverage` (global, todas as empresas)
+ * com `completedWithCompanyCount` num único score/número (R17/D4 Opção A — proibido `score`).
+ */
+export interface WorkerPerformanceRow {
+  workerId: string;
+  workerName: string;
+  /** D5.3 */
+  companyId: string;
+  /** `workers.rating_average` — rótulo obrigatório na UI: "Avaliação (global — todas as empresas)". */
+  ratingAverage: number | null;
+  completedWithCompanyCount: number;
+}
+
+/**
+ * D4 — F4 (confirmação de véspera) só entra como bloco AGREGADO de operação nesta v1, nunca
+ * como coluna por freela (sem `pg_cron` verificado ativo em produção por >= 30 dias, "não
+ * respondeu" significaria "ninguém perguntou" — acusaria o freela por falha de infraestrutura).
+ */
+export interface AttendanceConfirmationsSummary {
+  requested: number;
+  responded: number;
+  /** `response = 'cannot_attend'`. */
+  declined: number;
+}
+
+export type SpendSummaryBlock = MetricBlock<SpendSummary>;
+export type HiresSummaryBlock = MetricBlock<HiresSummary>;
+export type CostPerHourSummaryBlock = MetricBlock<CostPerHourSummary>;
+export type HoursRatioSummaryBlock = MetricBlock<HoursRatioSummary>;
+export type FillTimeStatsBlock = MetricBlock<FillTimeStats>;
+export type CallsByStatusBlock = MetricBlock<CallsByStatus>;
+export type CallsByReasonBlock = MetricBlock<{ rows: CallsByReasonRow[] }>;
+export type WorkerAcceptanceBlock = MetricBlock<{ rows: WorkerAcceptanceRow[] }>;
+export type WorkerAttendanceBlock = MetricBlock<{ rows: WorkerAttendanceRow[] }>;
+export type WorkerPerformanceBlock = MetricBlock<{ rows: WorkerPerformanceRow[] }>;
+export type AttendanceConfirmationsBlock = MetricBlock<AttendanceConfirmationsSummary>;
+
+/**
+ * Agregado consolidado devolvido por `operationAnalyticsService.getOperationAnalytics()`.
+ *
+ * `scopeCompanyIds` (D5.1/D5.5) — resultado de `resolveCompanyScope()`; hoje 1–2 ids
+ * (ancoragem dupla `auth.uid()` + `companies.owner_id`). É o ÚNICO ponto do frontend que muda
+ * quando `is_job_owner`/`is_company_owner` forem unificadas (F13 multi-unidade) — ver
+ * ADR-20260817-seam-autorizacao-empresa.md.
+ *
+ * `truncated` (D1 guarda 2) — `true` quando QUALQUER fonte paginada atingiu `MAX_PAGES` sem
+ * terminar. A UI é obrigada a exibir a faixa de truncamento (A16) e NUNCA um número parcial sem
+ * esse rótulo.
+ *
+ * `hasError` — `true` quando alguma fonte falhou a leitura (erro de rede/RLS/coluna inexistente)
+ * durante a coleta. Antes, um erro de leitura era engolido por `logError` e devolvido como
+ * `sem-fonte` em todos os 11 blocos — indistinguível de "esta empresa realmente não tem dado
+ * nenhum". A UI é obrigada a mostrar um aviso de falha de carregamento (nunca reportar como
+ * "nenhum turno criado") quando `hasError` é `true`.
+ */
+export interface OperationAnalytics {
+  scopeCompanyIds: string[];
+  truncated: boolean;
+  hasError: boolean;
+  spend: SpendSummaryBlock;
+  hires: HiresSummaryBlock;
+  costPerHour: CostPerHourSummaryBlock;
+  hoursRatio: HoursRatioSummaryBlock;
+  fillTime: FillTimeStatsBlock;
+  callsByStatus: CallsByStatusBlock;
+  callsByReason: CallsByReasonBlock;
+  acceptanceByWorker: WorkerAcceptanceBlock;
+  attendanceByWorker: WorkerAttendanceBlock;
+  performanceByWorker: WorkerPerformanceBlock;
+  attendanceConfirmations: AttendanceConfirmationsBlock;
 }

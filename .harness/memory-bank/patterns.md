@@ -931,3 +931,213 @@ Um freela pode atualizar certificação/treinamento **após** ter sido conferenc
 **Padrão:** sempre que conteúdo é mutável E tem um campo de validação, trigger valida: se conteúdo muda → validação zera. Consulta: "qual trigger em qual tabela?" → procure `NEW.* IS DISTINCT FROM OLD.*`. ADR-20260821-certificacoes-metadado-sem-arquivo.md, ADR-20260821-conferencia-de-certificacao-e-do-conferente.md.
 
 
+
+## `DROP POLICY` de nome inexistente passa em silêncio
+
+**Achado em 21/08/2026, ao pagar a dívida #9 (`reviews` varrível).**
+
+A migration dropava três nomes de policy e criava uma restritiva no lugar. Aplicou com sucesso.
+Mas o nome real da policy permissiva em produção era **outro** (`"Public view reviews"`, `qual = true`),
+e `DROP POLICY IF EXISTS` de um nome que não existe **não falha** — não avisa nada.
+
+Como policies de SELECT são combinadas por **OR**, a policy restritiva nova não restringia coisa
+alguma: qualquer conta autenticada seguia lendo tudo. A dívida apareceria como paga e o buraco
+continuaria aberto — **pior do que não ter corrigido**, porque ninguém voltaria a olhar.
+
+**Regra:** depois de aplicar qualquer migration que mexa em RLS, consultar `pg_policies` e **ler
+as policies que sobraram**. O `{"success": true}` do comando não diz nada sobre o estado final.
+Vale o mesmo para `DROP TRIGGER`, `DROP FUNCTION` e `REVOKE` — todos são no-ops silenciosos quando
+o alvo não existe com aquele nome exato.
+
+Corolário do já registrado "migration não aplicada é migration não verificada": **migration
+aplicada também não é migration verificada.** O que verifica é a consulta ao catálogo depois.
+
+## O schema real pode divergir do histórico de migrations
+
+**Mesmo achado, mesmo dia.** O contrato assumiu `reviews.reviewer_id`/`reviewed_id` como `TEXT`
+porque a migration legada `20260314000008` os declara assim. Em produção são **`uuid`**. A primeira
+tentativa de aplicar falhou com `42883: operator does not exist: uuid = text`.
+
+Várias tabelas do projeto (`workers`, `companies`, `reviews`) foram criadas ou alteradas fora do
+histórico versionado. **Antes de escrever SQL que compara colunas, consultar
+`information_schema.columns` do banco real** — não o repositório.
+
+Relacionado: o corpo de `plpgsql` **não** é validado no `CREATE`, então uma coluna inexistente
+(ex.: `w.photo_url`, que não existe em `workers`) passa na migration e só explode em runtime, na
+primeira chamada. As duas armadilhas têm a mesma defesa: conferir contra o catálogo, não contra o
+que o repositório diz.
+
+## Substituição de texto que não casa é no-op silencioso — igual a `DROP POLICY`
+
+**Cometido por mim (orquestrador) em 21/08/2026, duas horas depois de registrar a regra acima.**
+
+Ao sincronizar a migration de `reviews` com o que foi aplicado, usei `str.replace()` **sem asserção**
+para o bloco da policy. Comentários entre as linhas quebraram o match exato, o replace não fez nada,
+**e não reclamou**. Resultado: a função virou `uuid` e a policy ficou em `::text` no mesmo arquivo —
+internamente contraditório e **inaplicável** (`42883` sob qualquer hipótese de tipo). Só apareceu
+porque o evaluator leu o arquivo em vez de confiar no relato de que estava sincronizado.
+
+**Regra:** toda substituição de texto em arquivo versionado carrega `assert count == 1` antes de
+escrever. Vale para `sed`, `str.replace`, e qualquer edição programática. É a mesma família de
+`DROP POLICY`/`DROP FUNCTION`/`REVOKE` de alvo inexistente: **a ferramenta faz nada e diz que deu
+certo.**
+
+Corolário do corolário: "migration aplicada não é migration verificada" vale também para o
+**arquivo**. O que roda em produção e o que está no repositório são duas coisas, e sincronizar uma
+com a outra é uma operação que também precisa ser verificada.
+
+## `COMMENT` errado no catálogo é pior que comentário ausente
+
+Mesmo dia. O `COMMENT ON FUNCTION public.try_uuid` foi a produção afirmando que
+`reviews.reviewer_id/reviewed_id` são TEXT. São `uuid`. O COMMENT é o que a próxima pessoa lê ao
+inspecionar o banco direto — e foi exatamente essa premissa (herdada do histórico do repositório)
+que fez a primeira aplicação falhar.
+
+Comentário no catálogo é documentação **em produção**: quando o fato muda, ele muda junto, na mesma
+migration.
+
+## O ambiente de teste não pode fabricar permissão que produção não dá
+
+**Custou duas vezes nesta leva.** Quando o teste monta a unidade **sem a camada que decide** (guard de
+rota, RLS, `select` real), ele testa um mundo onde tudo é permitido — e passa em cima de um caminho
+que produção nega 100% das vezes.
+
+- **F7:** o mock de `listTeamMembers` **fabricava** `availability_days`. O `select` real não trazia a
+  coluna, o selo era inerte em produção, e 630 testes passavam.
+- **F12:** `CompanyBadges.test.tsx` montava em `MemoryRouter` **sem `ProtectedRoute`**. Em produção,
+  `mode='view'` só existe para `user_type='hire'`, e o destino do clique está em `workerOnlyPaths` —
+  todo clique virava toast de "sem permissão" + redirect. 804 testes verdes.
+
+**Regra:** todo teste de um efeito que atravessa uma **fronteira de autorização** (navegação entre
+papéis, leitura cross-empresa, escrita sob RLS) monta a fronteira junto, **ou** planta uma armadilha
+que reprova se o caminho negado for atingido (ex.: uma `<Route>` para o destino proibido que falha o
+teste ao ser alcançada).
+
+**Mock de dado é permitido; mock de permissão exige justificativa escrita no teste.**
+
+Corolário para RLS: teste que mocka o client Supabase prova a forma do payload, nunca que a policy
+deixa passar. Para isso, ou se assere a string do `select`/predicado (ver o teste de regressão de
+`listTeamMembers`, verificado por mutante), ou se exercita contra o banco.
+
+## `workerOnlyPaths` casa por PREFIXO — não abrir caminho ali por causa de um link
+
+`ProtectedRoute.tsx` usa `pathname === p || pathname.startsWith(p + '/')`. Liberar `/empresa` para o
+papel empresa resolveria um clique quebrado **e faria toda rota futura sob `/empresa/*` nascer
+acessível a empresas sem ninguém decidir isso**.
+
+É o único ponto do frontend que implementa o Article 1 (isolamento worker⇎company). O caminho
+autorizado para conteúdo público linkado por dois papéis é **uma rota por papel, sob o layout daquele
+papel, com um componente por trás** — ver ADR-20260821-rota-espelho-perfil-publico-empresa.
+
+## Linha que sobrevive de propósito neutraliza TODO `ON DELETE` pendurado nela
+
+Quando uma linha passa a **sobreviver** a uma operação que antes a apagava (lápide pseudônima de
+`workers`/`companies` na anonimização LGPD), a ação referencial dos dependentes **para de existir**:
+`ON DELETE CASCADE`, `SET NULL` e `SET DEFAULT` viram `NO ACTION` de fato, porque a ação só acontece
+no ato do `DELETE` da linha referenciada. O schema continua declarando a intenção ("apague junto") e
+o runtime não a executa mais.
+
+**O modo de falha é silêncio:** nenhum erro, nenhum log, o dado do titular sobrevive e a verificação
+manual passa. Duas tabelas (F10 `worker_referrals`, F12 `worker_company_badge_prefs`) nasceram
+depois do contrato congelado e caíram nessa exata brecha; uma varredura de `pg_constraint` encontrou
+outras cinco, uma delas com contato de pessoa natural (`company_spend_limits.financial_contact_*`).
+
+**Regra:** ao decidir que uma linha sobrevive, varra `pg_constraint` por `confrelid` **sem filtrar
+`confdeltype`**, classifique cada dependente (inclusive os que ficam "sem nada a fazer") e transforme
+a lista numa **asserção que HALTa a migration** quando aparecer dependente não classificado. Lista à
+mão declara a decisão; o catálogo é quem descobre. Adicionar nome à lista para "fazer passar" é o
+anti-padrão — adicionar significa "eu decidi e escrevi onde".
+
+Corolários:
+- **Cascata intra-domínio continua valendo** (`team_list_members → team_lists(id)`, porque
+  `team_lists` é apagada de verdade). Só quebra a FK cujo alvo é a linha que sobrevive — e apagar o
+  pai intra-domínio limpa o filho de graça.
+- **Flag booleana não é "retida por não ter conteúdo pessoal"** quando governa um cálculo **derivado
+  de dado retido**. `badges_hidden` precisa ir a `true`: apagar o opt-out por empresa sem ela
+  ressuscitaria o grafo que o opt-out suprimia. `discoverable_for_sos` precisa ir a `false`: o pool
+  de F11 filtra pela flag e não conhece `anonymized_at`.
+- **Ramos assimétricos denunciam cobertura faltando.** Se o ramo "freela" da rotina apaga 3 tabelas e
+  o ramo "empresa" apaga 1, o segundo provavelmente está incompleto — não mais simples.
+
+Ver ADR-20260821-lapide-neutraliza-acao-referencial.
+
+## ⚠️ Projeção fechada não retém o identificador — o uuid viaja embutido em outro campo
+
+`get_worker_referral_card` (F10) escolhe seis campos a dedo e faz
+`CASE WHEN status='accepted' THEN worker_id ELSE NULL` — a projeção está correta. **E o uuid sai
+mesmo assim**, dentro de `avatar_url`: o único ponto de upload de foto de freela
+(`Profile.tsx:315`) monta o path do bucket como `${profile.id}/avatar_<ts>.<ext>`, então a URL
+pública é `.../avatars/<WORKER_UUID>/...` e vai para o `src` de um `<img>`. Ler o identificador é
+abrir o DevTools.
+
+**Por que duas revisões deram PASS:** o vazamento mora na **costura** entre a projeção SQL e uma
+convenção do frontend. Segurança auditou o SQL (correto). Frontend auditou o React (correto).
+Ninguém cruzou os dois. Mesma família de "o defeito mora entre duas camadas revisadas
+separadamente" — ver o padrão do mock que fabrica permissão que produção nega.
+
+**Regra 1 — projeção é sobre valores, não sobre nomes de coluna.** Ao decidir "este identificador
+não sai", listar os campos que **derivam** dele: URL de storage, nome de arquivo, slug, token,
+deep-link de notificação, `key` de lista serializada, mensagem de erro. Reter a coluna e liberar um
+derivado é o mesmo dado com outro rótulo.
+
+**Regra 2, que vale mais — se vazar o identificador é um incidente, o defeito é a autorização.**
+Enquanto conhecer um uuid *conceder* alguma coisa, ele é credencial portadora, e cada campo novo do
+produto precisa ser auditado como canal de uuid para sempre — auditoria que falha sozinha na
+primeira costura. Foi o caso: `team_connections.status='pending'` é escrito **unilateralmente pela
+empresa** (`tc_insert_company`) e `can_view_worker_profile` concedia por ele a linha inteira de
+`workers` (cpf, phone, pix_key, birth_date).
+
+A prova de que o canal não era a causa: procurando a *classe*, apareceu uma segunda instância **sem
+path nenhum e já em produção** — `get_profile_reviews` (`20260816130000:143`) mascara o *nome* do
+freela avaliador ("Carlos S.") e devolve `reviewer_id` **cru** ao lado, para qualquer sessão
+autenticada. Consertar só o path do bucket teria deixado essa em pé.
+
+**Heurística de triagem:** ao receber um achado do tipo "campo X vaza identificador", perguntar
+primeiro *"e se o identificador vazar, o que acontece?"*. Se a resposta for "nada demais", corrigir o
+canal. Se for "PII", parar de caçar canais e corrigir o predicado — depois corrigir o canal como
+defesa em profundidade.
+
+Ver ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii.
+
+## `CREATE OR REPLACE` a partir de baseline desatualizado reverte fix sem erro nenhum
+
+**Família:** "a ferramenta faz nada e diz que deu certo" — a mesma de `DROP POLICY` de nome
+inexistente e de `str.replace` que não casa.
+
+**O caso (F11, 21/08/2026).** O contrato mandava recriar `claim_shift_slot` "copiando o corpo
+verbatim de `20260817000200`". Mas existia `20260817000500`, que **redefinia** a função com um fix
+(checagem de `jobs.status='deleted'` dentro do lock). O builder obedeceu ao contrato; o
+security-reviewer conferiu contra **o mesmo arquivo que o contrato nomeou** — e por isso validou a
+coisa errada.
+
+Migrations aplicam em ordem de nome. `001600 > 000500`, última escrita vence. Em produção, um turno
+**cancelado pela empresa** com chamado aberto voltaria a ser reivindicável: o freela aceita e é
+contratado para um turno que não existe mais. Sem erro, sem log, sem teste falhando — `plpgsql` não
+valida nada disso, e Vitest não alcança SQL.
+
+**Regra:** antes de copiar **qualquer** função-base, rode
+`grep -l "<nome_da_funcao>" supabase/migrations/*.sql` e use a **redefinição mais recente**, não a
+que o contrato nomeia. O contrato pode estar desatualizado — foi escrito num instante, e o schema
+continuou andando.
+
+**Corolário para revisores:** conferir contra o baseline que o contrato indica **não é revisar**.
+Se o contrato errar a base, a revisão herda o erro. O revisor localiza a base por conta própria.
+
+## Asserção que vale igual no código certo e no quebrado não prova nada
+
+**O caso (F9, 21/08/2026), achado por mutação.** Um teste dizia proteger o cálculo de dia civil
+contra regressão para `toISOString().split('T')[0]`. O evaluator aplicou exatamente essa
+substituição em três sítios: **dois mutantes sobreviveram**.
+
+Um deles é instrutivo. Sob o mutante, o início esperado do turno pula um dia e o check-in fica com
+`diffMinutes = -1440`. A regra é `if (diffMinutes <= LATE_TOLERANCE) punctualCount += 1` — ou seja,
+**24 horas adiantado conta como pontual**. A asserção (`punctualCount=1, lateCount=0`) vale idêntica
+nos dois mundos. Pior: sob o mutante, um freela **genuinamente atrasado** também vira "pontual" —
+exatamente o bug que o teste dizia prevenir.
+
+O outro sobreviveu porque a função nem era chamada: a application do caso era `completed`, e o ramo
+exigia `hired`/`in_progress`.
+
+**Regra:** ao escrever teste de regressão, pergunte **o que mudaria de valor** se o bug voltasse.
+Se a resposta for "nada nesta asserção", o teste é decoração. E a única forma de saber é **mutar**:
+quebre o código de propósito, confirme que o teste morre, restaure.

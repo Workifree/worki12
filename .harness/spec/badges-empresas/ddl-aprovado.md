@@ -8,7 +8,12 @@
 >
 > ADR: `.harness/memory-bank/decisions/ADR-20260821-badges-historico-de-empresas.md`
 
-STATUS: **APPROVED_WITH_CHANGES** — 10 desvios normativos da spec (DS1–DS10), §2.
+STATUS: **APPROVED_WITH_CHANGES** — 11 desvios normativos da spec (DS1–DS11), §2.
+
+> **Adendo de 2026-08-21 (gate de arquitetura sobre o achado `C-BADGE-CLICK-TARGET`):** **DS11** é
+> normativo e corrige um destino de navegação que, como escrito na spec (R9/A9), **nunca funciona** em
+> `mode='view'`. Nenhum SQL novo, nenhuma migration nova — o desvio é 100% de rota/UI.
+> ADR: `.harness/memory-bank/decisions/ADR-20260821-rota-espelho-perfil-publico-empresa.md`
 
 > **SINALIZAÇÃO AO HUMANO (não bloqueia esta feature, mas é maior que ela):** a policy de SELECT de
 > `reviews` é `USING (true)` desde `20260309000000` — **qualquer conta autenticada** (worker ou empresa,
@@ -142,6 +147,78 @@ turno concluído, ou badge visível ao público geral: nenhum dos dois está aqu
 | **DS8** | R1 | A tabela nova tem **FK para `workers` e `companies` com `ON DELETE CASCADE`**, e RLS **só de SELECT** (self). INSERT/UPDATE/DELETE **não têm policy** — toda escrita passa pela RPC. | Preferência de exibição não é dado financeiro nem de auditoria (o veto do checklist a CASCADE vale para tabela financeira); apagar o freela deve apagar a preferência dele. Estado só muda por RPC = máquina de estados num lugar (padrão `shift_calls`). |
 | **DS9** | R11 | Arquivo da migration: **`20260817001400_worker_company_badges.sql`** (a spec chutou `20260818000000`). | `20260817001300` é o último timestamp ocupado no repo. |
 | **DS10** | R2 | A guarda de acesso mora **dentro** da cláusula `WHERE` da RPC e retorna conjunto vazio; **nunca** `RAISE EXCEPTION`. | Exceção distinguiria "freela não existe" de "existe mas você não pode" = oráculo de existência (A3). |
+| **DS11** | R9, A9, §5 | O destino do clique no selo **depende do `mode`**: `mode='manage'` → `/empresa/:company_id` (como hoje); `mode='view'` → **`/company/empresa/:company_id`**, rota **nova** sob `CompanyLayout` que renderiza o **mesmo** `CompanyPublicProfile`. Proibido: liberar `/empresa` para `user_type='hire'` no `ProtectedRoute`, e proibido tornar o selo não-navegável. | `/empresa` está em `workerOnlyPaths` (`ProtectedRoute.tsx:148`) e `mode='view'` só monta em `/company/worker/:id` — quem clica é **sempre** `hire`. Como escrito, R9/A9 produz toast de "sem permissão" + redirect para `/company/dashboard` em 100% dos cliques, perdendo o perfil que a empresa estava lendo. Ver §2.1. |
+
+---
+
+## 2.1 DS11 em detalhe — rota-espelho, não furo no isolamento de papel
+
+**O bug (determinístico, não intermitente).** `CompanyBadges.tsx:230` navega para `/empresa/:company_id`.
+Em `mode='view'` o componente só monta em `pages/company/WorkerPublicProfile.tsx` (rota
+`/company/worker/:id`, sob `CompanyLayout`, que já exige `user_type === 'hire'`). Logo, quem clica é
+sempre `hire`. Mas `/empresa/:id` está registrada sob `MainLayout` (`App.tsx:162`) e `'/empresa'` está em
+`workerOnlyPaths` (`ProtectedRoute.tsx:148`). O guard casa por `pathname === p || pathname.startsWith(p + '/')`,
+então **todo** clique vira `addToast('Você não tem permissão para acessar esta página.')` + `Navigate` para
+`/company/dashboard`. O card é `role="button"` com `tabIndex={0}` e hover — promete uma navegação que não
+existe para o único público daquele modo.
+
+**Decisão: rota-espelho (opção 3 do evaluator). As outras duas foram recusadas:**
+
+- **Liberar `/empresa` para `hire` no `ProtectedRoute`** — recusada. O isolamento worker⇎empresa é o
+  Article 1 da constitution e um "ponto sensível" declarado em `architecture.md`. `workerOnlyPaths` é uma
+  **lista de prefixos**, e `/empresa` só seria seguro de abrir porque hoje é folha; abrir o prefixo cria
+  precedente de exceção por rota e faz qualquer rota futura sob `/empresa/*` (ex.: `/empresa/:id/turnos`)
+  nascer acessível a `hire` sem ninguém decidir isso. Trocar um guard de segurança por um problema de
+  navegação é câmbio ruim.
+- **Selo não-navegável em `mode='view'`** — recusada. Contradiz R9/A9 e mata o valor do selo justamente
+  para quem ele existe: a empresa que está avaliando o freela e quer conferir quem foi o empregador
+  anterior. Um card que não leva a lugar nenhum também não deveria ser `role="button"`.
+
+**Contrato da rota nova**
+
+| Item | Valor |
+|---|---|
+| Path | `/company/empresa/:id` |
+| Layout | `CompanyLayout` (dentro do bloco `<Route path="/company" ...>` de `App.tsx`) |
+| Element | `CompanyPublicProfile` — **o mesmo componente**, sem cópia, sem fork, sem prop nova |
+| Guard | `ProtectedRoute` (não muda) + `CompanyLayout`, que já rejeita `user_type !== 'hire'` |
+| SQL | **nenhum** — sem migration, sem policy, sem RPC, sem grant |
+
+**Por que `CompanyPublicProfile` pode ser reusado sem tocar nele (verificado linha a linha):**
+
+1. `select` em `companies` — policy `USING (true)` (`20260317160000`). Nenhuma dependência de papel. Nada
+   novo é exposto: `/empresa/:id` já é o perfil público, e a empresa que olha já vê nome+logo no
+   `JobCard`/feed.
+2. Query de `applications` (`.eq('worker_id', user.id)`) — para um usuário `hire`, `user.id` é um
+   `companies.id`, que nunca aparece em `applications.worker_id`. Resultado: array vazio ⇒
+   `applicationId === null` ⇒ o botão **"Falar com a empresa" não renderiza**. Comportamento correto por
+   construção (empresa não abre chat com empresa), **sem nenhum `if (userType)` dentro do componente**.
+   Custo: uma query que sempre volta vazia — aceito; o alternativo seria ramificar por papel um componente
+   hoje agnóstico.
+3. `ProfileReviews reviewerRole="worker"` → `get_profile_reviews(id, 'company')` (`20260816130000`).
+   O ramo de mascaramento devolve nome completo **só** se `p_reviewed_id = auth.uid()` ou se `auth.uid()`
+   é `companies.owner_id` do perfil. Uma empresa olhando **outra** empresa recebe nomes mascarados
+   ("Carlos S.") — igual ao freela. Uma empresa que clique no selo de **si mesma** vê nomes completos,
+   exatamente o que `/company/profile` já mostra a ela. Zero exposição nova.
+
+**Impacto em `mode='manage'` (freela em `/profile`): nenhum.** O destino continua `/empresa/:company_id`,
+que é worker-only e funciona hoje. DS11 **adiciona** um destino, não substitui o existente.
+
+**Como o componente escolhe o destino.** Derivar do prop `mode`, não de leitura de sessão (Article 5 —
+sem `await` novo no clique):
+
+```tsx
+// DS11: /empresa/:id e worker-only (ProtectedRoute.workerOnlyPaths). Em mode='view' quem clica e
+// SEMPRE uma empresa (o componente so monta em /company/worker/:id), entao o destino e a rota-espelho
+// sob CompanyLayout. INVARIANTE: mode='view' => caller e 'hire'; mode='manage' => caller e 'work'.
+// Montar CompanyBadges em qualquer tela nova exige revalidar esta invariante.
+const profileBase = mode === 'view' ? '/company/empresa' : '/empresa';
+```
+
+**Teste obrigatório (é o que faltou):** `CompanyBadges.test.tsx` monta em `MemoryRouter` **sem**
+`ProtectedRoute` — ambiente de teste fabricando uma condição que produção não tem. O caso novo deve
+asserir os **dois** destinos (`mode='view'` → `/company/empresa/:id`; `mode='manage'` → `/empresa/:id`) e,
+no caso `view`, montar também uma `<Route path="/empresa/:id">` que **reprova** o teste se for atingida.
 
 ---
 
@@ -541,12 +618,19 @@ SELECT count(*) FROM public.get_worker_company_badges(
 - **`components/CompanyBadges.tsx`** — `{ workerId: string; mode: 'view' | 'manage' }`, fetch
   `useState`/`useEffect` (Article 5), modelo em `ProfileReviews.tsx`. Selo neo-brutalista (Article 13),
   `shifts_count` **sempre** na face (DS4), sem nota quando `avg_rating === null`, iniciais em círculo preto
-  quando não há logo, alvo de toque ≥44px, clique navega para `/empresa/:company_id`
-  (`stopPropagation` no controle de ocultar).
+  quando não há logo, alvo de toque ≥44px, clique navega para a rota do perfil público da empresa
+  **conforme DS11** (`mode='manage'` → `/empresa/:company_id`; `mode='view'` →
+  `/company/empresa/:company_id`) — `stopPropagation` no controle de ocultar.
 - **`mode='manage'`** — além do olho por badge, um **switch único "Não exibir onde já trabalhei"**
   (`update workers set badges_hidden` direto, DS2). Ligado, o grid continua visível para o dono, com aviso
   explícito de que ninguém mais o vê.
 - **Telas:** `pages/company/WorkerPublicProfile.tsx` (`mode='view'`) e `pages/Profile.tsx` (`mode='manage'`).
+- **`App.tsx`** — uma linha nova dentro do bloco `<Route path="/company" element={<CompanyLayout />}>`
+  (DS11), reusando o `lazy` de `CompanyPublicProfile` que já existe:
+  ```tsx
+  <Route path="empresa/:id" element={<CompanyPublicProfile />} />
+  ```
+- **`ProtectedRoute.tsx`** — **nenhuma** alteração. `workerOnlyPaths` fica intacto.
 - **Gate:** `cd frontend && npm run build` + `npm run lint` verdes (Article 3).
 
 ---
@@ -564,4 +648,9 @@ SELECT count(*) FROM public.get_worker_company_badges(
   da spec, e é a fronteira com a anti-vision "NÃO é rede social" (D7).
 - **Notificar a empresa** quando um freela oculta o badge dela — decisão unilateral do freela sobre o
   próprio perfil, silenciosa por desenho.
+- **Alterar `workerOnlyPaths` em `ProtectedRoute.tsx`, abrir `/empresa` para `user_type='hire'` ou
+  mexer no isolamento worker⇎empresa de qualquer forma** — recusado no adendo DS11 (§2.1); o caminho
+  autorizado é a rota-espelho `/company/empresa/:id`, aditiva.
+- **Fork/cópia de `CompanyPublicProfile`** para uma versão company-side, ou prop nova de papel dentro
+  dele — a rota-espelho reusa o componente **como está** (DS11).
 - **Corrigir a exposição de `reviews` (`USING (true)`)** — dívida real, sinalizada no topo, spec própria.

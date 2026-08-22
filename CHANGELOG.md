@@ -10,6 +10,52 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Analytics de Operação — Painel de Métricas da Empresa (2026-08-21)
+
+**Empresa:**
+- **Nova tela "Operação"** (`/company/operacao`): painel de leitura com números que você monta na mão
+- **Métrica de destaque:** tempo médio de preenchimento de chamados (quanto leva entre disparar e alguém aceitar)
+- **Quatro números principais:**
+  - Gasto no período (modo A — pagamento externo registrado)
+  - Contratações (freelas que aceitaram)
+  - Custo por hora (gasto ÷ horas trabalhadas)
+  - Horas realizadas ÷ previstas (percentual de execução)
+- **Breakdowns visuais:**
+  - Chamados por status (aberto, preenchido, cancelado, expirado)
+  - Chamados por motivo (falta, demissão, pico previsto, evento, férias, folga, reforço, outro)
+  - Confirmações de véspera (quantos confirmaram/não responderam/disseram que não vão)
+- **Tabelas por freela:**
+  - Aceitação (quantos chamados aceitou)
+  - Presença (quantos registraram check-in)
+  - Desempenho (turnos concluídos, horas totais, nota)
+  - Ordem alfabética, **não ranking** (sem "melhor freela")
+- **Seletor de período:** atalhos (Hoje, Semana, Mês) + datas customizadas
+- **Avisos de dados:**
+  - Turno sem checkout usa hora estimada (aviso explícito: "X de Y usaram estimativa")
+  - Período muito longo trunca números (aviso em destaque, pede redução)
+  - Horas inconsistentes são descartadas (aviso em vermelho)
+- **Limitação honesta documentada:** gasto contado por data de pagamento, horas por data de turno — deslocamento perto de bordas de período
+
+#### Badges das Empresas — Selos no Perfil do Freela (2026-08-21)
+
+**Freela:**
+- **Seção "Já trabalhou com"** no perfil: selos visuais de empresas onde você concluiu turno
+- **O que mostra o selo:**
+  - Logo/nome da empresa
+  - Quantos turnos você fez com ela
+  - Nota que ela te deu (ex: "4.8 ★"), ou "Sem avaliação" se nunca avaliou
+- **Clicar no selo:** abre perfil público daquela empresa (nome, setor, descrição, endereço, avaliações de outros freelas)
+- **Dois controles de visibilidade:**
+  1. **Esconder/reexibir selos individuais:** botão de olho em cada selo — reexibir depois é possível (dado não é apagado)
+  2. **Chave-mestra:** switch "Não exibir onde já trabalhei" — esconde a seção **inteira** para todas as empresas; você continua vendo tudo em seu perfil
+- **Ordem cronológica:** selos mais recentes aparecem primeiro, **não ranking por nota**
+- **Quem vê:** só empresas com vínculo ativo (`team_connections.status='accepted'`) e selos que você deixou visíveis; você sempre vê tudo no seu perfil
+- **"Sem avaliação" ≠ nota baixa:** é ausência de nota, não prejudica você
+
+**Empresa:**
+- **Ver selos ao revisar freela:** no perfil de um freela (rota `/company/worker/:id`), você vê os selos dele — prova social de experiência dele com outras empresas
+- **Nunca vê selos ocultos:** se freela escondeu um selo ou ligou a chave-mestra, a seção desaparece de seu lado
+
 #### Aviso de Risco de Vínculo — Alertar sobre Frequência Semanal do Freela (2026-08-18)
 
 **Empresa:**

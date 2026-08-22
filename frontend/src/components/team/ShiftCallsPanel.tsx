@@ -1,4 +1,4 @@
-import { Megaphone, Loader2, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
+import { Megaphone, Siren, Loader2, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
 import { formatDurationShort } from '../../lib/dateUtils';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
 import type { ShiftCall, ShiftCallTarget } from '../../types';
@@ -10,6 +10,16 @@ import type { ShiftCall, ShiftCallTarget } from '../../types';
 // quanto tempo faz, e quanto tempo levou para preencher. Esse último número é o argumento
 // comercial inteiro do produto ("de 2 horas para 6 minutos") — por isso ele aparece na tela da
 // operação, não escondido num relatório que ninguém abre.
+//
+// F11 (SOS) reusa este painel para `origin='sos'`, e é aqui que a membrana da feature (D1 do
+// ADR-20260821 — "a empresa nunca vê quem foi chamado") precisa ser respeitada NO CLIENTE
+// também, não só na RLS: `call.targets` de um chamado SOS só traz, pela policy
+// `shift_call_targets_select`, quem já ACEITOU — nunca é o pool. Por isso, para `origin='sos'`:
+//   - a contagem de "quantos foram avisados" usa `call.targets_count` (o número que a RPC
+//     devolveu), NUNCA `targets.length` (que aqui é só o tamanho de quem aceitou);
+//   - a lista de chips é filtrada explicitamente para `response === 'accepted'` — defesa em
+//     profundidade: mesmo que a RLS já garanta isso, o componente nunca assume e nunca
+//     renderiza uma linha "Aguardando"/pendente de um alvo de SOS (não há como saber quem são).
 // ---------------------------------------------------------------------------
 
 function targetVisual(target: ShiftCallTarget) {
@@ -43,10 +53,17 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
   return (
     <div className="space-y-3 mb-8">
       {calls.map((call) => {
-        const targets = call.targets ?? [];
-        const pending = targets.filter((t) => !t.response).length;
+        const isSos = call.origin === 'sos';
+        const rawTargets = call.targets ?? [];
+        // F11: para SOS, `rawTargets` já vem filtrado pela RLS a só quem aceitou — não confiar
+        // nisso é o que documenta o comentário acima; filtra de novo, explicitamente.
+        const targets = isSos ? rawTargets.filter((t) => t.response === 'accepted') : rawTargets;
+        const pending = isSos ? 0 : targets.filter((t) => !t.response).length;
         const accepted = targets.filter((t) => t.response === 'accepted').length;
         const isOpen = call.status === 'open';
+        // F11: o número que a empresa PODE ver é `targets_count` (devolvido pela RPC), nunca o
+        // tamanho do array de alvos carregados no client.
+        const notifiedCount = isSos ? call.targets_count : targets.length;
 
         return (
           <div
@@ -58,16 +75,27 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
                 <p className="font-black uppercase text-sm flex items-center gap-2">
-                  <Megaphone size={16} />
-                  {isOpen ? 'Chamado aberto' : 'Chamado encerrado'}
+                  {isSos ? <Siren size={16} /> : <Megaphone size={16} />}
+                  {isSos
+                    ? isOpen
+                      ? 'Chamado de urgência aberto'
+                      : 'Chamado de urgência encerrado'
+                    : isOpen
+                      ? 'Chamado aberto'
+                      : 'Chamado encerrado'}
                   <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-black text-white">
                     {SHIFT_CALL_REASON_LABELS[call.reason]}
                   </span>
+                  {isSos && (
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white border-2 border-black">
+                      Fora do Elenco
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs font-bold text-gray-500 mt-1">
-                  {targets.length} chamado{targets.length !== 1 ? 's' : ''} ·{' '}
-                  {accepted} aceite{accepted !== 1 ? 's' : ''}
-                  {isOpen && pending > 0 ? ` · ${pending} sem responder` : ''}
+                  {isSos
+                    ? `${notifiedCount ?? 0} avisado${(notifiedCount ?? 0) !== 1 ? 's' : ''} fora do Elenco · ${accepted} aceite${accepted !== 1 ? 's' : ''}`
+                    : `${notifiedCount} chamado${notifiedCount !== 1 ? 's' : ''} · ${accepted} aceite${accepted !== 1 ? 's' : ''}${isOpen && pending > 0 ? ` · ${pending} sem responder` : ''}`}
                 </p>
               </div>
 

@@ -5,7 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
-import { formatDateOnly } from '../lib/dateUtils';
+import { formatDateOnly, calculateWorkedHours } from '../lib/dateUtils';
 import PageMeta from '../components/PageMeta';
 import ServiceTermSection from '../components/ServiceTermSection';
 import { ArrowLeft, Printer, Clock, MapPin, AlertTriangle, LogIn, LogOut } from 'lucide-react';
@@ -33,27 +33,6 @@ interface ShiftAttendance {
     checkinSource: AttendanceSource | null;
     checkout: string | null;
     checkoutSource: AttendanceSource | null;
-}
-
-/**
- * Total de horas trabalhadas entre chegada e saída REGISTRADAS (timestamps completos, com
- * data — não só hora-do-dia). Turno que cruza a meia-noite (ex.: 18h10 às 01h00) é resolvido
- * automaticamente pela subtração de datas absolutas: como cada timestamp já carrega sua
- * própria data, checkout "no dia seguinte" não precisa do hack "+24h" usado em `calculateHours`
- * (CompanyCreateJob.tsx), que só é necessário para strings de hora soltas sem data.
- *
- * Retorna `null` se checkin/checkout ausentes ou se checkout <= checkin (dado inconsistente —
- * melhor omitir a linha do recibo do que exibir um total errado/negativo).
- */
-function calculateWorkedHours(
-    checkinIso: string | null | undefined,
-    checkoutIso: string | null | undefined,
-): number | null {
-    if (!checkinIso || !checkoutIso) return null;
-    const checkin = new Date(checkinIso).getTime();
-    const checkout = new Date(checkoutIso).getTime();
-    if (!Number.isFinite(checkin) || !Number.isFinite(checkout) || checkout <= checkin) return null;
-    return (checkout - checkin) / (1000 * 60 * 60);
 }
 
 /** Formata horas decimais como "7h30", "8h" ou "45min" (pt-BR, sem casas decimais soltas). */
