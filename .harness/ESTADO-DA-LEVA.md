@@ -29,22 +29,35 @@ PR #216 mergeado. Migrations `20260821000300` (DS-PII), `20260817001400` (F12), 
 `jobs.status='deleted'` e o lock continua em `jobs`. O trigger de `origin` é **BEFORE** — se virasse
 AFTER, as duas policies novas deixariam de valer em silêncio.
 
-### 🔴 PENDENTE: deploy do frontend NÃO entrou
+### 🔴 PENDENTE: deploy do frontend NÃO entrou — e a causa foi diagnosticada
 
-`api.vercel.com` está inalcançável desta máquina (`curl` devolve `000`; `vercel.com` e GitHub
-respondem). O bundle no ar continua sendo `index-BLTg-_4j.js`, o mesmo da leva F5–F8 — nenhuma tela
-nova está publicada.
+O bundle no ar continua `index-BLTg-_4j.js`, o mesmo da leva F5–F8. **Nenhuma tela de F9–F12 está
+publicada.** Não quebrou nada (a ordem migration-antes-do-frontend foi respeitada), mas para o
+usuário final essas quatro features **ainda não existem**.
 
-**Isso não quebrou nada** (a ordem migration-antes-do-frontend foi respeitada), **mas há uma janela
-de risco aberta:**
+**Diagnóstico (22/08):** não é credencial nem Vercel fora do ar.
+1. O CLI falhava com `TypeError: fetch failed` enquanto `curl` alcançava `api.vercel.com`. A
+   diferença era **IPv6**: o Node preferia AAAA, que não resolve nesta máquina.
+   `NODE_OPTIONS="--dns-result-order=ipv4first"` fez `vercel whoami` passar.
+2. Mas o **deploy continua falhando** mesmo com a flag, em 5 tentativas seguidas. `whoami`
+   (requisição pequena) passa; o deploy (que sobe arquivos) não. Aponta para algo entre esta
+   máquina e a Vercel que quebra em payload maior — proxy, MTU ou firewall.
 
-> O frontend no ar ainda usa o embed `worker:workers(...)` em `listAllConnections`, que a DS-PII
-> esvaziou para linhas `pending`. Hoje há **0 conexões pendentes**, então nada acontece. Se alguém
-> criar um convite antes do deploy, o cartão aparece **sem o nome do freela e sem erro nenhum** —
-> exatamente a falha silenciosa que `list_team_connection_cards()` existe para evitar.
+**Ação para o owner — é o único item que depende de outra máquina:**
+```
+! npx vercel --prod
+```
+Da **raiz** do repo (não `--cwd frontend`, que publica num projeto avulso). Se falhar aí também,
+prefixar com `NODE_OPTIONS="--dns-result-order=ipv4first"`.
 
-**Ação:** rodar `npx vercel --prod` **da raiz** quando a API voltar, e verificar o chunk no ar (não
-o hash do build local, que nunca bate). Ver `[[vercel-deploy-setup]]` na memória.
+**Depois de publicar, verificar o chunk no ar** — o hash do build local nunca bate com o da Vercel:
+baixar o `index-*.js` publicado, extrair o nome do chunk (`grep -oE '(CompanyOperationAnalytics|
+CompanyReferrals|QuemTeIndicou|CompanyBadges)-[A-Za-z0-9_-]+\.js'`), baixar e procurar uma string
+que só existe na versão nova.
+
+**Janela de risco enquanto não sobe:** o frontend no ar ainda usa o embed `worker:workers(...)` em
+`listAllConnections`, que a DS-PII esvaziou para linhas `pending`. Hoje há **0 conexões pendentes**.
+Se alguém criar um convite antes do deploy, o cartão aparece **sem o nome e sem erro nenhum**.
 
 ## 3. ✅ DECISÕES TOMADAS (21/08/2026 — owner delegou: "tome a decisão recomendada")
 
