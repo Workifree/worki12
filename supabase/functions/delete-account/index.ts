@@ -16,7 +16,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { getCorsHeaders, ASAAS_API_URL, getAsaasHeaders } from '../_shared/asaas.ts';
+import { getCorsHeaders } from '../_shared/asaas.ts';
 
 // ---------------------------------------------------------------------------
 // Tipos do retorno da RPC (jsonb) — ver corpo em
@@ -217,7 +217,7 @@ serve(async (req) => {
     // 4b. Asaas: os cartões tokenizados lidos em (2) NÃO são revogados aqui. Dívida DECLARADA,
     //     não esquecimento — e a não-ação é deliberada.
     //
-    // A primeira versão deste bloco chamava `DELETE ${ASAAS_API_URL}/creditCard/{token}`. Esse
+    // A primeira versão deste bloco chamava `DELETE {ASAAS_API_URL}/creditCard/{token}`. Esse
     // endpoint foi INVENTADO: não há precedente dele no repositório (o único DELETE ao Asaas é
     // `asaas-release-hold`, que apaga um `payment` — outro recurso) e a documentação pública do
     // Asaas não descreve remoção de token de cartão. Ela documenta `POST /v3/creditCard/tokenize`
