@@ -29,35 +29,30 @@ PR #216 mergeado. Migrations `20260821000300` (DS-PII), `20260817001400` (F12), 
 `jobs.status='deleted'` e o lock continua em `jobs`. O trigger de `origin` é **BEFORE** — se virasse
 AFTER, as duas policies novas deixariam de valer em silêncio.
 
-### 🔴 PENDENTE: deploy do frontend NÃO entrou — e a causa foi diagnosticada
+### ✅ DEPLOY FEITO (22/08) — F9–F12 no ar, verificadas no bundle publicado
 
-O bundle no ar continua `index-BLTg-_4j.js`, o mesmo da leva F5–F8. **Nenhuma tela de F9–F12 está
-publicada.** Não quebrou nada (a ordem migration-antes-do-frontend foi respeitada), mas para o
-usuário final essas quatro features **ainda não existem**.
+Bundle `index-musdyRGh.js`. Chunks conferidos por download, não pelo relatório do deploy:
+`CompanyOperationAnalytics`, `CompanyReferrals`, `QuemTeIndicou`, `CompanyBadges` — todos presentes,
+com o texto esperado dentro (tempo de preenchimento, banner de erro, consentimento citando CPF,
+"Sem avaliação" ≠ nota zero, e o vocabulário proibido de F10 ausente como deve ser).
 
-**Diagnóstico (22/08):** não é credencial nem Vercel fora do ar.
-1. O CLI falhava com `TypeError: fetch failed` enquanto `curl` alcançava `api.vercel.com`. A
-   diferença era **IPv6**: o Node preferia AAAA, que não resolve nesta máquina.
+**O que destravou: `--archive=tgz`.** O CLI falhava com `TypeError: fetch failed` na fase de upload
+mesmo com a rede boa. Duas descobertas no caminho:
+1. O Node preferia IPv6, que não resolve nesta máquina — `curl` funcionava por usar IPv4.
    `NODE_OPTIONS="--dns-result-order=ipv4first"` fez `vercel whoami` passar.
-2. Mas o **deploy continua falhando** mesmo com a flag, em 5 tentativas seguidas. `whoami`
-   (requisição pequena) passa; o deploy (que sobe arquivos) não. Aponta para algo entre esta
-   máquina e a Vercel que quebra em payload maior — proxy, MTU ou firewall.
+2. Mas o deploy seguia falhando: requisição pequena passava, upload de muitos arquivos não.
+   **`--archive=tgz` sobe um tarball único** e contorna. Comando que funciona:
 
-**Ação para o owner — é o único item que depende de outra máquina:**
 ```
-! npx vercel --prod
+npx vercel --prod --yes --archive=tgz
 ```
-Da **raiz** do repo (não `--cwd frontend`, que publica num projeto avulso). Se falhar aí também,
-prefixar com `NODE_OPTIONS="--dns-result-order=ipv4first"`.
 
-**Depois de publicar, verificar o chunk no ar** — o hash do build local nunca bate com o da Vercel:
-baixar o `index-*.js` publicado, extrair o nome do chunk (`grep -oE '(CompanyOperationAnalytics|
-CompanyReferrals|QuemTeIndicou|CompanyBadges)-[A-Za-z0-9_-]+\.js'`), baixar e procurar uma string
-que só existe na versão nova.
+Da **raiz** (nunca `--cwd frontend`, que publica num projeto avulso).
 
-**Janela de risco enquanto não sobe:** o frontend no ar ainda usa o embed `worker:workers(...)` em
-`listAllConnections`, que a DS-PII esvaziou para linhas `pending`. Hoje há **0 conexões pendentes**.
-Se alguém criar um convite antes do deploy, o cartão aparece **sem o nome e sem erro nenhum**.
+**Verificação pós-deploy obrigatória** — o hash do build local nunca bate com o da Vercel: baixar o
+`index-*.js` do ar, extrair o nome do chunk por grep, baixar o chunk e procurar uma string que só
+existe na versão nova. Foi assim que descobri que meu primeiro grep de "Tempo de preenchimento"
+dava falso negativo (a string real é "Tempo médio de preenchimento do chamado").
 
 ## 3. ✅ DECISÕES TOMADAS (21/08/2026 — owner delegou: "tome a decisão recomendada")
 
