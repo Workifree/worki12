@@ -98,7 +98,27 @@ REVOKE ALL ON FUNCTION public.list_team_connection_cards() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.list_team_connection_cards() TO authenticated, service_role;
 
 -- ============================================================================
--- DOWN: reaplicar o corpo de 20260821001000 (WHERE public.is_company_owner(tc.company_id)).
+-- DOWN: trocar o predicado do WHERE de volta para a forma por-linha:
+--
+--          WHERE public.is_company_owner(tc.company_id)
+--
+--       ...mantendo TODO o resto do corpo acima intacto. Nao ha mais nada a reverter: esta
+--       migration muda um predicado e nada alem dele.
+--
+-- ⚠️ NAO diga "reaplicar o corpo de 20260821001000". Esse arquivo NAO existe em
+--    `supabase/migrations/` deste repositorio — ele vive na branch `feat/multi-unidade`
+--    (worktree), embora ja esteja APLICADO em producao. Um DOWN que aponta para artefato
+--    irrecuperavel a partir do repo nao e reversibilidade, e sim arqueologia: quem precisar
+--    reverter estara sob pressao e nao vai ter onde procurar. Por isso o DOWN acima e literal.
+--
+-- MEDIDO em producao (22/08/2026), e nao presumido:
+--   forma antiga  `WHERE is_company_owner(tc.company_id)`
+--     -> Filter aplicado em `team_connections`; cost 26.11; Execution Time 25.657 ms
+--   forma nova    `WHERE tc.company_id IN (SELECT c.id FROM companies WHERE is_company_owner(c.id))`
+--     -> Filter aplicado em `companies`, "Rows Removed by Filter: 7" (uma chamada por EMPRESA),
+--        Bitmap Index Scan em idx_team_connections_company; cost 12.67; Execution Time 1.790 ms
+--   Confirma O(empresas) no lugar de O(conexoes). Com 4 linhas na tabela o ganho absoluto e
+--   irrelevante HOJE; o que a medicao estabelece e a FORMA do plano, que e o que escala.
 -- VERIFICACAO pos-aplicacao:
 --   1. Projecao inalterada:
 --      SELECT pg_get_functiondef(oid) FROM pg_proc WHERE proname='list_team_connection_cards';
