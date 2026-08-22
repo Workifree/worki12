@@ -26,11 +26,18 @@ que é resíduo:
 | `shift_payments` (modo A) | 4 `recorded` | **não usa Asaas** |
 
 **Nenhum dos quatro saldos tem lastro no razão:** uma carteira tem R$ 4.700 e **zero** lançamentos;
-outra tem R$ 4.130 contra um razão de −R$ 670. Os dois únicos créditos são de R$ 0,00. Conclusão de
-fato: **nunca entrou dinheiro real**; os saldos foram gravados direto na coluna, fora das RPCs — o
-que contraria a premissa do Article 8 e nunca foi detectado porque nada reconciliava as duas coisas.
+outra tem R$ 4.130 contra um razão de −R$ 670. Os dois únicos créditos são de R$ 0,00. Os saldos
+foram gravados direto na coluna, fora das RPCs — o que contraria a premissa do Article 8 e nunca foi
+detectado porque **nada, em lugar nenhum, reconciliava saldo com razão**.
 
-Isso torna a pausa barata: não há dinheiro de terceiro para devolver.
+Minha primeira leitura destes números foi que "nunca entrou dinheiro real". **Estava errada, e quem
+corrigiu foi o owner:** entrou dinheiro real em algum momento — alguns reais de teste do Asaas — e
+**já foi sacado**. O que sobrou na coluna não corresponde a valor devido a ninguém. Registro o erro
+porque ele mostra o limite do método: o razão prova que o saldo não tem lastro, mas **não prova o que
+aconteceu no mundo**. Para isso é preciso perguntar a quem estava lá.
+
+De todo modo a conclusão prática se mantém: não há dinheiro de terceiro para devolver, e a pausa é
+barata.
 
 ## Decisão
 
@@ -43,7 +50,8 @@ Clientes** (lista de empresas — relacional, não dinheiro) e `/recebimentos` �
 Ou seja, do ponto de vista do usuário o produto já era só modo A; esta decisão torna isso oficial em
 vez de circunstancial.
 
-O que continua de pé e é decisão de ops, não de produto: **sete Edge Functions Asaas ATIVAS**
+O que estava de pé e foi decidido pelo owner remover (feito — ver "Execução"): **sete Edge Functions
+Asaas, à época ATIVAS**
 (`asaas-webhook`, `-onboard`, `-deposit`, `-checkout`, `-withdraw`, `-sync`, `-account-status`).
 A `asaas-webhook` roda com `verify_jwt: false` **por desenho** (o Asaas não manda JWT do Supabase),
 mas **não é porta aberta**: exige o header `asaas-access-token` contra `ASAAS_WEBHOOK_TOKEN` e falha
@@ -70,7 +78,11 @@ própria, com data e justificativa, como manda o histórico do arquivo.
    supunha tokens retidos no processador; há **zero**. A pergunta técnica ao suporte do Asaas e a
    decisão de owner/jurídico que dependia dela saem da lista. Ver
    `ADR-20260822-token-de-cartao-permanece-no-asaas.md`, que fica **superado neste ponto**.
-2. **Duas guardas da rotina de exclusão de conta passam a barrar por dado que não representa nada.**
+2. ~~**Duas guardas da rotina de exclusão de conta passam a barrar por dado que não representa
+   nada.**~~ ✅ **RESOLVIDO na execução** (`20260822000500`): saldos e escrows encerrados, as guardas
+   continuam intactas e agora não barram ninguém. O texto original fica abaixo como registro do
+   raciocínio.
+   **Duas guardas da rotina de exclusão de conta passam a barrar por dado que não representa nada.**
    `anonymize_account` recusa exclusão com `wallet_has_balance` (4 carteiras) e `escrow_active`
    (4 escrows). Com pagamento pausado e saldo sem lastro, essas guardas deixam de proteger dinheiro
    e passam a **impedir o exercício do art. 18, VI** por causa de resíduo de teste. Precisa de
@@ -87,8 +99,10 @@ própria, com data e justificativa, como manda o histórico do arquivo.
   apagar `wallet_transactions`/`escrow_transactions` destrói a trilha que o Article 9 protege — pelo
   mesmo argumento que já rejeitou trocar aqueles FKs por CASCADE (§0.1 do contrato de LGPD). Pausa
   não justifica destruição.
-- **Zerar os saldos "para limpar".** Rejeitada por ora: é escrita de saldo, e escrita de saldo passa
-  por RPC atômica (Article 8). Se for feito, é operação declarada, com razão, não faxina.
+- **Zerar os saldos como "faxina", com `UPDATE` solto.** Rejeitada — e o encerramento foi feito
+  (ver "Execução"), mas do jeito oposto: operação **declarada**, em migration, com um lançamento em
+  `wallet_transactions` por carteira carregando o valor exato e o motivo. A diferença não é
+  cerimônia: é ela que preserva o saldo original no `amount` e torna a operação reversível.
 - **Deixar tudo exatamente como está.** Rejeitada em parte: as sete funções ativas são superfície
   sem propósito de negócio. Não é urgente (a webhook falha fechado), mas é dívida declarada.
 
