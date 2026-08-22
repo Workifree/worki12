@@ -48,6 +48,26 @@ no roteamento (`ProtectedRoute`) e no banco (RLS).
 - NÃO é multi-gateway — **Asaas é o único** provedor de pagamento (Stripe foi 100% removido).
 - Modo A (pagamento externo registrado, default piloto) não move saldo — é auditoria/recibo. Escrow (modo B/C) é caminho opt-in.
 
+## ⏸️ PAGAMENTO PAUSADO (22/08/2026 — decisão do owner)
+
+**O Asaas foi abandonado e o Worki não processa pagamento por enquanto.** A funcionalidade de a
+empresa depositar a folha inteira no Worki para o Worki repassar aos freelas está **pausada**.
+
+O produto passa a ser **100% modo A**: a empresa paga por fora (PIX/dinheiro) e registra no Worki,
+que emite o recibo bilateral. Nada de dinheiro passa pela plataforma.
+
+Na prática isso **já era** a experiência do usuário — não existe rota `/wallet`, nem
+`/company/financeiro`, nem tela de depósito ou saque. A decisão torna oficial o que era
+circunstancial. Modos B (PIX único distribuído) e C (cartão on-file) saem de "opt-in" para
+**pausados**.
+
+Fato apurado no dia da decisão, que torna a pausa barata: **nunca entrou dinheiro real**. Há
+R$ 8.834 em saldos, mas **sem lastro no razão** — os dois únicos lançamentos de crédito são de
+R$ 0,00 e uma das carteiras tem R$ 4.700 com zero lançamentos. É resíduo de teste gravado direto na
+coluna. Não há dinheiro de terceiro para devolver.
+
+Detalhes, efeito constitucional e consequências: `decisions/ADR-20260822-pausa-do-processamento-de-pagamento.md`.
+
 ## Direção atual (MVP — 2026)
 
 Foco em **piloto com primeiro cliente real, 100% modo A** (Onda 1 — Revisão Piloto):
