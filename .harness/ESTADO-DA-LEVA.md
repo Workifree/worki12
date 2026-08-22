@@ -320,3 +320,23 @@ recebe e-mail; e o UNIQUE de idempotência do Article 9 é **índice parcial**
 **Causa raiz:** este arquivo descreve a **intenção** das migrations; nada no build, lint ou teste
 cruza isso com o banco. Ficou registrada nota no topo do arquivo: schema ali vale o que o catálogo
 disser.
+
+## ⚠️ GATE DE DEPLOY: a Edge Function `delete-account` NÃO pode subir antes da migration
+
+Achado A-2 do evaluator. A função reescrita chama `anonymize_account`, que **não existe** em produção
+(`20260821000000` não aplicada — conferido: a função não está no catálogo).
+
+Deployá-la agora **troca um bug por outro pior**: hoje a exclusão falha no `deleteUser` por FK; com a
+função nova e sem a migration, a chamada `.rpc()` devolve `PGRST202` e **100% das tentativas de
+exclusão retornam 500**. O comportamento é fail-closed (ninguém perde credencial), mas ninguém
+consegue excluir conta nenhuma.
+
+**Ordem obrigatória:** `20260821000000` (anonimização) → `20260821000400` (expurgo) → deploy da Edge
+Function. Mesma família da regra já registrada "migration antes do frontend".
+
+**E antes de qualquer um dos três**, o que continua faltando e não é técnico:
+- **Política de Privacidade** (J4/§6.1) — bloqueia publicar a rotina ao usuário.
+- **Prazo de retenção de 6 anos** — confirmação jurídica.
+- **Texto de consentimento do SOS** — revisão jurídica.
+- **Retenção do token de cartão no Asaas** — sem endpoint de revogação confirmado; ou se confirma
+  com o Asaas, ou se remove o cliente lá, ou se declara a retenção na Política de Privacidade.
