@@ -57,10 +57,24 @@ confirmação de um advogado antes do piloto, e a implementação não depende d
 - **Anonimização com lápide pseudônima**, não exclusão física. Não existe caminho que cumpra o
   art. 18, VI **e** preserve a trilha fiscal; a alternativa seria destruir `shift_payments`, que é
   documento de auditoria.
-- **Prazo de retenção: 5 anos** de `shift_payments` e `service_terms`, contados de `paid_at` /
-  `accepted_at`. Base: prescrição civil (CC art. 206, §5º, I) — é o número que o próprio contrato
-  aponta como padrão de mercado. **Escolhido por mim; confirmar com advogado.** Decorrido o prazo,
-  expurgo — o que exige um cron que **não existe hoje** e passa a ser parte da entrega.
+- **Prazo de retenção: 6 anos** de `shift_payments` e `service_terms`, contados de `paid_at` /
+  `accepted_at`. **Corrigido de 5 para 6 em 21/08**, por recomendação do architect, e ele estava
+  certo: eu tinha raciocinado a partir da prescrição **civil** (CC art. 206, §5º, I — cobrança de
+  dívidas), mas o risco que este produto corre é **reclamação trabalhista alegando vínculo**. Ela
+  cabe até 2 anos após o fim da relação (CF art. 7º, XXIX) e o processo dura anos — a prova que
+  interessa é exatamente o `term_text`, que declara ausência de vínculo, e o cenário realista é
+  precisar dele **no ano 6 ou 7**. Cinco anos deixaria a prova expirar antes do risco.
+  **Ainda assim é escolha de orquestração, não parecer jurídico — confirmar com advogado.**
+  O prazo mora isolado em `lgpd_retention_interval()`: trocar é `CREATE OR REPLACE` de três linhas.
+- **O expurgo apaga CONTEÚDO PESSOAL, não a LINHA** (ADR-20260821-expurgo-de-conteudo-nao-de-linha).
+  O que a LGPD exige eliminar é o dado pessoal; o registro contábil pseudônimo não é dado pessoal
+  depois que nome e CPF saem, e é ele que sustenta a trilha fiscal.
+- **O prazo é do DADO, não da conta.** Conta excluída hoje com pagamento de 4 anos atrás: expurgo em
+  2 anos. Contar da exclusão faria quem exerce o art. 18, VI **prolongar** a retenção dos próprios
+  dados (6 anos para quem não pede, 10 para quem pede) — e deixaria todo registro de conta viva fora
+  do expurgo para sempre.
+- Decorrido o prazo, expurgo por cron — **não existe hoje**, é a migration `20260821000400`, e passa
+  a ser parte da entrega.
 - **A política e a tela precisam dizer, com todas as letras**, que o termo aceito é retido **com
   nome e CPF** por esse período. Sem isso a promessa continua falsa, só que na direção oposta.
 - Nota de honestidade que fica no ADR: isto **não é anonimização** no sentido do art. 5º, XI — é

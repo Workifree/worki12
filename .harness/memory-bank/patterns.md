@@ -1141,3 +1141,54 @@ exigia `hired`/`in_progress`.
 **Regra:** ao escrever teste de regressão, pergunte **o que mudaria de valor** se o bug voltasse.
 Se a resposta for "nada nesta asserção", o teste é decoração. E a única forma de saber é **mutar**:
 quebre o código de propósito, confirme que o teste morre, restaure.
+
+## Função que IMITA a regra em vez de DELEGAR envelhece sozinha
+
+**Achado na revisão do F13, 21/08/2026 — e causado pelo nosso próprio paralelismo.**
+
+O projeto tem um "contrato de manutenção conjunta" registrado: `is_job_owner` e `is_company_owner`
+são um par e mudam na mesma migration. O contrato funcionou — as duas foram unificadas juntas.
+
+Mas **três funções-irmãs** (`can_view_worker_profile`, `list_team_connection_cards`,
+`can_view_reviews_of`) reimplementam a mesma ancoragem **inline**:
+
+```sql
+tc.company_id = v_uid OR tc.company_id IN (SELECT id FROM companies WHERE owner_id = v_uid)
+```
+
+O comentário de uma delas diz *"ancoragem dupla idêntica a `is_company_owner`"* — mas **imita, não
+delega**. Resultado: quando a regra de autorização de empresa mudou (multi-unidade), as duas do par
+ganharam gerente e operador; as três irmãs **não**. Um gerente operando a unidade deixaria de ver
+CPF, telefone e PIX dos freelas do próprio elenco — o dado de que o modo A de pagamento depende.
+
+**Nenhum teste pega:** RLS não roda nos testes, e mock devolve o que o teste mandar.
+
+**Por que aconteceu:** as três foram escritas **no mesmo dia**, por frentes paralelas, **depois** de
+o contrato da feature de autorização ser congelado. Ninguém errou — cada frente fez o certo no
+próprio escopo.
+
+**Regra:** quando existir uma função canônica de autorização, **as outras a chamam**. Duplicar o
+predicado "porque é a mesma regra" cria N cópias que divergem no primeiro dia em que a regra muda —
+e divergem **em silêncio**, porque cada cópia continua sintaticamente válida.
+
+**Corolário para o contrato de manutenção:** a lista de "quem muda junto" não pode conter só as
+funções que **têm o nome** da regra. Precisa conter todas as que **contêm a regra**. Descobre-se com
+`grep` do predicado, não do nome da função.
+
+## Lista à mão de dependentes envelhece; enumeração de catálogo não
+
+**Mesmo dia, duas ocorrências independentes** — a guarda de `DELETE` de `accept_manager_invite`
+(seis `NOT EXISTS` escritos à mão, seis FKs reais de fora) e a classificação de tabelas da
+anonimização LGPD (escrita contra um snapshot que já não era o banco).
+
+Nas duas, o modo de falha é idêntico: a lista estava **certa quando foi escrita** e ficou errada
+porque features novas (F10, F12) criaram dependentes depois.
+
+**Regra:** enumeração de dependentes vem do catálogo (`pg_constraint` por `confrelid`), e **não
+filtra por `confdeltype`** — `SET NULL` e `RESTRICT` também são dependências que alguém precisa ter
+pensado. A lista à mão continua existindo, mas muda de papel: deixa de ser *inventário* e passa a
+ser *declaração de que foi decidido*. O `HALT` quando aparece dependente fora da lista é o ponto,
+não o efeito colateral.
+
+**Enumeração automática decide o que existe; a lista à mão decide o que é seguro. As duas juntas,
+nunca uma só.**

@@ -16,10 +16,22 @@
 > classificadas (`worker_referrals`, `worker_company_badge_prefs`, `team_lists`,
 > `company_spend_limits`, `company_monthly_revenue`, `job_series`, ramo empresa de
 > `worker_trainings`), asserção (c) em §2.2, V9–V12 em §2.6, 1 risco residual em §5.3.
-> **Não libera aplicação:** H1/H2 seguem pendentes do owner.
 >
-> **Duas migrations independentes.** Nenhuma depende da outra; aplicar sempre a #1 antes da #2
-> (a #1 contém asserções de schema que valem como diagnóstico geral do banco).
+> **EMENDA 2026-08-21 (retenção/expurgo).** **H1 e H2 VIERAM DO OWNER — ver §5.** H1: retenção de
+> **5 anos** (contada de `paid_at` / `accepted_at`), depois **expurgo**. H2: **remover** as FKs
+> CASCADE, como desenhado. Delta desta emenda: **§2.7 (migration #3 — expurgo)**; §0.3 (o veredito
+> de `enforce_shift_payment_immutability` MUDOU — agora **precisa** de emenda); §5/H1–H2
+> reescritos como DECIDIDO; §5.3 (`shift_payments.note` deixa de ser risco *permanente* e vira
+> risco *com prazo*); e **§6 (texto de política e de tela)**, entregável desta emenda.
+> O que **NÃO** muda: toda a §2.1–§2.6 (cobertura de 7 tabelas, 4 colunas, asserção (c)) —
+> **não reabrir**.
+> **Bloqueio remanescente: TÉCNICO, não de decisão.** A #1 não vai a produção sozinha: sem a #3,
+> a promessa de 5 anos não é cumprida por nada.
+>
+> **Três migrations.** #1 e #2 são independentes entre si; aplicar a #1 antes da #2 (a #1 contém
+> asserções de schema que valem como diagnóstico geral do banco). **A #3 DEPENDE da #1** — ela
+> reescreve `enforce_service_term_immutability` com o corpo-**superset** (delta da anonimização
+> **mais** o do expurgo). Ordem obrigatória: **#1 → #3**.
 
 ---
 
@@ -57,9 +69,43 @@ quem acreditava que `deleteUser` funcionava.
 
 | Guarda | Ator `service_role` / `auth.uid()` NULL | Veredito para a anonimização |
 |---|---|---|
-| `enforce_shift_payment_immutability` (20260630/20260712) | A partição por papel está dentro de `IF auth.uid() IS NOT NULL` — sem sessão não há partição. Mas as colunas materiais (`amount`, `note`, `source`, `paid_at`, …) são imutáveis **antes** disso, para todos os papéis. | **Não precisa mudar.** Nada em `shift_payments` é anonimizado (§2.1). O trigger fica intocado. |
+| `enforce_shift_payment_immutability` (20260630/20260712) | A partição por papel está dentro de `IF auth.uid() IS NOT NULL` — sem sessão não há partição. Mas as colunas materiais (`amount`, `note`, `source`, `paid_at`, …) são imutáveis **antes** disso, para todos os papéis. | ~~Não precisa mudar~~ → **PRECISA de emenda (§2.7)**. Continua verdade que **nada em `shift_payments` é anonimizado** na exclusão de conta (§2.1) — a migration #1 segue sem tocar neste trigger. Mas o **expurgo** (migration #3) apaga `note`, que está na lista de colunas materiais. Ver o quadro abaixo. |
 | `enforce_service_term_immutability` (20260817001100) | Vale para **todos** os papéis, inclusive `service_role` e owner. Permite reescrever `term_text` **apenas** na transição `anonymized_at NULL→ts`. | **Precisa de uma emenda cirúrgica.** `accepted_ip` e `accepted_user_agent` são imutáveis após o aceite **sem exceção** — e IP é dado pessoal (art. 5º, I). Hoje a anonimização seria **barrada** ao tentar apagá-los. Emenda em §2.4: permitir `ip/ua → NULL` (só para NULL, nunca para outro valor) dentro da mesma transição. |
 | `enforce_certification_update_scope` (F8, 20260817001300) | Ramo **(c)** (`v_uid IS NULL`): `RAISE EXCEPTION` se `v_content_changed`. | **Barra a anonimização por UPDATE.** O ramo (c) foi escrito para cron e FK SET NULL, não para apagar conteúdo. Conclusão: `worker_certifications` e `worker_trainings` **não** se anonimizam — **apagam-se** (`DELETE`), que nenhum trigger `BEFORE UPDATE` intercepta e que é o tratamento correto (certificação não tem valor fiscal). Ver §2.1. |
+
+#### 0.3.1 O expurgo bate nos MESMOS guardas — e agora bate nos dois (emenda 2026-08-21)
+
+A pergunta que o gate reabriu: *com o expurgo apagando **conteúdo** (UPDATE) em vez de apagar a
+**linha** (DELETE, ADR-20260821-expurgo-de-conteudo-nao-de-linha), os guardas barram de novo?*
+**Sim — e é assim que tem de ser.** Escolher `UPDATE` foi justamente escolher a rota que **passa**
+pelos guardas: um `DELETE` não dispara trigger `BEFORE UPDATE` nenhum e seria a única operação
+destrutiva do sistema sem supervisão. O preço de estar sob supervisão é ter de escrever a exceção.
+
+| Guarda | O que barra o expurgo hoje | Delta em §2.7 |
+|---|---|---|
+| `enforce_shift_payment_immutability` | **Três** bloqueios, não um. (1) `note` está na lista de colunas materiais "imutáveis SEMPRE, inclusive `service_role`" (20260712000000:145–160) ⇒ `note → NULL` levanta exceção. (2) `IF OLD.status = 'voided' THEN RAISE` — e um pagamento **estornado** de 6 anos atrás carrega `note` igual; sem tratar isto, exatamente as linhas mais antigas ficariam de fora. (3) `purged_at` é coluna **nova**: nenhuma checagem a menciona, então ela passaria **em silêncio** por qualquer caminho — inclusive por um `authenticated`. | Ganha um ramo de expurgo **auto-limitado** no topo (`RETURN NEW` cedo) + um bloqueio explícito de `purged_at` para todo o resto. Corpo vigente **inalterado** abaixo disso. |
+| `enforce_service_term_immutability` | `term_text` pós-aceite só muda sob `v_anonymizing` (§2.4); `accepted_ip`/`accepted_user_agent` idem. O expurgo atinge **conta viva** (decisão 3 do ADR — prazo é do dado), e numa conta viva `anonymized_at` é e continua `NULL` ⇒ `v_anonymizing` é `false` ⇒ **barrado**. Reaproveitar `anonymized_at` para escapar disso está **proibido** (marcaria como "conta excluída" quem não excluiu conta). | Ganha o **mesmo** ramo auto-limitado, `v_purging`, ao lado de `v_anonymizing`. ⚠️ **Corpo-superset:** esta função é reescrita por §2.4 **e** por §2.7 — a #3 tem de conter as duas emendas. Ordem obrigatória **#1 → #3**, com asserção em §2.7 que **HALTa** se a #1 não estiver aplicada. |
+| `enforce_certification_update_scope` (F8) | Irrelevante para o expurgo: `worker_certifications` **não** tem retenção — é `DELETE` na própria exclusão da conta (§2.1). | Nenhum. |
+
+**A forma da exceção (vale para os dois, e é o que a torna segura).** O ramo só existe se as cinco
+condições valerem juntas — qualquer uma faltando é `RAISE`, nunca fall-through silencioso:
+
+1. `auth.uid() IS NULL` — só `service_role`/cron. Nenhuma sessão humana expurga.
+2. `purged_at` vai de `NULL` para timestamp (marcador novo, one-way). É também o **gatilho barato**
+   do ramo: numa `UPDATE` normal a condição falha na primeira comparação e nada mais é avaliado.
+3. **A linha passou do prazo**, medido pela mesma `public.lgpd_retention_interval()` que a RPC usa.
+   Consequência declarada: **nem o `service_role` consegue expurgar um registro de ontem.** A regra
+   de retenção passa a morar no guarda de imutabilidade, não só na rotina que ele guarda.
+4. **Nenhuma trava de litígio ativa** (`service_terms.retention_hold_reason`; para o pagamento, a
+   trava do termo correspondente).
+5. **Nada além das colunas do expurgo mudou**, verificado por
+   `to_jsonb(NEW) - <colunas do expurgo> IS NOT DISTINCT FROM to_jsonb(OLD) - <as mesmas>`.
+
+É (5) que autoriza o `RETURN NEW` cedo sem reexecutar o corpo vigente: se `to_jsonb` de tudo o mais
+é idêntico, então `amount`, `job_id`, `worker_id`, `accepted_at`, `status` e a confirmação do freela
+**não podem** ter mudado — o corpo abaixo não teria o que reprovar. E a comparação protege
+**colunas que ainda não existem**: quem adicionar coluna em `shift_payments` amanhã a ganha
+protegida contra o expurgo sem editar uma linha deste trigger.
 
 ### 0.4 O nome honesto disto não é "anonimização"
 
@@ -838,6 +884,775 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 
 ---
 
+## 2.7 Migration #3 — `supabase/migrations/20260821000400_lgpd_retention_purge.sql`
+
+> **Entregável da emenda de retenção.** H1 veio do owner: **5 anos**, contados de `paid_at` /
+> `accepted_at`, depois **expurgo**. Sem esta migration, a #1 promete um prazo que **nenhum código
+> cumpre** — por isso as duas andam juntas (§0, bloqueio remanescente).
+>
+> ADR: `.harness/memory-bank/decisions/ADR-20260821-expurgo-de-conteudo-nao-de-linha.md`.
+> O que o ADR decidiu e este documento apenas implementa: **o expurgo é `UPDATE`, não `DELETE`** —
+> apaga o **conteúdo pessoal** e preserva a **linha pseudônima**. Nenhum `DELETE` em
+> `shift_payments` ou `service_terms`, nem pelo cron, nem por ninguém.
+>
+> **Depende da #1.** Reescreve `enforce_service_term_immutability` com o corpo-**superset**
+> (emenda da anonimização §2.4 **mais** a do expurgo). Aplicar na ordem inversa faria a #1
+> sobrescrever a exceção de expurgo em silêncio. Há asserção que **HALTa** se a #1 faltar.
+
+### 2.7.0 O prazo é do DADO, não da conta (decisão desta emenda)
+
+Pergunta que muda a query: *uma conta excluída hoje, com um pagamento de 4 anos atrás — expurga em
+1 ano (idade do dado) ou em 5 (data da exclusão)?*
+
+**Decisão: em 1 ano. O relógio é do dado.** Cutoff sobre `coalesce(paid_at, created_at)` e
+`coalesce(accepted_at, created_at)`, **sem nenhuma referência a `anonymized_at`**.
+
+Por quê:
+
+1. **Contar da exclusão é perverso.** O titular que exerce o art. 18, VI passaria a **prolongar** a
+   retenção dos próprios dados: quem nunca pede exclusão tem o dado apagado em 5 anos, quem pede
+   fica com ele por 9. Punir o exercício do direito com mais retenção é indefensável perante
+   qualquer autoridade — e é o oposto do princípio da necessidade (art. 6º, III).
+2. **A base legal já é datada pelo fato, não pela conta.** O que sustenta a retenção é a
+   prescrição da pretensão nascida **daquela transação** (CC art. 189: o prazo corre da lesão do
+   direito). O prazo do documento começa quando o documento nasce. A conta do titular é irrelevante
+   para o relógio: uma empresa que nunca sai da plataforma também deixa de ter justificativa para
+   guardar o nome e o CPF de um freela num termo de 2021.
+3. **Consequência assumida: o expurgo atinge conta VIVA.** Um freela ativo há 7 anos perde o
+   `term_text` dos termos mais antigos. Isso é correto (a retenção tem prazo porque o prazo existe,
+   não porque a pessoa saiu) e **é a razão pela qual a exceção nos triggers não pode reaproveitar
+   `v_anonymizing`** — numa conta viva `anonymized_at` é `NULL` e continua `NULL` (§0.3.1).
+4. **Operacionalmente é a única query sã.** Cutoff por coluna própria da tabela = varredura por
+   índice parcial em `shift_payments`/`service_terms`, sem `JOIN` com a lápide. Contar da exclusão
+   exigiria juntar `workers`/`companies` a cada varredura **e** deixaria todo registro de conta viva
+   **fora do expurgo para sempre** — ou seja: a variante "da conta" não é só pior, ela **não cumpre**
+   a promessa de 5 anos para a maioria da base.
+
+> ⚠️ **Confirmação jurídica pendente (não bloqueia o código, muda um literal).** 5 anos é a
+> prescrição civil (CC art. 206, §5º, I) — o número que o próprio contrato já apontava como padrão,
+> **escolhido pela orquestração, não por parecer de advogado**. A recomendação técnica é **6 anos**:
+> a reclamação trabalhista alegando vínculo pode ser ajuizada **até 2 anos após o fim da relação**
+> (CF art. 7º, XXIX) e o processo dura anos — a prova que interessa nesse cenário é exatamente o
+> `term_text` que declara ausência de vínculo, e o cenário realista é precisar dele **no ano 6 ou 7**.
+> O desenho torna a troca trivial de propósito: o prazo vive numa função só
+> (`lgpd_retention_interval()`), consumida pela RPC **e** pelos dois triggers. Trocar 5→6 é um
+> `CREATE OR REPLACE` de três linhas — **não** é caça a literal espalhado. Enquanto não houver
+> parecer, quem precisar de mais prazo numa linha específica usa a **trava de litígio**
+> (`retention_hold_reason`), que é o instrumento correto para exceção pontual.
+
+### 2.7.1 Classificação — o que o expurgo apaga e o que fica
+
+| Tabela / coluna | Ação no expurgo | Justificativa |
+|---|---|---|
+| `service_terms.term_text` | **SUBSTITUÍDO** por marcador `'[REGISTRO EXPURGADO …]'` | É o único lugar do sistema com **nome e CPF em texto claro**. É por causa dele que a retenção precisava de prazo. Marcador (e não `NULL`) porque a coluna é `NOT NULL` e porque o rótulo é o sinal auditável de que houve expurgo, não de que houve bug. |
+| `service_terms.accepted_ip`, `accepted_user_agent` | **APAGADOS** (`NULL`) | Se já não sobrevivem à exclusão da conta (§2.1), não há razão para sobreviverem ao prazo numa conta viva. Telemetria `BEST-EFFORT e FALSIFICÁVEL` pelo próprio schema. |
+| `service_terms.amount`, `accepted_at`, `term_version`, `job_id`, `worker_id`, `company_id`, `shift_payment_id`, `created_at` | **RETIDOS** | O **fato** da transação (valor, data, partes pseudônimas) não identifica ninguém depois que a lápide esvaziou `workers`/`companies`. É o que sustenta BI e a integridade referencial `RESTRICT`. |
+| `shift_payments.note` | **APAGADO** (`NULL`) | Único texto livre da tabela e o risco residual §5.3. Depois do prazo não existe mais justificativa para guardar texto da empresa que **pode** conter nome de pessoa. §5.3 deixa de ser risco permanente e vira risco **com prazo**. |
+| `shift_payments` — todo o resto | **RETIDO** | Documento declaratório. `amount`/`paid_at` continuam contando no BI de gasto. Um expurgo por `DELETE` teria reescrito, em silêncio, todo relatório anterior a 5 anos. |
+| `purged_at` (novo, nas duas tabelas) | **RECEBE** `now()` | Marcador do expurgo. **Não** reaproveitar `anonymized_at`: a transição dele já foi gasta na exclusão da conta e o marcador não distinguiria os dois eventos. |
+| `service_terms.retention_hold_reason` (nova) | **trava** — linha com valor não-`NULL` é **pulada** | Litígio/investigação em curso. Trava o termo **e** o `note` do pagamento correspondente. `service_terms` só tem policy de `SELECT` ⇒ a coluna é inalcançável pelo client **por construção**. |
+| `wallets`, `wallet_transactions`, `escrow_transactions` | **NÃO SÃO LIDAS NEM ESCRITAS** | Article 8/9 intactos **por construção**, não por cuidado: a garantia de idempotência `(wallet_id, reference_id)` só existe enquanto a linha existe, e o expurgo não conhece essas tabelas. |
+| `workers`, `companies` (lápide ou não) | **INTOCADAS** | O expurgo é sobre **registro de transação**, não sobre perfil. Perfil é tratado pela #1. |
+
+### 2.7.2 SQL — cabeçalho, asserção de ordem e o prazo num lugar só
+
+```sql
+-- Migration: LGPD — expurgo de conteudo pessoal apos o prazo de retencao (debito pre-piloto #5)
+-- File: supabase/migrations/20260821000400_lgpd_retention_purge.sql
+-- ADR: .harness/memory-bank/decisions/ADR-20260821-expurgo-de-conteudo-nao-de-linha.md
+-- DDL aprovado (FONTE NORMATIVA): .harness/spec/lgpd-producao/ddl-aprovado.md §2.7
+-- Gate: harness-architect (21/08/2026). H1 decidido pelo owner: 5 anos.
+--
+-- ============================================================================
+-- O QUE ESTA MIGRATION FAZ
+-- ----------------------------------------------------------------------------
+--   Cumpre o prazo de retencao que a #1 promete. Decorridos 5 anos de `paid_at` / `accepted_at`,
+--   o CONTEUDO PESSOAL de `service_terms` e `shift_payments` e eliminado por UPDATE. A LINHA
+--   permanece: valor, data e partes (uuids pseudonimos) continuam no banco e no BI.
+--
+--   NAO HA DELETE. Nem aqui, nem em lugar nenhum, nessas duas tabelas. Razoes (ADR):
+--     - `shift_payments` NAO TEM policy de DELETE por decisao explicita de 20260630000000
+--       ("auditoria nao se apaga; correcao = voided"). Um cron que apaga contradiz o schema.
+--     - `service_terms.shift_payment_id` e RESTRICT (+ FK composta service_terms_payment_identity)
+--       => DELETE teria ordem obrigatoria e lote abortado por erro de ordem. Sem DELETE, o
+--       problema inteiro deixa de existir.
+--     - Os dois guardas de imutabilidade sao BEFORE UPDATE. Um DELETE ESCAPA de ambos: seria a
+--       unica operacao destrutiva do sistema sem guarda nenhum.
+--
+-- ============================================================================
+-- ORDEM DE APLICACAO — OBRIGATORIA: #1 (20260821000000) ANTES DESTA
+-- ----------------------------------------------------------------------------
+--   Esta migration reescreve `enforce_service_term_immutability` com o corpo-SUPERSET: emenda da
+--   anonimizacao (ip/ua -> NULL sob anonymized_at) + emenda do expurgo. Aplicada ANTES da #1, a
+--   #1 sobrescreveria a excecao do expurgo EM SILENCIO e o cron passaria a falhar todo dia.
+--   A assercao abaixo torna isso impossivel: FALHA FECHADO.
+--
+-- ============================================================================
+-- FRONTEIRA FINANCEIRA (Article 8/9) — INTACTA POR CONSTRUCAO
+-- ----------------------------------------------------------------------------
+--   Nenhuma tabela de saldo/razao e LIDA ou ESCRITA por esta migration. Nenhuma RPC de saldo e
+--   tocada. `wallet_transactions`/`escrow_transactions` nao aparecem em nenhuma query daqui.
+--
+-- Risk: MEDIUM — rotina destrutiva de conteudo, agendada, que atinge tambem CONTAS VIVAS
+--   (o prazo e do DADO, nao da conta — ddl-aprovado §2.7.0). Irreversivel por natureza.
+-- Backup required before production deploy: SIM (pg_dump de service_terms e shift_payments).
+--
+-- PRIMEIRA EXECUCAO: rodar em DRY-RUN antes de deixar o cron ativo (V4 da secao COMO VERIFICAR).
+--   Com 5 anos de prazo e a plataforma em piloto, o esperado hoje e ZERO linha elegivel — se o
+--   dry-run devolver numero > 0, PARE: ou o relogio do banco esta errado, ou ha dado de teste com
+--   data antiga. Nao "confirme" um expurgo que voce nao explica.
+--
+-- DOWN (rollback): ver rodape. O DOWN NAO restaura conteudo ja expurgado.
+-- ============================================================================
+
+-- =============================================
+-- 1. ASSERCAO DE ORDEM — a #1 precisa estar aplicada
+--    Marcadores da #1: `service_terms.anonymized_at` ja existia (20260817001100), mas
+--    `workers.anonymized_at` e `public.anonymize_account` NASCEM na #1. Exigimos os dois.
+-- =============================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'workers' AND column_name = 'anonymized_at'
+    ) THEN
+        RAISE EXCEPTION
+          'ASSERCAO DE ORDEM: 20260821000000 (lgpd_account_anonymization) NAO esta aplicada. '
+          'Esta migration reescreve enforce_service_term_immutability com o corpo-superset; '
+          'aplicar fora de ordem faria a #1 apagar a excecao do expurgo em silencio. HALT.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public' AND p.proname = 'anonymize_account'
+    ) THEN
+        RAISE EXCEPTION
+          'ASSERCAO DE ORDEM: public.anonymize_account nao existe — a #1 nao esta aplicada. HALT.';
+    END IF;
+END $$;
+
+-- =============================================
+-- 2. O PRAZO, NUM LUGAR SO
+--    Consumida pela RPC de expurgo E pelos DOIS triggers de imutabilidade. Trocar 5 -> 6 anos
+--    (recomendacao tecnica pendente de parecer juridico — ddl-aprovado §2.7.0) e um
+--    CREATE OR REPLACE desta funcao, e mais nada. NAO inline o literal em lugar nenhum.
+-- =============================================
+CREATE OR REPLACE FUNCTION public.lgpd_retention_interval()
+RETURNS interval
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$ SELECT interval '5 years' $$;
+
+COMMENT ON FUNCTION public.lgpd_retention_interval() IS
+    'Prazo de retencao do CONTEUDO PESSOAL de service_terms.term_text e shift_payments.note. '
+    '5 anos = prescricao civil (CC art. 206 §5 I) — escolha do owner em 21/08/2026, PENDENTE de '
+    'confirmacao juridica; recomendacao tecnica e 6 anos pelo vetor trabalhista (CF art. 7 XXIX + '
+    'duracao do processo). Ponto UNICO de verdade: consumida pela RPC purge_expired_personal_data '
+    'e pelos triggers enforce_service_term_immutability / enforce_shift_payment_immutability. '
+    'ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
+
+-- Custo zero e evita a assimetria de risco de 20260816201457 (funcao de trigger sem EXECUTE):
+-- esta funcao nao devolve dado nenhum, so o literal do prazo.
+REVOKE ALL ON FUNCTION public.lgpd_retention_interval() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.lgpd_retention_interval() TO service_role, authenticated;
+```
+
+### 2.7.3 SQL — marcadores, trava de litígio e prova de conformidade
+
+```sql
+-- =============================================
+-- 3. MARCADORES DO EXPURGO + TRAVA DE LITIGIO
+--    ADD COLUMN nullable sem DEFAULT = sem reescrita de heap.
+-- =============================================
+ALTER TABLE public.service_terms   ADD COLUMN IF NOT EXISTS purged_at            timestamptz;
+ALTER TABLE public.service_terms   ADD COLUMN IF NOT EXISTS retention_hold_reason text;
+ALTER TABLE public.shift_payments  ADD COLUMN IF NOT EXISTS purged_at            timestamptz;
+
+COMMENT ON COLUMN public.service_terms.purged_at IS
+    'Expurgo de retencao (LGPD): venceu o prazo de lgpd_retention_interval() e o CONTEUDO PESSOAL '
+    'desta linha foi eliminado (term_text -> marcador, accepted_ip/accepted_user_agent -> NULL). '
+    'A LINHA permanece: amount, accepted_at, partes e vinculos sao RETIDOS. One-way, fechada ao '
+    'client (service_terms so tem policy de SELECT). NAO confundir com anonymized_at, que marca '
+    'exclusao de CONTA — o expurgo atinge conta viva tambem (o prazo e do DADO).';
+COMMENT ON COLUMN public.shift_payments.purged_at IS
+    'Expurgo de retencao (LGPD) — ver public.service_terms.purged_at. Nesta tabela o expurgo '
+    'apaga APENAS `note` (unico texto livre). Valor, datas e partes sao RETIDOS: o BI de gasto '
+    'historico sobrevive ao expurgo.';
+COMMENT ON COLUMN public.service_terms.retention_hold_reason IS
+    'TRAVA DE LITIGIO. Nao-NULL = esta linha (e o `note` do shift_payment correspondente) e '
+    'PULADA pelo expurgo, indefinidamente, mesmo vencido o prazo. Preenchida por operacao '
+    '(service_role) quando ha litigio/investigacao em curso. Inalcancavel pelo client por '
+    'construcao: service_terms so tem policy de SELECT. Limpar a trava reabre a linha ao expurgo.';
+
+-- Indices parciais: a varredura diaria pergunta "quem ainda NAO foi expurgado e ja venceu".
+-- Expressao coalesce(...) e IMMUTABLE => indexavel. Sem CONCURRENTLY (migration roda em transacao).
+CREATE INDEX IF NOT EXISTS idx_service_terms_retention_due
+    ON public.service_terms ((coalesce(accepted_at, created_at)))
+    WHERE purged_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_shift_payments_retention_due
+    ON public.shift_payments ((coalesce(paid_at, created_at)))
+    WHERE purged_at IS NULL;
+
+-- =============================================
+-- 4. PROVA DE CONFORMIDADE — registro das operacoes de tratamento (LGPD art. 37)
+--    Sem isto, "expurgamos" e afirmacao sem lastro. Com isto, e consulta.
+--    RLS habilitada e ZERO policy: nenhum client le (service_role ignora RLS).
+-- =============================================
+CREATE TABLE IF NOT EXISTS public.data_retention_purge_runs (
+    id                    uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+    ran_at                timestamptz NOT NULL DEFAULT now(),
+    cutoff                timestamptz NOT NULL,
+    retention_interval    interval    NOT NULL,
+    batch_limit           integer     NOT NULL,
+    service_terms_purged  integer     NOT NULL DEFAULT 0,
+    shift_payments_purged integer     NOT NULL DEFAULT 0,
+    service_terms_held    integer     NOT NULL DEFAULT 0,
+    duration_ms           integer     NOT NULL DEFAULT 0
+);
+
+ALTER TABLE public.data_retention_purge_runs ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE public.data_retention_purge_runs IS
+    'Registro das execucoes do expurgo de retencao (LGPD art. 37 — registro das operacoes de '
+    'tratamento). Uma linha por execucao EFETIVA do cron/RPC. Dry-run NAO grava (diagnostico nao '
+    'e operacao de tratamento). RLS habilitada sem policy: so service_role le. Nunca contem dado '
+    'pessoal — so contagens.';
+COMMENT ON COLUMN public.data_retention_purge_runs.service_terms_held IS
+    'Quantas linhas VENCIDAS foram puladas por retention_hold_reason (trava de litigio). Numero '
+    'alto e persistente = alguem esqueceu de limpar uma trava.';
+```
+
+### 2.7.4 SQL — os dois guardas de imutabilidade (corpos-superset)
+
+> **Reproduzir as funções INTEIRAS.** São `CREATE OR REPLACE` sobre funções **aplicadas em
+> produção**. `enforce_shift_payment_immutability` parte do corpo de `20260712000000` (§4);
+> `enforce_service_term_immutability` parte do corpo **já emendado em §2.4** — este é o
+> corpo-superset, e é o motivo da ordem `#1 → #3`. Não reordenar e **não reescrever mensagens de
+> erro existentes** (há teste e log dependendo delas). Os triggers não são recriados:
+> `CREATE OR REPLACE FUNCTION` mantém os existentes apontando para o novo corpo.
+
+```sql
+-- =============================================
+-- 5. shift_payments — corpo vigente (20260712000000) + RAMO DE EXPURGO no topo
+--    O ramo e AUTO-LIMITADO: so existe se as 5 condicoes de §0.3.1 valerem juntas. O gatilho
+--    (purged_at NULL -> ts) e barato, entao UPDATE normal nao paga nada pelas checagens caras.
+--    Se alguem entra no gatilho e NAO cumpre a forma, e RAISE — nunca fall-through silencioso.
+-- =============================================
+CREATE OR REPLACE FUNCTION public.enforce_shift_payment_immutability()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_is_company BOOLEAN;
+    v_is_worker  BOOLEAN;
+BEGIN
+    -- === EMENDA 2026-08-21 (LGPD, expurgo de retencao) ==========================
+    -- Gatilho barato: so o expurgo leva purged_at de NULL para timestamp.
+    IF OLD.purged_at IS NULL AND NEW.purged_at IS NOT NULL THEN
+        IF auth.uid() IS NULL
+           -- (b) a linha PASSOU DO PRAZO. Nem service_role expurga registro de ontem.
+           AND coalesce(OLD.paid_at, OLD.created_at) <= now() - public.lgpd_retention_interval()
+           -- (c) forma do expurgo nesta tabela: `note` some, e so.
+           AND NEW.note IS NULL
+           -- (d) trava de litigio do termo correspondente
+           AND NOT EXISTS (
+                 SELECT 1 FROM public.service_terms st
+                  WHERE st.shift_payment_id = OLD.id
+                    AND st.retention_hold_reason IS NOT NULL
+               )
+           -- (e) NADA alem das colunas do expurgo mudou. E isto que autoriza o RETURN cedo:
+           --     se todo o resto e identico, o corpo abaixo nao teria o que reprovar. Protege
+           --     tambem colunas que ainda nao existem.
+           AND (to_jsonb(NEW) - ARRAY['note','purged_at'])
+               IS NOT DISTINCT FROM
+               (to_jsonb(OLD) - ARRAY['note','purged_at'])
+        THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'shift_payments: expurgo fora da forma permitida (exige service_role, prazo de retencao vencido, ausencia de trava de litigio e nenhuma alteracao alem de note->NULL).';
+    END IF;
+
+    -- purged_at e ONE-WAY e so o expurgo o escreve. Qualquer outro caminho para.
+    IF NEW.purged_at IS DISTINCT FROM OLD.purged_at THEN
+        RAISE EXCEPTION 'shift_payments: purged_at so pode ser definido pelo expurgo de retencao e depois e imutavel.';
+    END IF;
+    -- === FIM DA EMENDA — abaixo, corpo vigente INALTERADO ======================
+
+    -- === COLUNAS MATERIAIS SEMPRE IMUTÁVEIS (todos os papéis, inclusive service_role) ===
+    -- scheduled_for entra aqui: a PROMESSA não se reescreve (reagendar = void + novo).
+    IF NEW.id             IS DISTINCT FROM OLD.id
+       OR NEW.job_id         IS DISTINCT FROM OLD.job_id
+       OR NEW.company_id     IS DISTINCT FROM OLD.company_id
+       OR NEW.worker_id      IS DISTINCT FROM OLD.worker_id
+       OR NEW.application_id IS DISTINCT FROM OLD.application_id
+       OR NEW.source         IS DISTINCT FROM OLD.source
+       OR NEW.amount         IS DISTINCT FROM OLD.amount
+       OR NEW.recorded_by    IS DISTINCT FROM OLD.recorded_by
+       OR NEW.note           IS DISTINCT FROM OLD.note
+       OR NEW.created_at     IS DISTINCT FROM OLD.created_at
+       OR NEW.scheduled_for  IS DISTINCT FROM OLD.scheduled_for
+    THEN
+        RAISE EXCEPTION 'shift_payments: colunas materiais sao imutaveis (job_id, company_id, worker_id, application_id, source, amount, recorded_by, note, created_at, scheduled_for). Correcao = estorno logico (voided).';
+    END IF;
+
+    -- === paid_at: imutável, EXCETO a efetivacao (scheduled->recorded) que o define UMA vez ===
+    IF NEW.paid_at IS DISTINCT FROM OLD.paid_at THEN
+        IF NOT (OLD.status = 'scheduled' AND NEW.status = 'recorded'
+                AND OLD.paid_at IS NULL AND NEW.paid_at IS NOT NULL) THEN
+            RAISE EXCEPTION 'shift_payments: paid_at so pode ser definido na efetivacao (scheduled->recorded) e depois e imutavel.';
+        END IF;
+    END IF;
+
+    -- === Registro estornado é IMUTÁVEL (não re-abre, não re-confirma) ===
+    IF OLD.status = 'voided' THEN
+        RAISE EXCEPTION 'shift_payments: registro estornado (voided) e imutavel.';
+    END IF;
+
+    -- === Transições de status permitidas ===
+    IF NEW.status IS DISTINCT FROM OLD.status THEN
+        IF NOT (
+            (OLD.status = 'scheduled' AND NEW.status IN ('recorded', 'voided'))
+            OR (OLD.status = 'recorded' AND NEW.status = 'voided')
+        ) THEN
+            RAISE EXCEPTION 'shift_payments: transicao de status invalida (% -> %).', OLD.status, NEW.status;
+        END IF;
+    END IF;
+
+    -- === worker_confirmed_at é ONE-WAY (NULL → timestamp; nunca altera/limpa) ===
+    IF OLD.worker_confirmed_at IS NOT NULL
+       AND NEW.worker_confirmed_at IS DISTINCT FROM OLD.worker_confirmed_at
+    THEN
+        RAISE EXCEPTION 'shift_payments: worker_confirmed_at nao pode ser alterado apos a confirmacao.';
+    END IF;
+
+    -- === PARTIÇÃO POR PAPEL (só p/ chamadas autenticadas; service_role/trigger tem auth.uid() NULL) ===
+    IF auth.uid() IS NOT NULL THEN
+        v_is_company := EXISTS (
+            SELECT 1 FROM public.companies WHERE id = NEW.company_id AND owner_id = auth.uid()
+        );
+        v_is_worker := (NEW.worker_id = auth.uid());
+
+        IF v_is_worker AND NOT v_is_company THEN
+            -- Freela: SÓ pode setar worker_confirmed_at (num registro já 'recorded'). Nada mais muda.
+            IF NEW.status      IS DISTINCT FROM OLD.status
+               OR NEW.voided_at   IS DISTINCT FROM OLD.voided_at
+               OR NEW.void_reason IS DISTINCT FROM OLD.void_reason
+               OR NEW.paid_at     IS DISTINCT FROM OLD.paid_at
+            THEN
+                RAISE EXCEPTION 'shift_payments: freela so pode confirmar recebimento (worker_confirmed_at).';
+            END IF;
+        ELSIF v_is_company THEN
+            -- Empresa: efetiva (scheduled->recorded), cancela (->voided), estorna; NÃO toca a confirmacao do freela.
+            IF NEW.worker_confirmed_at IS DISTINCT FROM OLD.worker_confirmed_at THEN
+                RAISE EXCEPTION 'shift_payments: empresa nao pode alterar a confirmacao do freela.';
+            END IF;
+        ELSE
+            RAISE EXCEPTION 'shift_payments: usuario nao autorizado a atualizar este registro.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.enforce_shift_payment_immutability() IS
+    'BEFORE UPDATE em shift_payments. Colunas materiais imutaveis para TODOS os papeis; correcao = '
+    'estorno logico (voided). UNICA excecao: o expurgo de retencao LGPD (purged_at NULL->ts por '
+    'service_role, com prazo vencido e nada alem de note->NULL) — ver '
+    'ADR-20260821-expurgo-de-conteudo-nao-de-linha. O prazo mora em lgpd_retention_interval(): '
+    'a regra de retencao e verificada AQUI, nao so na RPC que a aplica.';
+```
+
+```sql
+-- =============================================
+-- 6. service_terms — CORPO-SUPERSET
+--    = corpo de 20260817001100
+--      + emenda da ANONIMIZACAO (ddl-aprovado §2.4: ip/ua -> NULL sob anonymized_at NULL->ts)
+--      + emenda do EXPURGO (esta migration)
+--    Aplicar esta migration ANTES da #1 apagaria a segunda emenda. A assercao de ordem (secao 1)
+--    impede isso.
+-- =============================================
+CREATE OR REPLACE FUNCTION public.enforce_service_term_immutability()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    -- EMENDA 2026-08-21 (anonimizacao): a transicao de anonimizacao, calculada uma vez.
+    v_anonymizing boolean := (OLD.anonymized_at IS NULL AND NEW.anonymized_at IS NOT NULL);
+BEGIN
+    -- === EMENDA 2026-08-21 (LGPD, expurgo de retencao) ==========================
+    -- NAO reaproveita v_anonymizing: o expurgo atinge CONTA VIVA (o prazo e do DADO —
+    -- ddl-aprovado §2.7.0), e em conta viva anonymized_at e e continua NULL.
+    IF OLD.purged_at IS NULL AND NEW.purged_at IS NOT NULL THEN
+        IF auth.uid() IS NULL
+           AND OLD.retention_hold_reason IS NULL
+           AND coalesce(OLD.accepted_at, OLD.created_at) <= now() - public.lgpd_retention_interval()
+           -- forma do expurgo nesta tabela: telemetria some, term_text vira marcador.
+           -- O VALOR do marcador e da RPC, nao do trigger (nao se duplica texto normativo).
+           AND NEW.accepted_ip IS NULL
+           AND NEW.accepted_user_agent IS NULL
+           AND NEW.term_text IS NOT NULL
+           AND (to_jsonb(NEW) - ARRAY['term_text','accepted_ip','accepted_user_agent','purged_at'])
+               IS NOT DISTINCT FROM
+               (to_jsonb(OLD) - ARRAY['term_text','accepted_ip','accepted_user_agent','purged_at'])
+        THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'service_terms: expurgo fora da forma permitida (exige service_role, prazo de retencao vencido, ausencia de retention_hold_reason e nenhuma alteracao alem de term_text/accepted_ip/accepted_user_agent).';
+    END IF;
+
+    IF NEW.purged_at IS DISTINCT FROM OLD.purged_at THEN
+        RAISE EXCEPTION 'service_terms: purged_at so pode ser definido pelo expurgo de retencao e depois e imutavel.';
+    END IF;
+
+    -- Trava de litigio: so operacao (service_role) poe e tira. Client nem chega aqui
+    -- (service_terms so tem policy de SELECT) — defesa em profundidade.
+    IF auth.uid() IS NOT NULL
+       AND NEW.retention_hold_reason IS DISTINCT FROM OLD.retention_hold_reason
+    THEN
+        RAISE EXCEPTION 'service_terms: retention_hold_reason e gerida por operacao (service_role).';
+    END IF;
+    -- === FIM DA EMENDA DO EXPURGO ==============================================
+
+    -- === Vínculo e valor: imutáveis SEMPRE ===
+    IF NEW.id               IS DISTINCT FROM OLD.id
+       OR NEW.shift_payment_id IS DISTINCT FROM OLD.shift_payment_id
+       OR NEW.job_id           IS DISTINCT FROM OLD.job_id
+       OR NEW.worker_id        IS DISTINCT FROM OLD.worker_id
+       OR NEW.company_id       IS DISTINCT FROM OLD.company_id
+       OR NEW.amount           IS DISTINCT FROM OLD.amount
+       OR NEW.created_at       IS DISTINCT FROM OLD.created_at
+    THEN
+        RAISE EXCEPTION 'service_terms: vinculo e valor sao imutaveis (shift_payment_id, job_id, worker_id, company_id, amount, created_at).';
+    END IF;
+
+    -- === accepted_at: ONE-WAY (NULL -> timestamp). Nunca altera, nunca limpa. ===
+    IF OLD.accepted_at IS NOT NULL AND NEW.accepted_at IS DISTINCT FROM OLD.accepted_at THEN
+        RAISE EXCEPTION 'service_terms: accepted_at e imutavel apos o aceite.';
+    END IF;
+
+    -- === IP/UA: só podem ser gravados NO aceite; nunca reescritos depois. ===
+    -- EMENDA 2026-08-21 (LGPD): exceção única — a anonimização pode APAGÁ-LOS (levar a NULL).
+    -- Levar a QUALQUER OUTRO VALOR continua proibido: não se falsifica trilha de aceite.
+    IF OLD.accepted_at IS NOT NULL
+       AND (NEW.accepted_ip         IS DISTINCT FROM OLD.accepted_ip
+         OR NEW.accepted_user_agent IS DISTINCT FROM OLD.accepted_user_agent)
+       AND NOT (v_anonymizing
+                AND NEW.accepted_ip IS NULL
+                AND NEW.accepted_user_agent IS NULL)
+    THEN
+        RAISE EXCEPTION 'service_terms: accepted_ip/accepted_user_agent sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD, e apenas para NULL).';
+    END IF;
+
+    -- === anonymized_at: ONE-WAY (NULL -> timestamp). Nunca volta. ===
+    IF OLD.anonymized_at IS NOT NULL AND NEW.anonymized_at IS DISTINCT FROM OLD.anonymized_at THEN
+        RAISE EXCEPTION 'service_terms: anonymized_at e imutavel.';
+    END IF;
+
+    -- === term_text / term_version: livres ENQUANTO rascunho; congelados no aceite. ===
+    -- Única exceção pós-aceite: a anonimização LGPD (NULL -> ts), que é o ato de
+    -- reescrever o texto. Fora dela, um termo aceito não muda mais.
+    IF OLD.accepted_at IS NOT NULL
+       AND (NEW.term_text IS DISTINCT FROM OLD.term_text
+         OR NEW.term_version IS DISTINCT FROM OLD.term_version)
+       AND NOT v_anonymizing
+    THEN
+        RAISE EXCEPTION 'service_terms: term_text/term_version sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD).';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.enforce_service_term_immutability() IS
+    'BEFORE UPDATE em service_terms. term_text e rascunho enquanto accepted_at IS NULL e CONGELA no '
+    'aceite. Vale para TODOS os papeis (service_role e owner inclusive) — RLS nao cobriria. DUAS '
+    'reescritas pos-aceite, e so elas: (1) anonimizacao LGPD (anonymized_at NULL->ts), que tambem '
+    'apaga accepted_ip/accepted_user_agent; (2) EXPURGO de retencao (purged_at NULL->ts por '
+    'service_role, com prazo de lgpd_retention_interval() vencido e sem retention_hold_reason). '
+    'ADR-20260818 + ADR-20260821-anonimizacao-em-vez-de-exclusao + '
+    'ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
+```
+
+### 2.7.5 SQL — a RPC `purge_expired_personal_data`
+
+```sql
+-- =============================================
+-- 7. RPC DO EXPURGO
+--    SECURITY DEFINER + search_path='' + GRANT EXECUTE SOMENTE a service_role.
+--    Idempotente (purged_at IS NULL filtra o que ja foi feito) e em LOTE: reexecutar drena o
+--    backlog em dias, sem lock longo. Devolve `outcome` estruturado — nunca levanta excecao em
+--    caminho esperado.
+--    p_dry_run=true: MESMO predicado, ZERO escrita. E como se confere antes de deixar o cron
+--    ativo, e como se responde "quanto tem para expurgar?" sem confiar em contagem no client.
+-- =============================================
+CREATE OR REPLACE FUNCTION public.purge_expired_personal_data(
+    p_batch_limit integer DEFAULT 500,
+    p_dry_run     boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_started  timestamptz := clock_timestamp();
+    v_cutoff   timestamptz := now() - public.lgpd_retention_interval();
+    v_limit    integer     := least(greatest(coalesce(p_batch_limit, 500), 1), 5000);
+    v_terms    integer     := 0;
+    v_payments integer     := 0;
+    v_held     integer     := 0;
+    c_purged_term constant text :=
+        '[REGISTRO EXPURGADO — o prazo legal de retencao deste documento venceu e o conteudo '
+        'pessoal (nomes, CPF/CNPJ e demais dados de identificacao) foi eliminado pela Worki, nos '
+        'termos da LGPD (art. 15, I e art. 16). O registro da transacao — valor, data do aceite e '
+        'as partes, em identificadores internos — foi mantido.]';
+BEGIN
+    -- Cinto e suspensorio: nao ha GRANT para authenticated, e o trigger exigiria auth.uid() NULL
+    -- de qualquer forma. Falhar aqui e mais legivel do que falhar la dentro.
+    IF auth.uid() IS NOT NULL THEN
+        RETURN jsonb_build_object('outcome', 'forbidden');
+    END IF;
+
+    -- Quantas linhas VENCIDAS estao travadas por litigio (observabilidade, nao acao).
+    SELECT count(*) INTO v_held
+      FROM public.service_terms st
+     WHERE st.purged_at IS NULL
+       AND st.retention_hold_reason IS NOT NULL
+       AND coalesce(st.accepted_at, st.created_at) <= v_cutoff;
+
+    IF p_dry_run THEN
+        SELECT count(*) INTO v_terms FROM (
+            SELECT 1 FROM public.service_terms st
+             WHERE st.purged_at IS NULL
+               AND st.retention_hold_reason IS NULL
+               AND coalesce(st.accepted_at, st.created_at) <= v_cutoff
+             LIMIT v_limit
+        ) q;
+
+        SELECT count(*) INTO v_payments FROM (
+            SELECT 1 FROM public.shift_payments sp
+             WHERE sp.purged_at IS NULL
+               AND coalesce(sp.paid_at, sp.created_at) <= v_cutoff
+               AND NOT EXISTS (
+                     SELECT 1 FROM public.service_terms st
+                      WHERE st.shift_payment_id = sp.id
+                        AND st.retention_hold_reason IS NOT NULL
+                   )
+             LIMIT v_limit
+        ) q;
+
+        -- Dry-run NAO grava em data_retention_purge_runs: diagnostico nao e operacao de
+        -- tratamento (art. 37). O registro so existe para o que de fato aconteceu.
+        RETURN jsonb_build_object(
+            'outcome', 'dry_run',
+            'cutoff', v_cutoff,
+            'batch_limit', v_limit,
+            'service_terms', v_terms,
+            'shift_payments', v_payments,
+            'service_terms_held', v_held
+        );
+    END IF;
+
+    -- =========================================================
+    -- A PARTIR DAQUI E DESTRUTIVO (de CONTEUDO; nenhuma linha e apagada).
+    -- =========================================================
+
+    -- ---- service_terms: term_text -> marcador; telemetria do aceite -> NULL ----
+    -- SKIP LOCKED: se alguem estiver segurando a linha, ela fica para a proxima execucao.
+    -- O expurgo nao tem pressa e nao pode virar fonte de lock em producao.
+    WITH alvo AS (
+        SELECT st.id
+          FROM public.service_terms st
+         WHERE st.purged_at IS NULL
+           AND st.retention_hold_reason IS NULL
+           AND coalesce(st.accepted_at, st.created_at) <= v_cutoff
+         ORDER BY coalesce(st.accepted_at, st.created_at)
+         LIMIT v_limit
+           FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.service_terms st
+       SET term_text           = c_purged_term,
+           accepted_ip         = NULL,
+           accepted_user_agent = NULL,
+           purged_at           = now()
+      FROM alvo
+     WHERE st.id = alvo.id;
+    GET DIAGNOSTICS v_terms = ROW_COUNT;
+
+    -- ---- shift_payments: note -> NULL. Valor, datas e partes RETIDOS (BI sobrevive) ----
+    -- Linhas cujo `note` ja e NULL tambem sao marcadas: purged_at e o marcador de conformidade,
+    -- nao de "teve texto". Sem isso o backlog nunca drena e a contagem mente.
+    WITH alvo AS (
+        SELECT sp.id
+          FROM public.shift_payments sp
+         WHERE sp.purged_at IS NULL
+           AND coalesce(sp.paid_at, sp.created_at) <= v_cutoff
+           AND NOT EXISTS (
+                 SELECT 1 FROM public.service_terms st
+                  WHERE st.shift_payment_id = sp.id
+                    AND st.retention_hold_reason IS NOT NULL
+               )
+         ORDER BY coalesce(sp.paid_at, sp.created_at)
+         LIMIT v_limit
+           FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.shift_payments sp
+       SET note      = NULL,
+           purged_at = now()
+      FROM alvo
+     WHERE sp.id = alvo.id;
+    GET DIAGNOSTICS v_payments = ROW_COUNT;
+
+    INSERT INTO public.data_retention_purge_runs (
+        cutoff, retention_interval, batch_limit,
+        service_terms_purged, shift_payments_purged, service_terms_held, duration_ms
+    ) VALUES (
+        v_cutoff, public.lgpd_retention_interval(), v_limit,
+        v_terms, v_payments, v_held,
+        (extract(epoch FROM clock_timestamp() - v_started) * 1000)::integer
+    );
+
+    RETURN jsonb_build_object(
+        'outcome', 'purged',
+        'cutoff', v_cutoff,
+        'batch_limit', v_limit,
+        'service_terms', v_terms,
+        'shift_payments', v_payments,
+        'service_terms_held', v_held,
+        -- true = ainda ha backlog; a proxima execucao continua de onde esta.
+        'has_more', (v_terms >= v_limit OR v_payments >= v_limit)
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.purge_expired_personal_data(integer, boolean) IS
+    'Expurgo de retencao LGPD. UPDATE, nunca DELETE: apaga o CONTEUDO PESSOAL (service_terms.'
+    'term_text -> marcador, accepted_ip/accepted_user_agent -> NULL; shift_payments.note -> NULL) '
+    'e PRESERVA a linha pseudonima (valor, datas, partes) — o BI historico sobrevive. Prazo do '
+    'DADO (paid_at/accepted_at), nao da conta. Pula linhas com service_terms.retention_hold_reason. '
+    'Idempotente e em lote (SKIP LOCKED). p_dry_run=true nao escreve nada. Article 8/9 intactos: '
+    'nenhuma tabela de saldo/razao e lida ou escrita. ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
+
+REVOKE ALL ON FUNCTION public.purge_expired_personal_data(integer, boolean)
+    FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.purge_expired_personal_data(integer, boolean) TO service_role;
+```
+
+### 2.7.6 SQL — agendamento (`pg_cron`)
+
+```sql
+-- =============================================
+-- 8. AGENDAMENTO — molde de 20260817000800 (F4) e 20260817001300 (F8)
+--    pg_cron interpreta o schedule em UTC. '30 3 * * *' = 03:30 UTC = 00:30 BRT — janela de menor
+--    trafego. Brasil sem DST desde 2019: offset fixo, nada a manter.
+--    cron.schedule(jobname, ...) faz upsert por nome (pg_cron >= 1.4) => reaplicar nao duplica.
+--
+--    DIFERENCA EM RELACAO A 20260817000800: naquela data pg_cron estava DISPONIVEL mas NAO
+--    INSTALADO. Em 21/08/2026 a extensao esta INSTALADA e com job ativo em producao — o ramo
+--    ELSE abaixo existe para CI / `supabase db reset`, nao como caminho esperado de producao.
+--    Se ele disparar em producao, e incidente: a promessa de 5 anos deixa de ser cumprida por
+--    qualquer codigo, em silencio.
+-- =============================================
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        PERFORM cron.schedule(
+            'lgpd-retention-purge',
+            '30 3 * * *',
+            $cron$SELECT public.purge_expired_personal_data(500, false);$cron$
+        );
+    ELSE
+        RAISE WARNING 'pg_cron ausente: o EXPURGO de retencao (LGPD) NAO sera executado. '
+                      'O prazo de 5 anos prometido na Politica de Privacidade fica sem nenhum '
+                      'codigo que o cumpra. Habilite a extensao e reaplique esta migration.';
+    END IF;
+END $$;
+```
+
+> ⚠️ **O canal de aplicação engole o `WARNING`.** `supabase/migrations/APLICACAO-2026-08-16.md`
+> registra que as migrations deste projeto são aplicadas via **MCP do Supabase**, que não devolve
+> `NOTICE`/`WARNING` do servidor. Silêncio **não** é sucesso: **V6** da seção abaixo é obrigatória,
+> não opcional — é a única confirmação confiável de que o agendamento pegou.
+
+### 2.7.7 SQL — verificação obrigatória e DOWN
+
+```sql
+-- ============================================================================
+-- COMO VERIFICAR (obrigatorio apos aplicar)
+-- ----------------------------------------------------------------------------
+-- V1. Ordem respeitada: a assercao da secao 1 nao levantou excecao (a migration aplicou).
+--
+-- V2. O prazo esta num lugar so:
+--     SELECT public.lgpd_retention_interval();            -- => 5 years
+--     -- e nenhum literal '5 years' fora dela:
+--     SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+--      WHERE n.nspname='public' AND pg_get_functiondef(p.oid) ILIKE '%interval ''5 years''%';
+--     -- ESPERADO: exatamente 1 linha (lgpd_retention_interval).
+--
+-- V3. DRY-RUN ANTES DE QUALQUER COISA (o cron ja esta agendado; rode isto no mesmo dia):
+--     SELECT public.purge_expired_personal_data(500, true);
+--     -- ESPERADO HOJE (piloto, base nova): service_terms=0, shift_payments=0.
+--     -- Numero > 0 => PARE e explique antes de deixar o cron rodar.
+--
+-- V4. O prazo e verificado pelo TRIGGER, nao so pela RPC — tentar expurgar registro NOVO falha
+--     (rodar como service_role, DENTRO de transacao com ROLLBACK):
+--     BEGIN;
+--       UPDATE public.shift_payments SET note=NULL, purged_at=now()
+--        WHERE id='<pagamento-recente>';
+--     -- ESPERADO: EXCEPTION 'expurgo fora da forma permitida...'
+--     ROLLBACK;
+--
+-- V5. A forma e auto-limitada — tentar carona (mudar `amount` junto) falha:
+--     BEGIN;
+--       UPDATE public.shift_payments SET note=NULL, purged_at=now(), amount=1
+--        WHERE id='<pagamento-vencido>';
+--     -- ESPERADO: EXCEPTION 'expurgo fora da forma permitida...'
+--     ROLLBACK;
+--
+-- V6. Job agendado (PASSO DE RUNBOOK OBRIGATORIO — o MCP engole o RAISE WARNING do ELSE):
+--     SELECT jobname, schedule, active FROM cron.job WHERE jobname='lgpd-retention-purge';
+--     -- ESPERADO: 1 linha, schedule='30 3 * * *', active=t. Se 0 linhas: pg_cron nao estava
+--     -- habilitado no momento da aplicacao; habilitar e reaplicar via CLI.
+--
+-- V7. Trava de litigio funciona (em linha VENCIDA de teste):
+--     UPDATE public.service_terms SET retention_hold_reason='teste' WHERE id='<id>';
+--     SELECT public.purge_expired_personal_data(500, true);
+--     -- ESPERADO: a linha NAO conta em service_terms e conta em service_terms_held.
+--
+-- V8. Article 8/9: nenhuma tabela de saldo aparece no codigo desta migration:
+--     SELECT pg_get_functiondef(p.oid) ILIKE ANY (ARRAY['%wallet%','%escrow%'])
+--       FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+--      WHERE n.nspname='public' AND p.proname='purge_expired_personal_data';
+--     -- ESPERADO: f
+--
+-- V9. Prova de conformidade gravada apos a primeira execucao efetiva:
+--     SELECT * FROM public.data_retention_purge_runs ORDER BY ran_at DESC LIMIT 5;
+--
+-- ============================================================================
+-- DOWN (rollback — copiar/colar). NAO restaura conteudo ja expurgado: e irreversivel por
+-- natureza; por isso o backup do cabecalho e obrigatorio.
+-- ----------------------------------------------------------------------------
+--   SELECT cron.unschedule('lgpd-retention-purge');
+--   DROP FUNCTION IF EXISTS public.purge_expired_personal_data(integer, boolean);
+--   -- restaurar o corpo de enforce_shift_payment_immutability de 20260712000000 §4
+--   -- restaurar o corpo de enforce_service_term_immutability do ddl-aprovado §2.4 (com a
+--   --   emenda da anonimizacao — NAO o de 20260817001100 puro, ou a #1 quebra)
+--   DROP TABLE IF EXISTS public.data_retention_purge_runs;
+--   ALTER TABLE public.service_terms  DROP COLUMN IF EXISTS purged_at;
+--   ALTER TABLE public.service_terms  DROP COLUMN IF EXISTS retention_hold_reason;
+--   ALTER TABLE public.shift_payments DROP COLUMN IF EXISTS purged_at;
+--   DROP FUNCTION IF EXISTS public.lgpd_retention_interval();  -- por ultimo: os triggers a usam
+-- ============================================================================
+```
+
+---
+
 ## 3. Migration #2 — `supabase/migrations/20260821000100_reviews_select_by_relationship.sql`
 
 ### 3.1 O achado que muda o desenho
@@ -1166,37 +1981,164 @@ e PIX sem nenhum titular capaz de pedir a exclusão de novo.
 
 ---
 
-## 5. Itens que vão ao humano (destaque)
+## 5. Itens que foram ao humano — **DECIDIDOS em 21/08/2026**
 
-### H1 — "Excluir a conta" passa a significar "perder o acesso + anonimizar", não "apagar tudo"
+> Ambos voltaram do owner. Esta seção deixa de ser pergunta e passa a ser registro. O que sobra de
+> bloqueio é **técnico** (§0: a #1 não vai sozinha, precisa da #3) e **jurídico-consultivo** (o
+> número de anos, marcado abaixo), não de decisão de produto.
 
-Não existe caminho em que o direito do art. 18, VI seja cumprido **e** a trilha fiscal sobreviva.
-Recomendação técnica: **anonimização com retenção** (este documento). O que o humano precisa aprovar,
-porque é jurídico e não técnico:
+### H1 — DECIDIDO: retenção de **5 anos**, depois expurgo. "Excluir a conta" = perder o acesso + anonimizar
 
-1. **Prazo de retenção** de `shift_payments` e `service_terms`. O desenho assume "indefinido até
-   decisão em contrário"; o padrão de mercado é **5 anos** (prescrição — CC art. 206, §5º, I). Se
-   houver prazo, ele vira um cron de expurgo, que **não existe hoje**.
-2. **Texto da Política de Privacidade e da tela de exclusão.** Hoje a UI implica apagamento total.
-   Precisa dizer, com todas as letras, que **o termo de prestação aceito é retido com nome e CPF**
-   como prova da transação. Sem isso a promessa continua falsa — só que na direção oposta. Isto é o
-   débito #1 e **bloqueia** a ida a público desta rotina.
+Não existe caminho em que o direito do art. 18, VI seja cumprido **e** a trilha da transação
+sobreviva. Decisão: **anonimização com retenção**, como desenhado neste documento.
 
-### H2 — Remover as FKs `CASCADE` para `auth.users`
+1. **Prazo de retenção — DECIDIDO: 5 anos**, contados de `paid_at` (`shift_payments`) e
+   `accepted_at` (`service_terms`). Base: prescrição civil, **CC art. 206, §5º, I** — o mesmo número
+   que este contrato já apontava como padrão de mercado. Vencido o prazo, **expurgo**.
+   - **O prazo é do DADO, não da conta** — §2.7.0. Conta excluída hoje com pagamento de 4 anos
+     atrás expurga em **1 ano**, não em 5. Contar da exclusão faria o titular que exerce o art. 18,
+     VI **prolongar** a retenção dos próprios dados.
+   - **O expurgo apaga CONTEÚDO, não a LINHA** — ADR-20260821-expurgo-de-conteudo-nao-de-linha.
+     Nenhum `DELETE` em `shift_payments`/`service_terms`. O BI de gasto histórico sobrevive.
+   - **Materializado em §2.7** (migration #3 + `pg_cron` diário). Sem ela, o prazo é promessa que
+     nenhum código cumpre — por isso a #1 **não vai a produção sozinha**.
+   - ⚠️ **Marcado: escolha da orquestração, a confirmar com advogado.** 5 anos é a prescrição
+     **civil**. Recomendação técnica: **6 anos**, pelo vetor **trabalhista** — reclamação alegando
+     vínculo pode ser ajuizada até 2 anos após o fim da relação (CF art. 7º, XXIX) e o processo dura
+     anos; a prova que interessa nesse cenário é exatamente o `term_text` que declara ausência de
+     vínculo, e o cenário realista é precisar dele **no ano 6 ou 7**. O vetor **fiscal** não puxa
+     para cima no modo A: a obrigação fiscal é da **empresa**, não da Worki — a Worki retém como
+     prova de que **intermediou** (art. 7º, VI + art. 16, I), não por escrituração própria. Trocar
+     5→6 é `CREATE OR REPLACE` de `lgpd_retention_interval()` e mais nada (§2.7.2). Até haver
+     parecer, exceção pontual usa a trava `retention_hold_reason`.
+2. **Texto da Política de Privacidade e da tela de exclusão — ENTREGUE em §6.** Hoje a UI implica
+   apagamento total. O texto de §6 diz, com todas as letras, que **o termo de prestação aceito é
+   retido com nome e CPF por 5 anos**, e **não chama isso de anonimização**. Continua sendo
+   **pré-requisito de ida a público** (débito #1): o texto precisa ser publicado **antes** de a
+   rotina ficar acessível ao usuário.
 
-É o coração da solução (§1). Consequência aceita: passam a existir linhas de `workers`/`companies`/
-`wallets` sem `auth.users` correspondente — **por construção**. Alternativa rejeitada: manter a conta
-`auth.users` viva, banida e com e-mail trocado por placeholder (preserva integridade referencial, mas
-deixa uma casca de conta reativável e um registro de identidade que o titular pediu para eliminar).
-Se o humano preferir a alternativa, **volte ao architect**: o desenho muda inteiro.
+### H2 — DECIDIDO: remover as FKs `CASCADE` para `auth.users`
+
+Confirmado como desenhado (§1, §2.3). É o coração da solução. Consequência aceita: passam a existir
+linhas de `workers`/`companies`/`wallets` sem `auth.users` correspondente — **por construção**.
+Alternativa rejeitada pelo owner: manter a conta `auth.users` viva, banida e com e-mail trocado por
+placeholder (preserva integridade referencial, mas deixa uma casca de conta reativável e um registro
+de identidade que o titular pediu para eliminar).
 
 ### 5.3 Riscos residuais aceitos (registrar, não corrigir agora)
 
 | Risco | Por que fica |
 |---|---|
-| `shift_payments.note` é texto livre da empresa e pode conter o nome do freela. | É coluna material imutável do documento fiscal. Mexer nela exigiria reescrever `enforce_shift_payment_immutability` — troca ruim. Mitigação: hint na UI de registro de pagamento ("não escreva dado pessoal aqui"). |
+| `shift_payments.note` é texto livre da empresa e pode conter o nome do freela. **Deixou de ser risco permanente e virou risco COM PRAZO** *(emenda 2026-08-21)*. | Continua sobrevivendo à exclusão da conta (é coluna material do documento declaratório, §2.1), mas **não sobrevive ao prazo**: o expurgo de §2.7 apaga `note` 5 anos depois de `paid_at`. A "troca ruim" que este contrato recusava — reescrever `enforce_shift_payment_immutability` — deixou de ser opcional quando H1 fixou um prazo, e foi feita **na forma auto-limitada** (§0.3.1), que é o que a torna aceitável: o trigger passa a **exigir** o prazo em vez de apenas permitir a escrita. Mitigação enquanto o prazo corre: hint na UI de registro de pagamento ("não escreva dado pessoal aqui"). |
 | `reviews.comment` escrito **pelo** titular excluído sobrevive. | Texto opinativo sobre terceiro; a autoria já degrada para o rótulo genérico. Remoção específica = atendimento manual. |
 | `worker_certifications.verified_note` escrito pela **empresa** excluída sobre um freela que continua na plataforma. *(emenda 2026-08-21)* | O `ON DELETE SET NULL` da FK não dispara mais (§2.1.0) e o par `verified_by_company_id`/`verified_at` é travado por CHECK — "conferência anônima" é estado inexpressável. Um `UPDATE` seria barrado pelo ramo (c) de `enforce_certification_update_scope` (§0.3). Mitigação existente: o uuid é pseudônimo e resolve para `'[Empresa Deletada]'`. Mesma classe de `reviews.comment`: remoção específica = atendimento manual. |
 | A contraparte mantém o histórico da conversa (`Message` recebidas). | Mensagem tem dois titulares. Apagar o lado do outro é destruir dado alheio. |
 | `companies` continua `USING (true)` com `cnpj`, `email` e `address` legíveis por qualquer autenticado. | **Débito NOVO (#10)** — mesma classe do #9, descoberto neste gate. Não entra aqui porque `/empresa/:id` e `CompanyProfile` dependem dessa policy e o fecho correto é column-scoped (RPC `get_company_public_profile` + policy restrita), o que é spec própria. |
 | A policy de INSERT de `reviews` é `WITH CHECK (reviewer_id = auth.uid())` — não exige turno concluído. | Qualquer conta pode inventar avaliação sobre qualquer id. Fora do escopo deste débito: **#11**. |
+
+---
+
+## 6. Texto da Política de Privacidade e da tela de exclusão (entregável da emenda)
+
+> **Pré-requisito de ida a público (débito #1).** Este texto é **normativo como o SQL**: a rotina de
+> exclusão não fica acessível ao usuário antes de a Política publicada dizer isto. Hoje a UI implica
+> apagamento total — sem esta correção a promessa continua falsa, só que na direção oposta.
+>
+> **Regra que não se negocia:** ⚠️ **a política NÃO pode chamar isto de "anonimização"** (§0.4).
+> O que a rotina faz é **eliminação parcial com retenção justificada** (art. 16, I) sobre uma chave
+> **pseudônima** (`workers.id`). Enquanto `service_terms.term_text` de um termo aceito guardar nome e
+> CPF, o conjunto **não** é anonimizado no sentido do **art. 5º, XI** (que exige que o titular não
+> possa mais ser identificado, "considerando a utilização de meios técnicos razoáveis e disponíveis
+> na ocasião do tratamento"). Chamar de anonimização seria declarar um regime jurídico que não se
+> cumpre — e dado anonimizado está **fora** da LGPD (art. 12), o que transformaria uma imprecisão de
+> copy em afirmação de que a lei não se aplica a esses registros. Vocabulário aprovado: **"excluir a
+> conta"**, **"eliminar seus dados pessoais"**, **"registros retidos"**, **"expurgo"**. Vocabulário
+> proibido nesta seção: **"anonimizar"**, **"anônimo"**, **"todos os seus dados serão apagados"**.
+
+### 6.1 Política de Privacidade — seção "Exclusão da conta e retenção de dados"
+
+> Você pode excluir sua conta a qualquer momento pelo aplicativo. Quando você faz isso:
+>
+> **O que é eliminado imediatamente.** Suas credenciais de acesso são apagadas — a conta deixa de
+> existir e não pode ser reativada. Eliminamos também seus dados de identificação e de perfil: nome,
+> CPF/CNPJ, telefone, data de nascimento, chave PIX, endereço, cidade, foto e imagem de capa,
+> biografia, funções, disponibilidade, certificações e treinamentos, vínculos com empresas
+> ("Elenco"), indicações, notificações e meios de pagamento cadastrados.
+>
+> **O que é retido, por quanto tempo e por quê.** Não conseguimos apagar tudo. Cada turno pago pela
+> plataforma gera dois registros que continuam existindo depois da exclusão da sua conta:
+>
+> - **O termo de prestação de serviço que você aceitou.** Ele é retido **na íntegra, com nome e
+>   CPF/CNPJ das partes**. É a prova de que aquele serviço foi contratado e prestado nas condições
+>   declaradas — inclusive de que **não havia vínculo empregatício**. Sem ele, nem você nem a empresa
+>   teriam como demonstrar o que foi combinado, se isso for questionado depois.
+> - **O registro do pagamento** (valor, data e as partes envolvidas), que sustenta o recibo da outra
+>   parte da transação.
+>
+> Retemos esses dois registros por **5 (cinco) anos**, contados da data do pagamento e da data do
+> aceite do termo. O prazo é o da prescrição das pretensões relativas àquela transação (Código Civil,
+> art. 206, §5º, I), e a base legal é o cumprimento de obrigação legal ou regulatória e o exercício
+> regular de direitos (LGPD, art. 7º, II e VI; art. 16, I e III).
+>
+> **O prazo conta a partir do registro, não da exclusão da sua conta.** Um pagamento feito há quatro
+> anos será expurgado daqui a um ano, tenha você excluído a conta ou não.
+>
+> **O que acontece no fim do prazo.** Eliminamos automaticamente o conteúdo pessoal desses registros:
+> o texto do termo — com os nomes e o CPF/CNPJ — é substituído por um marcador, e as observações
+> livres do pagamento são apagadas. Permanecem apenas o valor, as datas e identificadores internos,
+> que **não** identificam você. Essa rotina roda diariamente.
+>
+> **O que continua existindo e não é seu para apagar.** Avaliações que você escreveu sobre empresas
+> permanecem publicadas, sem o seu nome — aparecem como de uma conta excluída. Mensagens que você
+> enviou continuam na caixa de quem recebeu, porque pertencem também à outra pessoa.
+>
+> **Exceção.** Se houver processo judicial, administrativo ou arbitral em curso relacionado a um
+> registro específico, ele é preservado até o fim do processo, mesmo depois dos 5 anos.
+>
+> **Honestidade sobre o que isto é.** Este processo **não é uma anonimização**: enquanto o termo
+> aceito estiver retido, ele contém dados que identificam você. É uma **eliminação parcial dos seus
+> dados pessoais, com retenção justificada** dos registros acima pelo prazo declarado. Enquanto
+> esses registros existirem, todos os seus direitos previstos na LGPD continuam valendo sobre eles —
+> inclusive o de pedir explicações sobre a retenção, pelo canal de privacidade.
+
+### 6.2 Tela de exclusão de conta (copy do produto)
+
+**Título:** `EXCLUIR MINHA CONTA`
+
+**Corpo (antes do botão):**
+
+> **Isso não pode ser desfeito.** Sua conta e seu acesso acabam agora. Apagamos seu nome, CPF,
+> telefone, chave PIX, foto, perfil profissional, vínculos com empresas e notificações.
+>
+> **O que fica:** por exigência legal, mantemos por **5 anos** o **termo de serviço que você
+> aceitou** — que inclui **seu nome e seu CPF** — e o **registro dos pagamentos** (valor e data) dos
+> turnos que você já fez. É a prova da transação, para você e para a empresa. Depois dos 5 anos,
+> apagamos automaticamente o conteúdo pessoal desses registros.
+>
+> **Suas avaliações sobre empresas continuam no ar, sem o seu nome.** Mensagens já enviadas
+> continuam com quem as recebeu.
+>
+> [Ler a seção completa da Política de Privacidade →]
+
+**Confirmação:** exigir digitar `EXCLUIR` (gesto deliberado; a operação é irreversível).
+
+**Estados de recusa** — a rotina se recusa a rodar e a tela precisa dizer o porquê (§4.1(3)):
+
+| `outcome` da RPC | Texto |
+|---|---|
+| `wallet_has_balance` | `Você tem saldo na carteira. Saque antes de excluir a conta.` |
+| `escrow_active` | `Você tem pagamentos em aberto. Conclua ou cancele antes de excluir a conta.` |
+| `scheduled_payment_pending` | `Há um pagamento agendado pendente. Ele precisa ser efetivado ou estornado antes.` |
+
+**Depois da exclusão (o que a outra parte vê):** onde havia seu nome, a empresa passa a ver
+`[Conta Deletada]`. **Não** prometer na tela que a empresa "não verá mais nada": o histórico de
+turnos e o termo continuam abrindo para ela — é o mesmo documento que protege os dois lados.
+
+### 6.3 Onde isto entra (para quem implementar — não é escopo deste gate)
+
+| Superfície | Mudança |
+|---|---|
+| `frontend/src/pages/Privacy*` (Política publicada) | Nova seção com o texto de §6.1, **na íntegra**. É o que torna a rotina publicável. |
+| Tela de exclusão de conta (Perfil → Excluir conta) | Copy de §6.2 + confirmação por digitação + tratamento dos três `outcome` de recusa. |
+| Modal de registro de pagamento (`shift_payments.note`) | Hint: *"Não escreva dados pessoais aqui."* — mitigação de §5.3 enquanto o prazo corre. |
+| Termo de prestação (`ServiceTermSection`) | Uma linha no rodapé do termo: *"Este documento é retido por 5 anos como prova da prestação, mesmo que uma das contas seja excluída."* Quem aceita fica sabendo **no ato**, não só na política. |

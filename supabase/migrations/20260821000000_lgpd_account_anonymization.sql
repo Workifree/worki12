@@ -1,23 +1,43 @@
 -- ============================================================================
--- ⚠️⚠️⚠️ NÃO APLICAR EM PRODUÇÃO SEM DECISÃO EXPLÍCITA DO OWNER (H1/H2) ⚠️⚠️⚠️
+-- ⚠️ NÃO APLICAR SOZINHA — BLOQUEIO TÉCNICO (H1/H2 JÁ FORAM DECIDIDOS)
 -- ----------------------------------------------------------------------------
--- Esta migration foi ESCRITA a pedido do gate (.harness/spec/lgpd-producao/ddl-aprovado.md,
--- harness-architect 21/08/2026), mas depende de DUAS decisões jurídicas/produto que ainda não
--- vieram do humano:
+-- ATUALIZADO EM 21/08/2026. O bloqueio ANTERIOR era de DECISÃO ("H1/H2 do owner não vieram").
+-- AS DECISÕES VIERAM. O que resta é bloqueio TÉCNICO — outra coisa, e menor:
 --
---   H1. Prazo de retenção de `shift_payments`/`service_terms` (o desenho assume "indefinido até
---       decisão em contrário"; padrão de mercado é 5 anos — CC art. 206 §5º I). E o texto da
---       Política de Privacidade / tela de exclusão precisa dizer, com todas as letras, que o termo
---       ACEITO é retido com nome e CPF como prova (débito #1, PRÉ-REQUISITO desta rotina ir a
---       público).
---   H2. Remoção das FKs CASCADE `workers/companies/wallets -> auth.users` (ver §2 abaixo) — a
---       consequência aceita é a existência de linhas "lápide" sem `auth.users` correspondente, POR
---       CONSTRUÇÃO. Alternativa rejeitada: manter `auth.users` viva e banida (ver ddl-aprovado §H2).
---       Se o humano preferir essa alternativa, o desenho muda inteiro — volta ao architect.
+--   H1. DECIDIDO: retenção de 5 ANOS de `shift_payments` e `service_terms`, contados de `paid_at`
+--       e `accepted_at`; vencido o prazo, EXPURGO. Base: prescrição civil (CC art. 206 §5º I).
+--       ⚠️ O NÚMERO é escolha da orquestração, PENDENTE de confirmação com advogado — a
+--       recomendação técnica é 6 anos pelo vetor trabalhista (ddl-aprovado §2.7.0). Isso NÃO
+--       bloqueia nada: o prazo mora em `public.lgpd_retention_interval()` e trocar 5→6 é um
+--       CREATE OR REPLACE de três linhas.
+--       O expurgo apaga CONTEÚDO PESSOAL, NÃO A LINHA de auditoria — nenhum DELETE em
+--       shift_payments/service_terms, nunca (ADR-20260821-expurgo-de-conteudo-nao-de-linha).
+--       O prazo é do DADO, não da conta: conta excluída hoje com pagamento de 4 anos atrás
+--       expurga em 1 ano. Contar da exclusão faria quem exerce o art. 18, VI PROLONGAR a própria
+--       retenção.
+--   H2. DECIDIDO: REMOVER as FKs CASCADE `workers/companies/wallets -> auth.users`, como
+--       desenhado (§2 abaixo). Consequência aceita: linhas "lápide" sem `auth.users`
+--       correspondente, POR CONSTRUÇÃO.
 --
--- Ver `.harness/spec/lgpd-producao/ddl-aprovado.md` §0.4, §5 (H1/H2) para o racional completo.
--- ATÉ que ambas venham por escrito do owner: esta migration fica NO REPOSITÓRIO, NÃO É APLICADA,
--- e a Edge Function `delete-account` NÃO É alterada para chamar `anonymize_account`.
+-- ----------------------------------------------------------------------------
+-- O QUE AINDA BLOQUEIA (técnico, verificável — não é decisão de ninguém):
+-- ----------------------------------------------------------------------------
+--   (1) A migration #3 do expurgo — `20260821000400_lgpd_retention_purge.sql`
+--       (ddl-aprovado §2.7) — NÃO ESTÁ ESCRITA/APLICADA. Sem ela a promessa de 5 anos não é
+--       cumprida por NENHUM código: esta migration passa a reter conteúdo pessoal sem prazo real.
+--       ORDEM OBRIGATÓRIA: esta (#1) ANTES da #3. A #3 reescreve
+--       `enforce_service_term_immutability` com o corpo-SUPERSET (a emenda daqui + a do expurgo);
+--       aplicar fora de ordem faria ESTA migration apagar a exceção do expurgo em silêncio.
+--       A #3 carrega asserção que falha fechado se esta aqui não estiver aplicada.
+--   (2) O texto da Política de Privacidade / tela de exclusão (ddl-aprovado §6, ENTREGUE) precisa
+--       estar PUBLICADO antes de a rotina ficar acessível ao usuário. Ele diz, com todas as
+--       letras, que o termo ACEITO é retido COM NOME E CPF por 5 anos — e NÃO chama isso de
+--       "anonimização" (§0.4: é eliminação parcial + retenção justificada sobre chave pseudônima;
+--       não é anonimização no sentido do art. 5º, XI).
+--
+-- Até (1) e (2): esta migration pode ir ao banco, mas a Edge Function `delete-account` NÃO deve
+-- ser liberada ao usuário final. Ver `.harness/spec/lgpd-producao/ddl-aprovado.md` §0.3.1, §0.4,
+-- §2.7 e §5 (H1/H2 — DECIDIDOS) para o racional completo.
 -- ============================================================================
 
 -- Migration: LGPD — exclusão de conta vira ANONIMIZAÇÃO + lápide pseudônima (débito pré-piloto #5)
