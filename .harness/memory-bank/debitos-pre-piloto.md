@@ -344,3 +344,28 @@ uma asserção genuinamente bilateral.**
 
 **Latente, não é defeito desta entrega:** como o limiar não tem piso, um check-in **23h adiantado**
 conta como pontual. É pergunta de produto sobre a métrica, não bug de implementação.
+
+## Token de cartão permanece no Asaas após exclusão de conta
+
+**Estado:** ABERTO. Bloqueia **publicar** a rotina de exclusão ao usuário; não bloqueia aplicar a migration.
+
+Quando a empresa exclui a conta, `anonymize_account` apaga `payment_methods` — o Worki perde a
+referência ao cartão. Mas o **token continua existindo no Asaas**. O dado sai do nosso banco e
+permanece no processador.
+
+**Por que não foi resolvido junto:** não existe endpoint confirmado para revogar um
+`creditCardToken` isoladamente. A documentação pública do Asaas descreve `POST /v3/creditCard/tokenize`
+para criar, e o token é vinculado ao **cliente** — o caminho documentado para eliminar o cartão
+parece ser remover o cliente, ação de escopo bem maior (afeta cobranças e histórico), que não se
+decide dentro de uma rotina de LGPD sem confirmação.
+
+**Uma tentativa foi escrita e removida.** A primeira versão da Edge Function chamava
+`DELETE /creditCard/{token}`, endpoint inventado, como "melhor esforço" não-bloqueante. Removido por
+dois motivos: (1) responderia 404 em toda exclusão e logaria "revogação não confirmada" para sempre —
+ruído disfarçado de tentativa, que faz quem lê o log concluir que houve esforço legítimo em vez de
+endpoint inexistente; (2) logava o próprio token, credencial de pagamento em log, dentro da rotina
+de LGPD. Hoje a função emite um aviso único, explícito, apontando para este documento.
+
+**Para fechar:** confirmar contra a API do Asaas (documentação de referência completa ou suporte) se
+existe revogação de token; se existir, implementar; se não existir, decidir entre remover o cliente
+Asaas ou declarar a retenção na Política de Privacidade — decisão de owner + jurídico, junto de J1–J4.
