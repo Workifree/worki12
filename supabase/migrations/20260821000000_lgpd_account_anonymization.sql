@@ -290,7 +290,7 @@ DECLARE
         --    CHECK adiada para leva propria (§5.5 Hh5): adicionar CHECK em `jobs.status` vivo
         --    exige varrer os valores existentes antes, e isso e migration com risco proprio.
         --    NAO redigir nenhuma delas: `status` e maquina de estados (todo consumidor faz
-        --    `.neq('status','deleted')`) e as outras quatro sustentam filtro e BI.
+        --    `.neq('status','deleted')`) e as demais sustentam filtro, horario e BI.
         'jobs.scope',                                   -- constante do cliente: 'on-site'
         'jobs.type', 'jobs.budget_type',                -- constantes: 'freelance' / 'daily'
         'jobs.category',                                -- selecao validada no client
@@ -1035,7 +1035,14 @@ BEGIN
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_counts := v_counts || jsonb_build_object('notifications', v_n);
 
-    -- ---- token de cartão da empresa (revogar no Asaas é da Edge Function) ----
+    -- ---- token de cartão da empresa ----
+    -- EMENDA 2026-08-22: a versao anterior deste comentario dizia "revogar no Asaas e da Edge
+    -- Function". NAO HA REVOGACAO. Nao existe caminho verificado para revogar um creditCardToken
+    -- avulso (o token e vinculado ao CLIENTE; o endpoint por token nao tem precedente aqui nem
+    -- consta da doc publica). Este DELETE apaga a REFERENCIA do nosso lado; o token PERMANECE no
+    -- processador. O token e opaco (nunca PAN/CVV) e wallets.asaas_customer_id sobrevive, entao
+    -- remediacao por CLIENTE continua possivel depois. Ver ddl-aprovado 4.1-4b, 5.3 e 5.4 J5, e
+    -- ADR-20260822-token-de-cartao-permanece-no-asaas.md.
     IF cardinality(v_company_ids) > 0 THEN
         DELETE FROM public.payment_methods pm WHERE pm.company_id = ANY (v_company_ids);
         GET DIAGNOSTICS v_n = ROW_COUNT;
