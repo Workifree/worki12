@@ -91,3 +91,43 @@ própria, com data e justificativa, como manda o histórico do arquivo.
   por RPC atômica (Article 8). Se for feito, é operação declarada, com razão, não faxina.
 - **Deixar tudo exatamente como está.** Rejeitada em parte: as sete funções ativas são superfície
   sem propósito de negócio. Não é urgente (a webhook falha fechado), mas é dívida declarada.
+
+---
+
+## Execução (22/08/2026) — o que foi feito, e o defeito que a execução revelou
+
+**1. Sete Edge Functions Asaas REMOVIDAS de produção** (`asaas-webhook`, `-onboard`, `-deposit`,
+`-checkout`, `-withdraw`, `-sync`, `-account-status`), via CLI. O código continua no repositório e
+volta com um deploy se o processamento for retomado. Restaram só as sete de negócio (`jobs-api`,
+`applications-api`, `profiles-api`, `admin-data`, `send-notification`, `delete-account`,
+`expire-invites`) — nenhuma delas toca Asaas.
+
+**2. Saldos e escrows residuais ENCERRADOS** (`20260822000500`), por operação declarada: cada
+carteira recebeu um lançamento em `wallet_transactions` com o valor exato do movimento, o motivo, e
+`reference_id` estável; os 4 escrows `reserved` foram para `refunded`. Verificado: soma dos saldos
+= 0, escrow ativo = 0, e os quatro valores originais (4700,00 / 4130,00 / 3,02 / 1,02) conferidos um
+a um contra o estado capturado antes. **Idempotente na prática** — a migration foi reaplicada e não
+duplicou lançamento. É o que torna a operação reversível: o saldo original vive no `amount`.
+Correção do que este ADR dizia antes: segundo o owner, **entrou dinheiro real** em algum momento
+(alguns reais de teste do Asaas) e **já foi sacado**. O saldo encerrado não era devido a ninguém.
+
+**3. 🐞 DEFEITO ENCONTRADO PELA REMOÇÃO — concluir turno estava atado ao escrow.**
+`CompanyJobCandidates.handleConfirmDelivery` chama `WalletService.releaseOrCaptureEscrow` **antes**
+de marcar o turno como `completed`, e **aborta** se ela devolver `success: false`. A função, sem
+encontrar escrow, caía no default `'prepaid'` e chamava `asaas-checkout`. Com a função removida isso
+viraria 404 — e, pior, **em modo A turno NUNCA tem escrow**, então o sintoma seria "Erro ao liberar
+pagamento" numa operação que não envolve pagamento nenhum, com a empresa sem conseguir concluir
+turno algum.
+
+Consertado com uma guarda que é sobre o **estado**, não sobre a pausa: se não há escrow em
+`reserved`/`authorized`, a função devolve `success: true` — *não havia nada a liberar* é resposta
+correta, e tratá-la como erro era o defeito. Por ser sobre o estado, a guarda **continua válida se o
+processamento voltar**: quem tiver escrow ativo segue pelo fluxo normal, sem flag para alguém lembrar
+de virar. Três testes novos, **verificados por mutante** (desligar a guarda mata dois deles; o
+terceiro, que exercita o caminho com `escrowKind` explícito, corretamente sobrevive).
+
+**Vale registrar como a remoção virou achado.** A pausa não criou este bug — ela o tornou
+inevitável em vez de intermitente. O `asaas-checkout` estava publicado, então o erro dependia do
+estado do escrow e do humor da chamada. Remover a função transformou "às vezes falha" em "sempre
+falha", que é o que fez a análise de alcançabilidade ser feita. **Desligar coisa morta é uma forma
+barata de descobrir quem ainda dependia dela** — desde que se rastreie quem chamava antes de desligar.
