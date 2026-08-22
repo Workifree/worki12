@@ -8,20 +8,37 @@
 -- `NOT EXISTS` (jobs, team_connections, shift_payments, company_members, team_lists, job_series).
 -- Mas ha FKs para `companies(id)` fora dessa lista: `payment_methods`, `company_spend_limits`,
 -- `company_monthly_revenue`, `worker_certifications.verified_by_company_id`, `worker_referrals`
--- (duas colunas: referring_company_id, requesting_company_id), `worker_trainings` e
--- `worker_company_badge_prefs`. Risco baixo na pratica (casca recem-criada com
--- onboarding_completed=false dificilmente tem isso), mas e a MESMA classe de landmine que
--- 20260821000000 §1(c) foi escrita para cacar: lista a mao que envelhece a cada feature nova
--- (F10 worker_referrals e F12 worker_company_badge_prefs nasceram depois e passaram despercebidas
--- ate aquela migration).
+-- (duas colunas: referring_company_id, requesting_company_id), `worker_trainings`,
+-- `worker_company_badge_prefs` e `service_terms.company_id` (ON DELETE RESTRICT — 20260817001100).
+-- Risco baixo na pratica (casca recem-criada com onboarding_completed=false dificilmente tem isso),
+-- mas e a MESMA classe de landmine que 20260821000000 §1(c) foi escrita para cacar: lista a mao
+-- que envelhece a cada feature nova (F10 worker_referrals e F12 worker_company_badge_prefs
+-- nasceram depois e passaram despercebidas ate aquela migration; `service_terms` nasceu na MESMA
+-- janela desta migration e ainda assim ficou de fora na primeira revisao — prova viva do proprio
+-- argumento da migration).
+--
+-- CONFERENCIA CONTRA `pg_constraint` EM PRODUCAO (nao em grep no repositorio, 2026-08-18):
+-- consulta direta a `pg_constraint`/`confrelid = 'public.companies'::regclass` em producao
+-- (projeto vrklakcbkcsonarmhqhp) devolveu TREZE tabelas hoje dependentes (company_members ainda
+-- nao existe em producao — nasce com esta mesma janela de migrations). Dessas treze, a que
+-- realmente faltava na allow-list/NOT EXISTS desta migration era `service_terms.company_id`
+-- (ON DELETE RESTRICT). `jobs` (ON DELETE NO ACTION) ja estava coberta desde 20260818100300, mas
+-- e a prova do metodo: `jobs` NAO TEM `CREATE TABLE public.jobs` em migration alguma do historico
+-- versionado (nasceu fora do historico — ver architecture.md) — so o catalogo a revela; um
+-- `grep` no repositorio jamais a encontraria, e teria sido facil "confirmar" a lista antiga so
+-- por grep e deixar `jobs` de fora por coincidencia de sorte. E exatamente por isso que a
+-- asserção do §1 abaixo enumera do catalogo (`pg_constraint`) e nao de uma lista estatica do
+-- repo: se alguem "simplificar" esta asserção de volta para grep, qualquer FK criada fora de
+-- migration (como `jobs`) volta a ficar invisivel.
 --
 -- O QUE ESTA MIGRATION FAZ
 -- ============================================================================
 --   1. Asserção de migração (mesmo padrão de 20260821000000 §1(c)): enumera `pg_constraint`
 --      contra `companies` e falha se houver dependente fora da allow-list abaixo. Enumeração
 --      automática decide *o que existe*; a allow-list decide *o que é seguro*. As duas juntas.
---   2. `accept_manager_invite` ganha os NOT EXISTS que faltavam, cobrindo TODAS as 13 tabelas
---      hoje dependentes de `companies(id)` (as 6 originais + as 7 que faltavam).
+--   2. `accept_manager_invite` ganha os NOT EXISTS que faltavam, cobrindo TODAS as 14 tabelas
+--      hoje dependentes de `companies(id)` (as 6 originais + as 8 que faltavam, incluindo
+--      `service_terms`, que a primeira versao desta migration ja tinha deixado de fora).
 --
 -- Article 8 intacto: nao toca saldo/escrow. Risk: LOW (torna a guarda MAIS restritiva, nunca
 -- menos — na pior hipotese, deixa de apagar uma casca que ja tem dado, o que e o comportamento
@@ -37,10 +54,11 @@
 -- ============================================================================
 DO $$
 DECLARE
-    -- As 13 tabelas HOJE dependentes de companies(id) — as 6 já cobertas por
-    -- accept_manager_invite (20260818100300) + as 7 que faltavam (achado do security-reviewer).
+    -- As 14 tabelas HOJE dependentes de companies(id) — as 6 já cobertas por
+    -- accept_manager_invite (20260818100300) + as 8 que faltavam (achado do security-reviewer,
+    -- validado contra pg_constraint em produção — ver cabeçalho acima).
     v_classified_deps text[] := ARRAY[
-        'public.jobs',                        -- coberto (NOT EXISTS já existia)
+        'public.jobs',                        -- coberto (NOT EXISTS já existia, 20260818100300)
         'public.team_connections',            -- coberto (NOT EXISTS já existia)
         'public.shift_payments',               -- coberto (NOT EXISTS já existia)
         'public.company_members',             -- coberto (NOT EXISTS já existia)
@@ -52,7 +70,8 @@ DECLARE
         'public.worker_trainings',            -- NOVO (company_id)
         'public.worker_certifications',       -- NOVO (verified_by_company_id, ON DELETE SET NULL)
         'public.worker_company_badge_prefs',  -- NOVO
-        'public.worker_referrals'             -- NOVO (referring_company_id + requesting_company_id)
+        'public.worker_referrals',            -- NOVO (referring_company_id + requesting_company_id)
+        'public.service_terms'                -- NOVO (company_id, ON DELETE RESTRICT, 20260817001100)
     ];
     v_unknown text;
 BEGIN
@@ -72,7 +91,7 @@ END $$;
 
 
 -- ============================================================================
--- 2. accept_manager_invite — guarda exaustiva (as 13 tabelas da allow-list acima).
+-- 2. accept_manager_invite — guarda exaustiva (as 14 tabelas da allow-list acima).
 --    Corpo idêntico a 20260818100300, exceto a lista de NOT EXISTS na DELETE de companies.
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.accept_manager_invite(p_token text)
@@ -131,7 +150,7 @@ BEGIN
     -- Sem isto o gerente carrega uma "empresa" fantasma com onboarding_completed=false e volta
     -- ao loop de onboarding por outro caminho (ver ddl-aprovado.md D4).
     -- Guardas estritas: so remove se estiver COMPLETAMENTE vazia. Lista EXAUSTIVA (20260818100500)
-    -- das 13 tabelas hoje dependentes de companies(id) — a asserção acima (§1) garante que nenhuma
+    -- das 14 tabelas hoje dependentes de companies(id) — a asserção acima (§1) garante que nenhuma
     -- ficou fora; tabela nova FALHA a migration em vez de ficar despercebida.
     DELETE FROM public.companies c
      WHERE c.id = v_uid
@@ -151,7 +170,8 @@ BEGIN
        AND NOT EXISTS (
              SELECT 1 FROM public.worker_referrals wr
               WHERE wr.referring_company_id = c.id OR wr.requesting_company_id = c.id
-           );
+           )
+       AND NOT EXISTS (SELECT 1 FROM public.service_terms st WHERE st.company_id = c.id);
 
     RETURN jsonb_build_object('outcome', 'accepted',
                               'company_id', v_row.company_id, 'member_id', v_row.id);
@@ -161,7 +181,7 @@ $$;
 COMMENT ON FUNCTION public.accept_manager_invite(text) IS
     'O gerente ja autenticado amarra o proprio user_id ao convite e (se a casca de companies '
     'criada por handle_new_user estiver vazia) a remove. Guarda de DELETE EXAUSTIVA '
-    '(20260818100500): as 13 tabelas hoje dependentes de companies(id), validadas por asserção '
+    '(20260818100500): as 14 tabelas hoje dependentes de companies(id), validadas por asserção '
     'de pg_constraint na mesma migration — nenhuma tabela nova pode ficar fora sem falhar a '
     'migration primeiro.';
 
@@ -173,12 +193,13 @@ GRANT EXECUTE ON FUNCTION public.accept_manager_invite(text) TO authenticated, s
 -- COMO VERIFICAR (obrigatório após aplicar)
 -- ----------------------------------------------------------------------------
 -- V1. Assercao do §1 passa sem RAISE EXCEPTION (nenhum dependente novo fora da allow-list).
--- V2. Casca vazia (onboarding_completed=false, nenhuma das 13 tabelas com linha) + accept_manager_invite
+-- V2. Casca vazia (onboarding_completed=false, nenhuma das 14 tabelas com linha) + accept_manager_invite
 --       ⇒ outcome='accepted' e a linha de companies É removida (comportamento inalterado).
--- V3. Casca com UMA linha em payment_methods (ou qualquer uma das 7 tabelas novas) apontando para
---       c.id = v_uid ⇒ accept_manager_invite ainda retorna outcome='accepted' (o convite é aceito
---       normalmente) mas a linha de companies NÃO é removida (antes: era removida em silêncio,
---       deixando o FK órfão logicamente ligado a uma unidade fantasma).
+-- V3. Casca com UMA linha em payment_methods (ou qualquer uma das 8 tabelas novas, incluindo
+--       service_terms) apontando para c.id = v_uid ⇒ accept_manager_invite ainda retorna
+--       outcome='accepted' (o convite é aceito normalmente) mas a linha de companies NÃO é
+--       removida (antes: era removida em silêncio, deixando o FK órfão logicamente ligado a
+--       uma unidade fantasma).
 --
 -- DOWN (rollback):
 --   -- Restaura accept_manager_invite ao corpo de 20260818100300 (6 NOT EXISTS).
