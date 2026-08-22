@@ -478,3 +478,41 @@ credencial e deixando PII para trás. Aplicar a migration sem publicar a funçã
 seguro por um inseguro.
 
 Com o architect. **Nada de LGPD vai ao banco até isso fechar.**
+
+---
+
+# FECHAMENTO DA SESSÃO (22/08/2026)
+
+## No ar e verificado no bundle publicado
+F9–F12, item 7 (tempo de preenchimento) e **F13 multi-unidade completa**. Bundle
+`index-C6qLeHfT.js`. Conferido baixando os chunks: `get_my_companies` (o conserto do R11) no bundle
+principal, e `invite_company_manager` / `accept_manager_invite` / `revoke_company_manager` no
+`organizationService-5YGqeeEg.js`. As telas `Organization` e `AcceptManagerInvite` respondem.
+
+`list_company_managers` **não existe** — a Fase 3 nunca a definiu, apesar de a spec citá-la. A tela
+lista por consulta direta. Registrado para não virar caça ao fantasma.
+
+## Aplicado em produção hoje (11 migrations)
+F13 Fases 0–3, irmãs do seam, limpeza de policies fora do seam, `COMMENT` do `asaas_customer_id`,
+performance de `list_team_connection_cards`, conserto do reconvite de gerente, e os três `CHECK`s de
+domínio.
+
+## `main` alinhado com produção
+As 11 estão no `main` (merge de `feat/multi-unidade`). O risco "produção à frente do `main`" está
+fechado. Build verde, lint 0 erros, **905 testes em 77 arquivos**.
+
+## ⚠️ Disciplina de branch violada nesta sessão
+O harness exige branch isolado por mudança; os commits de hoje foram direto no `main`. Não causou
+dano — o merge da F13 veio de branch própria e produção está alinhada —, mas contraria a regra e
+fica registrado. Próxima leva volta a abrir branch antes do primeiro commit.
+
+## LGPD — pronta em código, PARADA de propósito
+A seção 2B foi reescrita depois do achado ALTO e **simulada contra produção com rollback**: derruba
+as 8 FKs de `public` e o `deleteUser` passa para o freela que antes falhava com 23503. Não vai ao
+banco porque depende de decisões que não são de engenharia (abaixo).
+
+## Dívida 17 continua ABERTA, e honestamente
+Cobertura de `collectRawData`/`resolveCompanyScope`. Duas tentativas caíram por erro de rede. A
+primeira chegou a escrever o comentário de cabeçalho declarando a dívida FECHADA, prometendo testes
+que nunca escreveu — **revertido**. Comentário que afirma cobertura inexistente é pior que dívida
+aberta. Não é regressão: a dívida já existia antes desta sessão.
