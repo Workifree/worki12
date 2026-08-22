@@ -439,3 +439,42 @@ uma **corrida residual** (duas sessões, dois tokens distintos, mesma pessoa) qu
 comentário da própria migration; tratada com `EXCEPTION WHEN unique_violation`, que cobre toda
 colisão contra o índice — inclusive as não previstas — em vez de um lock que cobriria só a corrida
 imaginada.
+
+## 🔴 ACHADO ALTO — a leva de LGPD, como está, NÃO destrava o `deleteUser`
+
+Testado contra produção (simulando `auth.admin.deleteUser`, que é `DELETE FROM auth.users`), com
+rollback proposital, num freela **real**:
+
+```
+candidaturas: 2 | reviews: 2
+RESULTADO: 23503 — violates foreign key constraint "applications_worker_id_fkey"
+```
+
+**Inventário de FKs de `public` para `auth.users`** (`pg_constraint`):
+
+| tabela | ON DELETE | a migration derruba? |
+|---|---|---|
+| workers, wallets | CASCADE | ✅ sim |
+| companies (id, owner_id) | NO ACTION | ✅ sim |
+| notifications | CASCADE | — (a rotina apaga as linhas) |
+| **applications** | **NO ACTION** | ❌ **NÃO** |
+| **reviews** (reviewer, reviewed) | **NO ACTION** | ❌ **NÃO** |
+| **analytics_events** | **NO ACTION** | ❌ **NÃO** |
+
+A migration tem **um único** `DROP CONSTRAINT` (linha 576), restrito a
+`conrelid IN (workers, companies, wallets)`. E `applications`/`reviews` são **RETIDAS** por decisão
+(§2.1) — a rotina não as apaga por design. Logo o `deleteUser` continuaria falhando para qualquer
+freela que já tenha se candidatado **uma vez**.
+
+**Por que passou:** a asserção de FK (linha ~589) filtra `confdeltype = 'c'` — só enxerga CASCADE. O
+§0.1 do contrato analisa com cuidado o caminho **indireto** (`auth.users →CASCADE→ wallets
+→NO ACTION← wallet_transactions`), mas o caminho **direto** `applications → auth.users` não aparece.
+Um guarda que só procura CASCADE não acha bloqueio por NO ACTION.
+
+**⚠️ E o efeito colateral inverso, que é o que torna isso urgente:** hoje a exclusão **falha**, e
+falhar é seguro. Se as FKs caírem e a Edge Function nova **não** estiver publicada, a função **velha**
+— anonimização parcial de 7 colunas seguida de `deleteUser` — passaria a **funcionar**, apagando a
+credencial e deixando PII para trás. Aplicar a migration sem publicar a função nova troca um bug
+seguro por um inseguro.
+
+Com o architect. **Nada de LGPD vai ao banco até isso fechar.**
