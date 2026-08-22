@@ -395,3 +395,47 @@ Estado final conferido no catálogo: `accept_manager_invite` com **14** `NOT EXI
 EXECUTADO (`format('ALTER TABLE %s ...')`), porque o mesmo `search_path` que o renderiza também o
 resolve; o defeito existe só na **COMPARAÇÃO contra literal**. A migration de LGPD usa as duas
 formas e as duas estão certas — não uniformizar.
+
+## Hh5 EXECUTADA — 3 CHECKs em produção, 2 colunas descartadas com razão (22/08)
+
+`20260822000400` aplicada. `jobs.status ('open','paused','deleted')`, `jobs.budget_type
+('hourly','daily','project')` e `applications.status` (13 valores) passaram a ter domínio garantido
+**pelo banco**, e não por constante de frontend — que é o que o Article 4 exige.
+
+**O domínio veio do CÓDIGO, não dos dados**, e essa foi a decisão central:
+- `'paused'` está no CHECK e **não existe em nenhuma linha de produção**. Entrou porque o botão
+  Pausar existe. Um CHECK montado com `SELECT DISTINCT` quebraria no primeiro clique.
+- `applications.status` precisou de **13** valores, não os 10 da união TS. Três — `'applied'`,
+  `'accepted'`, `'approved'` — **nenhum código escreve**, mas o banco os espera: dois estão no
+  predicado de `update_job_series_future`/`stop_job_series`, e `'approved'` é testado pelo trigger
+  vivo `validate_application_update`. Passaram despercebidos porque `types/index.ts:252` declara
+  `status: ApplicationStatus | string` — **a união não tipa nada**.
+
+**`jobs.type` e `jobs.scope` ficaram de fora, em definitivo.** Têm valores órfãos em produção
+(`'full-time'`, `'hybrid'`) que não existem em **nenhuma linha do repositório** — nem viva, nem
+morta, nem em teste, nem nas árvores legadas. E `CompanyCreateJob` faz **round-trip** na edição, então
+um CHECK que os omitisse quebraria "editar turno" em toda linha legada. São taxonomia aberta, mesma
+natureza de `jobs.category`. Verificado após aplicar, com rollback: regravar uma linha
+`scope='hybrid'` passa sem erro.
+
+### Bug de produto achado de passagem, já corrigido
+
+O payload de `CompanyCreateJob` era **compartilhado** entre criar e editar, e carregava
+`status: 'open'` fixo. Consequência: **editar um turno pausado o reabria, e editar um deletado o
+ressuscitava** — em silêncio, sem nada na tela. Agora `status` só vai no INSERT; o ciclo de vida
+pertence aos botões Pausar/Reativar e à exclusão, não ao formulário de edição.
+
+## C-INVITE-REACCEPT-23505 — reproduzido e corrigido
+
+Reproduzido em produção com rollback: convidar → aceitar → **reconvidar** o mesmo e-mail devolvia
+`invited` e criava uma segunda linha; o aceite seguinte estourava **23505** cru (500 na tela de quem
+foi convidado). Causa em duas partes: o aceite não limpa `invited_email`, e
+`uq_company_members_pending_email` é **parcial** (`WHERE status='invited'`), então a linha ativa sai
+do índice e o reconvite não conflita.
+
+Corrigido nas duas pontas — a causa (`invite_company_manager` devolve `already_active` sem token) e a
+defesa (`accept_manager_invite` queima o convite pendurado em vez de explodir). O revisor achou ainda
+uma **corrida residual** (duas sessões, dois tokens distintos, mesma pessoa) que contradizia o
+comentário da própria migration; tratada com `EXCEPTION WHEN unique_violation`, que cobre toda
+colisão contra o índice — inclusive as não previstas — em vez de um lock que cobriria só a corrida
+imaginada.
