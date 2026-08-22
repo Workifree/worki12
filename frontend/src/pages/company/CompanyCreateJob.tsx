@@ -309,7 +309,12 @@ export default function CompanyCreateJob() {
                 // CHECK (slots >= 1) no banco — o clamp aqui evita que um campo limpo pela
                 // pessoa (string vazia → NaN) vire erro de constraint na cara dela.
                 slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
-                status: 'open'
+                // `status` NÃO entra aqui de propósito — ver o insert e o update abaixo.
+                // Este payload é compartilhado pelos dois caminhos, e enquanto ele carregava
+                // `status: 'open'` fixo, EDITAR um turno reescrevia o status: um turno `paused`
+                // voltava a `open` e um `deleted` era RESSUSCITADO, sem nada na tela dizendo isso.
+                // O status é da máquina de estados (botão Pausar/Reativar, exclusão), não do
+                // formulário de edição — quem edita título e valor não está decidindo ciclo de vida.
             };
 
             if (isEditing) {
@@ -329,7 +334,9 @@ export default function CompanyCreateJob() {
                 navigate('/company/dashboard');
             } else {
                 // Criar turno — SEM reservar escrow (postpago, Slice 2)
-                const { data: newJob, error } = await supabase.from('jobs').insert(payload).select().single();
+                // `status: 'open'` só na CRIAÇÃO: turno novo nasce aberto. No UPDATE acima ele é
+                // deliberadamente omitido, para a edição não reescrever o ciclo de vida.
+                const { data: newJob, error } = await supabase.from('jobs').insert({ ...payload, status: 'open' }).select().single();
                 if (error) throw error;
 
                 // Novo turno deve aparecer imediatamente no dashboard (invalida cache).
