@@ -85,11 +85,24 @@ DECLARE
     ];
     v_unknown text;
 BEGIN
-    SELECT string_agg(DISTINCT con.conrelid::regclass::text, ', ') INTO v_unknown
+    -- ⚠️ CORRECAO 2026-08-22 — NAO usar `conrelid::regclass::text` para COMPARAR com a lista.
+    --    `regclass::text` OMITE o schema quando ele esta no `search_path`, e o das migrations do
+    --    Supabase esta. O texto sai `jobs`, jamais casa com `'public.jobs'`, e a asserção acusa
+    --    TODAS as dependentes — inclusive as 14 que ja estao na allow-list logo acima. Foi
+    --    exatamente o que aconteceu ao aplicar: HALT com as 14 tabelas classificadas na mensagem.
+    --    O nome e montado a partir de `pg_namespace`/`pg_class`: deterministico, independente de
+    --    search_path, e `%I` cita `"Message"` do mesmo jeito.
+    --
+    --    Distincao que vale guardar: `regclass::text` continua CORRETO quando o nome vai ser
+    --    EXECUTADO (ex.: `format('ALTER TABLE %s ...')`), porque o mesmo search_path que o
+    --    renderiza tambem o resolve. O defeito aparece so na COMPARACAO contra literal.
+    SELECT string_agg(DISTINCT format('%I.%I', ns.nspname, cl.relname), ', ') INTO v_unknown
     FROM pg_constraint con
+    JOIN pg_class     cl ON cl.oid = con.conrelid
+    JOIN pg_namespace ns ON ns.oid = cl.relnamespace
     WHERE con.contype = 'f'
       AND con.confrelid = 'public.companies'::regclass
-      AND con.conrelid::regclass::text <> ALL (v_classified_deps);
+      AND format('%I.%I', ns.nspname, cl.relname) <> ALL (v_classified_deps);
 
     IF v_unknown IS NOT NULL THEN
         RAISE EXCEPTION
