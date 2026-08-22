@@ -1,5 +1,15 @@
 -- Migration: accept_manager_invite - guarda de DELETE da casca vazia passa a ser exaustiva
--- File: supabase/migrations/20260818100500_accept_manager_invite_dep_guard.sql
+-- File: supabase/migrations/20260821001100_accept_manager_invite_dep_guard.sql
+--
+-- ⚠️ RENOMEADA de 2026081810xx para 2026082100xx em 22/08/2026 (achado
+--    C-MIGRATION-ORDER-REPLAY do evaluator). Esta migration foi ESCRITA DEPOIS de
+--    20260821000100 e 20260821000300, e parte do corpo delas como baseline — mas o
+--    timestamp original (20260818) era ANTERIOR. Em producao nao houve problema porque
+--    a aplicacao foi manual, na ordem certa. Mas em `supabase db reset`, staging novo ou
+--    CI, o replay por timestamp rodaria esta ANTES das duas, e as funcoes voltariam a
+--    ancoragem hardcoded — justamente no ambiente onde a correcao seria testada.
+--    Regra: o timestamp precisa refletir a ordem de DEPENDENCIA, nao a data em que a
+--    feature comecou.
 -- Achado: security-reviewer (F13 pos-Fase-3), MEDIO.
 --
 -- O DEFEITO, EM UMA FRASE

@@ -1,5 +1,15 @@
 -- Migration: as funcoes-irma do seam passam a DELEGAR para is_company_owner, nao imitar
--- File: supabase/migrations/20260818100400_seam_irmas_delegam.sql
+-- File: supabase/migrations/20260821001000_seam_irmas_delegam.sql
+--
+-- ⚠️ RENOMEADA de 2026081810xx para 2026082100xx em 22/08/2026 (achado
+--    C-MIGRATION-ORDER-REPLAY do evaluator). Esta migration foi ESCRITA DEPOIS de
+--    20260821000100 e 20260821000300, e parte do corpo delas como baseline — mas o
+--    timestamp original (20260818) era ANTERIOR. Em producao nao houve problema porque
+--    a aplicacao foi manual, na ordem certa. Mas em `supabase db reset`, staging novo ou
+--    CI, o replay por timestamp rodaria esta ANTES das duas, e as funcoes voltariam a
+--    ancoragem hardcoded — justamente no ambiente onde a correcao seria testada.
+--    Regra: o timestamp precisa refletir a ordem de DEPENDENCIA, nao a data em que a
+--    feature comecou.
 -- Achado: security-reviewer (F13 pos-Fase-2), ALTO.
 --
 -- O DEFEITO, EM UMA FRASE
@@ -85,7 +95,7 @@ BEGIN
     --     do freela virava credencial portadora de cpf/phone/pix_key/birth_date — ver
     --     ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii. 'blocked' continua sem conceder
     --     (veto explícito do freela). NAO REINTRODUZIR o ramo 'pending' aqui.
-    --     Ancoragem: DELEGA para is_company_owner (20260818100400) — antes hardcodada inline,
+    --     Ancoragem: DELEGA para is_company_owner (20260818100200) — antes hardcodada inline,
     --     por isso um gerente/operador de multi-unidade nao enxergava o proprio elenco.
     IF EXISTS (
         SELECT 1
@@ -102,7 +112,7 @@ BEGIN
     --     CompanyDashboard, CompanyMessages, ReceiptView, relatório de ordens e o BI financeiro.
     --     Sem filtro de status: histórico concluído/cancelado precisa continuar legível para
     --     recibo, relatório e BI. Inalterado por DS-PII-1.
-    --     Ancoragem: DELEGA para is_company_owner (20260818100400) — idem.
+    --     Ancoragem: DELEGA para is_company_owner (20260818100200) — idem.
     IF EXISTS (
         SELECT 1
         FROM public.applications a
@@ -123,7 +133,7 @@ COMMENT ON FUNCTION public.can_view_worker_profile(uuid) IS
     'nascia de INSERT unilateral da empresa e virava credencial de PII), ou empresa com '
     'applications do freela em turno seu. Retorna só boolean (não vaza dado). Usada na policy '
     'de SELECT de workers e em can_view_reviews_of/get_profile_reviews. Ancoragem de empresa '
-    'DELEGA para public.is_company_owner (20260818100400) — cobre gerente/operador de '
+    'DELEGA para public.is_company_owner (20260818100200) — cobre gerente/operador de '
     'multi-unidade, nao so owner_id.';
 
 REVOKE EXECUTE ON FUNCTION public.can_view_worker_profile(uuid) FROM PUBLIC, anon;
@@ -149,7 +159,7 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'unauthenticated');
     END IF;
 
-    -- Ancoragem: DELEGA para is_company_owner (20260818100400) — antes materializava a CTE
+    -- Ancoragem: DELEGA para is_company_owner (20260818100200) — antes materializava a CTE
     -- `mine` so com owner_id/id, deixando de fora gerente (company_members) e socio/operador
     -- (organization_members) da unidade.
     SELECT coalesce(jsonb_agg(x ORDER BY ord DESC), '[]'::jsonb)
@@ -191,7 +201,7 @@ COMMENT ON FUNCTION public.list_team_connection_cards() IS
     'city — nenhum PII). Existe porque DS-PII-1 esvazia o embed worker:workers(...) de '
     'listAllConnections para linhas pending. SEM PARAMETRO de proposito (varredura com passo de '
     'uuid seria possivel se aceitasse "por qual empresa"). Nao toca saldo. Ancoragem DELEGA para '
-    'public.is_company_owner (20260818100400) — cobre gerente/operador de multi-unidade.';
+    'public.is_company_owner (20260818100200) — cobre gerente/operador de multi-unidade.';
 
 REVOKE EXECUTE ON FUNCTION public.list_team_connection_cards() FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION public.list_team_connection_cards() TO authenticated, service_role;
@@ -222,7 +232,7 @@ BEGIN
     END IF;
 
     -- (1) perfil avaliado é uma EMPRESA que eu opero. Ancoragem: DELEGA para is_company_owner
-    --     (20260818100400) — antes hardcodada inline (so owner_id/id), deixando de fora
+    --     (20260818100200) — antes hardcodada inline (so owner_id/id), deixando de fora
     --     gerente/operador de multi-unidade.
     IF public.is_company_owner(v_id) THEN
         RETURN true;
@@ -242,7 +252,7 @@ $$;
 
 COMMENT ON FUNCTION public.can_view_reviews_of(uuid) IS
     'Decide se auth.uid() pode ler as avaliacoes RECEBIDAS por um perfil. Retorna so boolean. '
-    'Empresa que eu opero (DELEGA para public.is_company_owner, 20260818100400 — cobre '
+    'Empresa que eu opero (DELEGA para public.is_company_owner, 20260818100200 — cobre '
     'gerente/operador de multi-unidade) OU freela que eu ja posso ver (can_view_worker_profile, '
     '20260816120000). NAO concede leitura de avaliacoes de EMPRESA a terceiros — esse caminho e a '
     'RPC get_profile_reviews, que serve a prova social do perfil publico /empresa/:id.';
@@ -283,7 +293,7 @@ AS $$
         -- DS-PII-3: reviewer_id só sai quando o avaliador é EMPRESA (companies.id é público,
         -- SELECT USING (true)) OU quando o caller é o DONO do perfil avaliado — MESMO
         -- predicado que já mascara reviewer_name abaixo. Ancoragem: DELEGA para
-        -- is_company_owner (20260818100400) — antes hardcodada inline.
+        -- is_company_owner (20260818100200) — antes hardcodada inline.
         (CASE
             WHEN p_direction = 'worker' THEN r.reviewer_id::text
             WHEN (
@@ -342,7 +352,7 @@ COMMENT ON FUNCTION public.get_profile_reviews(text, text) IS
     'NULL quando o avaliador e freela e o caller nao e o dono do perfil avaliado — mesmo '
     'predicado que ja mascarava reviewer_name, fechando a segunda instancia da classe descrita em '
     'ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii. Ancoragem "e o dono/opera a empresa" '
-    'DELEGA para public.is_company_owner (20260818100400) — cobre gerente/operador de '
+    'DELEGA para public.is_company_owner (20260818100200) — cobre gerente/operador de '
     'multi-unidade, que antes ficava mascarado como terceiro no proprio perfil.';
 
 REVOKE EXECUTE ON FUNCTION public.get_profile_reviews(text, text) FROM PUBLIC, anon;
