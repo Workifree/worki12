@@ -10,7 +10,13 @@ interface ReviewRow {
     rating: number;
     comment: string | null;
     created_at: string;
-    reviewer_id: string;
+    /**
+     * DS-PII-3 (ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii): a RPC devolve NULL quando
+     * o avaliador é freela e o caller não é o dono do perfil avaliado. Não usado para renderizar
+     * nem como key de lista (isso é `review_id`) — só carregado para eventual uso futuro do
+     * próprio dono do perfil.
+     */
+    reviewer_id: string | null;
     reviewer_name: string;
 }
 
@@ -67,7 +73,7 @@ export default function ProfileReviews({
                     rating: number;
                     comment: string | null;
                     created_at: string;
-                    reviewer_id: string;
+                    reviewer_id: string | null;
                     reviewer_name: string | null;
                 }[];
 

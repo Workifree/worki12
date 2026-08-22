@@ -26,6 +26,7 @@ const MyJobs = lazy(() => import('./pages/MyJobs'));
 const CarteiraClientes = lazy(() => import('./pages/CarteiraClientes'));
 const MeusRecebimentos = lazy(() => import('./pages/MeusRecebimentos'));
 const CompanyPublicProfile = lazy(() => import('./pages/CompanyPublicProfile'));
+const QuemTeIndicou = lazy(() => import('./pages/QuemTeIndicou'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
@@ -36,7 +37,9 @@ const CompanyJobCandidates = lazy(() => import('./pages/company/CompanyJobCandid
 const CompanyMessages = lazy(() => import('./pages/company/CompanyMessages'));
 const CompanyTeam = lazy(() => import('./pages/company/CompanyTeam'));
 const CompanyOrdersReport = lazy(() => import('./pages/company/CompanyOrdersReport'));
+const CompanyOperationAnalytics = lazy(() => import('./pages/company/CompanyOperationAnalytics'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
+const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -159,6 +162,7 @@ function App() {
                       <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="recebimentos" element={<MeusRecebimentos />} />
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
+                      <Route path="indicacoes" element={<QuemTeIndicou />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="messages" element={<Messages />} />
                       <Route path="notifications" element={<Notifications />} />
@@ -173,10 +177,16 @@ function App() {
                       <Route path="jobs/:id/edit" element={<CompanyCreateJob />} />
                       <Route path="jobs/:id/candidates" element={<CompanyJobCandidates />} />
                       <Route path="worker/:id" element={<WorkerPublicProfile />} />
+                      {/* DS11 (badges-empresas/ddl-aprovado.md §2.1): rota-espelho de /empresa/:id
+                          para o mesmo CompanyPublicProfile, sob CompanyLayout. mode='view' do
+                          CompanyBadges navega para cá — nunca para /empresa/:id (worker-only). */}
+                      <Route path="empresa/:id" element={<CompanyPublicProfile />} />
                       <Route path="profile" element={<CompanyProfile />} />
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="team" element={<CompanyTeam />} />
+                      <Route path="indicacoes" element={<CompanyReferrals />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
+                      <Route path="operacao" element={<CompanyOperationAnalytics />} />
                       <Route path="notifications" element={<Notifications />} />
                     </Route>
 

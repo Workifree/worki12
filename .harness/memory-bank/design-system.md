@@ -120,3 +120,5 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 | `ServiceTermSection` | `frontend/src/components/ServiceTermSection.tsx` | renderização de termo + checkbox de concordância (F6) |
 | `MyCertificationsSection` | `frontend/src/components/MyCertificationsSection.tsx` | grid de certificações do freela (F8) |
 | `WorkerCertificationsPanel` | `frontend/src/components/company/WorkerCertificationsPanel.tsx` | painel da empresa com certificações da equipe (F8) |
+| `ProfileReviews` | `frontend/src/components/ProfileReviews.tsx` | lista de avaliações recebidas (estrelas + comentário, reutilizável) |
+| `CompanyBadges` | `frontend/src/components/CompanyBadges.tsx` | cards "Já trabalhou com" com toggle ocultar/reexibir (F12) |

@@ -525,34 +525,33 @@ export const TeamConnectionService = {
   /**
    * Lista todas as conexões da empresa (pending + accepted + blocked).
    * Útil para a UI de gestão da equipe.
+   *
+   * Via RPC `list_team_connection_cards()` (DS-PII-1/2, migration 20260821000300) — NÃO mais
+   * embed direto `worker:workers(...)`. Desde DS-PII-1, `can_view_worker_profile` perdeu o ramo
+   * 'pending' (nascia de INSERT unilateral da empresa e virava credencial de PII), então sob
+   * PostgREST o embed de uma linha 'pending' viria `null` (RLS negada, sem erro) — o cartão de
+   * convite pendente (`PendingCard`) ficaria sem nome. A RPC roda como owner e projeta só os
+   * seis campos não-PII que esta tela já consumia (id, full_name, avatar_url, primary_role,
+   * rating_average, city) para TODAS as conexões da empresa, qualquer status.
    */
   async listAllConnections(): Promise<TeamConnection[]> {
     try {
-      const companyId = await getAuthenticatedCompanyId();
-
-      const { data, error } = await supabase
-        .from('team_connections')
-        .select(
-          `
-          *,
-          worker:workers (
-            id,
-            full_name,
-            avatar_url,            primary_role,
-            rating_average,
-            city
-          )
-        `,
-        )
-        .eq('company_id', companyId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('list_team_connection_cards');
 
       if (error) {
         logError('teamConnection.listAllConnections', error);
         return [];
       }
 
-      return (data ?? []) as TeamConnection[];
+      const result = data as { outcome: string; items?: TeamConnection[] } | null;
+      if (!result || result.outcome !== 'ok') {
+        if (result && result.outcome !== 'ok') {
+          logError('teamConnection.listAllConnections', new Error(`outcome=${result.outcome}`));
+        }
+        return [];
+      }
+
+      return result.items ?? [];
     } catch (err) {
       logError('teamConnection.listAllConnections', err);
       return [];

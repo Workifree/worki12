@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase';
 import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
+import CompanyBadges from '../components/CompanyBadges';
+import ReferralOptOutSection from '../components/ReferralOptOutSection';
+import SosDiscoverySection from '../components/SosDiscoverySection';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -952,6 +955,17 @@ export default function Profile() {
                         certificação externa. v1 SEM ARQUIVO (ADR-20260821) — só metadado +
                         número de registro. */}
                     <MyCertificationsSection />
+
+                    {/* F10 — opt-out de indicação entre empresas (workers.accepts_referrals). */}
+                    <ReferralOptOutSection />
+
+                    {/* F11 — opt-in de descoberta em urgência (workers.discoverable_for_sos).
+                        Adjacente à Disponibilidade (F7): só aparece com availability_days
+                        declarado — ver ddl-aprovado.md §5. */}
+                    <SosDiscoverySection />
+
+                    {/* F12 — selos das empresas onde já trabalhou (o dono gerencia visibilidade). */}
+                    {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
 
                     {/* Avaliações recebidas de empresas */}
                     {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}

@@ -65,6 +65,15 @@ exclusão da LGPD e **não cumpre**.
 architect: anonimização em vez de exclusão (preservando a trilha fiscal do pagamento) é o caminho
 mais provável, já que `shift_payments` é documento de auditoria e não pode simplesmente sumir.
 
+**Parecer do architect (21/08/2026):** `.harness/spec/lgpd-producao/ddl-aprovado.md` §2 +
+ADR-20260821-anonimizacao-em-vez-de-exclusao. **Há um SEGUNDO caminho de bloqueio, não registrado:**
+`auth.users --CASCADE--> wallets --NO ACTION-- wallet_transactions/escrow_transactions`
+(`001_create_wallet_escrow_tables.sql`) — basta uma linha de razão para `deleteUser` falhar, sem
+`shift_payments` nenhum. Decisão: lápide pseudônima (remover as CASCADEs para `auth.users`; a
+credencial some, a linha de identidade sobrevive anonimizada) + RPC transacional `anonymize_account`.
+**Dois itens aguardam o humano:** prazo de retenção e texto da política (H1) e o aval para remover as
+FKs de identidade (H2). Este débito só fecha depois do #1 (política declarar a retenção).
+
 ## 6. Aceite do termo não é garantido pelo banco — só pela UI
 
 **Origem:** evaluator F6, finding `C-TERM-FETCH-FAIL` (tipo c — decisão de arquitetura).
@@ -126,3 +135,212 @@ PIX varríveis por qualquer autenticado) — e ficou de fora naquela passagem.
 o badge não muda uma linha.
 
 **Gate:** é exposição de dado pessoal em produção, e cresce com o piloto.
+
+> ✅ **PAGA em 21/08/2026.** Migrations `20260821000100_reviews_select_by_relationship.sql` +
+> `20260821000200_reviews_drop_public_select_policy.sql`, aplicadas e **verificadas no catálogo**:
+> `reviews` tem agora uma única policy de SELECT (`reviews_select_related`), e `get_profile_reviews`
+> ganhou gate por direção (`'company'` segue aberto — é a prova social deliberada do perfil público
+> da empresa; `'worker'` exige `can_view_worker_profile`).
+>
+> Duas armadilhas no caminho, ambas registradas em `patterns.md`: as colunas são `uuid` e não `text`
+> como o repositório declara, e o `DROP POLICY` mirava um nome que não existia — **a policy
+> permissiva sobreviveu à primeira aplicação**, deixando a correção inerte até a verificação pegar.
+
+**Parecer do architect (21/08/2026):** `.harness/spec/lgpd-producao/ddl-aprovado.md` §3 +
+ADR-20260821-reviews-por-vinculo. Achado que muda o desenho: fechar a policy **sozinha não fecha
+nada** — `get_profile_reviews` é `SECURITY DEFINER` e só exige `auth.uid() IS NOT NULL`, devolvendo
+o mesmo conteúdo. Tabela e RPC fecham juntas. `direction='company'` fica aberto de propósito
+(prova social de `/empresa/:id`). F12 confirmado inalterado.
+
+## 10. `companies` é `USING (true)` com CNPJ, e-mail e endereço
+
+**Origem:** gate do architect sobre o débito #9 (21/08/2026). **Pré-existente, em produção.**
+
+Mesma classe do #9, um nível acima: `companies` tem `SELECT USING (true)` (`20260317160000:23`), e a
+tabela carrega `cnpj`, `email` e `address`. Qualquer conta autenticada varre a base de empresas.
+
+**Por que não foi corrigido junto com o #9:** `/empresa/:id` (perfil público) e `CompanyProfile`
+dependem dessa policy, e o fecho correto **não é** escopo por linha — é column-scoped (RPC
+`get_company_public_profile` devolvendo só as colunas públicas + policy restrita ao dono). Spec própria.
+
+**🔗 CONSUMIDOR ACOPLADO — ler antes de fechar este débito (gate de 21/08/2026, F10):**
+`frontend/src/components/company/CreateReferralModal.tsx` busca a empresa destino com
+`from('companies').ilike('name', …)`. O gate aprovou a leitura direta **exatamente porque** esta
+policy é `USING (true)` — uma RPC hoje não subtrairia capacidade de ninguém. **No dia em que esta
+policy for escopada, aquela busca precisa virar RPC na MESMA migration.** Se não virar, a F10 quebra
+**em silêncio**: RLS que não casa devolve conjunto vazio (não erro), o campo "Empresa destino" nunca
+encontra ninguém e a feature de indicação fica inoperante sem nenhuma mensagem.
+O contrato da RPC substituta (`search_companies_for_referral`: só o termo, sem paginação, projeção
+`id/name/logo_url` campo a campo, teto e mínimo dentro da função) já está escrito — **não precisa de
+novo gate**, é só implementar:
+`.harness/memory-bank/decisions/ADR-20260821-busca-de-empresas-acoplada-ao-debito-10.md` §D2 e
+`.harness/spec/troca-freelas/ddl-aprovado.md` §6 (DS-BUSCA).
+
+## 11. `reviews` aceita avaliação sem turno concluído
+
+**Origem:** gate do architect sobre o débito #9 (21/08/2026). **Pré-existente.**
+
+A policy de INSERT é `WITH CHECK (reviewer_id = auth.uid())` (`20260309000000:114`) — nada exige que
+exista `applications` concluída entre avaliador e avaliado. Qualquer conta pode inventar avaliação
+sobre qualquer id, em qualquer direção. A validação vive só no client ("validated by application
+status in app logic", diz o comentário da própria migração).
+
+**Correção:** `WITH CHECK` com `EXISTS` sobre `applications`/`jobs` em status concluído, ou trigger
+`BEFORE INSERT`. Não entra no #9 (que é leitura); é escrita e merece verificação própria.
+
+## 12. F9 × F11 — o painel conta SOS diferente do que conta chamado de elenco
+
+**Origem:** security-reviewer do F11 (classificado como NOTA, não falha).
+
+`operationAnalyticsService` lê `shift_call_targets` sob o client autenticado, logo sob RLS. A policy
+nova do SOS libera à empresa **apenas os alvos com `response='accepted'`** quando `origin='sos'` —
+que é exatamente a membrana que a feature existe para criar.
+
+Consequência não-óbvia: no painel de operação, um chamado de **elenco** conta todos os alvos, e um
+**SOS** conta só quem aceitou. O "tempo de preenchimento" e o alcance ficam sub-representados para
+SOS, **sem nenhum sinal na tela**. Quem ler o número vai comparar coisas diferentes.
+
+**Não é bug** — corrigir "mostrando todos" quebraria a promessa do SOS. As saídas honestas são:
+(a) separar as duas origens no painel, com rótulo; (b) expor a contagem de alcance de SOS por uma
+RPC DEFINER que devolva **só o número**, nunca a lista; ou (c) declarar na tela que SOS conta
+diferente.
+
+**Gate:** decidir antes de o SOS ser ligado em produção. Depois, o número já terá sido lido como se
+fosse comparável.
+
+## 13. O consentimento do SOS subdeclara o que a empresa passa a ver
+
+**Origem:** evaluator do F11 (ALTO, tipo b — vício do contrato, não da implementação).
+
+O texto do §5, copiado fielmente pelo builder, diz que ao aceitar um SOS a empresa passa a ver
+**"telefone e chave PIX"**. Mas `can_view_worker_profile` é **row-level**: no aceite a empresa ganha
+a **linha inteira** de `workers` — que inclui **CPF** e **data de nascimento**.
+
+O próprio contrato exige que "o consentimento cubra o que realmente acontece". Hoje não cobre.
+
+**Duas saídas, e a escolha não é do builder:**
+1. Ampliar o texto para citar CPF e data de nascimento — honesto, mas pode reduzir adoção do opt-in.
+2. Restringir colunas nesse ramo específico do `can_view_worker_profile` — decisão de architect,
+   com impacto em todas as features que dependem do ramo operacional.
+
+**Gate:** entra no parecer jurídico/LGPD que o ADR do SOS já exigia. **Este é o item mais forte
+desse parecer** — é a primeira vez no produto que uma empresa vê CPF de alguém com quem não tinha
+nenhum vínculo prévio, e o consentimento que autoriza isso não menciona CPF.
+
+## 14. O painel de analytics mente a favor do SOS
+
+**Origem:** evaluator do F11 (MÉDIO). Complementa a dívida 12.
+
+`operationAnalyticsService` monta a métrica de aceitação (`received`/`accepted`) a partir das linhas
+**visíveis** de `shift_call_targets`. Para chamados SOS, só o alvo **aceito** é visível — então quem
+aceitou aparece com `received=1, accepted=1` = **100% de aceitação**, e todos os alcançados que
+recusaram somem do denominador.
+
+Não é vazamento: é a membrana funcionando como deve. Mas o número exibido passa a favorecer
+sistematicamente o SOS sobre o chamado de elenco, e ninguém saberia disso olhando o painel.
+
+**Saídas:** filtrar `origin='team'` no bloco de aceitação, ou rotular a métrica. A primeira é mais
+honesta; a segunda preserva o dado com a ressalva.
+
+**Gate:** decidir antes de ligar o SOS — depois, o número já terá sido lido como comparável.
+
+## 15. 🔴🔴 EM PRODUÇÃO — o uuid do freela é credencial de PII
+
+**Origem:** gate do `avatar_url` na F10 (21/08/2026). **Não foi introduzido por nenhuma feature
+desta leva.** ADR: `ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii.md`.
+
+### O defeito de fundo
+
+`can_view_worker_profile` concede leitura da **linha inteira** de `workers` — cpf, phone, pix_key,
+birth_date — por `team_connections.status = 'pending'`. Esse estado é escrito **unilateralmente
+pela empresa** (`tc_insert_company` só exige ser dona e nascer `'pending'`).
+
+Logo: **conhecer o uuid de um freela equivale a ter autorização sobre o PII dele.** O uuid é
+credencial portadora, e qualquer canal que exponha um identificador vira vazamento.
+
+`'pending'` é a empresa dizendo "quero". `'accepted'` é a pessoa dizendo "pode". CPF e PIX
+pertencem ao segundo.
+
+### O canal aberto hoje (desde 16/08)
+
+`get_profile_reviews` devolve `reviewer_id` **cru** para qualquer sessão autenticada. Com
+`p_direction='company'` os avaliadores são freelas: a RPC **mascara o nome** ("Carlos S.") e
+**entrega o uuid na coluna ao lado**. Colheita em lote sobre qualquer perfil de empresa, depois a
+escalada acima. Duas chamadas. Não passa por `ProtectedRoute` — é `.rpc()` direta com `GRANT` a
+`authenticated`.
+
+### Por que quase consertamos a coisa errada
+
+O primeiro diagnóstico foi "o `avatar_url` vaza o uuid porque o path do bucket é
+`${profile.id}/...`". Verdade, mas é **um** canal. Se a correção tivesse sido trocar a convenção de
+path — a opção que parecia consertar "a classe inteira" — este caso continuaria de pé.
+
+**A classe não é "path embute uuid". É "um identificador que autoriza".**
+
+### Correção (DS-PII-1..3, em implementação)
+
+1. `can_view_worker_profile` perde o ramo `'pending'`.
+2. `list_team_connection_cards()` DEFINER sem parâmetro — sem ela, o cartão de convite pendente
+   perde o nome **em silêncio** (embed PostgREST de linha negada vem `null`, não erro).
+3. `get_profile_reviews` devolve `reviewer_id` NULL para terceiro.
+
+### Mina armada relacionada (não vaza hoje)
+
+`CompanyProfile.tsx:233` usa a mesma convenção de path com `companies.id`. Inofensivo enquanto
+`companies.id = auth.uid()` e `companies` for `USING (true)`. **O F3/multi-unidade arma o pino:**
+`userId` passa a ser o uid do gerente, e o path passa a embutir um `auth.users.id` de pessoa
+natural. Uma linha agora; backfill com o furo aberto depois.
+
+## 16. F11 — verificações V1–V8 pendentes (gate de deploy, não de commit)
+
+**Origem:** evaluator do F11 (MÉDIO `C-GATE-VISIBILIDADE`). As verificações existem só em
+`.harness/spec/sos-descoberta/ddl-aprovado.md:864-920` e nada em `memory-bank/` apontava para elas.
+
+A migration `20260817001600_sos_discovery.sql` **não foi aplicada**. Antes de ligar o SOS:
+
+- **V8 primeiro, como bloqueio:** turno `status='deleted'` + chamado aberto → `claim_shift_slot`
+  deve devolver `{"outcome":"cancelled"}`. Se vier `claimed`, **não subir** — é a regressão que a
+  rejeição 1 pegou.
+- **V1–V7:** colunas/CHECKs, texto das 3 policies em `pg_policies`, ausência de `42P17` em runtime,
+  **V4** (empresa vê 0 alvos de SOS pendente) e **V6** (forjar `origin='sos'` → `42501`), trigger
+  ignorando o `origin` do cliente, e Article 8 (0 linhas em `escrow_transactions`).
+- **Confirmar `prosrc` depois de aplicar:**
+  `SELECT prosrc LIKE '%j.status%' FROM pg_proc WHERE proname='claim_shift_slot';`
+  O `{"success": true}` da migration não prova estado final — padrão já registrado em `patterns.md`.
+
+## 17. F9 — `collectRawData`/`resolveCompanyScope` sem cobertura (A15 sem prova)
+
+**Origem:** evaluator do F9 (`C-ANALYTICS-A15-SEM-PROVA`), aceito como dívida consciente.
+
+Os 30 testes do analytics cobrem a função pura `aggregate`, onde mora toda a lógica de negócio.
+**Nenhum toca `collectRawData`, `resolveCompanyScope` nem as strings de `select`.** Logo:
+
+- **A15** (ancoragem dupla — o AC de destaque do PRD) não tem teste **nem smoke executado**;
+- o laço de paginação que **produz** o flag `truncated` não é exercitado (só a propagação dele);
+- as 8 strings de `select` podem perder uma coluna e nada quebra — é **exatamente** o bug que a F7
+  teve, onde o mock fabricava o campo que produção não trazia.
+
+O comentário do arquivo de teste declara essa lacuna honestamente (foi corrigido depois de afirmar
+o contrário). Existe precedente no repo para fechar: `teamConnectionService.test.ts` assere a string
+do `select` de `listTeamMembers`, e foi verificado por mutante.
+
+**Gate:** rodar o smoke (a)/(b)/(c)/(d) do Step 8 do PRD antes do piloto, e escrever o teste da
+cadeia quando a frente abrir.
+
+## 18. F9 — os dois testes da âncora de meia-noite são um par INDIVISÍVEL
+
+**Origem:** evaluator do F9, que testou a direção oposta por conta própria.
+
+`operationAnalyticsService.ts:963` é um limiar **de um lado só**:
+`if (diffMinutes <= LATE_TOLERANCE_MINUTES) punctualCount += 1; else lateCount += 1;` — sem piso.
+
+Consequência para os testes: o de check-in **+40 min** mata o deslocamento **para frente** (o dia
+civil pula, o atraso vira −1400 e cai em "pontual"). O de check-in **exato** mata o deslocamento
+**para trás**. **Nenhum dos dois pega os dois lados.** Apagar qualquer um reabre metade do buraco,
+e a suíte continua verde.
+
+Ambos vivem no describe `C-ANALYTICS-ANCORA-MEIA-NOITE`. **Não remover nenhum sem substituir por
+uma asserção genuinamente bilateral.**
+
+**Latente, não é defeito desta entrega:** como o limiar não tem piso, um check-in **23h adiantado**
+conta como pontual. É pergunta de produto sobre a métrica, não bug de implementação.

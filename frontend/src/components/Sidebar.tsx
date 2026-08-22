@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt, BarChart3, Share2 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -78,6 +78,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Inbox, label: 'Convites', path: '/my-jobs' },
         { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
         { icon: Receipt, label: 'Meus Recebimentos', path: '/recebimentos' },
+        { icon: Share2, label: 'Quem Te Indicou', path: '/indicacoes' },
         { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];
@@ -87,8 +88,10 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Users, label: 'Meu Elenco', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
+        { icon: Share2, label: 'Indicações', path: '/company/indicacoes' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
+        { icon: BarChart3, label: 'Operação', path: '/company/operacao' },
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];
 

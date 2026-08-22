@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, TrendingUp, Bell, AlertTriangle, RefreshCw, PlayCircle } from 'lucide-react';
+import { Briefcase, TrendingUp, Bell, AlertTriangle, RefreshCw, PlayCircle, Share2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { ReferralService } from '../../services/referralService';
+import { logError } from '../../lib/logger';
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
@@ -23,6 +26,28 @@ function SectionError({ message, onRetry }: { message: string; onRetry: () => vo
 
 export default function CompanyDashboard() {
     const navigate = useNavigate();
+
+    // Indicações recebidas (F10) — atalho de mobile-reachability. `/company/indicacoes` não
+    // está no BottomNav (as duas listas já têm 6 itens, cheias) e nenhuma notificação aponta pra
+    // lá do lado de A (a de aceite vai para `/company/team`) — sem isto, a aba "Recebidas" só
+    // existe para quem abre a URL direto ou usa desktop. Padrão useState/useEffect (Article 5),
+    // isolado do bloco de useQuery abaixo (não migra o arquivo inteiro, só esta peça nova).
+    const [pendingReferralsCount, setPendingReferralsCount] = useState<number | null>(null);
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            const result = await ReferralService.listReceivedCards();
+            if (!active) return;
+            if (result.outcome !== 'ok') {
+                if (result.outcome === 'unauthenticated') return;
+                logError('CompanyDashboard.pendingReferrals', new Error(result.outcome));
+                return;
+            }
+            setPendingReferralsCount(result.items.filter((i) => i.status === 'awaiting_worker').length);
+        })();
+        return () => { active = false; };
+    }, []);
+
     // React Query Hooks
     const { data: company, isLoading: isLoadingCompany, isError: isErrorCompany, refetch: refetchCompany } = useQuery({
         queryKey: ['companyProfile'],
@@ -203,6 +228,33 @@ export default function CompanyDashboard() {
                     ))}
                 </div>
             )}
+
+            {/* Indicações recebidas (F10) — atalho mobile, ver comentário no hook acima. Fica
+                visível mesmo com 0 pendentes: é a PORTA para a caixa de entrada, não só um badge. */}
+            <button
+                type="button"
+                onClick={() => navigate('/company/indicacoes')}
+                className="w-full text-left bg-white border-2 border-black rounded-2xl p-5 mb-10 flex items-center justify-between gap-4 shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-0.5 transition-all"
+            >
+                <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-lg bg-primary-light text-primary border-2 border-black">
+                        <Share2 size={24} />
+                    </div>
+                    <div>
+                        <p className="font-black uppercase">Indicações recebidas</p>
+                        <p className="text-xs font-bold text-gray-500 uppercase">
+                            {pendingReferralsCount
+                                ? `${pendingReferralsCount} freela${pendingReferralsCount > 1 ? 's' : ''} aguardando decisão`
+                                : 'Freelas indicados por outras empresas'}
+                        </p>
+                    </div>
+                </div>
+                {!!pendingReferralsCount && (
+                    <span className="bg-black text-white px-3 py-1 rounded-pill font-black text-sm flex-shrink-0">
+                        {pendingReferralsCount}
+                    </span>
+                )}
+            </button>
 
             {/* Turnos em Andamento / Acompanhamento Direto */}
             {activeShifts.length > 0 && (

@@ -92,4 +92,41 @@ describe('ProfileReviews — autoria via RPC get_profile_reviews', () => {
       p_direction: 'worker',
     })
   })
+
+  // DS-PII-3 (ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii): a RPC passa a devolver
+  // reviewer_id=NULL para terceiros quando o avaliador é freela. O componente NUNCA usou
+  // reviewer_id como key de lista (já era review_id) nem o renderiza — este teste prova que a
+  // tela continua funcionando corretamente (nomes mascarados renderizados, sem quebra de key)
+  // mesmo quando reviewer_id vem NULL em todas as linhas, incluindo duas linhas distintas com
+  // o mesmo reviewer_id=NULL (o que quebraria se a key fosse reviewer_id).
+  it('renderiza normalmente quando a RPC devolve reviewer_id=NULL para terceiros (DS-PII-3)', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: [
+        {
+          review_id: 'review-a',
+          rating: 5,
+          comment: 'Excelente.',
+          created_at: new Date().toISOString(),
+          reviewer_id: null,
+          reviewer_name: 'Carlos S.',
+        },
+        {
+          review_id: 'review-b',
+          rating: 4,
+          comment: 'Muito bom.',
+          created_at: new Date().toISOString(),
+          reviewer_id: null,
+          reviewer_name: 'Maria O.',
+        },
+      ],
+      error: null,
+    } as never)
+
+    render(<ProfileReviews reviewedId="company-1" reviewerRole="worker" title="Avaliações" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Carlos S.')).toBeInTheDocument()
+      expect(screen.getByText('Maria O.')).toBeInTheDocument()
+    })
+  })
 })

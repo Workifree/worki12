@@ -117,8 +117,18 @@ export function isCertificationExpired(expiresAt: string | null | undefined): bo
     return expiryDateOnly < todayLocalDate();
 }
 
-export function formatDurationShort(fromIso: string, toIso: string): string {
-  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+/**
+ * Núcleo de "duração em ms → texto curto" (`"6 min"`, `"1h 12min"`), extraído de
+ * `formatDurationShort` (F9 — Analytics de operação, PRD Step 1/R9). `formatDurationShort`
+ * segue sendo o ponto de entrada para quem já tem dois ISO strings (chamado de turno na UI);
+ * `operationAnalyticsService` (tempo médio de preenchimento, R9) chama esta função direto porque
+ * já calculou a média em ms — reimplementar "Xh Ymin" ali duplicaria a mesma formatação que o
+ * produto vende ("de 2 horas para 6 minutos") em dois lugares que podem divergir.
+ *
+ * `ms < 0` (ou não finito) devolve `'—'` — mesma guarda de `formatDurationShort`, nunca duração
+ * negativa/NaN renderizada.
+ */
+export function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—';
 
   const totalMinutes = Math.round(ms / 60000);
@@ -128,4 +138,75 @@ export function formatDurationShort(fromIso: string, toIso: string): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
+}
+
+export function formatDurationShort(fromIso: string, toIso: string): string {
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+  return formatDurationMs(ms);
+}
+
+/**
+ * Total de horas trabalhadas entre chegada e saída REGISTRADAS (timestamps completos, com
+ * data — não só hora-do-dia). Turno que cruza a meia-noite (ex.: 18h10 às 01h00) é resolvido
+ * automaticamente pela subtração de datas absolutas: como cada timestamp já carrega sua
+ * própria data, checkout "no dia seguinte" não precisa do hack "+24h" usado em `calculateHours`
+ * (`CompanyCreateJob.tsx`), que só é necessário para strings de hora soltas sem data.
+ *
+ * Extraída de `ReceiptView.tsx` (F9 — Analytics de operação, PRD D2/Step 1) — MESMA assinatura,
+ * MESMO comportamento, para ser o ponto único de "quantas horas este turno durou de fato",
+ * reaproveitado pelo recibo E pelo painel de operação. Zero reimplementação: uma mudança de
+ * regra (ex.: tolerância de arredondamento) muda em um lugar só.
+ *
+ * Retorna `null` se checkin/checkout ausentes ou se checkout <= checkin (dado inconsistente —
+ * melhor tratar como "sem horas" do que exibir um total errado/negativo).
+ */
+export function calculateWorkedHours(
+    checkinIso: string | null | undefined,
+    checkoutIso: string | null | undefined,
+): number | null {
+    if (!checkinIso || !checkoutIso) return null;
+    const checkin = new Date(checkinIso).getTime();
+    const checkout = new Date(checkoutIso).getTime();
+    if (!Number.isFinite(checkin) || !Number.isFinite(checkout) || checkout <= checkin) return null;
+    return (checkout - checkin) / (1000 * 60 * 60);
+}
+
+// ---------------------------------------------------------------------------
+// Fuso EXPLÍCITO `America/Sao_Paulo` (F9 — Analytics de operação, PRD D3).
+//
+// Diferença deliberada de `todayLocalDate()`/`parseDateOnly()` (acima): aquelas funções usam o
+// fuso do DISPOSITIVO (`new Date().getFullYear()` etc.), o que é certo para "hoje" no aparelho
+// de quem está na tela. Mas `todayInBrazil`/`toBrazilDateOnly` existem para o caso em que o fuso
+// do dispositivo NÃO pode ser a fonte — bucketização de mês/semana no painel de operação precisa
+// ser a mesma data civil BRASILEIRA para todo mundo, mesmo que o gerente esteja viajando ou com
+// o relógio do celular errado. Por isso `Intl.DateTimeFormat('en-CA', { timeZone:
+// 'America/Sao_Paulo' })` — NUNCA um offset literal (`-03:00`) hardcoded: o Brasil não tem
+// horário de verão hoje, mas gravar o offset como constante é exatamente o tipo de premissa que
+// vira cicatriz (ver `isCertificationExpired`, acima, para o precedente do predicado de fuso
+// explícito em SQL — `job_local_date`, F4). `en-CA` é só um truque de locale que já formata
+// `YYYY-MM-DD` nativamente, sem parsing manual de string.
+// ---------------------------------------------------------------------------
+
+const BRAZIL_TZ = 'America/Sao_Paulo';
+
+function formatDateOnlyInBrazil(date: Date): string {
+  // en-CA (Canadá) formata datas como YYYY-MM-DD nativamente — evita montar a string à mão.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: BRAZIL_TZ }).format(date);
+}
+
+/**
+ * Data de HOJE em `America/Sao_Paulo`, como `YYYY-MM-DD` — independente do fuso do dispositivo.
+ * Ver nota de cabeçalho acima (por que isto NÃO é o mesmo que `todayLocalDate()`).
+ */
+export function todayInBrazil(): string {
+  return formatDateOnlyInBrazil(new Date());
+}
+
+/**
+ * Converte um timestamp ISO (`timestamptz`, ex.: `paid_at`, `shift_calls.created_at`,
+ * `worker_checkin_at`) para a data civil `YYYY-MM-DD` em `America/Sao_Paulo` — SEMPRE, mesmo que
+ * o dispositivo de quem chama esteja em outro fuso. Ver nota de cabeçalho acima.
+ */
+export function toBrazilDateOnly(iso: string): string {
+  return formatDateOnlyInBrazil(new Date(iso));
 }
