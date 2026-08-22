@@ -249,3 +249,31 @@ Consequência: o guarda acusava exatamente as policies **já migradas para o sea
 está certo. Mesma família do `regclass::text` sem schema, achado no mesmo dia.
 
 Corrigido para `strpos(...) > 0` na migration e no §6 do contrato. Q3 real: **limpo**.
+
+### ✅ Cadastro de empresa TESTADO em produção (não deduzido)
+
+A Fase 1 pôs `companies.organization_id` **NOT NULL**, e `handle_new_user` insere em `companies`
+**sem** essa coluna. Toda criação de empresa passou a depender do trigger BEFORE INSERT
+`trg_company_autoprovision_organization` funcionar. Se ele falhasse, o sintoma seria "ninguém
+consegue mais cadastrar empresa" — regressão de produção introduzida por nós.
+
+Isso não dá para deduzir do código: o caminho crítico é `name = ''` (o valor que `handle_new_user`
+grava), e `organizations.name` tem `CHECK (length(trim(name)) > 0)`. Um `NULLIF` ingênuo devolveria
+NULL e violaria o NOT NULL **no primeiro signup real**.
+
+Testado de verdade, com rollback forçado (`DO $$ ... RAISE EXCEPTION` — bloco atômico, aborta
+inteiro): criei um `auth.users` + `companies (id, name='', owner_id)` e li o resultado antes de
+abortar.
+
+```
+organization_id = 2f68ebdb-…        (preenchido pelo trigger)
+org.name        = [Organizacao 926bf402]   (fallback pegou o name = '')
+owner_ativo     = 1                 (organization_members owner/active criado)
+```
+
+Depois: `organizations=7, organization_members=7, companies=7`, zero resíduo de teste. O rollback
+levou tudo.
+
+**Padrão reutilizável:** para exercer caminho destrutivo em produção sem sujar, embrulhar em
+`DO $$ … RAISE EXCEPTION 'resultado: %' … END $$`. A exceção carrega o resultado da leitura e
+desfaz a escrita no mesmo gesto — um teste que não pode vazar por esquecimento de limpar.

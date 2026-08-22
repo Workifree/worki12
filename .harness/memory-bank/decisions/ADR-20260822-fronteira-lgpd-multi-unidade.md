@@ -2,9 +2,12 @@
 
 ## Status
 
-ACEITO (21→22/08/2026). Emenda pontual a `.harness/spec/lgpd-producao/ddl-aprovado.md`
-(§2.1, §2.1.1, §2.1.2, §2.2, §2.5, §4.4, §5.4) e a
-`supabase/migrations/20260821000000_lgpd_account_anonymization.sql`.
+ACEITO (21→22/08/2026). **REVISADO em 22/08/2026** pelo gate do architect, provocado por rejeição do
+evaluator: **D4 mudou de lugar** (o reconhecimento da classe gerente fica na migration de LGPD, não
+na da F13 — ver D4), **D1 ganhou um terceiro predicado** em `company_members`, e entrou **D6**
+(redação de texto livre em tabela retida). Emenda a
+`.harness/spec/lgpd-producao/ddl-aprovado.md` (§2.1, §2.1.1, §2.1.2, §2.2, §2.5, §4.4, §5.3, §5.4,
+§5.5) e a `supabase/migrations/20260821000000_lgpd_account_anonymization.sql`.
 Complementa ADR-20260821-lapide-neutraliza-acao-referencial e ADR-20260821-anonimizacao-em-vez-de-exclusao.
 
 ## Contexto
@@ -55,6 +58,16 @@ Nada das duas levas está aplicado. F1–F12, dívida #9 e DS-PII estão em prod
 - **Dois predicados em `company_members`** (`user_id` do titular **ou** `company_id` das empresas do
   titular): quando a **empresa** sai, seus gerentes são terceiros que continuam na plataforma; a
   unidade virou lápide, ninguém opera lápide, e o e-mail deles perde a base que o sustentava.
+- **TERCEIRO predicado (revisão 22/08): `status='invited' AND created_by = <titular>`.** Quem emite
+  convite de gerente é o **operador de rede** (`invite_company_manager` exige
+  `is_organization_operator`), logo ele convida para unidades **irmãs** — que **não** estão em
+  `v_company_ids`. Com o portão da classe gerente/sócio aberto (D4), a exclusão passaria a apagar a
+  credencial deixando para trás linhas `status='invited'` com `invited_email` **de terceiro** e
+  `invite_token` **vivo** (índice único, 7 dias), assinadas por uma conta inexistente: credencial
+  portadora resgatável emitida por ninguém. **Restrito a `'invited'` de propósito** — a linha
+  **ativa** é do **gerente**, terceiro que opera unidade de outro dono, e `created_by` ali é só a
+  trilha de quem convidou; derrubar o acesso dele porque o convidante saiu seria dano a terceiro.
+  É a **simetria exata** do predicado que `organization_members` já tinha; a assimetria era o bug.
 - **`organization_members` NÃO tem ramo por empresa**: a organização pertence também às unidades
   **irmãs, de outros sócios**. Excluir a conta de um sócio não desliga os demais. O segundo
   predicado cobre o convite **ainda pendente** emitido por quem está saindo.
@@ -95,14 +108,71 @@ por privilégio e portanto **falha aberto**).
 de contato classifica a tabela em §2.1 **na mesma migration**. O catálogo *descobre*; a lista à mão
 apenas *declara que foi decidido*.
 
-### D4 — `not_found` é FALHA; a classe GERENTE é dependência da F13
+### D4 — `not_found` é FALHA **e** a classe GERENTE é reconhecida **nesta** migration (revisado 22/08)
 
 A Edge Function `delete-account` **não** pode tratar `not_found` como "nada a fazer" e seguir para
 `deleteUser`: apagaria a credencial deixando `company_members` `active` com `invited_email` intacto.
-Responde 400 e aborta. O **reconhecimento** do gerente (deixar de devolver `not_found` para quem tem
-membership) é emenda mínima que pertence à **migration da F13**, que ordena depois — o corpo de
-`anonymize_account` já age sobre as tabelas via `to_regclass`. E2E de exclusão de conta de gerente é
-critério de aceite da F13, não desta leva.
+Responde 400 e aborta. **Isso continua valendo.**
+
+**O que mudou.** A versão original mandava fazer o **reconhecimento** do gerente (deixar de devolver
+`not_found` para quem tem membership) "na migration da F13, que ordena depois". Duas correções:
+
+1. **Só a Edge Function não basta — seria trocar um furo de segurança por um furo de direito.**
+   Abortar em `not_found` protege o vínculo, mas deixa o gerente **permanentemente impedido** de
+   excluir a própria conta, dentro da rotina que existe para cumprir o art. 18, VI. O portão certo
+   é reconhecer a classe, não recusá-la.
+2. **"Na migration da F13" só funciona em produção.** Em replay do zero, a F13 é `20260818100000`
+   e roda **antes** de `20260821000000`: um `CREATE OR REPLACE anonymize_account` lá seria
+   **sobrescrito** por esta migration, e o reconhecimento **existiria em produção e sumiria em CI**
+   — exatamente o defeito que o Contexto deste ADR e o D5 existem para matar, reintroduzido pela
+   recomendação do próprio ADR.
+
+**Regra que fica: o corpo de `anonymize_account` tem um único dono — a migration que o define.**
+Fronteira com feature futura se resolve com `pg_catalog.to_regclass` (execução dinâmica, no-op
+enquanto a tabela não existir), **nunca** com reescrita da função a partir de outra leva. O
+reconhecimento (`v_is_member`) está na migration de LGPD, guardado assim, e sobe junto com o
+terceiro predicado de D1 — portão e predicado são a mesma decisão.
+
+E2E de exclusão de conta de gerente **continua** sendo critério de aceite da F13 (só lá a classe
+existe de verdade). O que a F13 **não** faz mais: tocar no corpo desta função.
+
+**Corolário de forma (D4.1):** o retorno da rotina passa a declarar **`is_member`** e a nascer com
+todas as chaves de `counts` em zero. Para a classe gerente o retorno era `is_worker=false`,
+`company_ids=[]` e as chaves de domínio **ausentes** (viviam dentro de `IF`) — indistinguível de
+"bug: as âncoras não resolveram". Chave ausente e chave zero são fatos diferentes; uma rotina de
+LGPD tem de conseguir dizer "olhei e não havia nada".
+
+### D6 — texto livre em tabela RETIDA é REDIGIDO; a linha é que fica (novo, 22/08)
+
+`applications`, `jobs`, `shift_calls`, `shift_call_targets` e `shift_attendance_confirmations`
+estavam classificadas como RETIDAS com a justificativa "chaves pseudônimas + timestamps, **nenhum
+conteúdo pessoal**". **Isso era falso para três delas**, e falso de um jeito que o próprio contrato
+já contradizia: ele **apaga** `companies.default_briefing` porque "é texto da empresa e pode conter
+nomes", **deleta** `job_series` porque "`job_template` carrega o briefing — mesma classe" — e
+`create_job_series` (`20260817000400`) escreve `jobs.briefing` **copiando `job_template`
+literalmente**. A rotina apagava o **molde** e retinha as **cópias**. Nada disso constava dos riscos
+residuais (§5.3), que registram `shift_payments.note`, `reviews.comment` e `verified_note` — a mesma
+família.
+
+**Decisão:** a **linha** continua retida (é âncora de `shift_payments`/`service_terms`, do BI e da
+integridade referencial — apagá-la nunca esteve em jogo) e o **conteúdo** sai. É o padrão de
+`ADR-20260821-expurgo-de-conteudo-nao-de-linha`, aplicado agora fora do expurgo por prazo.
+
+- **Redigidas:** `jobs.briefing`, `jobs.description`, `jobs.requirements` (empresa);
+  `applications.cover_letter` (freela — só o ramo do freela: o texto é dele, a empresa que sai não
+  o apaga); `shift_calls.message` (empresa **ou** `created_by`, porque `shift_calls.company_id` e
+  `created_by` são `uuid` nu, sem FK, e `created_by` é a única forma de alcançar o texto escrito
+  pelo **gerente**, cuja unidade nunca aparece em `v_company_ids`).
+- **Marcador, não `NULL`:** `jobs.title`/`location` mostram que este schema tem coluna textual
+  `NOT NULL` e a lista vai crescer — um `NULL` em coluna `NOT NULL` estouraria **dentro** da
+  transação destrutiva, com metade da conta já anonimizada. O marcador também explica o vazio para
+  a contraparte em vez de parecer defeito. Acompanhado da asserção **(a2)**, que exige que cada
+  coluna redigida exista **e seja textual** antes de a parte destrutiva começar.
+- **`jobs.title` e `jobs.location` ficam** — decisão escrita, não omissão: não são narrativa livre,
+  são o rótulo operacional e o local que o **freela (terceiro que continua na plataforma)** lê no
+  próprio recibo, e ambos já estão **congelados** dentro de `service_terms.term_text` aceito, que é
+  retido integralmente como prova. Apagar em `jobs` não elimina a informação e degrada dado de
+  terceiro. Risco residual registrado.
 
 ### D5 — correção de `regclass::text` (achado colateral, classe blocker)
 
@@ -125,6 +195,23 @@ porque a migration nunca foi aplicada. Trocado por `format('%I.%I', ns.nspname, 
   DELETE), em vez de duas rotas com reversibilidades diferentes sobre a mesma linha.
 - Rede órfã e inapagável deixa de ser possível.
 - D5 corrige um guard que estava quebrado e verde.
+- *(revisão 22/08)* O gerente/sócio deixa de ser a única classe de usuário sem caminho de exclusão,
+  **e** o convite que ele emitiu para unidade irmã deixa de sobreviver como token vivo assinado por
+  conta inexistente. As duas coisas são a mesma decisão e sobem juntas.
+- *(revisão 22/08)* O contrato deixa de dizer "nenhum conteúdo pessoal" sobre tabelas que têm texto
+  livre — e a rotina deixa de apagar o molde guardando as cópias.
+
+### Negativas / Trade-offs (revisão 22/08)
+
+- A redação é por **enumeração de coluna**, não por varredura: coluna de texto livre nova em `jobs`
+  entraria retida em silêncio. A varredura fechada (asserção (b) estendida a `jobs`/`applications`)
+  depende de capturar o DDL real dessas tabelas do catálogo — elas não têm DDL no repositório.
+  Registrado em §5.3 e §5.5 do contrato; **não** foi enumerada às cegas, porque lista inventada em
+  guarda fail-closed é pior que guarda ausente.
+- O marcador de redação aparece na UI da contraparte (recibo, histórico). É deliberado — vazio
+  silencioso parece defeito — mas é copy que ninguém revisou ainda.
+- `jobs.title`/`location` da empresa excluída sobrevivem e podem conter dado pessoal. Aceito com
+  justificativa (o termo aceito já os congela como prova); remoção específica = atendimento manual.
 
 ### Negativas / Trade-offs
 
@@ -152,6 +239,15 @@ porque a migration nunca foi aplicada. Trocado por `format('%I.%I', ns.nspname, 
   desligada.
 - **Deixar a classificação para uma migration nova depois da F13**: só funcionaria em produção; o CI
   continuaria HALTando, e produção ficaria com a janela silenciosa entre F13 e a correção.
+- **Emendar `anonymize_account` a partir da migration da F13** (D4 original): funciona só em
+  produção; em CI a F13 roda antes e a emenda é sobrescrita. Ver D4 revisado.
+- **Deixar `jobs`/`applications`/`shift_calls` retidas e apenas registrar o texto livre em §5.3**
+  (risco residual): seria coerente se o contrato não **apagasse** o molde (`default_briefing`,
+  `job_template`) do mesmo texto. Registrar como risco o que a rotina já trata em outro lugar é
+  escolher a inconsistência e chamá-la de decisão.
+- **Apagar a linha de `jobs`/`applications`** em vez de redigir: destrói âncora de
+  `shift_payments`/`service_terms`, o BI e o registro da contraparte. Nunca esteve em jogo.
+- **Usar `NULL` em vez de marcador**: quebra em coluna `NOT NULL` no meio da transação destrutiva.
 - **Anonimizar as unidades irmãs junto** (usar a costura da F13 para resolver escopo de empresa em
   vez da ancoragem dupla `id`/`owner_id`): a exclusão de **um** sócio apagaria o perfil de **dez**
   restaurantes. A ancoragem dupla em `anonymize_account` é **deliberada** e não deve ser

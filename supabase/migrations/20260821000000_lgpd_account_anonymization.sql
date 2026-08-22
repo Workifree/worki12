@@ -222,8 +222,39 @@ DECLARE
         'jobs.briefing',            -- cópia literal de job_series.job_template (20260817000400)
         'jobs.description',
         'jobs.requirements',
-        'applications.cover_letter',-- texto do FREELA sobre si mesmo
-        'shift_calls.message'       -- texto da EMPRESA no disparo 1→N
+        -- EMENDA 2026-08-22 (2) — achada na varredura de catálogo que fechou a asserção (b2).
+        -- `<input maxLength={200} placeholder="Ex: CREF válido">` (CompanyCreateJob.tsx:466);
+        -- o próprio código a declara "texto livre ≤200, advisory" (F8). É a empresa escrevendo
+        -- exigência em prosa: nomeia credencial, condição e pode nomear pessoa. Mesma classe de
+        -- `briefing`. 0 linhas hoje só porque o F8 acabou de subir — classificar depois de haver
+        -- dado seria classificar tarde.
+        'jobs.certification_requirement',
+        'applications.cover_letter', -- texto do FREELA sobre si mesmo
+        'applications.message',      -- idem — coluna legada do pull, 0 linhas, mesma classe
+        'shift_calls.message'        -- texto da EMPRESA no disparo 1→N
+    ];
+
+    -- EMENDA 2026-08-22 — asserção (b2): classificação FECHADA de texto em tabela RETIDA.
+    -- Fecha a lacuna Hh2 (§5.3/§5.5): (a)/(b) varrem coluna a coluna só `workers`/`companies`, e
+    -- (c)/(d)/(e) têm granularidade de TABELA — uma coluna de texto livre nova em `jobs` entraria
+    -- retida EM SILÊNCIO. A lista abaixo é o CATÁLOGO DE PRODUÇÃO conferido em 22/08/2026 contra
+    -- o uso real no frontend, não uma suposição: enumerá-la às cegas antes disso teria produzido
+    -- HALT garantido e lista inventada — pior que guarda ausente.
+    -- Coluna textual NOVA nestas três tabelas ⇒ HALT. A decisão é binária e tem de ser escrita:
+    -- ou entra em v_redacted_text (texto livre) ou entra aqui (enum/operacional/estrutural).
+    v_retained_text text[] := ARRAY[
+        -- jobs: rótulo, enums em coluna text, e os dois RETIDOS por decisão (§2.1)
+        'jobs.title',            -- RETIDO por decisão: rótulo operacional, congelado no term_text
+        'jobs.location',         -- RETIDO por decisão: idem. Endereços reais — risco em §5.3
+        'jobs.category', 'jobs.type', 'jobs.budget_type', 'jobs.status',
+        'jobs.scope',            -- enum de fato (2 valores distintos, 7 chars)
+        'jobs.work_start_time', 'jobs.work_end_time',
+        -- applications
+        'applications.status',
+        'applications.invitation_response',  -- enum de fato (accepted/declined)
+        -- shift_calls
+        'shift_calls.reason',    -- enum do F1 (falta|demissao|pico_previsto|...)
+        'shift_calls.status', 'shift_calls.origin'
     ];
 
     v_col     text;
@@ -294,6 +325,35 @@ BEGIN
       ]);
     IF v_unknown IS NOT NULL THEN
         RAISE EXCEPTION 'ASSERCAO: colunas nao classificadas em public.companies: %. HALT -> architect.', v_unknown;
+    END IF;
+
+    -- (b2) EMENDA 2026-08-22 — classificacao FECHADA de texto em tabela RETIDA (fecha Hh2).
+    --      Mesma regra de (b), aplicada a `jobs`/`applications`/`shift_calls`: toda coluna
+    --      TEXTUAL dessas tabelas esta OU em v_redacted_text (texto livre -> redigido) OU em
+    --      v_retained_text (enum/operacional/decisao escrita). Coluna nova => HALT.
+    --      pg_catalog e nao information_schema: varredura que falha ABERTO por falta de
+    --      privilegio nao e guarda (mesma razao de (d)/(e)).
+    --      NAO adicionar nome a v_retained_text para "fazer passar": adicionar significa
+    --      "conferi o conteudo real e decidi que nao e texto livre", como foi feito em 22/08
+    --      com `jobs.scope` e `applications.invitation_response` (enums em coluna text).
+    SELECT string_agg(DISTINCT format('%s.%s', cl.relname, a.attname), ', ') INTO v_unknown
+    FROM pg_attribute  a
+    JOIN pg_class      cl ON cl.oid = a.attrelid
+    JOIN pg_namespace  ns ON ns.oid = cl.relnamespace
+    WHERE ns.nspname = 'public'
+      AND cl.relkind = 'r'
+      AND cl.relname IN ('jobs', 'applications', 'shift_calls')
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+      AND a.atttypid = ANY (ARRAY['text', 'character varying', 'character']::regtype[])
+      AND format('%s.%s', cl.relname, a.attname) <> ALL (v_redacted_text)
+      AND format('%s.%s', cl.relname, a.attname) <> ALL (v_retained_text);
+    IF v_unknown IS NOT NULL THEN
+        RAISE EXCEPTION
+          'ASSERCAO (b2): coluna TEXTUAL nao classificada em tabela RETIDA: %. '
+          'A linha destas tabelas nunca e apagada (ancora de shift_payments/BI), entao texto '
+          'livre nao classificado sobrevive a exclusao da conta EM SILENCIO. Decida: redigir '
+          '(ddl-aprovado 2.1) ou reter com justificativa escrita. HALT -> architect.', v_unknown;
     END IF;
 
     -- (c) EMENDA 2026-08-21 — nenhuma TABELA dependente pode ficar fora da classificação.
@@ -898,11 +958,17 @@ BEGIN
     IF v_is_worker THEN
         -- Texto que o FREELA escreveu SOBRE SI MESMO na candidatura (pull legado). Zero valor
         -- fiscal; `service_terms`/`shift_payments` e que provam a transacao.
+        -- `message` (EMENDA 2026-08-22 (2)): coluna legada do modelo pull, 0 linhas e nenhuma
+        -- escrita no frontend hoje. Entra pelo NOME e pelo TIPO, nao pelo volume: e texto livre
+        -- do titular, mesma classe de `cover_letter` e de `workers.bio` (APAGADO em §2.1).
+        -- Classificar coluna vazia custa uma linha; classificar depois que ela enche custa uma
+        -- migration nova e um intervalo em que o dado sobreviveu.
         UPDATE public.applications a
-           SET cover_letter = c_redacted_text
+           SET cover_letter = CASE WHEN a.cover_letter IS NULL THEN NULL ELSE c_redacted_text END,
+               message      = CASE WHEN a.message      IS NULL THEN NULL ELSE c_redacted_text END
          WHERE a.worker_id = p_user_id
-           AND a.cover_letter IS NOT NULL
-           AND a.cover_letter IS DISTINCT FROM c_redacted_text;
+           AND (   (a.cover_letter IS NOT NULL AND a.cover_letter IS DISTINCT FROM c_redacted_text)
+                OR (a.message      IS NOT NULL AND a.message      IS DISTINCT FROM c_redacted_text));
         GET DIAGNOSTICS v_n = ROW_COUNT;
         v_counts := v_counts || jsonb_build_object('applications_redacted', v_n);
     END IF;
@@ -911,11 +977,17 @@ BEGIN
         UPDATE public.jobs j
            SET briefing     = CASE WHEN j.briefing     IS NULL THEN NULL ELSE c_redacted_text END,
                description  = CASE WHEN j.description  IS NULL THEN NULL ELSE c_redacted_text END,
-               requirements = CASE WHEN j.requirements IS NULL THEN NULL ELSE c_redacted_text END
+               requirements = CASE WHEN j.requirements IS NULL THEN NULL ELSE c_redacted_text END,
+               -- F8: exigencia de certificacao em PROSA (<=200, advisory). Mesma classe do
+               -- briefing -- a empresa nomeia credencial, condicao e pode nomear pessoa.
+               certification_requirement = CASE WHEN j.certification_requirement IS NULL
+                                                THEN NULL ELSE c_redacted_text END
          WHERE j.company_id = ANY (v_company_ids)
            AND (   (j.briefing     IS NOT NULL AND j.briefing     IS DISTINCT FROM c_redacted_text)
                 OR (j.description  IS NOT NULL AND j.description  IS DISTINCT FROM c_redacted_text)
-                OR (j.requirements IS NOT NULL AND j.requirements IS DISTINCT FROM c_redacted_text));
+                OR (j.requirements IS NOT NULL AND j.requirements IS DISTINCT FROM c_redacted_text)
+                OR (j.certification_requirement IS NOT NULL
+                    AND j.certification_requirement IS DISTINCT FROM c_redacted_text));
         GET DIAGNOSTICS v_n = ROW_COUNT;
         v_counts := v_counts || jsonb_build_object('jobs_redacted', v_n);
     END IF;
@@ -1013,9 +1085,11 @@ COMMENT ON FUNCTION public.anonymize_account(uuid) IS
     'SOCIO (sem linha em workers/companies) — o corpo desta funcao tem UM dono, esta migration, '
     'nunca a da F13 (que ordena antes em replay e seria sobrescrita). ADR-20260822. '
     'EMENDA 2026-08-22 (2): REDIGE texto livre em linha RETIDA — jobs.briefing/description/'
-    'requirements, applications.cover_letter e shift_calls.message viram marcador; a LINHA fica '
-    '(ancora de shift_payments/BI), o TEXTO sai. jobs.title/location sao RETIDOS de proposito '
-    '(o termo aceito ja os congela como prova e a contraparte le no proprio recibo).';
+    'requirements/certification_requirement, applications.cover_letter/message e '
+    'shift_calls.message viram marcador; a LINHA fica (ancora de shift_payments/BI), o TEXTO sai. '
+    'jobs.title/location sao RETIDOS de proposito (o termo aceito ja os congela como prova e a '
+    'contraparte le no proprio recibo). A classificacao textual dessas tres tabelas e FECHADA '
+    'pela assercao (b2): coluna de texto nova nelas HALTa a migration.';
 
 REVOKE ALL ON FUNCTION public.anonymize_account(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
@@ -1112,8 +1186,10 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 --      SELECT count(*) AS linhas, count(*) FILTER (WHERE briefing LIKE '[CONTEUDO REMOVIDO%')
 --        FROM public.jobs WHERE company_id='<cid>' AND briefing IS NOT NULL;
 --      ⇒ linhas = igual a antes (nada apagado) e TODAS redigidas.
---      SELECT cover_letter FROM public.applications WHERE worker_id='<uuid>'
---       AND cover_letter IS NOT NULL;  ⇒ só o marcador.
+--      SELECT cover_letter, message FROM public.applications WHERE worker_id='<uuid>'
+--       AND (cover_letter IS NOT NULL OR message IS NOT NULL);  ⇒ só o marcador.
+--      SELECT certification_requirement FROM public.jobs WHERE company_id='<cid>'
+--       AND certification_requirement IS NOT NULL;  ⇒ só o marcador.
 --      SELECT message FROM public.shift_calls WHERE company_id='<cid>' OR created_by='<uuid>';
 --       ⇒ só o marcador (ou NULL onde já era NULL).
 --      E o que NÃO pode ter mudado: SELECT title, location FROM public.jobs WHERE id='<jid>'
@@ -1123,6 +1199,11 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 --      SELECT public.anonymize_account('<uuid-de-gerente-sem-workers-sem-companies>');
 --      ⇒ outcome='anonymized', is_worker=false, company_ids=[], **is_member=true**, e `counts`
 --        com TODAS as chaves presentes (zeros onde não havia nada) — nunca chave ausente.
+-- V21. EMENDA 2026-08-22 (2) — a classificação textual de `jobs`/`applications`/`shift_calls` é
+--      FECHADA. Re-executar o bloco DO da seção 1 num banco onde alguém adicionou coluna de
+--      texto a uma delas ⇒ HALT em (b2) com o nome da coluna. É o comportamento CORRETO: a
+--      decisão é binária (redigir OU reter com justificativa escrita em §2.1) e nunca implícita.
+--      Baseline conferido contra o catálogo de produção em 22/08/2026.
 --
 -- V12. Ocorrências de série SOBREVIVERAM ao DELETE de job_series (não há FK):
 --      SELECT count(*) FROM public.jobs WHERE series_id='<serie-da-empresa>'; ⇒ igual a antes.
