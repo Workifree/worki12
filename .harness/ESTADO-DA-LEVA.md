@@ -216,3 +216,36 @@ para cumpri-lo.
 `anonymize_account` agora reconhece a classe (consulta `company_members`/`organization_members` por
 `user_id`, guardada por `to_regclass`). `not_found` volta a significar "não há titular" e segue sendo
 falha para a Edge Function. Em avaliação pelo evaluator — eu escrevi, não me aprovo.
+
+## F13 — Fases 0/1/2 APLICADAS em produção (22/08), Fase 3 fora
+
+Verificado no catálogo entre cada passo: 3 tabelas, 5 funções, **7 organizações para 7 empresas**
+(1:1, marcador de reversibilidade íntegro), `is_company_owner` reescrita com corpo `BEGIN ATOMIC`
+delegando para `session_operates_company_membership` e sem a branch nua `p_company_id = auth.uid()`.
+
+Aplicadas: `20260818100000`, `20260818100100`, `20260818100200`, `20260821001000`, `20260822000000`.
+**Fora:** `20260818100300` (Fase 3) e `20260821001100` — sem frontend de gerente, não sobem.
+
+### Achado do Q3: duas policies autorizavam empresa por fora do seam
+
+A Fase 2 criou `jobs_insert/update/delete_company_owner` mas **não removeu** a legada
+`"Company owner can manage jobs"` (`FOR ALL`, ancoragem inline), nem
+`"Company owner can view own company"`. Não vazavam — subconjunto estrito. Mas eram uma **segunda
+porta** de autorização que não passa pelo seam: no dia em que alguém apertasse `is_company_owner`
+(movimento previsto — foi o que a DS-PII fez com `can_view_worker_profile`), a legada continuaria
+concedendo pelo critério antigo e o aperto viraria teatro.
+
+Removidas em `20260822000000`, com asserção fail-closed e depois do APROVADO do security-reviewer.
+**Fica** `"Users can create their company"` (INSERT, `owner_id = auth.uid()`): não é subconjunto da
+irmã `id = auth.uid()`, e errar aqui significa "ninguém cria empresa". Dívida de limpeza registrada.
+
+### ⚠️ O Q3 automatizado com `LIKE` estava errado — acusava o estado CORRETO
+
+`... LIKE '%owner_id%'` casava com `is_company_owner(id)`, porque **`_` é curinga de um caractere no
+LIKE**. A mesma linha devolvia `LIKE = true` e `position('owner_id' in qual) = 0`.
+
+Consequência: o guarda acusava exatamente as policies **já migradas para o seam** — todas chamam
+`is_company_owner(...)`. Guarda que grita no estado bom some no ruído ou faz alguém "consertar" o que
+está certo. Mesma família do `regclass::text` sem schema, achado no mesmo dia.
+
+Corrigido para `strpos(...) > 0` na migration e no §6 do contrato. Q3 real: **limpo**.
