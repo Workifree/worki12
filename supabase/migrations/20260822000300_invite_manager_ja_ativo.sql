@@ -70,6 +70,14 @@ BEGIN
     --       caminho, ou cujo e-mail de convite diferia do e-mail da conta.
     -- Sem (b), reconvidar pelo e-mail REAL de um gerente que foi convidado num e-mail antigo
     -- reproduziria o mesmo 23505. Sem (a), um gerente cuja conta trocou de e-mail escaparia.
+    -- ⚠️ PRECEDENTE NOVO: esta e a primeira RPC de dominio do projeto a ler `auth.users` fora de
+    --    um trigger da propria `auth.users`. E seguro aqui por tres razoes que precisam continuar
+    --    valendo se alguem copiar este padrao: (1) o gate `is_organization_operator` acontece
+    --    ANTES desta linha, entao chamador nao autorizado nunca chega aqui — nao ha oraculo de
+    --    "este e-mail tem conta?"; (2) so o `id` e lido, e ele nunca sai da funcao; (3) o outcome
+    --    `already_active` revela apenas o que este mesmo operador ja le direto em
+    --    `company_members` pela policy `cm_select_self_or_operator`. Verificar apos o deploy que
+    --    a leitura de fato resolve: alguns ambientes restringem `auth` ate para o dono da funcao.
     SELECT u.id INTO v_target FROM auth.users u WHERE lower(u.email) = v_email;
 
     SELECT cm.id INTO v_id
@@ -191,12 +199,44 @@ BEGIN
                                   'company_id', v_row.company_id, 'member_id', v_existing);
     END IF;
 
-    UPDATE public.company_members
-       SET user_id      = v_uid,
-           status       = 'active',
-           accepted_at  = now(),
-           invite_token = NULL
-     WHERE id = v_row.id;
+    -- ---- CORRIDA RESIDUAL: dois tokens distintos, mesma pessoa, mesma unidade ----
+    -- O `FOR UPDATE` acima trava a LINHA DO CONVITE, nao o par (company_id, user_id). Duas
+    -- sessoes aceitando tokens DIFERENTES da mesma unidade travam linhas diferentes, nao se
+    -- enxergam, ambas leem `v_existing IS NULL`, e colidem no UPDATE abaixo — o mesmo 23505 que
+    -- esta migration existe para eliminar. E possivel porque `uq_company_members_pending_email`
+    -- so impede duplicata do MESMO e-mail: dois e-mails diferentes que pertencem a mesma pessoa
+    -- geram dois convites validos.
+    --
+    -- Tratado por EXCEPTION e nao por advisory lock: o handler cobre TODA colisao contra este
+    -- indice, inclusive as que eu nao previ, enquanto um lock so cobre a corrida que eu imaginei.
+    -- Aqui o banco ja garante a invariante ("uma pessoa, uma linha por unidade") — o que faltava
+    -- era traduzir a violacao em resposta honesta em vez de deixar vazar 500 para a tela.
+    BEGIN
+        UPDATE public.company_members
+           SET user_id      = v_uid,
+               status       = 'active',
+               accepted_at  = now(),
+               invite_token = NULL
+         WHERE id = v_row.id;
+    EXCEPTION WHEN unique_violation THEN
+        -- A outra sessao venceu a corrida e ja ativou a pessoa nesta unidade. Este convite virou
+        -- redundante: queima e devolve o mesmo `already_accepted` do caminho sequencial, para as
+        -- duas sessoes concorrentes verem a MESMA coisa.
+        SELECT cm.id INTO v_existing
+          FROM public.company_members cm
+         WHERE cm.company_id = v_row.company_id
+           AND cm.user_id    = v_uid
+           AND cm.status     = 'active'
+           AND cm.id <> v_row.id;
+
+        UPDATE public.company_members
+           SET status = 'removed', invite_token = NULL
+         WHERE id = v_row.id;
+
+        RETURN jsonb_build_object('outcome', 'already_accepted',
+                                  'company_id', v_row.company_id,
+                                  'member_id', v_existing);
+    END;
 
     -- Limpeza da CASCA de companies criada por handle_new_user para o signup user_type='hire'.
     -- Lista EXAUSTIVA das 14 tabelas dependentes de companies(id) — identica a 20260821001100,
@@ -233,8 +273,22 @@ GRANT EXECUTE ON FUNCTION public.invite_company_manager(uuid, text) TO authentic
 GRANT EXECUTE ON FUNCTION public.accept_manager_invite(text)        TO authenticated, service_role;
 
 -- ============================================================================
--- DOWN: reaplicar os corpos de 20260818100300 (invite_company_manager) e de
---       20260821001100 (accept_manager_invite). Ambos os arquivos vivem nesta mesma branch.
+-- DOWN — literal, sem depender de abrir outro arquivo (um DOWN que manda "reaplicar o corpo de
+--        X" nao e reversibilidade: quem precisar reverter estara sob pressao. Aqui as duas
+--        funcoes voltam ao comportamento anterior REMOVENDO exatamente os blocos adicionados):
+--
+--   Em `invite_company_manager`: apagar as declaracoes `v_email`/`v_target`, a linha
+--   `v_email := lower(trim(p_email));`, o `SELECT u.id ... FROM auth.users`, e todo o bloco
+--   `-- NOVO: a pessoa ja e gerente ATIVO desta unidade?` ate o seu `END IF;`. Onde o corpo usa
+--   `v_email`, voltar a `lower(trim(p_email))`.
+--
+--   Em `accept_manager_invite`: apagar a declaracao `v_existing`, o bloco
+--   `-- NOVO: ja sou gerente ativo desta unidade por OUTRA linha?` ate o seu `END IF;`, e
+--   desembrulhar o UPDATE final do `BEGIN ... EXCEPTION WHEN unique_violation ... END`,
+--   deixando so o `UPDATE public.company_members SET user_id = v_uid, status = 'active',
+--   accepted_at = now(), invite_token = NULL WHERE id = v_row.id;`.
+--
+--   NADA MAIS muda: as 14 guardas `NOT EXISTS` do DELETE sao identicas as de 20260821001100.
 --
 -- VERIFICACAO (bloco com ROLLBACK proposital — o mesmo que reproduziu o defeito):
 --   convidar -> aceitar -> RECONVIDAR o mesmo e-mail -> tentar aceitar de novo.
