@@ -277,3 +277,46 @@ levou tudo.
 **Padrão reutilizável:** para exercer caminho destrutivo em produção sem sujar, embrulhar em
 `DO $$ … RAISE EXCEPTION 'resultado: %' … END $$`. A exceção carrega o resultado da leitura e
 desfaz a escrita no mesmo gesto — um teste que não pode vazar por esquecimento de limpar.
+
+## Auditoria do memory-bank contra o catálogo (22/08) — 14 divergências
+
+Terceira vez que o `architecture.md` afirma schema inexistente, então varri o arquivo inteiro contra
+`pg_attribute`/`pg_constraint`/`pg_proc`/`pg_trigger`/`pg_policies`/`pg_indexes`/`cron.job`.
+
+**A pior, e na direção contrária da esperada:** a seção "Estado do banco de produção" declarava
+`20260817001400` (F12), `001500` (F10) e `001600` (F11) como **NÃO aplicadas**, com a frase
+"confirmado: os objetos não existem no banco" — e as três **estão em produção**. Errar dizendo
+"aplicado" faz alguém deixar de aplicar; errar dizendo "não aplicado" convida a **reaplicar migration
+sobre objeto vivo** (`DROP POLICY`/`CREATE OR REPLACE` em cima de coisa em uso). O texto ainda
+carregava o selo "✅ VERIFICADO CONTRA O CATÁLOGO" de 21/08.
+
+**A de maior risco funcional:** `workers.availability_days` documentada como array de inteiros
+(`[1,2,3,4,5]`) quando é **objeto** `{"0":["manha","tarde"],…}`. Conferi o código publicado antes de
+concluir: `types/index.ts` e `lib/availability.ts` implementam a forma **correta**. Não houve bug em
+produção — o erro era só da documentação.
+
+**A que já tinha custado decisão:** `shift_attendance_confirmations.metadata jsonb` não existe. O
+architect registrou risco residual de LGPD sobre essa coluna, lendo o memory-bank. Risco vazio.
+
+**Erro que sobreviveu à própria correção:** o rótulo dizia "0–6 (segunda–domingo, convenção ISO
+`getDay()`)" — errado duas vezes (`getDay()` não é ISO; ISO-8601 é 1=segunda…7=domingo, e `getDay()`
+começa no domingo). O texto **se contradizia sozinho**: o exemplo ao lado tratava `1` como segunda,
+o que só fecha com `0` = domingo. A correção automática preservou a metade errada. Peguei conferindo
+`lib/availability.ts:94`, `types/index.ts:10` e o teste canônico. Varri o repo: nenhum outro arquivo
+carrega a convenção errada.
+
+Outras: cron da F4 (nome, horário e função todos errados — o real é
+`shift-attendance-confirmations-d1 @ '0 21 * * *'` chamando `request_attendance_confirmations_due()`;
+a função `batch_*` documentada não existe, e 21h UTC é 18h BRT, não madrugada); as três RPCs da F4
+recebem `p_application_id`, não `job_id`/`worker_id`; o trigger é AFTER e **não** é bilateral;
+`job_local_date` não lê `settings.app_timezone` (tabela inexistente), o fuso vem do GUC da função;
+`job_series` não tem `job_template jsonb` nem `updated_at`; **existe** FK `jobs.series_id →
+job_series` com `ON DELETE SET NULL` (a doc afirmava que não havia); o índice de
+`shift_attendance_confirmations` é `uq_sac_auto_once UNIQUE (application_id) WHERE source='auto'`,
+então "várias tentativas permitidas" é falso para o caminho do cron; `render_service_term_text` não
+recebe e-mail; e o UNIQUE de idempotência do Article 9 é **índice parcial**
+(`WHERE reference_id IS NOT NULL`), não constraint.
+
+**Causa raiz:** este arquivo descreve a **intenção** das migrations; nada no build, lint ou teste
+cruza isso com o banco. Ficou registrada nota no topo do arquivo: schema ali vale o que o catálogo
+disser.
