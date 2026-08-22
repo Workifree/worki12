@@ -158,11 +158,30 @@ família.
 integridade referencial — apagá-la nunca esteve em jogo) e o **conteúdo** sai. É o padrão de
 `ADR-20260821-expurgo-de-conteudo-nao-de-linha`, aplicado agora fora do expurgo por prazo.
 
-- **Redigidas:** `jobs.briefing`, `jobs.description`, `jobs.requirements` (empresa);
-  `applications.cover_letter` (freela — só o ramo do freela: o texto é dele, a empresa que sai não
-  o apaga); `shift_calls.message` (empresa **ou** `created_by`, porque `shift_calls.company_id` e
+- **Redigidas:** `jobs.briefing`, `jobs.description`, `jobs.requirements`,
+  `jobs.certification_requirement` (empresa); `applications.cover_letter`, `applications.message`
+  (freela — só o ramo do freela: o texto é dele, a empresa que sai não o apaga);
+  `shift_calls.message` (empresa **ou** `created_by`, porque `shift_calls.company_id` e
   `created_by` são `uuid` nu, sem FK, e `created_by` é a única forma de alcançar o texto escrito
   pelo **gerente**, cuja unidade nunca aparece em `v_company_ids`).
+- **A lista acima é do catálogo, não da memória (D6.1).** A primeira versão desta decisão
+  enumerou as colunas que o revisor conhecia e deixou **duas** de fora:
+  `jobs.certification_requirement` (F8 — `<input maxLength={200}>`, "texto livre, advisory" pelo
+  comentário do próprio código) e `applications.message`. Ambas com **0 linhas hoje** — a primeira
+  porque o F8 acabou de subir, a segunda por ser legada do pull. **Volume não é critério de
+  classificação:** classificar coluna vazia custa uma linha; classificar depois que ela enche
+  custa uma migration nova *e* um intervalo em que o dado sobreviveu à exclusão. Na mesma
+  varredura, dois falsos positivos foram descartados **com evidência** — `jobs.scope` (2 valores
+  distintos, 7 chars) e `applications.invitation_response` (1 valor distinto, 8 chars) são enums
+  em coluna `text`.
+- **A classificação textual dessas três tabelas passa a ser FECHADA (D6.2 — asserção `(b2)`).**
+  As asserções (a)/(b) varrem coluna a coluna só `workers`/`companies`; (c)/(d)/(e) têm
+  granularidade de **tabela** — uma coluna de texto livre nova em `jobs` entraria retida em
+  silêncio, que foi exatamente como `certification_requirement` passou. Agora toda coluna textual
+  de `jobs`/`applications`/`shift_calls` tem de estar redigida **ou** retida; coluna nova ⇒
+  **HALT**. Isto só pôde ser escrito **depois** do catálogo: enumerar às cegas produziria HALT
+  garantido e lista inventada — guarda fail-closed com lista inventada é pior que guarda ausente,
+  e por isso a lacuna ficou registrada como pendência (Hh2) até o dado chegar.
 - **Marcador, não `NULL`:** `jobs.title`/`location` mostram que este schema tem coluna textual
   `NOT NULL` e a lista vai crescer — um `NULL` em coluna `NOT NULL` estouraria **dentro** da
   transação destrutiva, com metade da conta já anonimizada. O marcador também explica o vazio para
@@ -203,11 +222,13 @@ porque a migration nunca foi aplicada. Trocado por `format('%I.%I', ns.nspname, 
 
 ### Negativas / Trade-offs (revisão 22/08)
 
-- A redação é por **enumeração de coluna**, não por varredura: coluna de texto livre nova em `jobs`
-  entraria retida em silêncio. A varredura fechada (asserção (b) estendida a `jobs`/`applications`)
-  depende de capturar o DDL real dessas tabelas do catálogo — elas não têm DDL no repositório.
-  Registrado em §5.3 e §5.5 do contrato; **não** foi enumerada às cegas, porque lista inventada em
-  guarda fail-closed é pior que guarda ausente.
+- A varredura fechada cobre `jobs`, `applications` e `shift_calls`, mas **não**
+  `shift_call_targets` nem `shift_attendance_confirmations` (não inventariadas), e (b2) por
+  construção **não alcança `metadata jsonb`** — nenhuma asserção textual alcança. Registrado em
+  §5.3; fechar exige o mesmo trabalho de catálogo.
+- (b2) é uma allow-list mantida à mão: vai HALTar em toda coluna textual nova dessas três tabelas,
+  inclusive as óbvias e inofensivas. É o custo aceito — o mesmo já pago em (c)/(d)/(e) — para que
+  a decisão sobre texto livre seja sempre **escrita**, nunca implícita.
 - O marcador de redação aparece na UI da contraparte (recibo, histórico). É deliberado — vazio
   silencioso parece defeito — mas é copy que ninguém revisou ainda.
 - `jobs.title`/`location` da empresa excluída sobrevivem e podem conter dado pessoal. Aceito com
