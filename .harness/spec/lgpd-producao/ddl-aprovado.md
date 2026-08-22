@@ -1,8 +1,54 @@
 # DDL aprovado — `lgpd-producao` (débitos pré-piloto #5 e #9)
 
-> **Fonte normativa.** O builder implementa **isto**, byte a byte. Divergência entre este arquivo e
-> qualquer outro documento (spec, memory-bank, comentário de código) resolve-se **a favor deste**.
-> Gate: `harness-architect`, 21/08/2026.
+> ## Regra de normatividade (2026-08-22 — **Hh1 fechada**)
+>
+> **Este documento manda em _o que decidimos e por quê_. O arquivo `.sql` manda em _como está
+> escrito_.**
+>
+> | Pergunta | Fonte normativa |
+> |---|---|
+> | O que acontece com esta coluna / esta tabela, e sob qual base legal? | **este documento** — §2.1, §2.7.0–2.7.1, §3.1–3.2, §4, §5, §6 |
+> | Como o predicado, a asserção, a função, a RPC ou o `DOWN` está escrito? | **o arquivo** `supabase/migrations/<timestamp>_*.sql` |
+>
+> Em divergência, **o arquivo vence para o corpo** — sem consulta, sem gate, sem parar o trabalho —
+> e a divergência é **bug deste documento**, nunca do arquivo. Consertar significa reescrever a
+> *decisão* aqui ou corrigir o ponteiro; **nunca** copiar SQL para cá.
+>
+> **Corolário operacional: este documento não contém corpo de migration.** Onde havia bloco copiado,
+> há ponteiro para arquivo, seção e função. Um ponteiro nunca está desatualizado.
+>
+> ### A fronteira: nem todo SQL num contrato é duplicação
+>
+> Um trecho de SQL citado para **sustentar um argumento** não é corpo — é o argumento. O que separa
+> os dois não é o tamanho, é a **função no texto**:
+>
+> | | Corpo (proibido aqui) | **Ilustração não-normativa** (permitida) |
+> |---|---|---|
+> | Serve para | ser **executado** | ser **lido**, para provar um ponto |
+> | Se divergir do arquivo | o leitor implementa a coisa errada | o argumento continua válido; o valor exato está no arquivo |
+> | Forma | função inteira, bloco `DO` inteiro, lista completa | um predicado, uma expressão, um contra-exemplo |
+> | Exemplo neste documento | ~~os blocos de §2.2, §2.4, §2.5, §2.6, §2.7.2-7, §3.3~~ (agora ponteiros) | `format('%I.%I', ns.nspname, cl.relname)` em §2.1.1; o `CHECK (... char_length(...) <= 200)` de §5.4/Hh6, que existe **exatamente** para mostrar que ter `CHECK` não prova conjunto fechado; o esboço de §4.4.1 |
+>
+> **Convenção:** todo trecho da coluna da direita é marcado **_(ilustração não-normativa)_** no
+> ponto de uso. O que não estiver marcado assim e parecer executável **é bug deste documento**.
+>
+> ### O `regclass::text` como caso de teste da regra (2026-08-22)
+>
+> O defeito que este documento carregou por um dia — comparar `conrelid::regclass::text` contra
+> literal `'public.x'`, que **omite o schema** quando ele está no `search_path` e por isso acusa
+> **todas** as tabelas — reapareceu **de forma independente** em
+> `20260821001100_accept_manager_invite_dep_guard.sql` (F13) e **derrubou a aplicação em produção**,
+> acusando as 14 tabelas que já estavam na própria allow-list. Corrigido lá com o mesmo
+> `format('%I.%I', ns.nspname, cl.relname)`.
+>
+> A distinção que ficou clara, e que vale além desta leva: **`regclass::text` é correto quando o
+> nome vai ser EXECUTADO** — `format('ALTER TABLE %s DROP CONSTRAINT %I', ...)` (§2.3) — porque o
+> mesmo `search_path` que o renderiza também o resolve. **O defeito existe só na COMPARAÇÃO contra
+> literal.** A migration #1 usa as duas formas, e as duas estão certas hoje pelo motivo certo.
+> *(Ilustração não-normativa; as ocorrências reais estão no arquivo.)*
+>
+> Gate: `harness-architect`, 21/08/2026; regra de normatividade em 22/08/2026.
+> ADR: `.harness/memory-bank/decisions/ADR-20260822-contrato-normativo-para-decisao-arquivo-para-corpo.md`
 >
 > ADRs: `.harness/memory-bank/decisions/ADR-20260821-anonimizacao-em-vez-de-exclusao.md`
 >       `.harness/memory-bank/decisions/ADR-20260821-reviews-por-vinculo.md`
@@ -336,155 +382,86 @@ arquivo `20260821001000` afirma seu baseline apenas em comentário e só *assert
 padrão "falha fechado se a #1 não estiver aplicada" que a migration #3 do expurgo já usa — tira o
 resultado da mão da ordem alfabética.
 
-### 2.2 SQL — cabeçalho e asserções de schema
+### 2.2 Cabeçalho e asserções de schema — *ponteiro*
 
-```sql
--- Migration: LGPD — exclusão de conta vira ANONIMIZAÇÃO + lápide pseudônima (débito pré-piloto #5)
--- File: supabase/migrations/20260821000000_lgpd_account_anonymization.sql
--- ADR: .harness/memory-bank/decisions/ADR-20260821-anonimizacao-em-vez-de-exclusao.md
--- DDL aprovado (FONTE NORMATIVA): .harness/spec/lgpd-producao/ddl-aprovado.md
--- Gate: harness-architect (21/08/2026).
---
--- ============================================================================
--- PROBLEMA (em produção, pré-existente — nenhuma feature desta leva criou)
--- ----------------------------------------------------------------------------
---   auth.admin.deleteUser falha por DOIS caminhos independentes:
---     (1) auth.users --CASCADE--> workers --RESTRICT-- shift_payments / service_terms
---     (2) auth.users --CASCADE--> wallets --NO ACTION-- wallet_transactions / escrow_transactions
---   O produto promete o direito de eliminação (LGPD art. 18, VI) e não cumpre.
---
--- DECISÃO
--- ----------------------------------------------------------------------------
---   A credencial (auth.users) é APAGADA. As linhas de workers/companies/wallets SOBREVIVEM como
---   lápide pseudônima, sem conteúdo pessoal. Para isso as FKs CASCADE para auth.users são
---   REMOVIDAS. shift_payments e service_terms continuam RESTRICT e continuam intactos.
---
---   ⚠️ NÃO é "anonimização" no sentido do art. 5º, XI: term_text de termo ACEITO retém nome e CPF
---   como prova (art. 7º, VI + art. 16, I). É eliminação parcial + retenção justificada. A Política
---   de Privacidade PRECISA dizer isso (débito #1) antes desta rotina ir a público.
---
--- FRONTEIRA FINANCEIRA (Article 8/9) — INALTERADA
--- ----------------------------------------------------------------------------
---   Nenhum UPDATE em wallets.balance. Nenhum DELETE em wallet_transactions/escrow_transactions.
---   Nenhuma RPC de saldo tocada. A remoção da CASCADE de wallets EXISTE PARA PROTEGER o razão:
---   hoje a cascata tentaria apagar a carteira e o NO ACTION do razão derruba a transação inteira.
---
--- Risk: MEDIUM-HIGH — remove FKs de identidade em tabelas centrais e cria rotina destrutiva.
--- Backup required before production deploy: SIM (pg_dump de workers, companies, service_terms).
---
--- DOWN (rollback): ver rodapé.
--- ============================================================================
+> **Corpo: `supabase/migrations/20260821000000_lgpd_account_anonymization.sql`, seção 1
+> (`ASSERÇÕES DE SCHEMA`).** Não reproduzido aqui — ver a **regra de normatividade** no topo.
+> A lista de colunas e de tabelas dentro das asserções é **derivada** da classificação de §2.1;
+> quando as duas divergirem, §2.1 é a decisão e o arquivo é a escrita.
 
--- =============================================
--- 1. ASSERÇÕES DE SCHEMA — a migration FALHA FECHADO se o banco não for o esperado
---    "Migration não aplicada é migration não verificada": as colunas de `workers`/`companies`
---    NÃO têm DDL no repositório (tabelas criadas fora de migration). Em vez de assumir, exigimos.
---    Falha aqui = HALT, volta ao architect com a lista real de colunas. NÃO editar a lista
---    às cegas para "fazer passar".
--- =============================================
-DO $$
-DECLARE
-    -- Colunas que a rotina ESCREVE (apaga ou substitui por valor). Emenda 2026-08-21:
-    -- +badges_hidden, +accepts_referrals, +discoverable_for_sos (F10/F11/F12) e +companies.city.
-    v_expected_workers   text[] := ARRAY[
-        'full_name','cpf','phone','birth_date','pix_key','bio','city','avatar_url','cover_url',
-        'primary_role','roles','tags','availability','availability_days','experience_years',
-        'verified_identity','badges_hidden','accepts_referrals','discoverable_for_sos'
-    ];
-    v_expected_companies text[] := ARRAY[
-        'name','cnpj','city','email','address','website','description','industry','logo_url',
-        'cover_url','default_briefing'
-    ];
+O que é normativo **aqui** é *o que cada asserção precisa garantir* — não como está escrita:
 
-    -- Emenda 2026-08-21 — asserção (c): dependentes de workers/companies JÁ CLASSIFICADOS em §2.1.
-    -- Ver §2.1.0: a lápide neutraliza CASCADE/SET NULL/SET DEFAULT. Tabela fora desta lista =
-    -- dado sobrevivendo em silêncio. NÃO adicionar nome aqui para "fazer passar": adicionar
-    -- significa "eu decidi o que acontece com essa tabela e escrevi na §2.1".
-    v_classified_deps text[] := ARRAY[
-        'public.shift_payments',              -- RESTRICT, INTOCADA (documento fiscal)
-        'public.service_terms',               -- RESTRICT, retido/redigido conforme aceite
-        'public.team_connections',            -- DELETE
-        'public.team_lists',                  -- DELETE (empresa)
-        'public.team_list_members',           -- DELETE (freela) + cascata intra-domínio
-        'public.payment_methods',             -- DELETE (empresa)
-        'public.company_spend_limits',        -- DELETE (empresa)
-        'public.company_monthly_revenue',     -- DELETE (empresa)
-        'public.job_series',                  -- DELETE (empresa)
-        'public.worker_certifications',       -- DELETE (freela) / verified_by_company_id RETIDO
-        'public.worker_trainings',            -- DELETE (freela E empresa)
-        'public.worker_referrals',            -- DELETE (3 predicados)
-        'public.worker_company_badge_prefs'   -- DELETE + workers.badges_hidden = true
-    ];
+| | Garante | Falha fechado quando |
+|---|---|---|
+| **(a)** | toda coluna que a rotina pretende apagar em `workers`/`companies` **existe** | coluna sumiu ou foi renomeada |
+| **(a2)** | toda coluna a ser **redigida** (`jobs`, `applications`, `shift_calls`) existe **e é textual** | tipo mudou sob a rotina |
+| **(b)** | nenhuma coluna de `workers`/`companies` fica **fora** da classificação (apagada **ou** retida) | coluna nova não classificada = dado sobrevivendo em silêncio |
+| **(b2)** | fecha a classificação **textual** de `jobs`, `applications`, `shift_calls`, `shift_call_targets`, `shift_attendance_confirmations` | coluna `text` nova em tabela retida |
+| **(b3)** | as colunas retidas **por serem enum** ainda têm `CHECK` de conjunto fechado, na forma `<coluna> = ANY (ARRAY[...])` adjacente ao nome | a evidência sumiu — a guarda confere a evidência, não a lista |
+| **(c)** | nenhuma **tabela dependente** de `workers`/`companies` (via `pg_constraint`) fica fora de §2.1 | FK nova não classificada (§2.1.0) |
+| **(d)** | nenhuma tabela com **ponteiro-de-pessoa** (`uuid` cujo *nome* está no vocabulário) fica fora | tabela sem FK, invisível a (c) (§2.1.1) |
+| **(e)** | nenhuma tabela com coluna de **contato/identificador** (nome casando `email`, `phone`, `cpf`, `cnpj`, `pix`, `birth_date`, `full_name`) fica fora | idem |
 
-    v_col     text;
-    v_unknown text;
-BEGIN
-    -- (a) toda coluna que a rotina PRETENDE apagar precisa existir
-    FOREACH v_col IN ARRAY v_expected_workers LOOP
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = 'public' AND table_name = 'workers'
-                          AND column_name = v_col) THEN
-            RAISE EXCEPTION 'ASSERCAO: public.workers.% nao existe. HALT -> architect (ddl-aprovado 2.1).', v_col;
-        END IF;
-    END LOOP;
+**Regra que não se negocia, e que é a razão de a asserção existir:** adicionar um nome à allow-list
+**não** é "fazer passar" — significa *"eu decidi o que acontece com essa tabela e escrevi na §2.1"*.
+Editar a lista às cegas transforma a guarda em decoração.
 
-    FOREACH v_col IN ARRAY v_expected_companies LOOP
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = 'public' AND table_name = 'companies'
-                          AND column_name = v_col) THEN
-            RAISE EXCEPTION 'ASSERCAO: public.companies.% nao existe. HALT -> architect (ddl-aprovado 2.1).', v_col;
-        END IF;
-    END LOOP;
+#### 2.2.1 Promoção pendente no arquivo — Hh5 (2026-08-22)
 
-    -- (b) nenhuma coluna pode ficar FORA da classificação (apagada OU retida).
-    --     Coluna nova não classificada = dado pessoal potencialmente sobrevivendo em silêncio.
-    SELECT string_agg(c.column_name, ', ') INTO v_unknown
-    FROM information_schema.columns c
-    WHERE c.table_schema = 'public' AND c.table_name = 'workers'
-      AND c.column_name <> ALL (v_expected_workers)
-      AND c.column_name <> ALL (ARRAY[
-            'id','xp','level','rating_average','reviews_count','completed_jobs_count',
-            'earnings_total','profile_views','accepted_tos','tos_accepted_at','tos_version',
-            'onboarding_completed','created_at','updated_at','anonymized_at'
-      ]);
-    IF v_unknown IS NOT NULL THEN
-        RAISE EXCEPTION 'ASSERCAO: colunas nao classificadas em public.workers: %. HALT -> architect.', v_unknown;
-    END IF;
+> **Decisão registrada aqui; escrita pendente no `.sql`.** É o primeiro uso deliberado da regra de
+> normatividade do topo, e por isso o handoff está escrito em vez de acontecer em silêncio.
 
-    SELECT string_agg(c.column_name, ', ') INTO v_unknown
-    FROM information_schema.columns c
-    WHERE c.table_schema = 'public' AND c.table_name = 'companies'
-      AND c.column_name <> ALL (v_expected_companies)
-      AND c.column_name <> ALL (ARRAY[
-            'id','owner_id','rating_average','reviews_count','onboarding_completed',
-            'accepted_tos','tos_accepted_at','tos_version','created_at','updated_at',
-            'link_risk_alert_enabled','link_risk_alert_threshold','anonymized_at'
-      ]);
-    IF v_unknown IS NOT NULL THEN
-        RAISE EXCEPTION 'ASSERCAO: colunas nao classificadas em public.companies: %. HALT -> architect.', v_unknown;
-    END IF;
+`20260822000400_checks_enum_jobs_applications.sql` foi **aplicada em produção** e deu `CHECK` de
+conjunto fechado a três colunas que este contrato classificava como classe fraca:
 
-    -- (c) EMENDA 2026-08-21 — nenhuma TABELA dependente pode ficar fora da classificação.
-    --     Por que existe (§2.1.0): a lápide nunca é apagada, logo NENHUM ON DELETE pendurado em
-    --     workers/companies dispara — CASCADE, SET NULL e SET DEFAULT viram NO ACTION de fato.
-    --     O que antes o banco limpava de graça agora TEM de estar na RPC do §2.5.
-    --     Esta asserção é o mecanismo que descobre tabela nova; a lista à mão só DECLARA a decisão.
-    --     (F10 `worker_referrals` e F12 `worker_company_badge_prefs` nasceram depois do contrato
-    --      congelado e passaram despercebidas justamente por não haver esta checagem.)
-    SELECT string_agg(DISTINCT con.conrelid::regclass::text, ', ') INTO v_unknown
-    FROM pg_constraint con
-    WHERE con.contype = 'f'
-      AND con.confrelid IN ('public.workers'::regclass, 'public.companies'::regclass)
-      AND con.conrelid NOT IN ('public.workers'::regclass, 'public.companies'::regclass)
-      AND con.conrelid::regclass::text <> ALL (v_classified_deps);
-    IF v_unknown IS NOT NULL THEN
-        RAISE EXCEPTION
-          'ASSERCAO: tabelas dependentes de workers/companies NAO classificadas em §2.1: %. '
-          'A lapide neutraliza ON DELETE (CASCADE/SET NULL/SET DEFAULT nao disparam mais): esse '
-          'dado sobreviveria a exclusao da conta EM SILENCIO. HALT -> architect.', v_unknown;
-    END IF;
-END $$;
-```
+| Coluna | `CHECK` aplicado | Efeito na classificação |
+|---|---|---|
+| `jobs.status` | `open`, `paused`, `deleted` | classe fraca **->** forte |
+| `jobs.budget_type` | `hourly`, `daily`, `project` | classe fraca **->** forte |
+| `applications.status` | 13 valores (ver 2.2.1.a) | classe fraca **->** forte |
+
+**Ação, e ela é no arquivo:** mover os três nomes de `v_retained_text` para `v_enum_text` na
+**seção 1** de `20260821000000_lgpd_account_anonymization.sql`. A migration **ainda não foi
+aplicada**, então é edição de arquivo — não migration nova. Depois disso a asserção **(b3)** passa a
+vigiá-las: derrubar o `CHECK` vira **HALT**, não mentira silenciosa.
+
+**O que NÃO muda:** as três continuam **retidas** e **não redigidas**. A promoção é sobre *quem
+garante a evidência* (o banco, agora, em vez do `CompanyCreateJob.tsx`), não sobre o destino do dado.
+
+##### 2.2.1.a O domínio de `applications.status` tem **13** valores, não os 10 da união TS
+
+Três valores que **nenhum código escreve** mas que o **banco espera encontrar**, e por isso estão no
+`CHECK`:
+
+- `'applied'` e `'accepted'` — vivem no **predicado** de `update_job_series_future` e
+  `stop_job_series` (`20260817000400`). Omiti-los faria as RPCs de série deixarem de casar linhas
+  que elas hoje casam.
+- `'approved'` — é **testado pelo trigger vivo** `validate_application_update` (`20260622000300`).
+
+**Por que isso passou despercebido até agora:** `types/index.ts` declara
+`status: ApplicationStatus | string` *(ilustração não-normativa)*. Com o `| string`, a união **não
+tipa nada** — ela documenta uma intenção e não recusa valor nenhum. Qualquer trecho deste contrato,
+ou de qualquer outro, que tenha tratado a união TS como se fosse o domínio estava **lendo
+documentação como se fosse garantia**. É o Article 4 outra vez, um andar acima: não é só o filtro no
+client que é UX — **o tipo no client também é**, quando ele tem `| string`.
+
+##### 2.2.1.b `'paused'` prova a regra: dado de hoje não é domínio
+
+`'paused'` está no `CHECK` de `jobs.status` e **não existe em nenhuma linha de produção** — nenhuma
+empresa pausou turno ainda. Entrou porque **o botão Pausar existe**.
+
+Montar o domínio com `SELECT DISTINCT` teria produzido um `CHECK` que passa em 100% da base e
+**quebra no primeiro clique** em "Pausar". A simétrica também é verdadeira e apareceu no mesmo
+levantamento: `jobs.scope`/`type` têm valores **órfãos** em produção (`'full-time'`, `'hybrid'`) que
+**não existem em lugar nenhum do repositório** — montar o domínio pelo código teria quebrado a
+edição de toda linha legada.
+
+**A regra, nas duas direções:** o domínio é a **união** do que o código escreve, do que o banco lê e
+do que a UI oferece — nunca só o `SELECT DISTINCT`, nunca só o `grep`. Este documento já dizia isso
+sobre o **catálogo × repositório** (§2.1.2, §3.3); Hh5 mostra que vale também para **dados ×
+código**. É a mesma nota de §5.4/Hh6 sobre confiar na evidência em vez da lista, com o sinal
+trocado: ali o risco era promover demais, aqui era restringir demais.
+
 
 > **Nota sobre a asserção (c) — por que ela cobre `SET NULL` também.** O filtro **não** discrimina
 > `confdeltype`. É de propósito: `RESTRICT`/`NO ACTION` continuam sendo dependência que a rotina
@@ -493,75 +470,27 @@ END $$;
 > deixou de disparar. Uma dependência **decidida como "nada a fazer"** entra na lista igual — o que
 > não pode existir é dependência **não decidida**.
 
-### 2.3 SQL — quebra das CASCADEs para `auth.users`
+### 2.3 Quebra das CASCADEs para `auth.users` — *ponteiro*
 
-```sql
--- =============================================
--- 2. REMOÇÃO DAS FKs CASCADE PARA auth.users
---    Descoberta dinâmica: o nome da constraint NÃO está no repositório (tabelas criadas fora de
---    migration). NUNCA hard-codar `workers_id_fkey`.
---    Idempotente: rodar duas vezes não faz nada na segunda.
--- =============================================
-DO $$
-DECLARE
-    r          record;
-    v_leftover text;
-BEGIN
-    FOR r IN
-        SELECT con.conname, con.conrelid::regclass::text AS tbl
-        FROM pg_constraint con
-        WHERE con.contype = 'f'
-          AND con.confrelid = 'auth.users'::regclass
-          AND con.conrelid IN ('public.workers'::regclass,
-                               'public.companies'::regclass,
-                               'public.wallets'::regclass)
-    LOOP
-        RAISE NOTICE 'Removendo FK % em % -> auth.users (lapide LGPD).', r.conname, r.tbl;
-        EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
-    END LOOP;
+> **Corpo: `20260821000000_lgpd_account_anonymization.sql`, seções 2 e 3.** Não reproduzido — ver a
+> regra de normatividade no topo.
 
-    -- Qualquer OUTRA tabela que ainda apague em cascata junto com auth.users precisa ser
-    -- conscientemente revisada: se guardar dado retido, deleteUser o destrói em silêncio.
-    -- A lista abaixo é a de tabelas cujo apagamento em cascata é DESEJADO.
-    SELECT string_agg(DISTINCT con.conrelid::regclass::text, ', ') INTO v_leftover
-    FROM pg_constraint con
-    WHERE con.contype = 'f'
-      AND con.confrelid = 'auth.users'::regclass
-      AND con.confdeltype = 'c'   -- 'c' = CASCADE
-      AND con.conrelid::regclass::text <> ALL (ARRAY[
-            'public.notifications', 'public.analytics_events',
-            'public."Message"', 'public."Conversation"'
-      ]);
-    IF v_leftover IS NOT NULL THEN
-        RAISE EXCEPTION
-          'ASSERCAO: FK CASCADE para auth.users nao revisada em: %. deleteUser apagaria esse dado. HALT -> architect.',
-          v_leftover;
-    END IF;
-END $$;
+Normativo **aqui** (a decisão, não a escrita):
 
--- =============================================
--- 3. MARCADOR DE LÁPIDE
---    ADD COLUMN nullable sem DEFAULT = sem reescrita de heap.
--- =============================================
-ALTER TABLE public.workers   ADD COLUMN IF NOT EXISTS anonymized_at timestamptz;
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS anonymized_at timestamptz;
+1. **Descoberta dinâmica do nome da constraint.** As tabelas foram criadas fora de migration; o nome
+   `workers_id_fkey` **não** está no repositório. Hard-codar nome é proibido — enumerar
+   `pg_constraint` e executar `format(...)`. É o caso em que `regclass::text` é **correto** (o nome
+   vai ser executado, não comparado contra literal; ver a regra no topo).
+2. **Alvo exato:** as FKs `workers`, `companies` e `wallets` -> `auth.users`. Nada mais.
+3. **Varredura do que sobrou:** qualquer **outra** FK `CASCADE` para `auth.users` fora da allow-list
+   (`notifications`, `analytics_events`, `"Message"`, `"Conversation"`) **HALTa** — cascata não
+   revisada é dado retido que `deleteUser` destrói em silêncio.
+4. **Marcador de lápide:** `anonymized_at timestamptz` **nullable e sem `DEFAULT`** nas duas tabelas
+   (sem reescrita de heap), com `COMMENT` explicando que a linha sobrevive por ser chave pseudônima,
+   e índice **parcial** `WHERE anonymized_at IS NOT NULL` (a lápide é minoria). Sem `CONCURRENTLY`:
+   migration do Supabase roda dentro de transação.
 
-COMMENT ON COLUMN public.workers.anonymized_at IS
-    'Lapide LGPD: a conta foi excluida (auth.users apagado) e o conteudo pessoal desta linha foi '
-    'removido por anonymize_account(). A linha SOBREVIVE porque e chave pseudonima de shift_payments '
-    'e service_terms (retencao por obrigacao legal, art. 16 I). NULL = conta viva. One-way.';
-COMMENT ON COLUMN public.companies.anonymized_at IS
-    'Lapide LGPD — ver public.workers.anonymized_at.';
-
--- Índices parciais: a lápide é minoria, e a consulta útil é "quem já foi anonimizado".
--- Sem CONCURRENTLY: migration do Supabase roda dentro de transação.
-CREATE INDEX IF NOT EXISTS idx_workers_anonymized
-    ON public.workers (anonymized_at) WHERE anonymized_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_companies_anonymized
-    ON public.companies (anonymized_at) WHERE anonymized_at IS NOT NULL;
-```
-
-### 2.4 SQL — emenda ao `enforce_service_term_immutability`
+### 2.4 Emenda ao `enforce_service_term_immutability` — *ponteiro*
 
 > **Reproduzir a função INTEIRA.** É `CREATE OR REPLACE` sobre função aplicada em produção
 > (20260817001100). O único delta é o marcado `EMENDA 2026-08-21`. Não reordenar e não reescrever
@@ -569,96 +498,38 @@ CREATE INDEX IF NOT EXISTS idx_companies_anonymized
 > `trg_enforce_service_term_immutability` **não** é recriado — `CREATE OR REPLACE FUNCTION` mantém o
 > trigger existente apontando para o novo corpo.
 
-```sql
--- =============================================
--- 4. IMUTABILIDADE DO TERMO — emenda LGPD
---    Delta único: accepted_ip / accepted_user_agent podem ir a NULL (e SÓ a NULL) dentro da
---    transição de anonimização (anonymized_at NULL -> ts). IP é dado pessoal autônomo e
---    user-agent é fingerprint; nenhum dos dois é elemento do negócio jurídico, e o próprio
---    schema os declara BEST-EFFORT e FALSIFICÁVEIS.
--- =============================================
-CREATE OR REPLACE FUNCTION public.enforce_service_term_immutability()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    -- EMENDA 2026-08-21: a transição de anonimização, calculada uma vez.
-    v_anonymizing boolean := (OLD.anonymized_at IS NULL AND NEW.anonymized_at IS NOT NULL);
-BEGIN
-    -- === Vínculo e valor: imutáveis SEMPRE ===
-    IF NEW.id               IS DISTINCT FROM OLD.id
-       OR NEW.shift_payment_id IS DISTINCT FROM OLD.shift_payment_id
-       OR NEW.job_id           IS DISTINCT FROM OLD.job_id
-       OR NEW.worker_id        IS DISTINCT FROM OLD.worker_id
-       OR NEW.company_id       IS DISTINCT FROM OLD.company_id
-       OR NEW.amount           IS DISTINCT FROM OLD.amount
-       OR NEW.created_at       IS DISTINCT FROM OLD.created_at
-    THEN
-        RAISE EXCEPTION 'service_terms: vinculo e valor sao imutaveis (shift_payment_id, job_id, worker_id, company_id, amount, created_at).';
-    END IF;
+> **Corpo: `20260821000000_lgpd_account_anonymization.sql`, seção 4**
+> (`enforce_service_term_immutability()`). Não reproduzido — ver a regra de normatividade no topo.
 
-    -- === accepted_at: ONE-WAY (NULL -> timestamp). Nunca altera, nunca limpa. ===
-    IF OLD.accepted_at IS NOT NULL AND NEW.accepted_at IS DISTINCT FROM OLD.accepted_at THEN
-        RAISE EXCEPTION 'service_terms: accepted_at e imutavel apos o aceite.';
-    END IF;
+Normativo **aqui**:
 
-    -- === IP/UA: só podem ser gravados NO aceite; nunca reescritos depois. ===
-    -- EMENDA 2026-08-21 (LGPD): exceção única — a anonimização pode APAGÁ-LOS (levar a NULL).
-    -- Levar a QUALQUER OUTRO VALOR continua proibido: não se falsifica trilha de aceite.
-    IF OLD.accepted_at IS NOT NULL
-       AND (NEW.accepted_ip         IS DISTINCT FROM OLD.accepted_ip
-         OR NEW.accepted_user_agent IS DISTINCT FROM OLD.accepted_user_agent)
-       AND NOT (v_anonymizing
-                AND NEW.accepted_ip IS NULL
-                AND NEW.accepted_user_agent IS NULL)
-    THEN
-        RAISE EXCEPTION 'service_terms: accepted_ip/accepted_user_agent sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD, e apenas para NULL).';
-    END IF;
+1. **Delta único** sobre o corpo aplicado em produção (`20260817001100`): `accepted_ip` e
+   `accepted_user_agent` podem ir a `NULL` — **e só a `NULL`** — dentro da transição de anonimização
+   (`anonymized_at` de `NULL` para timestamp). Levar a qualquer **outro** valor continua proibido:
+   não se falsifica trilha de aceite. IP é dado pessoal autônomo (art. 5º, I) e `user-agent` é
+   fingerprint; nenhum dos dois é elemento do negócio jurídico, e o próprio schema os declara
+   **BEST-EFFORT e FALSIFICÁVEIS**.
+2. **A função é reproduzida INTEIRA no arquivo**, porque é `CREATE OR REPLACE` sobre função viva em
+   produção. Não reordenar e **não reescrever mensagens de erro existentes** — há teste e log
+   dependendo delas.
+3. **O trigger `trg_enforce_service_term_immutability` não é recriado**: `CREATE OR REPLACE
+   FUNCTION` mantém o trigger existente apontando para o novo corpo.
+4. **O `COMMENT` da coluna `service_terms.anonymized_at` é atualizado na mesma seção** — a semântica
+   passa a ser "esta linha passou pela rotina de anonimização de conta", habilitando **duas**
+   reescritas e só elas: `term_text` **apenas** em rascunho, e `ip`/`ua` para `NULL`. Não deixar a
+   semântica antiga mentindo no schema.
+5. **Este corpo é reescrito de novo pela migration #3** (§2.7.4) como **corpo-superset**. Ordem
+   obrigatória **#1 -> #3**.
 
-    -- === anonymized_at: ONE-WAY (NULL -> timestamp). Nunca volta. ===
-    IF OLD.anonymized_at IS NOT NULL AND NEW.anonymized_at IS DISTINCT FROM OLD.anonymized_at THEN
-        RAISE EXCEPTION 'service_terms: anonymized_at e imutavel.';
-    END IF;
+### 2.5 A RPC `anonymize_account` — *ponteiro*
 
-    -- === term_text / term_version: livres ENQUANTO rascunho; congelados no aceite. ===
-    -- Única exceção pós-aceite: a anonimização LGPD (NULL -> ts), que é o ato de
-    -- reescrever o texto. Fora dela, um termo aceito não muda mais.
-    IF OLD.accepted_at IS NOT NULL
-       AND (NEW.term_text IS DISTINCT FROM OLD.term_text
-         OR NEW.term_version IS DISTINCT FROM OLD.term_version)
-       AND NOT v_anonymizing
-    THEN
-        RAISE EXCEPTION 'service_terms: term_text/term_version sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD).';
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-COMMENT ON FUNCTION public.enforce_service_term_immutability() IS
-    'BEFORE UPDATE em service_terms. term_text e rascunho enquanto accepted_at IS NULL e CONGELA no '
-    'aceite. Vale para TODOS os papeis (service_role e owner inclusive) — RLS nao cobriria. Unica '
-    'reescrita pos-aceite: anonimizacao LGPD (anonymized_at NULL->ts), que tambem pode APAGAR '
-    'accepted_ip/accepted_user_agent (so para NULL). ADR-20260818 + ADR-20260821.';
-
-COMMENT ON COLUMN public.service_terms.anonymized_at IS
-    'Marca que a linha passou pela rotina de anonimizacao de conta (anonymize_account). One-way, '
-    'fechada ao client. Habilita DUAS reescritas e so elas: (1) term_text, usada APENAS quando o '
-    'termo era RASCUNHO (accepted_at IS NULL) — termo ACEITO e RETIDO INTEGRALMENTE como prova de '
-    'transacao encerrada (LGPD art. 7 VI / art. 16 I, ADR-20260818); (2) accepted_ip / '
-    'accepted_user_agent -> NULL (telemetria; nao e elemento do negocio juridico).';
-```
-
-### 2.5 SQL — a RPC `anonymize_account`
-
-> **Emenda 2026-08-22 (F13):** o SQL abaixo é o de 21/08. Os três deltas da emenda —
+> **Emenda 2026-08-22 (F13):** os três deltas da emenda —
 > **GUARDA 4** (`sole_organization_owner`), o bloco **SOFT-REMOVE** de
 > `company_members`/`organization_members` sob `pg_catalog.to_regclass` (a migration pode ir ao
 > banco **antes** da F13), e as asserções **(d)/(e)** — estão escritos em
 > `supabase/migrations/20260821000000_lgpd_account_anonymization.sql`, que é a **cópia normativa**
 > desses trechos. Não duplicados aqui para não criar duas fontes divergentes do mesmo corpo.
+> *(Esta nota antecipava, em 22/08, a regra que hoje vale para o documento inteiro.)*
 >
 > **Revisão 2026-08-22 (mesma regra, quatro deltas a mais).** Também vivem só no arquivo da
 > migration, pela mesma razão:
@@ -684,328 +555,38 @@ COMMENT ON COLUMN public.service_terms.anonymized_at IS
 >    `is_worker=false`, `company_ids=[]` e as chaves de domínio **sumidas** — indistinguível de
 >    "bug, as âncoras não resolveram".
 >
-> ⚠️ **Drift declarado (pré-existente, não introduzido nesta revisão):** os blocos SQL de §2.2 e
-> §2.5 são o baseline de 21/08 e **não** contêm as emendas de 22/08 — inclusive a correção D5 de
-> `regclass::text`, que aqui ainda aparece na forma **quebrada**. Enquanto a migration não for
-> aplicada, o arquivo `.sql` é a fonte de verdade do **corpo**; esta seção continua normativa para
-> a **classificação** (§2.1) e para as **decisões**. Ressincronizar os blocos é tarefa própria e
-> vai ao humano (§5.5).
+> **Corpo: `20260821000000_lgpd_account_anonymization.sql`, seção 5** (`anonymize_account(p_user_id
+> uuid)` + `REVOKE`/`GRANT`). Não reproduzido — ver a regra de normatividade no topo.
+>
+> **Isto encerra o drift que §5.5/Hh1 registrava.** O baseline de 21/08 que vivia aqui não tinha as
+> asserções (d)/(e), a GUARDA 4, o SOFT-REMOVE de membership nem a correção do `regclass::text` — e
+> continuaria não tendo, porque **nada no build compara os dois**. O que era "drift declarado" virou
+> ausência de duplicata.
 
-```sql
--- =============================================
--- 5. RPC DE ANONIMIZAÇÃO
---    Uma transação (corpo de função = transação): ou a conta inteira é anonimizada, ou nada.
---    SECURITY DEFINER + search_path='' + GRANT EXECUTE SOMENTE a service_role.
---    Chamada exclusivamente pela Edge Function `delete-account` (Article 10).
---    Devolve `outcome` estruturado — NUNCA levanta exceção em caminho esperado.
--- =============================================
-CREATE OR REPLACE FUNCTION public.anonymize_account(p_user_id uuid)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    v_now           timestamptz := now();
-    v_is_worker     boolean;
-    v_company_ids   uuid[];
-    v_balance       numeric;
-    v_counts        jsonb := '{}'::jsonb;
-    v_n             integer;
-    c_worker_label  constant text := '[Conta Deletada]';
-    c_company_label constant text := '[Empresa Deletada]';
-    c_redacted      constant text :=
-        '[TERMO REMOVIDO — a conta do titular foi excluida a pedido dele (LGPD art. 18, VI). '
-        'Este termo nao havia sido aceito e, portanto, nao possui valor probatorio.]';
-BEGIN
-    IF p_user_id IS NULL THEN
-        RETURN jsonb_build_object('outcome', 'invalid_input');
-    END IF;
+### 2.6 Verificação obrigatória e DOWN — *ponteiro*
 
-    SELECT EXISTS (SELECT 1 FROM public.workers w WHERE w.id = p_user_id) INTO v_is_worker;
+> **Corpo: `20260821000000_lgpd_account_anonymization.sql`, rodapé** (`COMO VERIFICAR` + `DOWN`).
+> Não reproduzido — ver a regra de normatividade no topo.
+>
+> Este bloco era a prova mais barata do problema: o arquivo tem **V1-V22**; a cópia que vivia aqui
+> parou em **V12**, enquanto o próprio §5.4/Hh6 deste documento já citava "ensaio de regressão em
+> **V22**" — o documento referenciava um item que a sua própria cópia não continha.
 
-    -- Ancoragem DUPLA de empresa (mesma regra de is_company_owner / is_job_owner):
-    -- companies.id = auth.uid() no caso canônico, owner_id nos registros com dono separado.
-    SELECT array_agg(c.id) INTO v_company_ids
-    FROM public.companies c
-    WHERE c.id = p_user_id OR c.owner_id = p_user_id;
-    v_company_ids := coalesce(v_company_ids, ARRAY[]::uuid[]);
+Normativo **aqui** é *que a verificação existe e é obrigatória*, e o que ela precisa provar:
 
-    IF NOT v_is_worker AND cardinality(v_company_ids) = 0 THEN
-        RETURN jsonb_build_object('outcome', 'not_found');
-    END IF;
-
-    -- ---- GUARDA 1: saldo. Article 8 — não zeramos saldo aqui; RECUSAMOS. ----
-    SELECT w.balance INTO v_balance FROM public.wallets w WHERE w.user_id = p_user_id;
-    IF coalesce(v_balance, 0) > 0 THEN
-        RETURN jsonb_build_object('outcome', 'wallet_has_balance', 'balance', v_balance);
-    END IF;
-
-    -- ---- GUARDA 2: escrow em aberto ----
-    IF EXISTS (
-        SELECT 1
-        FROM public.escrow_transactions e
-        JOIN public.wallets w
-          ON w.id = e.company_wallet_id OR w.id = e.worker_wallet_id
-        WHERE w.user_id = p_user_id
-          AND e.status IN ('reserved', 'authorized')
-    ) THEN
-        RETURN jsonb_build_object('outcome', 'escrow_active');
-    END IF;
-
-    -- ---- GUARDA 3: pagamento prometido e não liquidado (modo A) ----
-    IF EXISTS (
-        SELECT 1 FROM public.shift_payments sp
-        WHERE sp.status = 'scheduled'
-          AND (sp.worker_id = p_user_id OR sp.company_id = ANY (v_company_ids))
-    ) THEN
-        RETURN jsonb_build_object('outcome', 'scheduled_payment_pending');
-    END IF;
-
-    -- =========================================================
-    -- A PARTIR DAQUI É DESTRUTIVO. Tudo numa transação só.
-    -- =========================================================
-
-    -- ---- service_terms: rascunho é redigido; termo ACEITO é retido (só ip/ua saem) ----
-    -- UM ÚNICO UPDATE por linha: o trigger só libera a reescrita quando anonymized_at vai de
-    -- NULL para ts NO MESMO statement. Dois UPDATEs separados seriam BARRADOS.
-    UPDATE public.service_terms st
-       SET term_text           = CASE WHEN st.accepted_at IS NULL THEN c_redacted ELSE st.term_text END,
-           accepted_ip         = NULL,
-           accepted_user_agent = NULL,
-           anonymized_at       = v_now
-     WHERE st.anonymized_at IS NULL
-       AND (st.worker_id = p_user_id OR st.company_id = ANY (v_company_ids));
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    v_counts := v_counts || jsonb_build_object('service_terms', v_n);
-
-    -- ---- certificações/treinamentos do freela: DELETE (ramo (c) do trigger F8 barra UPDATE) ----
-    IF v_is_worker THEN
-        DELETE FROM public.worker_certifications wc WHERE wc.worker_id = p_user_id;
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('worker_certifications', v_n);
-
-        DELETE FROM public.worker_trainings wt WHERE wt.worker_id = p_user_id;
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('worker_trainings', v_n);
-
-        DELETE FROM public.team_list_members tlm WHERE tlm.worker_id = p_user_id;
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('team_list_members', v_n);
-    END IF;
-
-    -- ---- EMENDA 2026-08-21: ramo EMPRESA (era mais fino que o ramo freela — §2.1.0, item 4) ----
-    IF cardinality(v_company_ids) > 0 THEN
-        -- `team_lists` apaga `team_list_members` por cascata INTRA-DOMÍNIO (a FK aponta para
-        -- team_lists(id), que é apagada de verdade — essa cascata continua disparando).
-        DELETE FROM public.team_lists tl WHERE tl.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('team_lists', v_n);
-
-        -- financial_contact_email / financial_contact_phone = contato de pessoa natural.
-        DELETE FROM public.company_spend_limits csl WHERE csl.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('company_spend_limits', v_n);
-
-        DELETE FROM public.company_monthly_revenue cmr WHERE cmr.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('company_monthly_revenue', v_n);
-
-        -- job_template carrega briefing (mesma classe de companies.default_briefing).
-        -- Seguro: NÃO há FK de jobs para job_series — as ocorrências materializadas permanecem.
-        DELETE FROM public.job_series js WHERE js.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('job_series', v_n);
-
-        -- anotação interna que a empresa escreveu sobre terceiros que CONTINUAM na plataforma.
-        DELETE FROM public.worker_trainings wt WHERE wt.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('worker_trainings_company', v_n);
-    END IF;
-
-    -- ---- vínculo de elenco: dos dois lados ----
-    DELETE FROM public.team_connections tc
-     WHERE tc.worker_id = p_user_id OR tc.company_id = ANY (v_company_ids);
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    v_counts := v_counts || jsonb_build_object('team_connections', v_n);
-
-    -- ---- EMENDA 2026-08-21: indicação entre empresas (F10) — grafo sobre a pessoa ----
-    -- TRÊS predicados: a indicação é um triângulo (freela, quem indica, para quem se indica).
-    -- A proveniência do BI de aquisição NÃO se perde: vive em team_connections.source='referral'.
-    DELETE FROM public.worker_referrals wr
-     WHERE wr.worker_id = p_user_id
-        OR wr.referring_company_id  = ANY (v_company_ids)
-        OR wr.requesting_company_id = ANY (v_company_ids);
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    v_counts := v_counts || jsonb_build_object('worker_referrals', v_n);
-
-    -- ---- EMENDA 2026-08-21: opt-out de badge por empresa (F12) ----
-    -- ⚠️ Este DELETE só é seguro porque a lápide de `workers` seta badges_hidden = true logo
-    --    abaixo. Sozinho, ele RESSUSCITARIA os badges que estas linhas suprimiam (o badge é
-    --    derivado de applications/jobs/reviews, todos RETIDOS). Os dois andam juntos.
-    DELETE FROM public.worker_company_badge_prefs bp
-     WHERE bp.worker_id = p_user_id OR bp.company_id = ANY (v_company_ids);
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    v_counts := v_counts || jsonb_build_object('worker_company_badge_prefs', v_n);
-
-    -- ---- notificações: texto com nome, valor e link ----
-    DELETE FROM public.notifications n WHERE n.user_id = p_user_id;
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    v_counts := v_counts || jsonb_build_object('notifications', v_n);
-
-    -- ---- token de cartão da empresa (revogar no Asaas é da Edge Function) ----
-    IF cardinality(v_company_ids) > 0 THEN
-        DELETE FROM public.payment_methods pm WHERE pm.company_id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('payment_methods', v_n);
-    END IF;
-
-    -- ---- LÁPIDE: workers ----
-    IF v_is_worker THEN
-        UPDATE public.workers w
-           SET full_name         = c_worker_label,
-               cpf               = NULL,
-               phone             = NULL,
-               birth_date        = NULL,
-               pix_key           = NULL,
-               bio               = NULL,
-               city              = NULL,
-               avatar_url        = NULL,
-               cover_url         = NULL,
-               primary_role      = NULL,
-               roles             = NULL,
-               tags              = NULL,
-               availability      = NULL,
-               availability_days = NULL,
-               experience_years  = NULL,
-               verified_identity = false,
-               -- EMENDA 2026-08-21 — flags de alcance/exposição (F10/F11/F12).
-               -- Não são "boolean sem conteúdo pessoal": governam quem alcança e quem enxerga
-               -- o grafo desta pessoa. Ver §2.1 (workers) para o raciocínio de cada uma.
-               badges_hidden        = true,   -- fecha "Já trabalhou com" (derivado de dado RETIDO)
-               accepts_referrals    = false,  -- não é mais oferecível a outras empresas
-               discoverable_for_sos = false,  -- sai do pool de SOS (o predicado de F11 não filtra lápide)
-               anonymized_at     = coalesce(w.anonymized_at, v_now)
-         WHERE w.id = p_user_id;
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('workers', v_n);
-    END IF;
-
-    -- ---- LÁPIDE: companies ----
-    IF cardinality(v_company_ids) > 0 THEN
-        UPDATE public.companies c
-           SET name             = c_company_label,
-               cnpj             = NULL,
-               city             = NULL,   -- EMENDA 2026-08-21: subconjunto de `address`, que já sai
-               email            = NULL,
-               address          = NULL,
-               website          = NULL,
-               description      = NULL,
-               industry         = NULL,
-               logo_url         = NULL,
-               cover_url        = NULL,
-               default_briefing = NULL,
-               anonymized_at    = coalesce(c.anonymized_at, v_now)
-         WHERE c.id = ANY (v_company_ids);
-        GET DIAGNOSTICS v_n = ROW_COUNT;
-        v_counts := v_counts || jsonb_build_object('companies', v_n);
-    END IF;
-
-    RETURN jsonb_build_object(
-        'outcome',       'anonymized',
-        'user_id',       p_user_id,
-        'is_worker',     v_is_worker,
-        'company_ids',   to_jsonb(v_company_ids),
-        'anonymized_at', v_now,
-        'counts',        v_counts
-    );
-END;
-$$;
-
-COMMENT ON FUNCTION public.anonymize_account(uuid) IS
-    'LGPD art. 18 VI — remove o conteudo pessoal da conta e deixa uma LAPIDE PSEUDONIMA '
-    '(workers/companies/wallets sobrevivem porque sao chave de shift_payments/service_terms, '
-    'retidos por obrigacao legal — art. 16 I). NAO toca saldo nem razao (Article 8/9): recusa com '
-    'outcome se houver saldo, escrow ativo ou pagamento agendado pendente. Chamada SO pela Edge '
-    'Function delete-account (service_role). Devolve outcome, nunca excecao em caminho esperado. '
-    'Idempotente: rodar de novo devolve counts zerados e outcome anonymized. ADR-20260821.';
-
-REVOKE ALL ON FUNCTION public.anonymize_account(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
-```
-
-### 2.6 SQL — verificação obrigatória e DOWN
-
-```sql
--- ============================================================================
--- COMO VERIFICAR (obrigatório após aplicar — sem isto, a migration NÃO está verificada)
--- ----------------------------------------------------------------------------
--- V1. Nenhuma FK CASCADE de identidade sobreviveu:
---     SELECT conrelid::regclass, conname, confdeltype FROM pg_constraint
---      WHERE contype='f' AND confrelid='auth.users'::regclass;
---     ⇒ workers, companies e wallets NÃO podem aparecer.
---
--- V2. Ensaio em conta de TESTE (nunca em conta real):
---     SELECT public.anonymize_account('<uuid-de-teste>');
---     ⇒ outcome='anonymized'; conferir counts.
---     SELECT full_name, cpf, phone, pix_key, anonymized_at FROM public.workers WHERE id='<uuid>';
---     ⇒ '[Conta Deletada]', NULL, NULL, NULL, timestamp.
---
--- V3. Termo ACEITO foi RETIDO e a telemetria saiu:
---     SELECT accepted_at IS NOT NULL AS aceito, length(term_text) > 0 AS texto_retido,
---            accepted_ip, accepted_user_agent, anonymized_at
---       FROM public.service_terms WHERE worker_id='<uuid>';
---     ⇒ aceito=t, texto_retido=t, ip/ua NULL, anonymized_at preenchido.
---
--- V4. Termo RASCUNHO foi redigido ⇒ term_text começa com '[TERMO REMOVIDO'.
---
--- V5. Saldo e razão intactos (Article 8/9):
---     SELECT count(*) FROM public.wallet_transactions wt
---       JOIN public.wallets w ON w.id=wt.wallet_id WHERE w.user_id='<uuid>';
---     ⇒ mesmo número de antes. E: SELECT balance FROM public.wallets WHERE user_id='<uuid>' ⇒ 0.
---
--- V6. Só então: auth.admin.deleteUser('<uuid>') ⇒ 200, e a linha de workers CONTINUA existindo.
---
--- V7. O recibo do turno pago continua abrindo para a EMPRESA (/recibo/:jobId), com '[Conta Deletada]'.
---
--- V8. Guardas: em conta com saldo > 0 ⇒ outcome='wallet_has_balance' e NENHUMA escrita.
---
--- --- EMENDA 2026-08-21 ---
--- V9.  Flags de alcance zeradas na lápide do freela:
---      SELECT badges_hidden, accepts_referrals, discoverable_for_sos FROM public.workers
---       WHERE id='<uuid>';   ⇒ t, f, f
---      E: rpc get_worker_company_badges('<uuid>') por uma EMPRESA que ainda tem applications
---         com esse freela ⇒ lista VAZIA (o grafo não ressuscitou com o DELETE das prefs).
--- V10. Nenhum dependente sobreviveu — rodar para conta de teste de FREELA e de EMPRESA:
---      SELECT 'referrals', count(*) FROM public.worker_referrals
---        WHERE worker_id='<uuid>' OR referring_company_id='<cid>' OR requesting_company_id='<cid>'
---      UNION ALL SELECT 'badge_prefs', count(*) FROM public.worker_company_badge_prefs
---        WHERE worker_id='<uuid>' OR company_id='<cid>'
---      UNION ALL SELECT 'lists',       count(*) FROM public.team_lists        WHERE company_id='<cid>'
---      UNION ALL SELECT 'spend',       count(*) FROM public.company_spend_limits WHERE company_id='<cid>'
---      UNION ALL SELECT 'revenue',     count(*) FROM public.company_monthly_revenue WHERE company_id='<cid>'
---      UNION ALL SELECT 'series',      count(*) FROM public.job_series        WHERE company_id='<cid>'
---      UNION ALL SELECT 'trainings',   count(*) FROM public.worker_trainings  WHERE company_id='<cid>';
---      ⇒ TODAS zero. (Antes da emenda, o ramo EMPRESA deixava as cinco últimas para trás.)
--- V11. `companies.city` saiu: SELECT city FROM public.companies WHERE id='<cid>' ⇒ NULL.
--- V12. Ocorrências de série SOBREVIVERAM ao DELETE de job_series (não há FK):
---      SELECT count(*) FROM public.jobs WHERE series_id='<serie-da-empresa>'; ⇒ igual a antes.
---
--- DOWN (rollback — copiar/colar). ATENÇÃO: NÃO desfaz dados já anonimizados. Irreversível por
--- natureza; por isso o backup do cabeçalho é obrigatório.
---   DROP FUNCTION IF EXISTS public.anonymize_account(uuid);
---   -- restaurar o corpo anterior de enforce_service_term_immutability (20260817001100 §7)
---   ALTER TABLE public.workers   DROP COLUMN IF EXISTS anonymized_at;
---   ALTER TABLE public.companies DROP COLUMN IF EXISTS anonymized_at;
---   -- re-adicionar as FKs exige que NÃO existam lápides órfãs:
---   ALTER TABLE public.workers   ADD CONSTRAINT workers_id_fkey
---       FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
---   ALTER TABLE public.companies ADD CONSTRAINT companies_id_fkey
---       FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
---   ALTER TABLE public.wallets   ADD CONSTRAINT wallets_user_id_fkey
---       FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
--- ============================================================================
-```
+| Prova | Por quê |
+|---|---|
+| nenhuma FK `CASCADE` de identidade (`workers`/`companies`/`wallets` -> `auth.users`) sobreviveu | é o coração de H2 |
+| ensaio de `anonymize_account` em conta de **teste** (nunca real) devolve `outcome='anonymized'` com os `counts` conferidos | rotina destrutiva não se verifica por leitura de código |
+| termo **aceito** retido integralmente, com `ip`/`ua` nulos; termo **rascunho** redigido | é a fronteira de §2.1 entre prova e telemetria |
+| saldo e razão **intactos** — mesma contagem de `wallet_transactions`, `balance` zerado | Article 8/9 |
+| `auth.admin.deleteUser` retorna 200 **e** a linha de `workers` continua existindo | é a definição de lápide |
+| o recibo do turno pago continua abrindo para a **contraparte**, com o rótulo genérico | dano a terceiro é o teste que mais falha em silêncio |
+| flags de alcance zeradas (`badges_hidden` / `accepts_referrals` / `discoverable_for_sos`) e badges **não** ressuscitam | §2.1, `worker_company_badge_prefs` |
+| nenhum dependente sobreviveu, rodado para conta de **freela** *e* de **empresa** | a assimetria era o bug latente de §2.1.0, item 4 |
+| classe **gerente/sócio** reconhecida; GUARDA 4 recusa sócio único; irmãos **não** são desligados | §4.4.1 e §5.4/J1 |
+| texto livre redigido em `jobs`/`applications`/`shift_calls` **com a linha preservada** | §2.1 |
+| **o `DOWN` não desfaz dado já anonimizado** — irreversível por natureza; por isso o backup do cabeçalho é obrigatório | não existe rollback de eliminação |
 
 ---
 
@@ -1079,176 +660,43 @@ Por quê:
 | `wallets`, `wallet_transactions`, `escrow_transactions` | **NÃO SÃO LIDAS NEM ESCRITAS** | Article 8/9 intactos **por construção**, não por cuidado: a garantia de idempotência `(wallet_id, reference_id)` só existe enquanto a linha existe, e o expurgo não conhece essas tabelas. |
 | `workers`, `companies` (lápide ou não) | **INTOCADAS** | O expurgo é sobre **registro de transação**, não sobre perfil. Perfil é tratado pela #1. |
 
-### 2.7.2 SQL — cabeçalho, asserção de ordem e o prazo num lugar só
+### 2.7.2 Cabeçalho, asserção de ordem e o prazo num lugar só — *ponteiro*
 
-```sql
--- Migration: LGPD — expurgo de conteudo pessoal apos o prazo de retencao (debito pre-piloto #5)
--- File: supabase/migrations/20260821000400_lgpd_retention_purge.sql
--- ADR: .harness/memory-bank/decisions/ADR-20260821-expurgo-de-conteudo-nao-de-linha.md
--- DDL aprovado (FONTE NORMATIVA): .harness/spec/lgpd-producao/ddl-aprovado.md §2.7
--- Gate: harness-architect (21/08/2026). H1 decidido pelo owner: 5 anos.
---
--- ============================================================================
--- O QUE ESTA MIGRATION FAZ
--- ----------------------------------------------------------------------------
---   Cumpre o prazo de retencao que a #1 promete. Decorridos 5 anos de `paid_at` / `accepted_at`,
---   o CONTEUDO PESSOAL de `service_terms` e `shift_payments` e eliminado por UPDATE. A LINHA
---   permanece: valor, data e partes (uuids pseudonimos) continuam no banco e no BI.
---
---   NAO HA DELETE. Nem aqui, nem em lugar nenhum, nessas duas tabelas. Razoes (ADR):
---     - `shift_payments` NAO TEM policy de DELETE por decisao explicita de 20260630000000
---       ("auditoria nao se apaga; correcao = voided"). Um cron que apaga contradiz o schema.
---     - `service_terms.shift_payment_id` e RESTRICT (+ FK composta service_terms_payment_identity)
---       => DELETE teria ordem obrigatoria e lote abortado por erro de ordem. Sem DELETE, o
---       problema inteiro deixa de existir.
---     - Os dois guardas de imutabilidade sao BEFORE UPDATE. Um DELETE ESCAPA de ambos: seria a
---       unica operacao destrutiva do sistema sem guarda nenhum.
---
--- ============================================================================
--- ORDEM DE APLICACAO — OBRIGATORIA: #1 (20260821000000) ANTES DESTA
--- ----------------------------------------------------------------------------
---   Esta migration reescreve `enforce_service_term_immutability` com o corpo-SUPERSET: emenda da
---   anonimizacao (ip/ua -> NULL sob anonymized_at) + emenda do expurgo. Aplicada ANTES da #1, a
---   #1 sobrescreveria a excecao do expurgo EM SILENCIO e o cron passaria a falhar todo dia.
---   A assercao abaixo torna isso impossivel: FALHA FECHADO.
---
--- ============================================================================
--- FRONTEIRA FINANCEIRA (Article 8/9) — INTACTA POR CONSTRUCAO
--- ----------------------------------------------------------------------------
---   Nenhuma tabela de saldo/razao e LIDA ou ESCRITA por esta migration. Nenhuma RPC de saldo e
---   tocada. `wallet_transactions`/`escrow_transactions` nao aparecem em nenhuma query daqui.
---
--- Risk: MEDIUM — rotina destrutiva de conteudo, agendada, que atinge tambem CONTAS VIVAS
---   (o prazo e do DADO, nao da conta — ddl-aprovado §2.7.0). Irreversivel por natureza.
--- Backup required before production deploy: SIM (pg_dump de service_terms e shift_payments).
---
--- PRIMEIRA EXECUCAO: rodar em DRY-RUN antes de deixar o cron ativo (V4 da secao COMO VERIFICAR).
---   Com 5 anos de prazo e a plataforma em piloto, o esperado hoje e ZERO linha elegivel — se o
---   dry-run devolver numero > 0, PARE: ou o relogio do banco esta errado, ou ha dado de teste com
---   data antiga. Nao "confirme" um expurgo que voce nao explica.
---
--- DOWN (rollback): ver rodape. O DOWN NAO restaura conteudo ja expurgado.
--- ============================================================================
+> **Corpo: `supabase/migrations/20260821000400_lgpd_retention_purge.sql`, seções 1 e 2.** Não
+> reproduzido — ver a regra de normatividade no topo.
 
--- =============================================
--- 1. ASSERCAO DE ORDEM — a #1 precisa estar aplicada
---    Marcadores da #1: `service_terms.anonymized_at` ja existia (20260817001100), mas
---    `workers.anonymized_at` e `public.anonymize_account` NASCEM na #1. Exigimos os dois.
--- =============================================
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = 'workers' AND column_name = 'anonymized_at'
-    ) THEN
-        RAISE EXCEPTION
-          'ASSERCAO DE ORDEM: 20260821000000 (lgpd_account_anonymization) NAO esta aplicada. '
-          'Esta migration reescreve enforce_service_term_immutability com o corpo-superset; '
-          'aplicar fora de ordem faria a #1 apagar a excecao do expurgo em silencio. HALT.';
-    END IF;
+Normativo **aqui**:
 
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE n.nspname = 'public' AND p.proname = 'anonymize_account'
-    ) THEN
-        RAISE EXCEPTION
-          'ASSERCAO DE ORDEM: public.anonymize_account nao existe — a #1 nao esta aplicada. HALT.';
-    END IF;
-END $$;
+1. **Asserção de ordem (`#1 -> #3`).** A migration **HALTa** se `20260821000000` não estiver
+   aplicada. Aplicar na ordem inversa faria a #1 sobrescrever a exceção de expurgo **em silêncio**,
+   e o silêncio é o modo de falha que este documento inteiro combate.
+2. **O prazo mora num lugar só:** `public.lgpd_retention_interval()`, consumida pela RPC **e** pelos
+   dois triggers. É o que torna 5->6 anos um `CREATE OR REPLACE` de três linhas em vez de caça a
+   literal espalhado (§2.7.0 e §5/H1). Nenhum outro objeto do schema pode carregar o literal — e a
+   verificação do arquivo checa exatamente isso, lendo `pg_get_functiondef`.
 
--- =============================================
--- 2. O PRAZO, NUM LUGAR SO
---    Consumida pela RPC de expurgo E pelos DOIS triggers de imutabilidade. Trocar 5 -> 6 anos
---    (recomendacao tecnica pendente de parecer juridico — ddl-aprovado §2.7.0) e um
---    CREATE OR REPLACE desta funcao, e mais nada. NAO inline o literal em lugar nenhum.
--- =============================================
-CREATE OR REPLACE FUNCTION public.lgpd_retention_interval()
-RETURNS interval
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$ SELECT interval '5 years' $$;
+### 2.7.3 Marcadores, trava de litígio e prova de conformidade — *ponteiro*
 
-COMMENT ON FUNCTION public.lgpd_retention_interval() IS
-    'Prazo de retencao do CONTEUDO PESSOAL de service_terms.term_text e shift_payments.note. '
-    '5 anos = prescricao civil (CC art. 206 §5 I) — escolha do owner em 21/08/2026, PENDENTE de '
-    'confirmacao juridica; recomendacao tecnica e 6 anos pelo vetor trabalhista (CF art. 7 XXIX + '
-    'duracao do processo). Ponto UNICO de verdade: consumida pela RPC purge_expired_personal_data '
-    'e pelos triggers enforce_service_term_immutability / enforce_shift_payment_immutability. '
-    'ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
+> **Corpo: `20260821000400_lgpd_retention_purge.sql`, seções 3 e 4.** Não reproduzido — ver a regra
+> de normatividade no topo.
 
--- Custo zero e evita a assimetria de risco de 20260816201457 (funcao de trigger sem EXECUTE):
--- esta funcao nao devolve dado nenhum, so o literal do prazo.
-REVOKE ALL ON FUNCTION public.lgpd_retention_interval() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.lgpd_retention_interval() TO service_role, authenticated;
-```
+Normativo **aqui**:
 
-### 2.7.3 SQL — marcadores, trava de litígio e prova de conformidade
+1. **`purged_at`** (em `service_terms` e `shift_payments`) — marcador do expurgo, nullable e sem
+   `DEFAULT`. **Não** reaproveitar `anonymized_at`: a transição dele já foi gasta na exclusão da
+   conta e o marcador deixaria de distinguir os dois eventos (§2.7.1).
+2. **`service_terms.retention_hold_reason`** — trava de litígio. Linha com valor não-`NULL` é
+   **pulada** pelo expurgo, e a trava do termo protege também o `note` do pagamento correspondente.
+   `service_terms` só tem policy de `SELECT`, logo a coluna é **inalcançável pelo client por
+   construção**. É o instrumento de exceção pontual enquanto o parecer jurídico sobre 5 x 6 anos não
+   vem (§5/H1).
+3. **Índices parciais de vencimento** nas duas tabelas — o expurgo é varredura por índice, sem
+   `JOIN` com a lápide (§2.7.0, item 4).
+4. **`data_retention_purge_runs`** — registro das operações de tratamento (**LGPD art. 37**), com
+   RLS habilitada. Contagens por execução, incluindo as linhas **travadas** (`*_held`): sem elas,
+   "expurgou 0" e "havia 40 travadas" seriam indistinguíveis num relatório à autoridade.
 
-```sql
--- =============================================
--- 3. MARCADORES DO EXPURGO + TRAVA DE LITIGIO
---    ADD COLUMN nullable sem DEFAULT = sem reescrita de heap.
--- =============================================
-ALTER TABLE public.service_terms   ADD COLUMN IF NOT EXISTS purged_at            timestamptz;
-ALTER TABLE public.service_terms   ADD COLUMN IF NOT EXISTS retention_hold_reason text;
-ALTER TABLE public.shift_payments  ADD COLUMN IF NOT EXISTS purged_at            timestamptz;
-
-COMMENT ON COLUMN public.service_terms.purged_at IS
-    'Expurgo de retencao (LGPD): venceu o prazo de lgpd_retention_interval() e o CONTEUDO PESSOAL '
-    'desta linha foi eliminado (term_text -> marcador, accepted_ip/accepted_user_agent -> NULL). '
-    'A LINHA permanece: amount, accepted_at, partes e vinculos sao RETIDOS. One-way, fechada ao '
-    'client (service_terms so tem policy de SELECT). NAO confundir com anonymized_at, que marca '
-    'exclusao de CONTA — o expurgo atinge conta viva tambem (o prazo e do DADO).';
-COMMENT ON COLUMN public.shift_payments.purged_at IS
-    'Expurgo de retencao (LGPD) — ver public.service_terms.purged_at. Nesta tabela o expurgo '
-    'apaga APENAS `note` (unico texto livre). Valor, datas e partes sao RETIDOS: o BI de gasto '
-    'historico sobrevive ao expurgo.';
-COMMENT ON COLUMN public.service_terms.retention_hold_reason IS
-    'TRAVA DE LITIGIO. Nao-NULL = esta linha (e o `note` do shift_payment correspondente) e '
-    'PULADA pelo expurgo, indefinidamente, mesmo vencido o prazo. Preenchida por operacao '
-    '(service_role) quando ha litigio/investigacao em curso. Inalcancavel pelo client por '
-    'construcao: service_terms so tem policy de SELECT. Limpar a trava reabre a linha ao expurgo.';
-
--- Indices parciais: a varredura diaria pergunta "quem ainda NAO foi expurgado e ja venceu".
--- Expressao coalesce(...) e IMMUTABLE => indexavel. Sem CONCURRENTLY (migration roda em transacao).
-CREATE INDEX IF NOT EXISTS idx_service_terms_retention_due
-    ON public.service_terms ((coalesce(accepted_at, created_at)))
-    WHERE purged_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_shift_payments_retention_due
-    ON public.shift_payments ((coalesce(paid_at, created_at)))
-    WHERE purged_at IS NULL;
-
--- =============================================
--- 4. PROVA DE CONFORMIDADE — registro das operacoes de tratamento (LGPD art. 37)
---    Sem isto, "expurgamos" e afirmacao sem lastro. Com isto, e consulta.
---    RLS habilitada e ZERO policy: nenhum client le (service_role ignora RLS).
--- =============================================
-CREATE TABLE IF NOT EXISTS public.data_retention_purge_runs (
-    id                    uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
-    ran_at                timestamptz NOT NULL DEFAULT now(),
-    cutoff                timestamptz NOT NULL,
-    retention_interval    interval    NOT NULL,
-    batch_limit           integer     NOT NULL,
-    service_terms_purged  integer     NOT NULL DEFAULT 0,
-    shift_payments_purged integer     NOT NULL DEFAULT 0,
-    service_terms_held    integer     NOT NULL DEFAULT 0,
-    duration_ms           integer     NOT NULL DEFAULT 0
-);
-
-ALTER TABLE public.data_retention_purge_runs ENABLE ROW LEVEL SECURITY;
-
-COMMENT ON TABLE public.data_retention_purge_runs IS
-    'Registro das execucoes do expurgo de retencao (LGPD art. 37 — registro das operacoes de '
-    'tratamento). Uma linha por execucao EFETIVA do cron/RPC. Dry-run NAO grava (diagnostico nao '
-    'e operacao de tratamento). RLS habilitada sem policy: so service_role le. Nunca contem dado '
-    'pessoal — so contagens.';
-COMMENT ON COLUMN public.data_retention_purge_runs.service_terms_held IS
-    'Quantas linhas VENCIDAS foram puladas por retention_hold_reason (trava de litigio). Numero '
-    'alto e persistente = alguem esqueceu de limpar uma trava.';
-```
-
-### 2.7.4 SQL — os dois guardas de imutabilidade (corpos-superset)
+### 2.7.4 Os dois guardas de imutabilidade (corpos-superset) — *ponteiro*
 
 > **Reproduzir as funções INTEIRAS.** São `CREATE OR REPLACE` sobre funções **aplicadas em
 > produção**. `enforce_shift_payment_immutability` parte do corpo de `20260712000000` (§4);
@@ -1257,524 +705,107 @@ COMMENT ON COLUMN public.data_retention_purge_runs.service_terms_held IS
 > erro existentes** (há teste e log dependendo delas). Os triggers não são recriados:
 > `CREATE OR REPLACE FUNCTION` mantém os existentes apontando para o novo corpo.
 
-```sql
--- =============================================
--- 5. shift_payments — corpo vigente (20260712000000) + RAMO DE EXPURGO no topo
---    O ramo e AUTO-LIMITADO: so existe se as 5 condicoes de §0.3.1 valerem juntas. O gatilho
---    (purged_at NULL -> ts) e barato, entao UPDATE normal nao paga nada pelas checagens caras.
---    Se alguem entra no gatilho e NAO cumpre a forma, e RAISE — nunca fall-through silencioso.
--- =============================================
-CREATE OR REPLACE FUNCTION public.enforce_shift_payment_immutability()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    v_is_company BOOLEAN;
-    v_is_worker  BOOLEAN;
-BEGIN
-    -- === EMENDA 2026-08-21 (LGPD, expurgo de retencao) ==========================
-    -- Gatilho barato: so o expurgo leva purged_at de NULL para timestamp.
-    IF OLD.purged_at IS NULL AND NEW.purged_at IS NOT NULL THEN
-        IF auth.uid() IS NULL
-           -- (b) a linha PASSOU DO PRAZO. Nem service_role expurga registro de ontem.
-           AND coalesce(OLD.paid_at, OLD.created_at) <= now() - public.lgpd_retention_interval()
-           -- (c) forma do expurgo nesta tabela: `note` some, e so.
-           AND NEW.note IS NULL
-           -- (d) trava de litigio do termo correspondente
-           AND NOT EXISTS (
-                 SELECT 1 FROM public.service_terms st
-                  WHERE st.shift_payment_id = OLD.id
-                    AND st.retention_hold_reason IS NOT NULL
-               )
-           -- (e) NADA alem das colunas do expurgo mudou. E isto que autoriza o RETURN cedo:
-           --     se todo o resto e identico, o corpo abaixo nao teria o que reprovar. Protege
-           --     tambem colunas que ainda nao existem.
-           AND (to_jsonb(NEW) - ARRAY['note','purged_at'])
-               IS NOT DISTINCT FROM
-               (to_jsonb(OLD) - ARRAY['note','purged_at'])
-        THEN
-            RETURN NEW;
-        END IF;
-        RAISE EXCEPTION 'shift_payments: expurgo fora da forma permitida (exige service_role, prazo de retencao vencido, ausencia de trava de litigio e nenhuma alteracao alem de note->NULL).';
-    END IF;
+> **Corpo: `20260821000400_lgpd_retention_purge.sql`, seções 5 e 6.** Não reproduzido — ver a regra
+> de normatividade no topo. As **funções inteiras** vivem lá, e é lá que se lê o que a exceção
+> permite exatamente.
 
-    -- purged_at e ONE-WAY e so o expurgo o escreve. Qualquer outro caminho para.
-    IF NEW.purged_at IS DISTINCT FROM OLD.purged_at THEN
-        RAISE EXCEPTION 'shift_payments: purged_at so pode ser definido pelo expurgo de retencao e depois e imutavel.';
-    END IF;
-    -- === FIM DA EMENDA — abaixo, corpo vigente INALTERADO ======================
+Normativo **aqui** é a **forma da exceção** — e é ela, não o texto, que a torna segura. O ramo de
+expurgo só existe se as **cinco** condições valerem juntas; qualquer uma faltando é `RAISE`, nunca
+fall-through silencioso (as cinco estão enunciadas em §0.3.1):
 
-    -- === COLUNAS MATERIAIS SEMPRE IMUTÁVEIS (todos os papéis, inclusive service_role) ===
-    -- scheduled_for entra aqui: a PROMESSA não se reescreve (reagendar = void + novo).
-    IF NEW.id             IS DISTINCT FROM OLD.id
-       OR NEW.job_id         IS DISTINCT FROM OLD.job_id
-       OR NEW.company_id     IS DISTINCT FROM OLD.company_id
-       OR NEW.worker_id      IS DISTINCT FROM OLD.worker_id
-       OR NEW.application_id IS DISTINCT FROM OLD.application_id
-       OR NEW.source         IS DISTINCT FROM OLD.source
-       OR NEW.amount         IS DISTINCT FROM OLD.amount
-       OR NEW.recorded_by    IS DISTINCT FROM OLD.recorded_by
-       OR NEW.note           IS DISTINCT FROM OLD.note
-       OR NEW.created_at     IS DISTINCT FROM OLD.created_at
-       OR NEW.scheduled_for  IS DISTINCT FROM OLD.scheduled_for
-    THEN
-        RAISE EXCEPTION 'shift_payments: colunas materiais sao imutaveis (job_id, company_id, worker_id, application_id, source, amount, recorded_by, note, created_at, scheduled_for). Correcao = estorno logico (voided).';
-    END IF;
+1. `auth.uid()` nulo — só `service_role`/cron; nenhuma sessão humana expurga.
+2. `purged_at` de `NULL` para timestamp, one-way — e é também o **gatilho barato**: num `UPDATE`
+   normal a condição falha na primeira comparação e nada mais é avaliado.
+3. **A linha passou do prazo**, medido pela mesma `lgpd_retention_interval()` que a RPC usa.
+   Consequência declarada: **nem o `service_role` expurga um registro de ontem** — a regra de
+   retenção passa a morar no guarda, não só na rotina que ele guarda.
+4. **Nenhuma trava de litígio ativa.**
+5. **Nada além das colunas do expurgo mudou**, verificado por
+   `to_jsonb(NEW) - <colunas> IS NOT DISTINCT FROM to_jsonb(OLD) - <as mesmas>`
+   *(ilustração não-normativa)*. É (5) que autoriza o `RETURN NEW` cedo sem reexecutar o corpo
+   vigente — e que protege **colunas que ainda não existem**: quem adicionar coluna amanhã a ganha
+   protegida sem editar o trigger.
 
-    -- === paid_at: imutável, EXCETO a efetivacao (scheduled->recorded) que o define UMA vez ===
-    IF NEW.paid_at IS DISTINCT FROM OLD.paid_at THEN
-        IF NOT (OLD.status = 'scheduled' AND NEW.status = 'recorded'
-                AND OLD.paid_at IS NULL AND NEW.paid_at IS NOT NULL) THEN
-            RAISE EXCEPTION 'shift_payments: paid_at so pode ser definido na efetivacao (scheduled->recorded) e depois e imutavel.';
-        END IF;
-    END IF;
+Mais três pontos que **não** podem ser perdidos numa reescrita:
 
-    -- === Registro estornado é IMUTÁVEL (não re-abre, não re-confirma) ===
-    IF OLD.status = 'voided' THEN
-        RAISE EXCEPTION 'shift_payments: registro estornado (voided) e imutavel.';
-    END IF;
+- **`enforce_shift_payment_immutability`** ganha o ramo no topo **e** um bloqueio explícito de
+  `purged_at` para todo o resto — a coluna é nova, nenhuma checagem antiga a menciona, então sem
+  isso ela passaria em silêncio inclusive por um `authenticated` (§0.3.1). Trata também
+  `OLD.status = 'voided'`: sem isso, exatamente as linhas mais antigas ficariam de fora.
+- **`enforce_service_term_immutability` é CORPO-SUPERSET** — a emenda da anonimização (§2.4)
+  **mais** a do expurgo. É o motivo da ordem obrigatória **#1 -> #3**.
+- **`v_purging` é distinto de `v_anonymizing`, e não pode ser fundido.** O expurgo atinge **conta
+  viva**, onde `anonymized_at` é e continua `NULL`. Reaproveitar `anonymized_at` para escapar disso
+  está **proibido**: marcaria como "conta excluída" quem não excluiu conta.
 
-    -- === Transições de status permitidas ===
-    IF NEW.status IS DISTINCT FROM OLD.status THEN
-        IF NOT (
-            (OLD.status = 'scheduled' AND NEW.status IN ('recorded', 'voided'))
-            OR (OLD.status = 'recorded' AND NEW.status = 'voided')
-        ) THEN
-            RAISE EXCEPTION 'shift_payments: transicao de status invalida (% -> %).', OLD.status, NEW.status;
-        END IF;
-    END IF;
+### 2.7.5 A RPC `purge_expired_personal_data` — *ponteiro*
 
-    -- === worker_confirmed_at é ONE-WAY (NULL → timestamp; nunca altera/limpa) ===
-    IF OLD.worker_confirmed_at IS NOT NULL
-       AND NEW.worker_confirmed_at IS DISTINCT FROM OLD.worker_confirmed_at
-    THEN
-        RAISE EXCEPTION 'shift_payments: worker_confirmed_at nao pode ser alterado apos a confirmacao.';
-    END IF;
+> **Corpo: `20260821000400_lgpd_retention_purge.sql`, seção 7** (`purge_expired_personal_data(integer,
+> boolean)` + `REVOKE`/`GRANT`). Não reproduzido — ver a regra de normatividade no topo.
 
-    -- === PARTIÇÃO POR PAPEL (só p/ chamadas autenticadas; service_role/trigger tem auth.uid() NULL) ===
-    IF auth.uid() IS NOT NULL THEN
-        v_is_company := EXISTS (
-            SELECT 1 FROM public.companies WHERE id = NEW.company_id AND owner_id = auth.uid()
-        );
-        v_is_worker := (NEW.worker_id = auth.uid());
+Normativo **aqui**:
 
-        IF v_is_worker AND NOT v_is_company THEN
-            -- Freela: SÓ pode setar worker_confirmed_at (num registro já 'recorded'). Nada mais muda.
-            IF NEW.status      IS DISTINCT FROM OLD.status
-               OR NEW.voided_at   IS DISTINCT FROM OLD.voided_at
-               OR NEW.void_reason IS DISTINCT FROM OLD.void_reason
-               OR NEW.paid_at     IS DISTINCT FROM OLD.paid_at
-            THEN
-                RAISE EXCEPTION 'shift_payments: freela so pode confirmar recebimento (worker_confirmed_at).';
-            END IF;
-        ELSIF v_is_company THEN
-            -- Empresa: efetiva (scheduled->recorded), cancela (->voided), estorna; NÃO toca a confirmacao do freela.
-            IF NEW.worker_confirmed_at IS DISTINCT FROM OLD.worker_confirmed_at THEN
-                RAISE EXCEPTION 'shift_payments: empresa nao pode alterar a confirmacao do freela.';
-            END IF;
-        ELSE
-            RAISE EXCEPTION 'shift_payments: usuario nao autorizado a atualizar este registro.';
-        END IF;
-    END IF;
+1. **`SECURITY DEFINER` + `search_path=''` + `GRANT EXECUTE` SOMENTE a `service_role`.** Nenhum
+   `authenticated` expurga.
+2. **Cutoff sobre `coalesce(paid_at, created_at)` e `coalesce(accepted_at, created_at)`, sem
+   nenhuma referência a `anonymized_at`** — o relógio é do **dado**, não da conta (§2.7.0).
+3. **Dry-run** roda o **mesmo predicado** sem escrever — mesmo padrão de
+   `previewUpdateFutureOccurrences` (F3). É o que permite a verificação obrigatória rodar em
+   produção no mesmo dia da aplicação, com o cron já agendado.
+4. **Limite de lote** mantém a varredura contida; a rotina é reentrante e idempotente (linha já com
+   `purged_at` não volta ao conjunto).
+5. **Article 8/9 por construção, não por cuidado:** a função **não menciona** `wallets`,
+   `wallet_transactions` nem `escrow_transactions`. A verificação do arquivo prova isso lendo o
+   próprio `pg_get_functiondef` — a guarda confere a evidência, não a intenção.
+6. **Grava `data_retention_purge_runs`** a cada execução efetiva, com as contagens **e** as
+   travadas.
 
-    RETURN NEW;
-END;
-$$;
+### 2.7.6 Agendamento (`pg_cron`) — *ponteiro*
 
-COMMENT ON FUNCTION public.enforce_shift_payment_immutability() IS
-    'BEFORE UPDATE em shift_payments. Colunas materiais imutaveis para TODOS os papeis; correcao = '
-    'estorno logico (voided). UNICA excecao: o expurgo de retencao LGPD (purged_at NULL->ts por '
-    'service_role, com prazo vencido e nada alem de note->NULL) — ver '
-    'ADR-20260821-expurgo-de-conteudo-nao-de-linha. O prazo mora em lgpd_retention_interval(): '
-    'a regra de retencao e verificada AQUI, nao so na RPC que a aplica.';
-```
+> **Corpo: `20260821000400_lgpd_retention_purge.sql`, seção 8.** Não reproduzido — ver a regra de
+> normatividade no topo.
 
-```sql
--- =============================================
--- 6. service_terms — CORPO-SUPERSET
---    = corpo de 20260817001100
---      + emenda da ANONIMIZACAO (ddl-aprovado §2.4: ip/ua -> NULL sob anonymized_at NULL->ts)
---      + emenda do EXPURGO (esta migration)
---    Aplicar esta migration ANTES da #1 apagaria a segunda emenda. A assercao de ordem (secao 1)
---    impede isso.
--- =============================================
-CREATE OR REPLACE FUNCTION public.enforce_service_term_immutability()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    -- EMENDA 2026-08-21 (anonimizacao): a transicao de anonimizacao, calculada uma vez.
-    v_anonymizing boolean := (OLD.anonymized_at IS NULL AND NEW.anonymized_at IS NOT NULL);
-BEGIN
-    -- === EMENDA 2026-08-21 (LGPD, expurgo de retencao) ==========================
-    -- NAO reaproveita v_anonymizing: o expurgo atinge CONTA VIVA (o prazo e do DADO —
-    -- ddl-aprovado §2.7.0), e em conta viva anonymized_at e e continua NULL.
-    IF OLD.purged_at IS NULL AND NEW.purged_at IS NOT NULL THEN
-        IF auth.uid() IS NULL
-           AND OLD.retention_hold_reason IS NULL
-           AND coalesce(OLD.accepted_at, OLD.created_at) <= now() - public.lgpd_retention_interval()
-           -- forma do expurgo nesta tabela: telemetria some, term_text vira marcador.
-           -- O VALOR do marcador e da RPC, nao do trigger (nao se duplica texto normativo).
-           AND NEW.accepted_ip IS NULL
-           AND NEW.accepted_user_agent IS NULL
-           AND NEW.term_text IS NOT NULL
-           AND (to_jsonb(NEW) - ARRAY['term_text','accepted_ip','accepted_user_agent','purged_at'])
-               IS NOT DISTINCT FROM
-               (to_jsonb(OLD) - ARRAY['term_text','accepted_ip','accepted_user_agent','purged_at'])
-        THEN
-            RETURN NEW;
-        END IF;
-        RAISE EXCEPTION 'service_terms: expurgo fora da forma permitida (exige service_role, prazo de retencao vencido, ausencia de retention_hold_reason e nenhuma alteracao alem de term_text/accepted_ip/accepted_user_agent).';
-    END IF;
+Normativo **aqui**:
 
-    IF NEW.purged_at IS DISTINCT FROM OLD.purged_at THEN
-        RAISE EXCEPTION 'service_terms: purged_at so pode ser definido pelo expurgo de retencao e depois e imutavel.';
-    END IF;
-
-    -- Trava de litigio: so operacao (service_role) poe e tira. Client nem chega aqui
-    -- (service_terms so tem policy de SELECT) — defesa em profundidade.
-    IF auth.uid() IS NOT NULL
-       AND NEW.retention_hold_reason IS DISTINCT FROM OLD.retention_hold_reason
-    THEN
-        RAISE EXCEPTION 'service_terms: retention_hold_reason e gerida por operacao (service_role).';
-    END IF;
-    -- === FIM DA EMENDA DO EXPURGO ==============================================
-
-    -- === Vínculo e valor: imutáveis SEMPRE ===
-    IF NEW.id               IS DISTINCT FROM OLD.id
-       OR NEW.shift_payment_id IS DISTINCT FROM OLD.shift_payment_id
-       OR NEW.job_id           IS DISTINCT FROM OLD.job_id
-       OR NEW.worker_id        IS DISTINCT FROM OLD.worker_id
-       OR NEW.company_id       IS DISTINCT FROM OLD.company_id
-       OR NEW.amount           IS DISTINCT FROM OLD.amount
-       OR NEW.created_at       IS DISTINCT FROM OLD.created_at
-    THEN
-        RAISE EXCEPTION 'service_terms: vinculo e valor sao imutaveis (shift_payment_id, job_id, worker_id, company_id, amount, created_at).';
-    END IF;
-
-    -- === accepted_at: ONE-WAY (NULL -> timestamp). Nunca altera, nunca limpa. ===
-    IF OLD.accepted_at IS NOT NULL AND NEW.accepted_at IS DISTINCT FROM OLD.accepted_at THEN
-        RAISE EXCEPTION 'service_terms: accepted_at e imutavel apos o aceite.';
-    END IF;
-
-    -- === IP/UA: só podem ser gravados NO aceite; nunca reescritos depois. ===
-    -- EMENDA 2026-08-21 (LGPD): exceção única — a anonimização pode APAGÁ-LOS (levar a NULL).
-    -- Levar a QUALQUER OUTRO VALOR continua proibido: não se falsifica trilha de aceite.
-    IF OLD.accepted_at IS NOT NULL
-       AND (NEW.accepted_ip         IS DISTINCT FROM OLD.accepted_ip
-         OR NEW.accepted_user_agent IS DISTINCT FROM OLD.accepted_user_agent)
-       AND NOT (v_anonymizing
-                AND NEW.accepted_ip IS NULL
-                AND NEW.accepted_user_agent IS NULL)
-    THEN
-        RAISE EXCEPTION 'service_terms: accepted_ip/accepted_user_agent sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD, e apenas para NULL).';
-    END IF;
-
-    -- === anonymized_at: ONE-WAY (NULL -> timestamp). Nunca volta. ===
-    IF OLD.anonymized_at IS NOT NULL AND NEW.anonymized_at IS DISTINCT FROM OLD.anonymized_at THEN
-        RAISE EXCEPTION 'service_terms: anonymized_at e imutavel.';
-    END IF;
-
-    -- === term_text / term_version: livres ENQUANTO rascunho; congelados no aceite. ===
-    -- Única exceção pós-aceite: a anonimização LGPD (NULL -> ts), que é o ato de
-    -- reescrever o texto. Fora dela, um termo aceito não muda mais.
-    IF OLD.accepted_at IS NOT NULL
-       AND (NEW.term_text IS DISTINCT FROM OLD.term_text
-         OR NEW.term_version IS DISTINCT FROM OLD.term_version)
-       AND NOT v_anonymizing
-    THEN
-        RAISE EXCEPTION 'service_terms: term_text/term_version sao imutaveis apos o aceite (unica excecao: anonimizacao LGPD).';
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-COMMENT ON FUNCTION public.enforce_service_term_immutability() IS
-    'BEFORE UPDATE em service_terms. term_text e rascunho enquanto accepted_at IS NULL e CONGELA no '
-    'aceite. Vale para TODOS os papeis (service_role e owner inclusive) — RLS nao cobriria. DUAS '
-    'reescritas pos-aceite, e so elas: (1) anonimizacao LGPD (anonymized_at NULL->ts), que tambem '
-    'apaga accepted_ip/accepted_user_agent; (2) EXPURGO de retencao (purged_at NULL->ts por '
-    'service_role, com prazo de lgpd_retention_interval() vencido e sem retention_hold_reason). '
-    'ADR-20260818 + ADR-20260821-anonimizacao-em-vez-de-exclusao + '
-    'ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
-```
-
-### 2.7.5 SQL — a RPC `purge_expired_personal_data`
-
-```sql
--- =============================================
--- 7. RPC DO EXPURGO
---    SECURITY DEFINER + search_path='' + GRANT EXECUTE SOMENTE a service_role.
---    Idempotente (purged_at IS NULL filtra o que ja foi feito) e em LOTE: reexecutar drena o
---    backlog em dias, sem lock longo. Devolve `outcome` estruturado — nunca levanta excecao em
---    caminho esperado.
---    p_dry_run=true: MESMO predicado, ZERO escrita. E como se confere antes de deixar o cron
---    ativo, e como se responde "quanto tem para expurgar?" sem confiar em contagem no client.
--- =============================================
-CREATE OR REPLACE FUNCTION public.purge_expired_personal_data(
-    p_batch_limit integer DEFAULT 500,
-    p_dry_run     boolean DEFAULT false
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    v_started  timestamptz := clock_timestamp();
-    v_cutoff   timestamptz := now() - public.lgpd_retention_interval();
-    v_limit    integer     := least(greatest(coalesce(p_batch_limit, 500), 1), 5000);
-    v_terms    integer     := 0;
-    v_payments integer     := 0;
-    v_held     integer     := 0;
-    c_purged_term constant text :=
-        '[REGISTRO EXPURGADO — o prazo legal de retencao deste documento venceu e o conteudo '
-        'pessoal (nomes, CPF/CNPJ e demais dados de identificacao) foi eliminado pela Worki, nos '
-        'termos da LGPD (art. 15, I e art. 16). O registro da transacao — valor, data do aceite e '
-        'as partes, em identificadores internos — foi mantido.]';
-BEGIN
-    -- Cinto e suspensorio: nao ha GRANT para authenticated, e o trigger exigiria auth.uid() NULL
-    -- de qualquer forma. Falhar aqui e mais legivel do que falhar la dentro.
-    IF auth.uid() IS NOT NULL THEN
-        RETURN jsonb_build_object('outcome', 'forbidden');
-    END IF;
-
-    -- Quantas linhas VENCIDAS estao travadas por litigio (observabilidade, nao acao).
-    SELECT count(*) INTO v_held
-      FROM public.service_terms st
-     WHERE st.purged_at IS NULL
-       AND st.retention_hold_reason IS NOT NULL
-       AND coalesce(st.accepted_at, st.created_at) <= v_cutoff;
-
-    IF p_dry_run THEN
-        SELECT count(*) INTO v_terms FROM (
-            SELECT 1 FROM public.service_terms st
-             WHERE st.purged_at IS NULL
-               AND st.retention_hold_reason IS NULL
-               AND coalesce(st.accepted_at, st.created_at) <= v_cutoff
-             LIMIT v_limit
-        ) q;
-
-        SELECT count(*) INTO v_payments FROM (
-            SELECT 1 FROM public.shift_payments sp
-             WHERE sp.purged_at IS NULL
-               AND coalesce(sp.paid_at, sp.created_at) <= v_cutoff
-               AND NOT EXISTS (
-                     SELECT 1 FROM public.service_terms st
-                      WHERE st.shift_payment_id = sp.id
-                        AND st.retention_hold_reason IS NOT NULL
-                   )
-             LIMIT v_limit
-        ) q;
-
-        -- Dry-run NAO grava em data_retention_purge_runs: diagnostico nao e operacao de
-        -- tratamento (art. 37). O registro so existe para o que de fato aconteceu.
-        RETURN jsonb_build_object(
-            'outcome', 'dry_run',
-            'cutoff', v_cutoff,
-            'batch_limit', v_limit,
-            'service_terms', v_terms,
-            'shift_payments', v_payments,
-            'service_terms_held', v_held
-        );
-    END IF;
-
-    -- =========================================================
-    -- A PARTIR DAQUI E DESTRUTIVO (de CONTEUDO; nenhuma linha e apagada).
-    -- =========================================================
-
-    -- ---- service_terms: term_text -> marcador; telemetria do aceite -> NULL ----
-    -- SKIP LOCKED: se alguem estiver segurando a linha, ela fica para a proxima execucao.
-    -- O expurgo nao tem pressa e nao pode virar fonte de lock em producao.
-    WITH alvo AS (
-        SELECT st.id
-          FROM public.service_terms st
-         WHERE st.purged_at IS NULL
-           AND st.retention_hold_reason IS NULL
-           AND coalesce(st.accepted_at, st.created_at) <= v_cutoff
-         ORDER BY coalesce(st.accepted_at, st.created_at)
-         LIMIT v_limit
-           FOR UPDATE SKIP LOCKED
-    )
-    UPDATE public.service_terms st
-       SET term_text           = c_purged_term,
-           accepted_ip         = NULL,
-           accepted_user_agent = NULL,
-           purged_at           = now()
-      FROM alvo
-     WHERE st.id = alvo.id;
-    GET DIAGNOSTICS v_terms = ROW_COUNT;
-
-    -- ---- shift_payments: note -> NULL. Valor, datas e partes RETIDOS (BI sobrevive) ----
-    -- Linhas cujo `note` ja e NULL tambem sao marcadas: purged_at e o marcador de conformidade,
-    -- nao de "teve texto". Sem isso o backlog nunca drena e a contagem mente.
-    WITH alvo AS (
-        SELECT sp.id
-          FROM public.shift_payments sp
-         WHERE sp.purged_at IS NULL
-           AND coalesce(sp.paid_at, sp.created_at) <= v_cutoff
-           AND NOT EXISTS (
-                 SELECT 1 FROM public.service_terms st
-                  WHERE st.shift_payment_id = sp.id
-                    AND st.retention_hold_reason IS NOT NULL
-               )
-         ORDER BY coalesce(sp.paid_at, sp.created_at)
-         LIMIT v_limit
-           FOR UPDATE SKIP LOCKED
-    )
-    UPDATE public.shift_payments sp
-       SET note      = NULL,
-           purged_at = now()
-      FROM alvo
-     WHERE sp.id = alvo.id;
-    GET DIAGNOSTICS v_payments = ROW_COUNT;
-
-    INSERT INTO public.data_retention_purge_runs (
-        cutoff, retention_interval, batch_limit,
-        service_terms_purged, shift_payments_purged, service_terms_held, duration_ms
-    ) VALUES (
-        v_cutoff, public.lgpd_retention_interval(), v_limit,
-        v_terms, v_payments, v_held,
-        (extract(epoch FROM clock_timestamp() - v_started) * 1000)::integer
-    );
-
-    RETURN jsonb_build_object(
-        'outcome', 'purged',
-        'cutoff', v_cutoff,
-        'batch_limit', v_limit,
-        'service_terms', v_terms,
-        'shift_payments', v_payments,
-        'service_terms_held', v_held,
-        -- true = ainda ha backlog; a proxima execucao continua de onde esta.
-        'has_more', (v_terms >= v_limit OR v_payments >= v_limit)
-    );
-END;
-$$;
-
-COMMENT ON FUNCTION public.purge_expired_personal_data(integer, boolean) IS
-    'Expurgo de retencao LGPD. UPDATE, nunca DELETE: apaga o CONTEUDO PESSOAL (service_terms.'
-    'term_text -> marcador, accepted_ip/accepted_user_agent -> NULL; shift_payments.note -> NULL) '
-    'e PRESERVA a linha pseudonima (valor, datas, partes) — o BI historico sobrevive. Prazo do '
-    'DADO (paid_at/accepted_at), nao da conta. Pula linhas com service_terms.retention_hold_reason. '
-    'Idempotente e em lote (SKIP LOCKED). p_dry_run=true nao escreve nada. Article 8/9 intactos: '
-    'nenhuma tabela de saldo/razao e lida ou escrita. ADR-20260821-expurgo-de-conteudo-nao-de-linha.';
-
-REVOKE ALL ON FUNCTION public.purge_expired_personal_data(integer, boolean)
-    FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.purge_expired_personal_data(integer, boolean) TO service_role;
-```
-
-### 2.7.6 SQL — agendamento (`pg_cron`)
-
-```sql
--- =============================================
--- 8. AGENDAMENTO — molde de 20260817000800 (F4) e 20260817001300 (F8)
---    pg_cron interpreta o schedule em UTC. '30 3 * * *' = 03:30 UTC = 00:30 BRT — janela de menor
---    trafego. Brasil sem DST desde 2019: offset fixo, nada a manter.
---    cron.schedule(jobname, ...) faz upsert por nome (pg_cron >= 1.4) => reaplicar nao duplica.
---
---    DIFERENCA EM RELACAO A 20260817000800: naquela data pg_cron estava DISPONIVEL mas NAO
---    INSTALADO. Em 21/08/2026 a extensao esta INSTALADA e com job ativo em producao — o ramo
---    ELSE abaixo existe para CI / `supabase db reset`, nao como caminho esperado de producao.
---    Se ele disparar em producao, e incidente: a promessa de 5 anos deixa de ser cumprida por
---    qualquer codigo, em silencio.
--- =============================================
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-        PERFORM cron.schedule(
-            'lgpd-retention-purge',
-            '30 3 * * *',
-            $cron$SELECT public.purge_expired_personal_data(500, false);$cron$
-        );
-    ELSE
-        RAISE WARNING 'pg_cron ausente: o EXPURGO de retencao (LGPD) NAO sera executado. '
-                      'O prazo de 5 anos prometido na Politica de Privacidade fica sem nenhum '
-                      'codigo que o cumpra. Habilite a extensao e reaplique esta migration.';
-    END IF;
-END $$;
-```
+1. **`pg_cron` diário, `'30 3 * * *'` = 03:30 UTC = 00:30 BRT** — janela de menor tráfego. `pg_cron`
+   interpreta o schedule em **UTC**; o Brasil não tem DST desde 2019, logo o offset é fixo e não há
+   nada a manter.
+2. **`cron.schedule(jobname, ...)` faz upsert por nome** (pg_cron >= 1.4), logo reaplicar não
+   duplica job.
+3. **Degrada com `RAISE WARNING`** se a extensão faltar — mesmo molde de `20260817000800` (F4) e
+   `20260817001300` (F8). Diferença em relação àquelas datas: em 21/08/2026 a extensão está
+   **instalada e com job ativo** em produção.
+4. **Sem o agendamento, a promessa de 5 anos não é cumprida por nada** — o cron não é housekeeping,
+   é a feature.
 
 > ⚠️ **O canal de aplicação engole o `WARNING`.** `supabase/migrations/APLICACAO-2026-08-16.md`
 > registra que as migrations deste projeto são aplicadas via **MCP do Supabase**, que não devolve
 > `NOTICE`/`WARNING` do servidor. Silêncio **não** é sucesso: **V6** da seção abaixo é obrigatória,
 > não opcional — é a única confirmação confiável de que o agendamento pegou.
 
-### 2.7.7 SQL — verificação obrigatória e DOWN
+### 2.7.7 Verificação obrigatória e DOWN — *ponteiro*
 
-```sql
--- ============================================================================
--- COMO VERIFICAR (obrigatorio apos aplicar)
--- ----------------------------------------------------------------------------
--- V1. Ordem respeitada: a assercao da secao 1 nao levantou excecao (a migration aplicou).
---
--- V2. O prazo esta num lugar so:
---     SELECT public.lgpd_retention_interval();            -- => 5 years
---     -- e nenhum literal '5 years' fora dela:
---     SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
---      WHERE n.nspname='public' AND pg_get_functiondef(p.oid) ILIKE '%interval ''5 years''%';
---     -- ESPERADO: exatamente 1 linha (lgpd_retention_interval).
---
--- V3. DRY-RUN ANTES DE QUALQUER COISA (o cron ja esta agendado; rode isto no mesmo dia):
---     SELECT public.purge_expired_personal_data(500, true);
---     -- ESPERADO HOJE (piloto, base nova): service_terms=0, shift_payments=0.
---     -- Numero > 0 => PARE e explique antes de deixar o cron rodar.
---
--- V4. O prazo e verificado pelo TRIGGER, nao so pela RPC — tentar expurgar registro NOVO falha
---     (rodar como service_role, DENTRO de transacao com ROLLBACK):
---     BEGIN;
---       UPDATE public.shift_payments SET note=NULL, purged_at=now()
---        WHERE id='<pagamento-recente>';
---     -- ESPERADO: EXCEPTION 'expurgo fora da forma permitida...'
---     ROLLBACK;
---
--- V5. A forma e auto-limitada — tentar carona (mudar `amount` junto) falha:
---     BEGIN;
---       UPDATE public.shift_payments SET note=NULL, purged_at=now(), amount=1
---        WHERE id='<pagamento-vencido>';
---     -- ESPERADO: EXCEPTION 'expurgo fora da forma permitida...'
---     ROLLBACK;
---
--- V6. Job agendado (PASSO DE RUNBOOK OBRIGATORIO — o MCP engole o RAISE WARNING do ELSE):
---     SELECT jobname, schedule, active FROM cron.job WHERE jobname='lgpd-retention-purge';
---     -- ESPERADO: 1 linha, schedule='30 3 * * *', active=t. Se 0 linhas: pg_cron nao estava
---     -- habilitado no momento da aplicacao; habilitar e reaplicar via CLI.
---
--- V7. Trava de litigio funciona (em linha VENCIDA de teste):
---     UPDATE public.service_terms SET retention_hold_reason='teste' WHERE id='<id>';
---     SELECT public.purge_expired_personal_data(500, true);
---     -- ESPERADO: a linha NAO conta em service_terms e conta em service_terms_held.
---
--- V8. Article 8/9: nenhuma tabela de saldo aparece no codigo desta migration:
---     SELECT pg_get_functiondef(p.oid) ILIKE ANY (ARRAY['%wallet%','%escrow%'])
---       FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
---      WHERE n.nspname='public' AND p.proname='purge_expired_personal_data';
---     -- ESPERADO: f
---
--- V9. Prova de conformidade gravada apos a primeira execucao efetiva:
---     SELECT * FROM public.data_retention_purge_runs ORDER BY ran_at DESC LIMIT 5;
---
--- ============================================================================
--- DOWN (rollback — copiar/colar). NAO restaura conteudo ja expurgado: e irreversivel por
--- natureza; por isso o backup do cabecalho e obrigatorio.
--- ----------------------------------------------------------------------------
---   SELECT cron.unschedule('lgpd-retention-purge');
---   DROP FUNCTION IF EXISTS public.purge_expired_personal_data(integer, boolean);
---   -- restaurar o corpo de enforce_shift_payment_immutability de 20260712000000 §4
---   -- restaurar o corpo de enforce_service_term_immutability do ddl-aprovado §2.4 (com a
---   --   emenda da anonimizacao — NAO o de 20260817001100 puro, ou a #1 quebra)
---   DROP TABLE IF EXISTS public.data_retention_purge_runs;
---   ALTER TABLE public.service_terms  DROP COLUMN IF EXISTS purged_at;
---   ALTER TABLE public.service_terms  DROP COLUMN IF EXISTS retention_hold_reason;
---   ALTER TABLE public.shift_payments DROP COLUMN IF EXISTS purged_at;
---   DROP FUNCTION IF EXISTS public.lgpd_retention_interval();  -- por ultimo: os triggers a usam
--- ============================================================================
-```
+> **Corpo: `20260821000400_lgpd_retention_purge.sql`, rodapé** (`COMO VERIFICAR` V1-V9 + `DOWN`).
+> Não reproduzido — ver a regra de normatividade no topo.
+
+Normativo **aqui** é *que a verificação existe e é obrigatória*, e o que ela precisa provar:
+
+| Prova | Por quê |
+|---|---|
+| a asserção de ordem não levantou exceção | a #1 está aplicada; sem ela o corpo-superset se perde |
+| `lgpd_retention_interval()` devolve o prazo **e é o único objeto do schema com o literal** | é o que torna 5->6 uma linha (§2.7.0) |
+| **dry-run antes de qualquer coisa**, no mesmo dia — hoje o esperado é **0 e 0** (base nova) | número > 0 = **PARE e explique** antes de deixar o cron rodar |
+| tentar expurgar registro **recente** falha, rodado em transação com `ROLLBACK` | prova que o **prazo** é verificado pelo trigger, não só pela RPC |
+| tentar **carona** (mudar `amount` junto do expurgo) falha | prova a auto-limitação, condição (5) de §2.7.4 |
+| `cron.job` tem a linha, com o schedule certo e ativa | **passo de runbook obrigatório**: o canal de aplicação engole o `WARNING` do ramo `ELSE` |
+| trava de litígio: linha vencida com `retention_hold_reason` **não** conta no expurgo e **conta** em `*_held` | §2.7.3 |
+| a função **não menciona** `wallet`/`escrow` (lido de `pg_get_functiondef`) | Article 8/9 verificado, não afirmado |
+| `data_retention_purge_runs` tem linha após a primeira execução efetiva | prova de conformidade, art. 37 |
+
+**O `DOWN` restaura os corpos de trigger, e a ordem importa:** `enforce_service_term_immutability`
+volta para o corpo da **migration #1 / §2.4** — **não** para o de `20260817001100` puro, ou a #1
+quebra junto. E `lgpd_retention_interval()` cai **por último**: os triggers a usam. Conteúdo já
+expurgado **não** é restaurado — irreversível por natureza.
 
 ---
 
@@ -1812,257 +843,66 @@ E uma assimetria deliberada, que é produto e não descuido:
 | `pages/MyJobs.tsx:524` e `pages/company/CompanyJobCandidates.tsx:777` | `insert` | Policy de INSERT **não é tocada** | Nenhuma |
 | **F12 (badges)** — `.harness/spec/badges-empresas/ddl-aprovado.md` | RPC própria, SECURITY DEFINER, agrega `reviews` sem devolver linha | **Confirmado: não muda uma linha.** DEFINER ignora a policy nova, e a RPC devolve média e contagem, não conteúdo | Nenhuma |
 
-### 3.3 SQL
+### 3.3 A migration — *ponteiro*
 
-```sql
--- Migration: `reviews` deixa de ser varrível por qualquer conta autenticada (débito pré-piloto #9)
--- File: supabase/migrations/20260821000100_reviews_select_by_relationship.sql
--- ADR: .harness/memory-bank/decisions/ADR-20260821-reviews-por-vinculo.md
--- DDL aprovado (FONTE NORMATIVA): .harness/spec/lgpd-producao/ddl-aprovado.md
--- Molde: 20260816120000 (workers por vínculo) + 20260816130000 (get_profile_reviews).
---
--- PROBLEMA (produção, pré-existente):
---   `reviews` é USING (true) desde 20260309000000:109. Qualquer conta autenticada, sem vínculo
---   nenhum, lê todas as avaliações de qualquer freela e resolve o nome da empresa avaliadora por
---   `reviewer_id` contra `companies` (também USING (true)). pages/company/WorkerPublicProfile.tsx
---   já renderiza exatamente isso.
---   E a RPC get_profile_reviews (SECURITY DEFINER) exige apenas auth.uid() IS NOT NULL — fechar
---   só a tabela deixaria a MESMA leitura aberta pela porta da RPC. As duas metades andam juntas.
---
--- NÃO TOCA SALDO/ESCROW (Article 8). Só leitura.
--- NÃO altera a policy de INSERT de `reviews` nem a de `companies` — ver débitos novos #10 e #11.
--- Risk: MEDIUM (muda leitura de tabela consumida por 4 telas). Reversível em 1 comando.
--- Backup required before production deploy: NO.
+> **Corpo: `supabase/migrations/20260821000100_reviews_select_by_relationship.sql`.** Não
+> reproduzido — ver a regra de normatividade no topo.
 
--- =============================================
--- 1. CAST SEGURO — reviews.reviewer_id / reviewed_id são TEXT (schema legado, 20260314000008)
---    `::uuid` puro em policy é bomba: uma linha com texto não-uuid derruba o SELECT inteiro com
---    22P02, e o conteúdo de reviewed_id é escolhido pelo atacante no INSERT.
--- =============================================
-CREATE OR REPLACE FUNCTION public.try_uuid(p_text text)
-RETURNS uuid
-LANGUAGE sql
-IMMUTABLE
-SET search_path = ''
-AS $$
-    SELECT CASE
-        WHEN p_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN p_text::uuid
-    END;
-$$;
+#### ⚠️ Este era o bloco mais perigoso dos três, e por um motivo específico
 
-COMMENT ON FUNCTION public.try_uuid(text) IS
-    'Cast text->uuid que devolve NULL em vez de 22P02. Existe porque reviews.reviewer_id/reviewed_id '
-    'sao TEXT (schema legado) e sao usados dentro de policy: um valor invalido derrubaria o SELECT '
-    'inteiro da tabela.';
+**Esta migration já está APLICADA em produção** (verificada contra o catálogo em 21/08/2026: hoje
+`reviews` tem **uma única** policy de `SELECT`). Um bloco de SQL num contrato descrevendo algo que
+**já está no banco** não é especificação: é um rascunho pré-aplicação com aparência de
+especificação — o pior dos dois mundos, porque não manda em nada e ainda assim é lido como se
+mandasse.
 
-REVOKE EXECUTE ON FUNCTION public.try_uuid(text) FROM PUBLIC, anon;
-GRANT  EXECUTE ON FUNCTION public.try_uuid(text) TO authenticated, service_role;
+E ele **estava errado sobre produção em dois pontos**, exatamente os dois que fizeram a aplicação
+precisar de **duas tentativas**:
 
--- =============================================
--- 2. ÍNDICE DE SUPORTE — a policy filtra por autor.
---    (reviewed_id, direction) já existe: idx_reviews_reviewed_direction (20260816130000).
---    Sem CONCURRENTLY: migration do Supabase roda em transação.
--- =============================================
-CREATE INDEX IF NOT EXISTS idx_reviews_reviewer ON public.reviews (reviewer_id);
+1. Declarava `reviews.reviewer_id` / `reviewed_id` como **`text`** (herdado da migration legada
+   `20260314000008`). **São `uuid` em produção.**
+2. O `DROP POLICY` mirava **três nomes que não existiam**. O nome real da policy permissiva era
+   `"Public view reviews"` — e `DROP POLICY IF EXISTS` de nome inexistente **não falha, passa em
+   silêncio**. Como policies de `SELECT` são combinadas por `OR`, a policy restritiva **não
+   restringia nada** enquanto a permissiva sobrevivia: a dívida #9 apareceria como paga com o buraco
+   aberto.
 
--- =============================================
--- 3. FUNÇÃO DE VISIBILIDADE
---    Retorna APENAS boolean; nunca devolve dado.
---    GRAFO DE POLICY (checagem de 42P17, que só aparece em RUNTIME):
---      reviews -> can_view_reviews_of (DEFINER: lê companies/workers como owner, sem RLS)
---                  -> can_view_worker_profile (DEFINER, 20260816120000)
---                       -> team_connections / applications / jobs / companies
---      Nenhuma dessas tabelas tem policy que referencie `reviews`. Grafo ACÍCLICO.
---      ⚠️ Se um dia alguma policy de team_connections/applications/jobs/companies passar a ler
---         `reviews`, ESTE é o ponto que fecha o ciclo. Registrar em ADR ao fazer.
--- =============================================
-CREATE OR REPLACE FUNCTION public.can_view_reviews_of(p_reviewed_id text)
-RETURNS boolean
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    v_uid uuid := (SELECT auth.uid());
-    v_id  uuid := public.try_uuid(p_reviewed_id);
-BEGIN
-    IF v_uid IS NULL OR v_id IS NULL THEN
-        RETURN false;
-    END IF;
+Os dois achados foram corrigidos **no arquivo**, que hoje carrega os comentários de verificação
+pós-aplicação. Manter aqui a versão anterior seria conservar, sob etiqueta de "fonte normativa",
+justamente o texto que produziu o erro.
 
-    -- (0) o dono do perfil avaliado (caso canônico: companies.id = workers.id = auth.uid()).
-    IF v_id = v_uid THEN
-        RETURN true;
-    END IF;
+**Decisão: ponteiro, não registro histórico.** Registro histórico se guarda quando o passado é
+informativo; aqui ele é um contra-exemplo **já absorvido** — a lição sobreviveu (é o parágrafo
+acima), o SQL errado não precisa sobreviver junto. Quem quiser o texto original tem `git log` do
+arquivo.
 
-    -- (1) perfil avaliado é uma EMPRESA que eu opero. Ancoragem DUPLA — mesma regra de
-    --     is_company_owner / is_job_owner (ADR-20260817-seam-autorizacao-empresa).
-    IF EXISTS (
-        SELECT 1 FROM public.companies c
-        WHERE c.id = v_id AND (c.id = v_uid OR c.owner_id = v_uid)
-    ) THEN
-        RETURN true;
-    END IF;
+**E uma advertência que vale para as três migrations:** para migration **já aplicada**, nem este
+documento nem o `.sql` são fonte de verdade sobre o **estado do banco** — só o catálogo é
+(`pg_policies`, `pg_proc`, `information_schema`). Esta migration é a prova: repositório e banco
+discordaram em dois pontos, e quem tinha razão era o banco.
 
-    -- (2) perfil avaliado é um FREELA que eu já posso ver (elenco pending/accepted OU vínculo
-    --     operacional via applications). Reusa a régua de 20260816120000 — uma decisão só, num
-    --     lugar só. Quando a autorização de empresa mudar (F3 multi-unidade), muda lá e vale aqui.
-    IF EXISTS (SELECT 1 FROM public.workers w WHERE w.id = v_id)
-       AND public.can_view_worker_profile(v_id) THEN
-        RETURN true;
-    END IF;
+#### O que é normativo aqui (a decisão, não a escrita)
 
-    RETURN false;
-END;
-$$;
+As **duas metades obrigatórias** de §3.1, mais o que as sustenta:
 
-COMMENT ON FUNCTION public.can_view_reviews_of(text) IS
-    'Decide se auth.uid() pode ler as avaliacoes RECEBIDAS por um perfil. Retorna so boolean. '
-    'Empresa que eu opero (ancoragem dupla) OU freela que eu ja posso ver (can_view_worker_profile, '
-    '20260816120000). NAO concede leitura de avaliacoes de EMPRESA a terceiros — esse caminho e a '
-    'RPC get_profile_reviews, que serve a prova social do perfil publico /empresa/:id.';
-
-REVOKE EXECUTE ON FUNCTION public.can_view_reviews_of(text) FROM PUBLIC, anon;
-GRANT  EXECUTE ON FUNCTION public.can_view_reviews_of(text) TO authenticated, service_role;
-
--- =============================================
--- 4. POLICY DE SELECT
---    Policies permissivas são OR'd: enquanto a `USING (true)` existir, nada muda. DROP primeiro.
--- =============================================
-DROP POLICY IF EXISTS "Authenticated users can view reviews" ON public.reviews;
-DROP POLICY IF EXISTS "Anyone authenticated can view reviews" ON public.reviews;
-DROP POLICY IF EXISTS "reviews_select_related" ON public.reviews;
-
-CREATE POLICY "reviews_select_related" ON public.reviews
-    FOR SELECT TO authenticated
-    USING (
-        -- (1) sou o AUTOR (MyJobs: "quais turnos eu já avaliei")
-        reviews.reviewer_id = ((SELECT auth.uid()))::text
-        -- (2) sou o AVALIADO
-        OR reviews.reviewed_id = ((SELECT auth.uid()))::text
-        -- (3) tenho vínculo com o perfil avaliado
-        OR public.can_view_reviews_of(reviews.reviewed_id)
-    );
-
--- GRANTS: reafirmação defensiva. NUNCA `REVOKE ALL ... FROM PUBLIC` em TABELA
--- (lição de 20260318000000: derrubou o service_role). Revogar de anon é o padrão do projeto.
-REVOKE ALL ON public.reviews FROM anon;
-GRANT SELECT, INSERT ON public.reviews TO authenticated;
-GRANT ALL ON public.reviews TO service_role;
-
--- =============================================
--- 5. FECHAR A OUTRA PORTA — gate de vínculo dentro de get_profile_reviews
---    Reproduz 20260816130000 na íntegra; delta ÚNICO marcado como EMENDA 2026-08-21.
---    Sem isto, a policy acima é teatro: a RPC é DEFINER e devolve o mesmo conteúdo.
--- =============================================
-CREATE OR REPLACE FUNCTION public.get_profile_reviews(
-    p_reviewed_id text,
-    p_direction   text
-)
-RETURNS TABLE (
-    review_id     text,
-    rating        numeric,
-    comment       text,
-    created_at    text,
-    reviewer_id   text,
-    reviewer_name text
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-    SELECT
-        r.id::text,
-        r.rating::numeric,
-        r.comment::text,
-        -- ISO 8601 explícito em UTC (parser estrito do Safari rejeita o formato nativo).
-        to_char(r.created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
-        r.reviewer_id::text,
-        (CASE
-            -- Avaliador é EMPRESA: nome comercial, sem mascaramento.
-            WHEN p_direction = 'worker' THEN (
-                SELECT c.name::text
-                FROM public.companies c
-                WHERE c.id::text = r.reviewer_id::text
-            )
-            -- Avaliador é FREELA (pessoa física): completo só para o dono do perfil avaliado.
-            ELSE (
-                SELECT CASE
-                    WHEN (
-                        p_reviewed_id = auth.uid()::text
-                        OR EXISTS (
-                            SELECT 1 FROM public.companies co
-                            WHERE co.id::text = p_reviewed_id
-                              AND co.owner_id = auth.uid()
-                        )
-                    ) THEN nullif(btrim(coalesce(w.full_name, '')), '')::text
-                    ELSE public.mask_display_name(w.full_name)
-                END
-                FROM public.workers w
-                WHERE w.id::text = r.reviewer_id::text
-            )
-        END)::text
-    FROM public.reviews r
-    WHERE auth.uid() IS NOT NULL
-      AND p_reviewed_id IS NOT NULL
-      AND p_direction IN ('worker', 'company')
-      -- EMENDA 2026-08-21 (débito #9): a RPC é DEFINER e era a MESMA varredura que a policy
-      -- USING(true) permitia. Gate por direção:
-      --   'company' = perfil de EMPRESA avaliada -> ABERTO a qualquer autenticado. É a prova
-      --               social do perfil público /empresa/:id (o freela decide antes de aceitar
-      --               convite). Os avaliadores freelas já saem mascarados ("Carlos S.").
-      --   'worker'  = perfil de FREELA avaliado -> exige vínculo, mesma régua de
-      --               can_view_worker_profile (20260816120000). Sem vínculo: ZERO linhas,
-      --               sem erro (degrada como lista vazia, não como falha).
-      AND (
-            p_direction = 'company'
-         OR public.can_view_worker_profile(public.try_uuid(p_reviewed_id))
-      )
-      AND r.reviewed_id::text = p_reviewed_id
-      AND r.direction::text = p_direction
-    ORDER BY r.created_at DESC;
-$$;
-
-COMMENT ON FUNCTION public.get_profile_reviews(text, text) IS
-    'Avaliacoes recebidas por um perfil, ja com o nome de exibicao do avaliador. Deriva os '
-    'avaliadores da propria tabela reviews (nao aceita lista de ids do caller) — nao e oraculo de '
-    'enumeracao de nomes. Freela avaliador aparece mascarado ("Carlos S.") para terceiros e '
-    'completo so para o dono do perfil avaliado. GATE POR DIRECAO (2026-08-21): p_direction='
-    '''company'' (perfil de empresa) e ABERTO a qualquer autenticado — prova social deliberada do '
-    'perfil publico /empresa/:id; p_direction=''worker'' (perfil de freela) EXIGE '
-    'can_view_worker_profile. Existe porque a policy workers_select_self_or_related impede o freela '
-    'de ler a linha de outro freela.';
-
-REVOKE EXECUTE ON FUNCTION public.get_profile_reviews(text, text) FROM PUBLIC, anon;
-GRANT  EXECUTE ON FUNCTION public.get_profile_reviews(text, text) TO authenticated, service_role;
-
--- ============================================================================
--- COMO VERIFICAR (obrigatório após aplicar)
--- ----------------------------------------------------------------------------
--- V1. Conta nova, sem vínculo nenhum (criar na hora):
---       GET /rest/v1/reviews?select=*                          ⇒ [] (antes: base inteira)
---       rpc get_profile_reviews(<freela alheio>, 'worker')     ⇒ []
---       rpc get_profile_reviews(<empresa qualquer>, 'company') ⇒ lista com nomes MASCARADOS
--- V2. Freela dono: rpc(<meu id>, 'worker') ⇒ minhas avaliações, nome da empresa inteiro.
--- V3. Empresa COM vínculo: /company/workers/:id continua mostrando avaliações e nome da empresa.
--- V4. Empresa SEM vínculo com aquele freela: mesma URL ⇒ lista vazia (não erro).
--- V5. /empresa/:id aberto por freela sem vínculo ⇒ avaliações continuam aparecendo (R2 preservada).
--- V6. MyJobs: o botão "Avaliar" continua sumindo nos turnos já avaliados.
--- V7. F12 (badges), quando existir: RPC própria, resultado idêntico antes e depois.
---
--- DOWN (rollback — copiar/colar):
---   DROP POLICY IF EXISTS "reviews_select_related" ON public.reviews;
---   CREATE POLICY "Authenticated users can view reviews" ON public.reviews
---       FOR SELECT TO authenticated USING (true);
---   -- e restaurar o corpo de get_profile_reviews de 20260816130000 (sem o bloco EMENDA).
---   DROP FUNCTION IF EXISTS public.can_view_reviews_of(text);
---   DROP FUNCTION IF EXISTS public.try_uuid(text);
---   DROP INDEX IF EXISTS public.idx_reviews_reviewer;
--- ============================================================================
-```
+1. **`try_uuid(text)`** — cast que devolve `NULL` em vez de erro `22P02`. Existe por causa do
+   **parâmetro `text`** de `get_profile_reviews` (o client passa string), **não** por causa do tipo
+   das colunas. `::uuid` puro em policy é bomba: uma linha não-uuid derruba o `SELECT` inteiro, e o
+   conteúdo de `reviewed_id` é escolhido por quem faz o `INSERT`.
+2. **Índice de suporte por autor** (`reviews.reviewer_id`) — a policy filtra por ele.
+   `(reviewed_id, direction)` já existe desde `20260816130000`.
+3. **`can_view_reviews_of(uuid)`** — a função de visibilidade, com a assimetria deliberada da tabela
+   de §3.1: `'company'` aberta a qualquer autenticado (prova social de `/empresa/:id`), `'worker'`
+   pela mesma régua de `can_view_worker_profile`.
+4. **Policy `reviews_select_related`**, três ramos: sou o **autor**, sou o **avaliado**, ou tenho
+   **vínculo** com o perfil avaliado. **`DROP` da permissiva primeiro** — policies permissivas são
+   combinadas por `OR`, e enquanto a `USING (true)` existir a restritiva não restringe nada.
+   **Conferir `pg_policies` DEPOIS de aplicar** é parte da entrega, não zelo extra.
+5. **Gate de vínculo DENTRO de `get_profile_reviews`** — fechar só a tabela deixaria a mesma leitura
+   aberta pela porta da RPC (`SECURITY DEFINER` ignora a policy). As duas metades andam juntas.
+6. **`GRANT`s:** revogar de `anon` na tabela; **nunca `REVOKE ALL ... FROM PUBLIC` em TABELA** —
+   lição de `20260318000000`, que derrubou o `service_role`. A policy de **`INSERT`** de `reviews`
+   **não é tocada** (dívida #11); a de `companies` também não (dívida #10).
 
 ---
 
@@ -2176,7 +1016,8 @@ matar — reintroduzido pela recomendação do próprio ADR.
 
 Regra que fica: **o corpo de `anonymize_account` tem um único dono, a migration que o define.**
 Fronteira com feature futura se resolve com `to_regclass` (execução dinâmica, no-op enquanto a
-tabela não existir), não com reescrita da função a partir de outra leva. Implementado assim:
+tabela não existir), não com reescrita da função a partir de outra leva. Implementado assim — **ilustração
+não-normativa**; o corpo está em `20260821000000`, seção 5:
 
 ```sql
 -- em anonymize_account, ANTES do not_found (guardado por to_regclass — a tabela pode não existir):
@@ -2250,9 +1091,9 @@ de identidade que o titular pediu para eliminar).
 | J3 | **Purga de `invited_email` de terceiro quando a EMPRESA sai** | Que o e-mail do gerente (terceiro que **continua** na plataforma) perca a base legal junto com a unidade que o convidou. Assumimos que sim. | Manter o e-mail exigiria base própria e um aviso a esse terceiro — nenhum dos dois existe hoje. |
 | J4 | **Texto da Política de Privacidade** (§6.1) | Precisa passar a mencionar que o vínculo de operação (gerente/sócio) é **retido de forma pseudônima** após a exclusão. O texto vigente só fala de `shift_payments`/`service_terms`. | Reescrita de §6.1 antes de a rotina ir a público. |
 
-| ~~Hh4~~ | ~~**Conferir o `CHECK` de `jobs.scope` e `applications.invitation_response`**~~ — **FECHADO em 22/08/2026.** | Conferido em `pg_constraint`, e o resultado foi mais amplo que a pergunta: `applications.invitation_response` **tem** `CHECK` fechado (`NULL|'accepted'|'declined'`) e foi **promovida** para `v_enum_text` — a asserção **(b3)** passa a vigiá-la. `jobs.scope` **não tem**, e mais **cinco** da mesma família também não (`jobs.status`, `type`, `category`, `budget_type`, `applications.status`). Reclassificadas com a justificativa correta — "constantes do cliente, sem enforcement no banco" — em §5.3. |
-| Hh5 | **Propor `CHECK` de conjunto fechado para as seis colunas sem enforcement**, em leva própria. | Fora do escopo da LGPD: eliminaria a classe de evidência fraca inteira, mas adicionar `CHECK` em `jobs.status` **vivo** exige varrer os valores existentes antes — migration com risco próprio, e uma linha divergente aborta o `ALTER`. Subconjunto barato para começar: `scope`, `type` e `budget_type`, que **ninguém digita** (constantes literais no código). Quando os `CHECK`s existirem, as colunas promovem para `v_enum_text` e a `(b3)` passa a verificá-las sozinha. |
-| ~~Hh6~~ | ~~**Varredura completa "toda coluna `text` de tabela retida × tem `CHECK` fechado?"**~~ — **FECHADO em 22/08/2026.** | 27 linhas para **25 colunas textuais distintas** nas cinco tabelas; **nenhuma ficou sem classificação possível**. Resultado: **8 promovidas** à classe forte (`applications.invitation_response`, `shift_calls.reason/status/origin`, `shift_call_targets.origin/response`, `shift_attendance_confirmations.source/response`) — inclusive as três de `shift_calls` que estavam rebaixadas por disciplina, e cujos `CHECK`s no catálogo vieram **idênticos** ao que o repositório declarava. **E um achado que quase inverteu uma decisão desta mesma leva:** `jobs.certification_requirement` **tem `check_def` não-nulo** — `CHECK (… char_length(certification_requirement) <= 200)`. Uma regra de promoção do tipo *"tem `CHECK` ⇒ classe forte"* a teria promovido e **tirado da redação**, em silêncio, justo a coluna de texto livre que esta rodada mandou redigir. **`CHECK` de comprimento não é evidência de conjunto fechado: limita o tamanho da prosa, não o fato de ser prosa.** A asserção **(b3)** foi apertada para exigir a forma `<coluna> = ANY (ARRAY[…])` **adjacente ao nome da coluna** — o que também impede carona em `CHECK` composto (`foo = 'x' AND bar = ANY(…)`) e resolve, via `EXISTS`, as colunas que participam de **mais de um** `CHECK` (as de coerência simplesmente não casam). Ensaio de regressão em **V22**. |
+| ~~Hh4~~ | ~~**Conferir o `CHECK` de `jobs.scope` e `applications.invitation_response`**~~ — **FECHADO em 22/08/2026.** | Conferido em `pg_constraint`, e o resultado foi mais amplo que a pergunta: `applications.invitation_response` **tem** `CHECK` fechado (`NULL|'accepted'|'declined'`) e foi **promovida** para `v_enum_text` — a asserção **(b3)** passa a vigiá-la. `jobs.scope` **não tem**, e mais **cinco** da mesma família também não (`jobs.status`, `type`, `category`, `budget_type`, `applications.status`). Reclassificadas com a justificativa correta — "constantes do cliente, sem enforcement no banco" — em §5.3. **Desfecho (Hh5, 22/08):** três das cinco (`jobs.status`, `budget_type`, `applications.status`) ganharam `CHECK` em produção e promoveram; `jobs.scope`, `type` e `category` ficam na classe fraca **em definitivo**, por serem taxonomia aberta com valores órfãos — ver §5.3. |
+| ~~Hh5~~ | ~~**Propor `CHECK` de conjunto fechado para as seis colunas sem enforcement**, em leva própria.~~ — **FECHADO em 22/08/2026: três ganharam `CHECK`, duas foram recusadas com evidência, uma segue por decisão.** | **Aplicado em produção** (`20260822000400_checks_enum_jobs_applications.sql`): `jobs.status` (`open\|paused\|deleted`), `jobs.budget_type` (`hourly\|daily\|project`) e `applications.status` (13 valores). As três **promovem** de `v_retained_text` para `v_enum_text` e passam a ser vigiadas pela **(b3)** — derrubar o `CHECK` vira **HALT** em vez de mentira silenciosa. **O subconjunto que este item sugeria como "barato" estava errado, e o levantamento provou:** propunha começar por `scope`, `type` e `budget_type` "que ninguém digita" — mas `scope` e `type` têm **valores órfãos em produção** (`'full-time'`, `'hybrid'`) sem nenhuma origem no repositório, e o round-trip de edição de `CompanyCreateJob.tsx` faria um `CHECK` incompleto **quebrar a edição de toda linha legada**. As duas ficam na classe fraca **em definitivo** — taxonomia aberta, como `jobs.category` — e §5.3 passa a dizer isso em vez de tratá-las como pendência. **Ação pendente, e ela é no ARQUIVO:** mover `jobs.status`, `jobs.budget_type` e `applications.status` de `v_retained_text` para `v_enum_text` na seção 1 de `20260821000000` (ainda não aplicada ⇒ edição de arquivo, não migration nova). A decisão é deste documento; a escrita é do `.sql` — regra de normatividade no topo. |
+| ~~Hh6~~ | ~~**Varredura completa "toda coluna `text` de tabela retida × tem `CHECK` fechado?"**~~ — **FECHADO em 22/08/2026.** | 27 linhas para **25 colunas textuais distintas** nas cinco tabelas; **nenhuma ficou sem classificação possível**. Resultado: **8 promovidas** à classe forte (`applications.invitation_response`, `shift_calls.reason/status/origin`, `shift_call_targets.origin/response`, `shift_attendance_confirmations.source/response`) — inclusive as três de `shift_calls` que estavam rebaixadas por disciplina, e cujos `CHECK`s no catálogo vieram **idênticos** ao que o repositório declarava. **E um achado que quase inverteu uma decisão desta mesma leva:** `jobs.certification_requirement` **tem `check_def` não-nulo** — `CHECK (… char_length(certification_requirement) <= 200)` *(ilustração não-normativa)*. Uma regra de promoção do tipo *"tem `CHECK` ⇒ classe forte"* a teria promovido e **tirado da redação**, em silêncio, justo a coluna de texto livre que esta rodada mandou redigir. **`CHECK` de comprimento não é evidência de conjunto fechado: limita o tamanho da prosa, não o fato de ser prosa.** A asserção **(b3)** foi apertada para exigir a forma `<coluna> = ANY (ARRAY[…])` **adjacente ao nome da coluna** — o que também impede carona em `CHECK` composto (`foo = 'x' AND bar = ANY(…)`) e resolve, via `EXISTS`, as colunas que participam de **mais de um** `CHECK` (as de coerência simplesmente não casam). Ensaio de regressão em **V22**. |
 
 | J5 | **Token de cartão retido no Asaas após a exclusão** *(emenda 2026-08-22)* | Duas perguntas, nesta ordem. **(a) Técnica, para o Asaas:** existe revogação de `creditCardToken` avulso? A resposta muda tudo o que vem depois, e não é nossa — é da referência completa da API ou do suporte. **(b) De owner + jurídico, se (a) for "não":** aceitar **remover o cliente no Asaas** na exclusão (escopo maior: afeta cobranças e histórico daquele cliente) **ou** declarar a retenção na Política de Privacidade e mantê-la. Não é escolha de engenharia: uma opção mexe no contrato financeiro, a outra no que o produto promete ao titular. | Se o parecer for "não pode reter": a exclusão passa a depender de uma chamada ao Asaas que **pode falhar**, e o contrato precisa decidir se essa falha **bloqueia** a exclusão (e o titular fica preso ao gateway) ou apenas registra incidente. Hoje nada disso existe. |
 
@@ -2271,14 +1112,21 @@ de identidade que o titular pediu para eliminar).
 | `companies` continua `USING (true)` com `cnpj`, `email` e `address` legíveis por qualquer autenticado. | **Débito NOVO (#10)** — mesma classe do #9, descoberto neste gate. Não entra aqui porque `/empresa/:id` e `CompanyProfile` dependem dessa policy e o fecho correto é column-scoped (RPC `get_company_public_profile` + policy restrita), o que é spec própria. |
 | A policy de INSERT de `reviews` é `WITH CHECK (reviewer_id = auth.uid())` — não exige turno concluído. | Qualquer conta pode inventar avaliação sobre qualquer id. Fora do escopo deste débito: **#11**. |
 | `jobs.title` e `jobs.location` da empresa excluída **sobrevivem** e podem conter dado pessoal ("Casa da Dona Maria, Rua X"). *(emenda 2026-08-22)* | Decisão escrita em §2.1, não omissão: os dois são o **registro da contraparte** sobre uma transação encerrada — o freela, que continua na plataforma, os lê no recibo — e ambos já estão **congelados** dentro de `service_terms.term_text` **aceito**, que é RETIDO INTEGRALMENTE como prova (art. 16, I). Apagar em `jobs` **não elimina** a informação e degrada dado de terceiro. Mesma classe de `reviews.comment`: remoção específica = atendimento manual. **Peso real, conferido em 22/08:** 16 turnos, **13 `location` distintos, endereços de verdade** — não é hipótese, é o dado que fica. O que sustenta a decisão continua sendo que apagar aqui **não elimina** a informação (ela está congelada no `term_text` aceito, retido como prova) e degrada o recibo de um terceiro. |
-| **Toda a classe de evidência fraca vive em `jobs`/`applications`** — `jobs.scope`, `status`, `type`, `category`, `budget_type`, `work_start_time`, `work_end_time` e `applications.status` não têm `CHECK` nenhum (varredura completa de 22/08; `title` e `location` também não, mas essas são retidas por **decisão escrita**). *(revisão 2026-08-22)* | Chamá-las de "enum" era **impreciso**, e a imprecisão importa: o que as mantém com cara de enum é **código de frontend** — `CompanyCreateJob.tsx` grava `'on-site'`, `'freelance'` e `'daily'` como **constantes literais** e `category` vem de seleção validada. O **Article 4 da constitution** diz exatamente que filtro no client é só UX e que a defesa dura é o banco: a classificação de todas elas repousa na camada que a constitution declara **não ser garantia**. Um `PATCH` direto via PostgREST (a empresa dona do turno passa na policy de UPDATE) escreve texto livre nelas **hoje**, e esse texto sobreviveria à exclusão da conta. A frase honesta não é "são enums", é **"são constantes do cliente, sem enforcement no banco"** — que envelhece de outro jeito. **Não são redigidas:** `status` é máquina de estados (todo consumidor faz `.neq('status','deleted')`) e as outras sustentam filtro e BI; redigir quebraria o produto para fechar uma via de abuso auto-infligida. **Fecho correto:** `CHECK`s numa leva própria — §5.5 Hh5. **O contraste que fecha o argumento:** as **oito** colunas das tabelas-evento e de `shift_calls`/`applications.invitation_response` **têm** `CHECK` de conjunto fechado e por isso subiram para a classe forte; a fronteira entre as duas classes não é o nome nem o tamanho do valor, é **quem garante** — o banco ou o `CompanyCreateJob.tsx`. |
+| ~~**Toda a classe de evidência fraca vive em `jobs`/`applications`**~~ — **REDUZIDA em 22/08/2026 pelo fechamento de Hh5.** Três das oito colunas saíram do risco: `jobs.status`, `jobs.budget_type` e `applications.status` ganharam `CHECK` de conjunto fechado **aplicado em produção** (`20260822000400_checks_enum_jobs_applications.sql`) e **promoveram** para a classe forte, sob vigilância da asserção **(b3)**. | O argumento que este risco fazia era o do **Article 4**: o que mantinha essas colunas com cara de enum era `CompanyCreateJob.tsx`, e a constitution diz que filtro no client é só UX. Agora, para as três, **quem garante é o banco** — um `PATCH` direto via PostgREST não escreve mais texto livre nelas, e se alguém derrubar o `CHECK` a migration **HALTa** em vez de mentir. É a diferença entre "hoje só tem esses valores" e "o banco não aceita outro". **Ação pendente no arquivo, não neste documento:** mover os três nomes de `v_retained_text` para `v_enum_text` na seção 1 de `20260821000000_lgpd_account_anonymization.sql` (a migration ainda não foi aplicada, então é edição de arquivo, não migration nova). Ver o item no topo de §2.2. |
+| **O que sobra da classe fraca é DEFINITIVO, não pendência:** `jobs.scope`, `jobs.type`, `jobs.category`, `jobs.work_start_time`, `jobs.work_end_time`. Continuam sem `CHECK`, continuam **retidas** e continuam **não redigidas**. *(revisão 2026-08-22, fechamento de Hh5)* | **`scope` e `type` não ganharam `CHECK` e não vão ganhar — e a razão é um achado, não uma omissão.** Produção tem valores **órfãos** nas duas — `'full-time'` e `'hybrid'` — que **não aparecem em nenhuma linha do repositório**: nem viva, nem morta, nem em teste, nem em `backend_legacy/`, nem em `frontend-angular-backup/`. Foram gravados por uma UI que não existe mais no git. E `CompanyCreateJob.tsx` faz **round-trip na edição** (lê a linha e regrava os mesmos campos), então um `CHECK` que omitisse os órfãos quebraria "editar turno" em **toda linha legada** — falha em produção, no gesto mais banal do produto. Como **não há como provar que esses são os únicos órfãos**, e como as duas colunas não têm UI, união de tipo nem seletor, a classificação honesta é **taxonomia aberta — mesma cara de `jobs.category`**, e não "enum ainda sem `CHECK`". `work_start_time`/`work_end_time` são formato `'HH:MM'` do client, mesma classe. **Nada disso é redigido:** sustentam filtro, horário e BI, e redigir quebraria o produto para fechar uma via de abuso auto-infligida (a empresa dona do turno já passa na policy de UPDATE). O risco residual que **fica** é este, escrito na forma honesta: **são constantes do cliente, sem enforcement no banco**, e o que a empresa escrever nelas por `PATCH` direto sobrevive à exclusão da conta. |
+| **Bug de produto achado de passagem no levantamento de Hh5 — já corrigido e no build.** O payload de `CompanyCreateJob` mandava `status: 'open'` **fixo** e era **compartilhado por criação e edição**: editar um turno **pausado o reabria**, e editar um **deletado o ressuscitava** — sem nada na tela dizendo isso. Corrigido: `status` só vai no INSERT. *(22/08/2026)* | **Registrado aqui porque toca a fundação deste contrato, não porque é bug de UI.** O soft-delete `jobs.status='deleted'` é **load-bearing** para a LGPD: §2.1 redige `briefing`/`description`/`requirements`/`certification_requirement` mas **retém a linha**, e todo consumidor confia em `.neq('status','deleted')`. Um caminho que ressuscita linha deletada por acidente é uma via de retorno para conteúdo que a operação já tinha tirado de circulação. **E é a demonstração empírica do argumento do Article 4 na linha acima:** a máquina de estados vivia numa constante literal de um payload de frontend compartilhado entre dois gestos — e o `CHECK` novo em `jobs.status`, sozinho, **não** teria pego este bug (`'open'` é valor válido). Guarda de client e guarda de banco fecham buracos diferentes; nenhuma das duas dispensa a outra. |
 | Turno **futuro** de uma empresa excluída fica com `briefing`/`description` redigidos e a empresa como lápide. *(emenda 2026-08-22)* | Consequência esperada da lápide, não da redação: a empresa deixou de existir e o turno está morto de qualquer modo (ninguém opera lápide). O freela já contratado é avisado pelo caminho normal de cancelamento se a empresa cancelar antes; se não cancelar, o turno apenas não acontece. Fechar isso exigiria soft-delete em massa dos turnos futuros na exclusão — decisão de produto, não de LGPD, e fora do escopo desta leva. |
 
 ### 5.5 Vai ao humano (revisão 2026-08-22 — não bloqueia a aplicação, bloqueia o "está fechado")
 
+> **Estado em 22/08/2026 (fim do dia): Hh1, Hh2, Hh4, Hh5 e Hh6 fechadas.** Sobram **Hh3**
+> (bloqueio técnico já conhecido: a #1 não vai sozinha) e **uma ação de arquivo** herdada de Hh5 —
+> mover três colunas de `v_retained_text` para `v_enum_text` em `20260821000000` (§2.2.1). Essa
+> ação **não** vai ao humano: é edição mecânica de arquivo não aplicado, com a decisão já escrita.
+
 | # | Item | Por que não foi resolvido aqui |
 |---|---|---|
-| Hh1 | **Ressincronizar os blocos SQL de §2.2 e §2.5** com o arquivo da migration. | Drift **pré-existente**: os blocos são o baseline de 21/08 e não têm as asserções (d)/(e), a GUARDA 4, o SOFT-REMOVE de membership, nem a correção D5 de `regclass::text` — que aqui ainda aparece **quebrada**. Copiar ~400 linhas de SQL para dentro do contrato cria duas fontes que voltam a divergir na próxima emenda. A escolha real é *"contrato normativo para classificação/decisão + arquivo normativo para corpo"* (o que está declarado agora) **ou** *"contrato normativo para tudo, e o arquivo é gerado dele"* — decisão de processo, não deste gate. |
+| ~~Hh1~~ | ~~**Ressincronizar os blocos SQL de §2.2 e §2.5** com o arquivo da migration.~~ — **FECHADA em 22/08/2026 por decisão do owner: NÃO ressincronizar.** | **A escolha foi a primeira das duas alternativas que esta própria linha enunciava:** *contrato normativo para classificação/decisão + arquivo normativo para corpo* — agora **escrita como regra**, no topo do documento, e não mais como observação de rodapé. **Razão:** ressincronizar é uma **promessa de continuar ressincronizando**, e **nada a força** — nenhum build, lint ou teste compara os dois. O drift era a prova de que a promessa não se cumpre sozinha: o contrato ficou parado no baseline de 21/08 (sem as varreduras (d)/(e), sem a GUARDA 4, sem o soft-remove de `company_members`, e com o `regclass::text` **quebrado**) enquanto o arquivo andou o dia inteiro. E já custou concreto: o builder da Edge Function teve de **escolher** entre contrato e arquivo, escolheu o arquivo — e ainda assim precisou **parar para reportar** a divergência; o próximo escolheria o outro. **Um ponteiro nunca está desatualizado. Executado:** os blocos de §2.2, §2.3, §2.4, §2.5, §2.6, §2.7.2-§2.7.7 e §3.3 viraram ponteiro; prosa, tabelas de classificação e justificativa **preservadas integralmente**; trechos de SQL que sustentam argumento ficam, marcados **_(ilustração não-normativa)_**. §3.3 recebeu tratamento próprio por ser migration **já aplicada** cujo bloco descrevia produção **errado** em dois pontos. ADR: `ADR-20260822-contrato-normativo-para-decisao-arquivo-para-corpo.md`. |
 | ~~Hh2~~ | ~~**Estender a asserção (b) a `jobs` e `applications`**~~ — **FECHADO em 22/08/2026.** | O catálogo de produção foi consultado e cada coluna textual de `jobs`/`applications`/`shift_calls` conferida contra o uso real no frontend. Resultado: **asserção (b2)** (classificação textual fechada, HALT em coluna nova) + duas colunas de texto livre que a lista original não cobria — `jobs.certification_requirement` e `applications.message` — agora redigidas. Dois falsos positivos descartados com evidência, não por palpite: `jobs.scope` (2 valores distintos, 7 chars) e `applications.invitation_response` (1 valor distinto, 8 chars) são **enums em coluna `text`**. **Fechado por completo na revisão do mesmo dia:** as duas tabelas-evento entraram no fecho (as quatro colunas textuais delas têm `CHECK` de conjunto fechado, verificado), e o `metadata jsonb` que constava como risco **não existe** — era descrição errada do `architecture.md`, que diverge da tabela real em seis pontos. Nenhuma coluna `jsonb`/`json` existe nas duas. |
 | Hh3 | **`shift_payments.note` e `service_terms` só ficam honestos com a migration #3.** | Já registrado no cabeçalho da migration (bloqueio técnico (1)). Repetido aqui porque a redação de texto livre de §2.1 aumenta o contraste: `jobs.briefing` sai na hora, `shift_payments.note` só sai em 5 anos — e essa diferença **tem** de estar na Política de Privacidade (§6.1 / J4). |
 

@@ -188,7 +188,10 @@ DECLARE
         'public.shift_attendance_confirmations', 'public.reviews',
         -- Article 8/9 — INTOCADAS
         'public.wallets', 'public.wallet_transactions', 'public.escrow_transactions',
-        -- apagadas pela RPC ou pela CASCADE de auth.users
+        -- apagadas pela RPC (`notifications` tambem tem CASCADE de auth.users, defesa em
+        -- profundidade). EMENDA 2026-08-22: `analytics_events` estava aqui com a justificativa
+        -- "ou pela CASCADE de auth.users" -- FALSO, a FK dela e NO ACTION. Hoje ela e apagada
+        -- pela RPC, de verdade, e a FK cai na secao 2B.
         'public.notifications', 'public.analytics_events',
         -- conformidade do expurgo (#3) — não guarda dado pessoal, só contagem
         'public.data_retention_purge_runs',
@@ -552,51 +555,199 @@ BEGIN
 END $$;
 
 -- Nota sobre a asserção (c) — por que ela cobre `SET NULL` também.
--- O filtro NÃO discrimina `confdeltype`. É de propósito: `RESTRICT`/`NO ACTION` continuam sendo
--- dependência que a rotina precisa ter pensado (é o caso de `shift_payments`/`service_terms`,
--- cuja decisão foi "INTOCADA"), e `SET NULL` é justamente o caso de
--- `worker_certifications.verified_by_company_id`, que também deixou de disparar. Uma dependência
--- decidida como "nada a fazer" entra na lista igual — o que não pode existir é dependência
--- NÃO decidida.
+-- =============================================
+-- 2A. GUARDA DE ORDEM — a credencial só é apagada DEPOIS da lápide
+--     ⚠️ ESTA SEÇÃO VEM ANTES DA 2B DE PROPÓSITO. NÃO INVERTER.
+--
+--     ACHADO 2026-08-22 (ALTO, com evidência de produção — ver ddl-aprovado §0.1.2):
+--     hoje `auth.admin.deleteUser` FALHA para praticamente todo usuário real, com 23503 em
+--     `applications_worker_id_fkey`. Falhar é o bug. Mas falhar também é, hoje, a ÚNICA coisa
+--     que impede a Edge Function ANTIGA (anonimização parcial de 7 colunas + deleteUser direto)
+--     de apagar a credencial deixando PII para trás.
+--
+--     Ou seja: as FKs para auth.users vinham fazendo trabalho de SEGURANÇA POR ACIDENTE.
+--     Removê-las (2B) sem repor essa proteção trocaria um bug SEGURO por um bug INSEGURO.
+--     Esta guarda repõe a proteção DE PROPÓSITO, no banco — não numa ordem de deploy escrita
+--     num documento, que nada força (mesmo raciocínio do Article 4: a defesa dura é o banco).
+--
+--     Pior caso desta guarda = o comportamento de HOJE (deleteUser falha). Não há regressão
+--     possível: ela só pode recusar o que hoje já é recusado.
+--
+--     PRIVILÉGIO: `CREATE TRIGGER` em `auth.users` é o mesmo padrão do `handle_new_user` deste
+--     projeto. Se falhar por permissão, a migration ABORTA AQUI — e isso é o desejado: sem a
+--     guarda, a 2B não pode acontecer.
+--
+--     ADR: .harness/memory-bank/decisions/ADR-20260822-guarda-de-ordem-na-exclusao-de-conta.md
+-- =============================================
+CREATE OR REPLACE FUNCTION public.lgpd_guard_auth_user_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_live text;
+BEGIN
+    -- "Existe algum perfil VIVO (nao anonimizado) apontando para esta credencial?"
+    -- Se nao existe perfil NENHUM (conta sem workers/companies), passa: nao ha o que anonimizar.
+    SELECT string_agg(x, ', ') INTO v_live FROM (
+        SELECT 'workers'         AS x FROM public.workers   w
+          WHERE w.id = OLD.id       AND w.anonymized_at IS NULL
+        UNION ALL
+        SELECT 'companies'             FROM public.companies c
+          WHERE c.id = OLD.id       AND c.anonymized_at IS NULL
+        UNION ALL
+        SELECT 'companies(owner_id)'   FROM public.companies c
+          WHERE c.owner_id = OLD.id AND c.anonymized_at IS NULL
+    ) s;
+
+    IF v_live IS NOT NULL THEN
+        RAISE EXCEPTION
+            'LGPD: a credencial % nao pode ser apagada -- ainda existe perfil VIVO (nao '
+            'anonimizado) em: %. Chame public.anonymize_account(<uuid>) ANTES de '
+            'auth.admin.deleteUser. Esta guarda repoe, de proposito, a protecao que as FKs para '
+            'auth.users davam por acidente (ddl-aprovado 0.1.2 / ADR-20260822-guarda-de-ordem).',
+            OLD.id, v_live;
+    END IF;
+
+    RETURN OLD;
+END;
+$fn$;
+
+COMMENT ON FUNCTION public.lgpd_guard_auth_user_delete() IS
+    'BEFORE DELETE em auth.users. Recusa apagar a credencial enquanto houver linha VIVA em '
+    'workers/companies (anonymized_at IS NULL) apontando para ela. Existe porque a leva de LGPD '
+    'REMOVE as FKs para auth.users -- e eram elas que, por acidente, impediam a Edge Function '
+    'antiga de apagar a credencial deixando PII para tras. Sem perfil nenhum, passa. Nao ha '
+    'bypass por service_role: e trigger, nao policy. ADR-20260822-guarda-de-ordem-na-exclusao.';
+
+DROP TRIGGER IF EXISTS trg_lgpd_guard_auth_user_delete ON auth.users;
+CREATE TRIGGER trg_lgpd_guard_auth_user_delete
+    BEFORE DELETE ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.lgpd_guard_auth_user_delete();
+
+DO $$
+BEGIN
+    -- Falha fechado: se por qualquer razao o trigger nao existir, a 2B NAO pode rodar.
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        WHERE t.tgrelid = 'auth.users'::regclass
+          AND t.tgname  = 'trg_lgpd_guard_auth_user_delete'
+          AND NOT t.tgisinternal
+    ) THEN
+        RAISE EXCEPTION
+          'ASSERCAO: a guarda de ordem em auth.users NAO foi instalada. Remover as FKs sem ela '
+          'transformaria um bug seguro (deleteUser falha) em um inseguro (credencial apagada, '
+          'PII retida). HALT -> architect.';
+    END IF;
+END $$;
 
 -- =============================================
--- 2. REMOÇÃO DAS FKs CASCADE PARA auth.users
---    Descoberta dinâmica: o nome da constraint NÃO está no repositório (tabelas criadas fora de
---    migration). NUNCA hard-codar `workers_id_fkey`.
---    Idempotente: rodar duas vezes não faz nada na segunda.
+-- 2B. REMOÇÃO DAS FKs PARA auth.users
+--     ⚠️ REESCRITA EM 2026-08-22 (achado ALTO). A versão anterior desta seção derrubava apenas
+--     as FKs de `workers`/`companies`/`wallets`, e a asserção seguinte só inventariava as
+--     `ON DELETE CASCADE` (`confdeltype = 'c'`). Efeito: `applications_worker_id_fkey`,
+--     `reviews_reviewer_id_fkey`, `reviews_reviewed_id_fkey` e `analytics_events_user_id_fkey`
+--     — todas NO ACTION, todas apontando DIRETO para auth.users, todas em tabelas cujas linhas
+--     esta rotina RETÉM por decisão (§2.1) — SOBREVIVIAM. Depois da leva inteira, `deleteUser`
+--     continuaria falhando com 23503 para qualquer freela que já tenha se candidatado uma vez.
+--     A migration não entregava a própria promessa.
+--
+--     A LÓGICA AGORA É INVERTIDA, e é a mesma das asserções (c)/(d)/(e): o CATÁLOGO descobre, a
+--     lista à mão apenas DECLARA a decisão. Derruba-se TODA FK para auth.users, exceto as
+--     explicitamente allow-listadas como "cascata desejada" — e exige-se que cada allow-listada
+--     seja, de fato, CASCADE. Uma FK NO ACTION disfarçada de "cascata desejada" é exatamente o
+--     caso de `analytics_events`, que a lista antiga descrevia como "apagada pela CASCADE de
+--     auth.users" enquanto era NO ACTION e a RPC não a apagava: ninguém a apagava.
+--
+--     Descoberta dinâmica: os nomes das constraints NÃO estão no repositório (tabelas criadas
+--     fora de migration). NUNCA hard-codar. Idempotente.
+--
+--     Aqui `conrelid::regclass::text` é CORRETO: o nome vai ser EXECUTADO, e o mesmo search_path
+--     que o renderiza também o resolve. A COMPARAÇÃO contra literal usa format('%I.%I', ...).
 -- =============================================
 DO $$
 DECLARE
     r          record;
+    -- Cascata DESEJADA: a linha morre junto com a credencial, e isso é decisão de §2.1.
+    -- Entrar aqui significa "eu decidi que este dado é apagado pelo DELETE de auth.users".
+    -- NÃO adicionar nome para "fazer passar": a asserção (B) exige que seja CASCADE de verdade.
+    v_keep     text[] := ARRAY[
+        'public.notifications',      -- também apagada pela RPC (defesa em profundidade)
+        'public."Message"',          -- legado Prisma, não auditado — §5.3
+        'public."Conversation"'      -- idem
+    ];
     v_leftover text;
+    v_notcasc  text;
 BEGIN
     FOR r IN
-        SELECT con.conname, con.conrelid::regclass::text AS tbl
+        SELECT con.conname,
+               con.conrelid::regclass::text            AS tbl_exec,
+               format('%I.%I', ns.nspname, cl.relname) AS tbl_cmp,
+               con.confdeltype
         FROM pg_constraint con
+        JOIN pg_class     cl ON cl.oid = con.conrelid
+        JOIN pg_namespace ns ON ns.oid = cl.relnamespace
         WHERE con.contype = 'f'
           AND con.confrelid = 'auth.users'::regclass
-          AND con.conrelid IN ('public.workers'::regclass,
-                               'public.companies'::regclass,
-                               'public.wallets'::regclass)
+          -- ⚠️ FILTRO DE SCHEMA OBRIGATORIO — descoberto simulando esta secao contra producao (22/08).
+          --    Sem ele o laco alcanca OITO tabelas INTERNAS do Supabase que tambem referenciam
+          --    auth.users: sessions, identities, mfa_factors, one_time_tokens, oauth_authorizations,
+          --    oauth_consents, webauthn_challenges, webauthn_credentials. Todas CASCADE — e e por elas
+          --    que o Supabase limpa sessao e identidade ao excluir a conta. Na simulacao a migration
+          --    ABORTOU com `42501: must be owner of table identities`: hoje ela e INAPLICAVEL, e so nao
+          --    e destrutiva por acidente de permissao. Como superusuario, derrubaria o mecanismo de
+          --    logout/limpeza do proprio Auth. A lapide decide sobre o dado do PRODUTO; `auth` nao e nosso.
+          AND ns.nspname = 'public'
+          AND format('%I.%I', ns.nspname, cl.relname) <> ALL (v_keep)
     LOOP
-        RAISE NOTICE 'Removendo FK % em % -> auth.users (lapide LGPD).', r.conname, r.tbl;
-        EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
+        RAISE NOTICE 'Removendo FK % em % -> auth.users (ON DELETE %) [lapide LGPD].',
+                     r.conname, r.tbl_cmp, r.confdeltype;
+        EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl_exec, r.conname);
     END LOOP;
 
-    -- Qualquer OUTRA tabela que ainda apague em cascata junto com auth.users precisa ser
-    -- conscientemente revisada: se guardar dado retido, deleteUser o destrói em silêncio.
-    -- A lista abaixo é a de tabelas cujo apagamento em cascata é DESEJADO.
-    -- EMENDA 2026-08-22: mesma correção de search_path da asserção (c) — ver nota lá.
+    -- (A) Nada fora da allow-list pode ter sobrado. (Idempotência / sanidade do laço.)
     SELECT string_agg(DISTINCT format('%I.%I', ns.nspname, cl.relname), ', ') INTO v_leftover
     FROM pg_constraint con
     JOIN pg_class     cl ON cl.oid = con.conrelid
     JOIN pg_namespace ns ON ns.oid = cl.relnamespace
     WHERE con.contype = 'f'
       AND con.confrelid = 'auth.users'::regclass
-      AND con.confdeltype = 'c'   -- 'c' = CASCADE
-      AND format('%I.%I', ns.nspname, cl.relname) <> ALL (ARRAY[
-            'public.notifications', 'public.analytics_events',
-            'public."Message"', 'public."Conversation"'
+      -- Mesmo filtro de schema do laco acima — ver nota la.
+      AND ns.nspname = 'public'
+      AND format('%I.%I', ns.nspname, cl.relname) <> ALL (v_keep);
+    IF v_leftover IS NOT NULL THEN
+        RAISE EXCEPTION
+          'ASSERCAO: sobrou FK para auth.users fora da allow-list: %. HALT -> architect.',
+          v_leftover;
+    END IF;
+
+    -- (B) ESTA É A ASSERÇÃO QUE FALTAVA. Toda FK que FICA tem de ser CASCADE de verdade.
+    --     Uma FK NO ACTION/RESTRICT apontando para auth.users BLOQUEIA o deleteUser — que é o
+    --     bug inteiro (§0.1.2). A asserção antiga filtrava `confdeltype = 'c'` e por isso era
+    --     CEGA exatamente para a classe que quebra a promessa.
+    SELECT string_agg(DISTINCT
+             format('%I.%I (%s, ON DELETE %s)', ns.nspname, cl.relname, con.conname,
+                    CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT'
+                                         WHEN 'n' THEN 'SET NULL'  WHEN 'd' THEN 'SET DEFAULT'
+                                         ELSE con.confdeltype::text END), ', ')
+      INTO v_notcasc
+    FROM pg_constraint con
+    JOIN pg_class     cl ON cl.oid = con.conrelid
+    JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+    WHERE con.contype = 'f'
+      AND con.confrelid = 'auth.users'::regclass
+      -- Mesmo filtro de schema do laco acima — ver nota la.
+      AND ns.nspname = 'public'
+      AND con.confdeltype <> 'c';
+    IF v_notcasc IS NOT NULL THEN
+        RAISE EXCEPTION
+          'ASSERCAO: FK NAO-CASCADE para auth.users sobreviveu em: %. Qualquer linha viva nessas '
+          'tabelas BLOQUEIA auth.admin.deleteUser com 23503 e a rotina de exclusao nao cumpre a '
+          'promessa (LGPD art. 18, VI). Ou a tabela sai da allow-list (a FK cai), ou a FK vira '
+          'CASCADE por decisao escrita em ddl-aprovado 2.1. HALT -> architect.', v_notcasc;
+    END IF;
+END $$;
       ]);
     IF v_leftover IS NOT NULL THEN
         RAISE EXCEPTION
@@ -736,6 +887,7 @@ DECLARE
         'company_monthly_revenue', 0, 'job_series', 0, 'worker_trainings_company', 0,
         'team_connections', 0, 'worker_referrals', 0, 'worker_company_badge_prefs', 0,
         'company_members', 0, 'organization_members', 0, 'notifications', 0,
+        'analytics_events', 0,
         'payment_methods', 0, 'applications_redacted', 0, 'jobs_redacted', 0,
         'shift_calls_redacted', 0, 'workers', 0, 'companies', 0
     );
@@ -1042,6 +1194,18 @@ BEGIN
     GET DIAGNOSTICS v_n = ROW_COUNT;
     v_counts := v_counts || jsonb_build_object('notifications', v_n);
 
+    -- ---- EMENDA 2026-08-22 (achado ALTO): analytics_events ----
+    -- NAO estava aqui, e a lista da varredura (d)/(e) a descrevia como "apagada pela RPC ou pela
+    -- CASCADE de auth.users". As DUAS metades da frase eram falsas: a RPC nao a apagava, e a FK
+    -- `analytics_events_user_id_fkey` e NO ACTION, nao CASCADE (conferido em pg_constraint,
+    -- 22/08). Ninguem apagava. Pior: sendo NO ACTION, cada linha aqui BLOQUEAVA o deleteUser.
+    -- Agora a FK cai na 2B e o dado sai AQUI, dentro da transacao da RPC -- antes da credencial,
+    -- e nao dependendo de acao referencial nenhuma (doutrina da lapide, ddl-aprovado 2.1.0).
+    -- Conteudo: telemetria comportamental por usuario. Zero valor fiscal ou probatorio.
+    DELETE FROM public.analytics_events ae WHERE ae.user_id = p_user_id;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || jsonb_build_object('analytics_events', v_n);
+
     -- ---- token de cartão da empresa ----
     -- EMENDA 2026-08-22: a versao anterior deste comentario dizia "revogar no Asaas e da Edge
     -- Function". NAO HA REVOGACAO. Nao existe caminho verificado para revogar um creditCardToken
@@ -1341,6 +1505,41 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 --        (que TEM CHECK, de char_length <= 200, e é TEXTO LIVRE que esta rotina REDIGE) entraria
 --        na classe forte e sairia da redação em silêncio.
 --
+-- --- EMENDA 2026-08-22 (achado ALTO — FKs diretas para auth.users) ---
+-- V23. NENHUMA FK não-CASCADE para auth.users sobreviveu (é a asserção (B), reconferida à mão):
+--      SELECT conrelid::regclass AS tabela, conname, confdeltype
+--        FROM pg_constraint
+--       WHERE contype='f' AND confrelid='auth.users'::regclass
+--       ORDER BY 1;
+--      ⇒ SÓ podem aparecer notifications, "Message" e "Conversation", TODAS com confdeltype='c'.
+--      ⇒ applications, reviews, analytics_events, workers, companies e wallets NÃO podem aparecer.
+--
+-- V24. O TESTE QUE ORIGINOU O ACHADO, agora em conta de teste JÁ anonimizada (o de verdade —
+--      V1/V6 não pegavam isto porque não simulavam o DELETE contra dado real):
+--      BEGIN;
+--        SELECT public.anonymize_account('<uuid-de-teste-com-candidatura-e-review>');
+--        DELETE FROM auth.users WHERE id='<uuid-de-teste>';
+--      -- ESPERADO: 1 linha apagada, SEM 23503. Antes desta emenda: 23503 em
+--      --           applications_worker_id_fkey.
+--        SELECT count(*) FROM public.applications WHERE worker_id='<uuid-de-teste>';  -- > 0
+--        SELECT count(*) FROM public.workers      WHERE id='<uuid-de-teste>';         -- = 1
+--      ROLLBACK;
+--
+-- V25. A GUARDA DE ORDEM recusa a exclusão de conta VIVA (é o que substitui a proteção que as
+--      FKs davam por acidente — sem isto, a Edge Function ANTIGA passaria a "funcionar"):
+--      BEGIN;
+--        DELETE FROM auth.users WHERE id='<uuid-de-conta-VIVA-de-teste>';
+--      -- ESPERADO: EXCEPTION 'LGPD: a credencial ... perfil VIVO ... workers'
+--      ROLLBACK;
+--      E o trigger existe:
+--      SELECT tgname FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND NOT tgisinternal;
+--      ⇒ contém trg_lgpd_guard_auth_user_delete.
+--
+-- V26. `analytics_events` é apagada pela RPC (antes, ninguém a apagava):
+--      SELECT (public.anonymize_account('<uuid>')->'counts'->>'analytics_events')::int;
+--      ⇒ igual ao count(*) de antes; e depois: SELECT count(*) FROM public.analytics_events
+--        WHERE user_id='<uuid>'  ⇒ 0.
+--
 -- V12. Ocorrências de série SOBREVIVERAM ao DELETE de job_series (não há FK):
 --      SELECT count(*) FROM public.jobs WHERE series_id='<serie-da-empresa>'; ⇒ igual a antes.
 --
@@ -1348,9 +1547,27 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 -- natureza; por isso o backup do cabeçalho é obrigatório.
 --   DROP FUNCTION IF EXISTS public.anonymize_account(uuid);
 --   -- restaurar o corpo anterior de enforce_service_term_immutability (20260817001100 §7)
+--   -- GUARDA DE ORDEM (2A) — derrubar por ÚLTIMO, e só se as FKs voltarem:
+--   DROP TRIGGER  IF EXISTS trg_lgpd_guard_auth_user_delete ON auth.users;
+--   DROP FUNCTION IF EXISTS public.lgpd_guard_auth_user_delete();
 --   ALTER TABLE public.workers   DROP COLUMN IF EXISTS anonymized_at;
 --   ALTER TABLE public.companies DROP COLUMN IF EXISTS anonymized_at;
---   -- re-adicionar as FKs exige que NÃO existam lápides órfãs:
+--
+--   -- ⚠️ EMENDA 2026-08-22 — AS FKs NÃO ERAM TODAS CASCADE. O DOWN anterior re-adicionava
+--   --    companies/wallets como `ON DELETE CASCADE`, o que NÃO restaura o estado anterior: ele
+--   --    o TROCA por um pior. Inventário real conferido em produção (pg_constraint, 22/08):
+--   --      workers.workers_id_fkey ................ CASCADE
+--   --      wallets.wallets_user_id_fkey ........... CASCADE
+--   --      companies.companies_id_fkey ............ NO ACTION
+--   --      companies.companies_owner_id_fkey ...... NO ACTION
+--   --      applications.applications_worker_id_fkey NO ACTION
+--   --      reviews.reviews_reviewer_id_fkey ....... NO ACTION
+--   --      reviews.reviews_reviewed_id_fkey ....... NO ACTION
+--   --      analytics_events.analytics_events_user_id_fkey NO ACTION
+--   --    Re-adicionar `companies_id_fkey` como CASCADE faria o deleteUser APAGAR a linha da
+--   --    empresa — exatamente o que a lápide existe para impedir. Restaurar cada uma com a
+--   --    ação ORIGINAL da tabela acima, e conferir contra um pg_dump do pré-deploy.
+--   -- re-adicionar QUALQUER FK exige que NÃO existam lápides órfãs (linha sem auth.users):
 --   ALTER TABLE public.workers   ADD CONSTRAINT workers_id_fkey
 --       FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
 --   ALTER TABLE public.companies ADD CONSTRAINT companies_id_fkey
