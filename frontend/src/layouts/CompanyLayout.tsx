@@ -5,6 +5,7 @@ import NotificationBell from '../components/NotificationBell';
 import { supabase } from '../lib/supabase';
 import { useEffect, useState, useCallback } from 'react';
 import { logError } from '../lib/logger'
+import { getMyCompanies, pickCurrentCompany } from '../services/companyScopeService';
 
 export default function CompanyLayout() {
     const navigate = useNavigate();
@@ -15,7 +16,7 @@ export default function CompanyLayout() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                // Let the protected route logic handling login redirection elsewhere, 
+                // Let the protected route logic handling login redirection elsewhere,
                 // or redirect here.
                 navigate('/login');
                 return;
@@ -27,15 +28,16 @@ export default function CompanyLayout() {
                 return;
             }
 
-            // Check if user has a company profile
-            const { data: company, error } = await supabase
-                .from('companies')
-                .select('onboarding_completed')
-                .eq('id', user.id)
-                .single();
+            // F13 (R11) — `get_my_companies()` é o único resolvedor de escopo de empresa: um
+            // gerente ativo (`company_members`) não tem linha própria em `companies` (a casca é
+            // apagada no aceite do convite), então `.eq('id', user.id).single()` sempre falhava
+            // aqui e mandava o gerente para `/company/onboarding` em loop, mesmo depois do fix
+            // em `ProtectedRoute`. Ver ddl-aprovado.md §7 e ADR-20260818-multi-unidade.
+            const companies = await getMyCompanies();
+            const current = pickCurrentCompany(companies);
 
-            // If no company record OR onboarding not completed
-            if (error || !company || !company.onboarding_completed) {
+            // Se não opera nenhuma empresa OU a unidade corrente não completou onboarding.
+            if (!current || !current.onboarding_completed) {
                 navigate('/company/onboarding');
             }
         } catch (err) {

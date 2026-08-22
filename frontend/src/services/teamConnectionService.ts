@@ -14,6 +14,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getAuthenticatedCompanyId as resolveAuthenticatedCompanyId } from './companyScopeService';
 import type {
   TeamConnection,
   TeamConnectionSource,
@@ -66,25 +67,17 @@ const WORKER_TOKEN_PREFIX = 'w_';
 // ---------------------------------------------------------------------------
 
 /**
- * Retorna o `company_id` da empresa autenticada.
- * Lança erro se não houver sessão ou se o usuário não for empresa.
+ * Retorna o `company_id` da empresa autenticada (a unidade CORRENTE da sessão — R13).
+ *
+ * F13 (R12/ddl-aprovado.md §7): delega para `companyScopeService`, que resolve via
+ * `get_my_companies()` (RPC) em vez de `.eq('owner_id', user.id)` — a ancoragem antiga não
+ * enxergava gerente (`company_members`) nem sócio/operador (`organization_members`) de uma
+ * unidade que não é a dele por `owner_id`. Mantém o mesmo contrato de erro de antes
+ * ("Perfil de empresa não encontrado.") para não mudar o comportamento observável dos
+ * consumidores existentes.
  */
 async function getAuthenticatedCompanyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sessão expirada. Faça login novamente.');
-
-  const { data: company, error } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('owner_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!company) throw new Error('Perfil de empresa não encontrado.');
-
-  return company.id as string;
+  return resolveAuthenticatedCompanyId();
 }
 
 // ---------------------------------------------------------------------------

@@ -177,6 +177,26 @@ export interface MyCompany {
   accepted_tos: boolean;
 }
 
+/**
+ * Linha de `company_members` (migration 20260818100000) — vínculo gerente x unidade. `user_id`
+ * é `null` enquanto o convite não foi aceito (R9). Projeção usada por `organizationService` /
+ * `pages/company/Organization.tsx` (R14-R16) — nunca dado financeiro/PII além do e-mail
+ * convidado, que a própria empresa digitou.
+ */
+export type CompanyMemberStatus = 'invited' | 'active' | 'removed';
+
+export interface CompanyMember {
+  id: string;
+  company_id: string;
+  user_id: string | null;
+  role: 'manager';
+  status: CompanyMemberStatus;
+  invited_email: string | null;
+  invited_at: string;
+  accepted_at: string | null;
+  expires_at: string;
+}
+
 // =============================================
 // JOB
 // =============================================

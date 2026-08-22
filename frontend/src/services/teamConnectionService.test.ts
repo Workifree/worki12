@@ -82,12 +82,37 @@ vi.mock('../lib/supabase', () => ({
   },
 }));
 
+// F13 (R12) — getAuthenticatedCompanyId agora resolve via `get_my_companies()` (RPC), não mais
+// `.from('companies').eq('owner_id', ...)`. Implementação PADRÃO devolve uma única linha
+// role='owner' (o caso dominante hoje) — testes específicos de RPC usam `mockResolvedValueOnce`
+// para outra chamada (ex.: list_team_connection_cards), que tem prioridade sobre este default.
+function mockGetMyCompaniesDefault() {
+  mockRpc.mockImplementation((fn: string) => {
+    if (fn === 'get_my_companies') {
+      return Promise.resolve({
+        data: [{
+          company_id: 'comp-12345678-1234-1234-1234-123456789012',
+          company_name: 'Empresa Teste',
+          role: 'owner',
+          organization_id: 'org-1',
+          organization_name: 'Org Teste',
+          onboarding_completed: true,
+          accepted_tos: true,
+        }],
+        error: null,
+      });
+    }
+    return Promise.resolve({ data: null, error: null });
+  });
+}
+
 describe('TeamConnectionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeleteSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
     mockUpdateSelect.mockResolvedValue({ data: [{ id: 'conn-1' }], error: null });
     mockOrder.mockResolvedValue({ data: [], error: null });
+    mockGetMyCompaniesDefault();
     vi.mocked(supabase.auth.getUser).mockResolvedValue({
       data: { user: { id: 'owner-123' } },
       error: null,

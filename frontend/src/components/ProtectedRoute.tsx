@@ -5,6 +5,8 @@ import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { Loader2 } from 'lucide-react';
 import TosGateModal from './TosGateModal';
+import { getMyCompanies, pickCurrentCompany } from '../services/companyScopeService';
+import type { CompanyRole } from '../types';
 
 export default function ProtectedRoute() {
     const [loading, setLoading] = useState(true);
@@ -13,6 +15,7 @@ export default function ProtectedRoute() {
     const [onboardingRedirect, setOnboardingRedirect] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState<boolean | null>(null);
     const [detectedRole, setDetectedRole] = useState<'worker' | 'company'>('worker');
+    const [companyRole, setCompanyRole] = useState<CompanyRole | null>(null);
     const [roleRedirect, setRoleRedirect] = useState<string | null>(null);
     const location = useLocation();
     const { addToast } = useToast();
@@ -25,91 +28,89 @@ export default function ProtectedRoute() {
             setLoading(false);
 
             if (currentUser) {
-                await checkOnboarding(currentUser);
-                await checkTos(currentUser);
+                await checkOnboardingAndTos(currentUser);
             }
         };
 
-        const checkOnboarding = async (authUser: { id: string; user_metadata?: { user_type?: string } }) => {
+        // F13 (R11) — a resolução de "esta sessão é company e está pronta?" (onboarding + TOS)
+        // NÃO pode ser `.eq('id', authUser.id).single()`: um gerente ativo (`company_members`)
+        // não tem linha própria em `companies` (a casca é apagada no aceite do convite,
+        // `accept_manager_invite`), então essa query sempre falha (PGRST116) e o gerente ficava
+        // preso num loop de onboarding permanente — o achado mais crítico da spec (A7).
+        // `get_my_companies()` (ddl-aprovado.md §7) é o único resolvedor de escopo de empresa do
+        // frontend: zero linhas → onboarding; uma ou mais → usa `onboarding_completed`/
+        // `accepted_tos` da linha corrente (role='owner' primeiro, senão a primeira).
+        const checkOnboardingAndTos = async (authUser: { id: string; user_metadata?: { user_type?: string } }) => {
             const pathname = location.pathname;
-
-            if (pathname === '/worker/onboarding' || pathname === '/company/onboarding') {
-                setOnboardingChecked(true);
-                return;
-            }
-
             const userType = authUser.user_metadata?.user_type;
 
-            try {
-                let data = null;
-                if (userType === 'work') {
-                    const result = await supabase
+            if (userType === 'work') {
+                if (pathname === '/worker/onboarding') {
+                    setOnboardingChecked(true);
+                    setTosAccepted(true);
+                    return;
+                }
+                try {
+                    const { data } = await supabase
                         .from('workers')
                         .select('onboarding_completed')
                         .eq('id', authUser.id)
                         .single();
-                    data = result.data;
-                } else if (userType === 'hire') {
-                    const result = await supabase
-                        .from('companies')
-                        .select('onboarding_completed')
-                        .eq('id', authUser.id)
-                        .single();
-                    data = result.data;
-                }
 
-                if (data?.onboarding_completed !== true) {
-                    setOnboardingRedirect(
-                        userType === 'work' ? '/worker/onboarding' : '/company/onboarding'
-                    );
-                }
-            } catch (error) {
-                logError('Erro ao verificar onboarding', error);
-                if (userType === 'work') {
+                    if (data?.onboarding_completed !== true) {
+                        setOnboardingRedirect('/worker/onboarding');
+                    }
+                } catch (error) {
+                    logError('Erro ao verificar onboarding', error);
                     setOnboardingRedirect('/worker/onboarding');
-                } else if (userType === 'hire') {
-                    setOnboardingRedirect('/company/onboarding');
                 }
-            }
 
-            setOnboardingChecked(true);
-        };
-
-        const checkTos = async (authUser: { id: string; user_metadata?: { user_type?: string } }) => {
-            const userType = authUser.user_metadata?.user_type;
-
-            // Tenta workers primeiro
-            if (userType === 'work') {
                 const { data: workerData } = await supabase
                     .from('workers')
                     .select('accepted_tos')
                     .eq('id', authUser.id)
                     .single();
 
-                if (workerData) {
-                    setTosAccepted(workerData.accepted_tos === true);
-                    setDetectedRole('worker');
-                    return;
-                }
+                setTosAccepted(workerData ? workerData.accepted_tos === true : true);
+                setDetectedRole('worker');
+                setOnboardingChecked(true);
+                return;
             }
 
-            // Tenta companies
             if (userType === 'hire') {
-                const { data: companyData } = await supabase
-                    .from('companies')
-                    .select('accepted_tos')
-                    .eq('id', authUser.id)
-                    .single();
-
-                if (companyData) {
-                    setTosAccepted(companyData.accepted_tos === true);
-                    setDetectedRole('company');
+                if (pathname === '/company/onboarding') {
+                    setOnboardingChecked(true);
+                    setTosAccepted(true);
                     return;
                 }
+
+                try {
+                    const companies = await getMyCompanies();
+                    const current = pickCurrentCompany(companies);
+
+                    if (!current) {
+                        setOnboardingRedirect('/company/onboarding');
+                        setTosAccepted(true);
+                    } else {
+                        setOnboardingRedirect(current.onboarding_completed ? null : '/company/onboarding');
+                        setTosAccepted(current.accepted_tos === true);
+                        setCompanyRole(current.role);
+                    }
+                } catch (error) {
+                    logError('Erro ao verificar onboarding', error);
+                    setOnboardingRedirect('/company/onboarding');
+                    setTosAccepted(true);
+                }
+
+                setDetectedRole('company');
+                setOnboardingChecked(true);
+                return;
             }
 
-            // Usuário sem perfil ainda (em onboarding) — não exibir gate de TOS
+            // user_type desconhecido (sessão em transição) — não bloqueia, mas também não
+            // afirma TOS aceito por engano.
             setTosAccepted(true);
+            setOnboardingChecked(true);
         };
 
         checkAuth();
@@ -152,6 +153,18 @@ export default function ProtectedRoute() {
             setRoleRedirect('/dashboard');
         } else if (userType === 'hire' && workerOnlyPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
             addToast('Você não tem permissão para acessar esta página.', 'error');
+            setRoleRedirect('/company/dashboard');
+        } else if (
+            userType === 'hire'
+            && pathname.startsWith('/company/organization')
+            && companyRole !== null
+            && companyRole !== 'owner'
+            && companyRole !== 'operator'
+        ) {
+            // R16: /company/organization só é acessível a sócio/operador (organization_members
+            // ativo) — mesma técnica do bloqueio worker⇎company acima. Gerente comum (role
+            // 'manager') não vê a visão consolidada da organização (fora do escopo dele, R14).
+            addToast('Apenas sócio/operador pode acessar a Organização.', 'error');
             setRoleRedirect('/company/dashboard');
         }
     }
