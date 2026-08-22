@@ -7,6 +7,9 @@ import SosDiscoverySection from './SosDiscoverySection';
 //  - O TEXTO DE CONSENTIMENTO (§5 do ddl-aprovado.md) está SEMPRE no DOM quando o toggle é
 //    oferecido — nunca escondido atrás de um clique/tooltip. Isto é o requisito central da
 //    tarefa: um consentimento que não diz o que expõe não sustenta a feature.
+//  - O texto precisa nomear CPF e data de nascimento, não só telefone/PIX (dívida #13): o aceite
+//    do SOS libera a linha inteira de `workers` via `can_view_worker_profile` (vínculo
+//    operacional), não só telefone/chave PIX. Este teste falha se alguém remover a menção a CPF.
 //  - Sem `availability_days` declarado, o toggle NEM APARECE (gate do DDL §5) — e, coerente com
 //    isso, o texto de consentimento também não aparece (nada foi oferecido para consentir).
 //  - Toggle chama SosService.setDiscoverable com o valor invertido; falha do service mostra
@@ -41,6 +44,10 @@ vi.mock('../lib/supabase', () => ({
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }));
 
 const CONSENT_PHRASE = /passa a ver seus dados de contrata/i;
+// A lista de dados expostos precisa citar CPF e data de nascimento (não só telefone/PIX) —
+// é o ponto central da correção da dívida #13: o texto antigo subdeclarava o que
+// `can_view_worker_profile` realmente libera no aceite do SOS.
+const CONSENT_LISTS_SENSITIVE_FIELDS = /telefone.*cpf.*data de nascimento.*chave pix/is;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -72,6 +79,7 @@ describe('SosDiscoverySection', () => {
     await waitFor(() => expect(screen.getByRole('switch')).toBeInTheDocument());
     // O consentimento precisa estar no DOM ANTES de qualquer interação — não atrás de clique.
     expect(screen.getByText(CONSENT_PHRASE)).toBeInTheDocument();
+    expect(screen.getByText(CONSENT_LISTS_SENSITIVE_FIELDS)).toBeInTheDocument();
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByText('Descoberta desativada')).toBeInTheDocument();
   });
@@ -86,6 +94,7 @@ describe('SosDiscoverySection', () => {
     await waitFor(() => expect(screen.getByText('Descoberta ativada')).toBeInTheDocument());
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByText(CONSENT_PHRASE)).toBeInTheDocument();
+    expect(screen.getByText(CONSENT_LISTS_SENSITIVE_FIELDS)).toBeInTheDocument();
   });
 
   it('ao ligar, chama setDiscoverable(true) e atualiza a UI', async () => {

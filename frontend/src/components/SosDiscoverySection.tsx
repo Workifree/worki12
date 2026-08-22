@@ -14,7 +14,8 @@ import { SosService } from '../services/sosService';
 //
 // O TEXTO DE CONSENTIMENTO (§5 do ddl-aprovado.md) É REQUISITO, NÃO COPY: é a PRIMEIRA vez no
 // produto que uma empresa SEM NENHUM vínculo prévio ganha acesso à linha completa do freela
-// (telefone + chave PIX), no instante em que ele aceita um chamado. Por isso o texto fica
+// (telefone, CPF, data de nascimento e chave PIX — `can_view_worker_profile` é row-level, não
+// libera só telefone/PIX), no instante em que ele aceita um chamado. Por isso o texto fica
 // SEMPRE visível — nunca atrás de tooltip, "saiba mais" ou depois do toggle — e o componente
 // NUNCA liga o toggle sem ele estar renderizado no DOM (ver teste). ADR-20260821 D3.
 //
@@ -106,16 +107,16 @@ export default function SosDiscoverySection() {
       </h3>
 
       {/* Texto de consentimento — sempre visível, nunca em tooltip/"saiba mais"/depois do
-          toggle (contrato §5 do ddl-aprovado.md). */}
+          toggle (contrato §5 do ddl-aprovado.md). A lista de dados expostos é a lista REAL
+          (can_view_worker_profile libera a linha inteira de workers, não só telefone/PIX). */}
       <p className="text-sm text-gray-600 font-medium mb-2">
-        Empresas que você ainda não conhece podem te chamar quando um turno fura em cima da hora,
-        na sua cidade. Só empresas da sua cidade, só para turnos que começam em menos de 4 horas,
-        no máximo 2 chamados por semana.
+        Empresas que você ainda não conhece podem te chamar para turnos que começam em menos de 4
+        horas, na sua cidade, no máximo 2 chamados por semana.
       </p>
       <p className="text-sm font-bold text-black bg-yellow-50 border-2 border-black rounded-xl p-3 mb-4">
-        Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação
-        (telefone e chave PIX) para poder te pagar. Recusar não tem nenhum efeito no seu perfil.
-        Você pode desligar isto a qualquer momento.
+        Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação —
+        telefone, CPF, data de nascimento e chave PIX — para poder te pagar. Recusar não tem
+        nenhum efeito no seu perfil. Você pode desligar isto a qualquer momento.
       </p>
 
       <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">

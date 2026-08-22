@@ -7,6 +7,7 @@
 > ADRs: `.harness/memory-bank/decisions/ADR-20260821-anonimizacao-em-vez-de-exclusao.md`
 >       `.harness/memory-bank/decisions/ADR-20260821-reviews-por-vinculo.md`
 >       `.harness/memory-bank/decisions/ADR-20260821-lapide-neutraliza-acao-referencial.md`
+>       `.harness/memory-bank/decisions/ADR-20260821-expurgo-de-conteudo-nao-de-linha.md`
 >
 > **EMENDA 2026-08-21 (cobertura).** Migration #1 (§2). Fecha lacunas de **classificação**, não de
 > lógica — a lógica de §2.4/§2.5 auditada pelo evaluator (emenda ip/ua, UPDATE único, fail-closed,

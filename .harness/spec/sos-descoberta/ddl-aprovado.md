@@ -844,17 +844,18 @@ Card em `Profile.tsx`, adjacente ao de disponibilidade (F7), visível só quando
 `availability_days IS NOT NULL`:
 
 > **Descoberta em urgência**
-> Empresas que você ainda não conhece podem te chamar quando um turno fura em cima da hora, na
-> sua cidade. Só empresas da sua cidade, só para turnos que começam em menos de 4 horas, no
-> máximo 2 chamados por semana.
-> **Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação (telefone
-> e chave PIX) para poder te pagar.** Recusar não tem nenhum efeito no seu perfil. Você pode
-> desligar isto a qualquer momento.
+> Empresas que você ainda não conhece podem te chamar para turnos que começam em menos de 4
+> horas, na sua cidade, no máximo 2 chamados por semana.
+> **Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação —
+> telefone, CPF, data de nascimento e chave PIX — para poder te pagar.** Recusar não tem nenhum
+> efeito no seu perfil. Você pode desligar isto a qualquer momento.
 
 A última parte não é opcional: é a primeira vez no produto que uma empresa **sem nenhum vínculo
 prévio** ganha acesso à linha completa do freela (`can_view_worker_profile`, ramo de vínculo
-operacional). O consentimento tem que cobrir o que realmente acontece. A spec já recomendou
-revisão jurídica/LGPD deste texto — o gate **endossa** e sugere que aconteça antes do piloto.
+operacional) — CPF e data de nascimento inclusos, não só telefone/PIX. O consentimento tem que
+cobrir o que realmente acontece; a lista acima é a lista real, não uma versão reduzida por caber
+melhor na tela. A spec já recomendou revisão jurídica/LGPD deste texto — o gate **endossa** e
+sugere que aconteça antes do piloto (pendente; esta correção não a substitui).
 
 ---
 

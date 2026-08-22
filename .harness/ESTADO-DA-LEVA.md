@@ -46,16 +46,55 @@ de risco aberta:**
 **Ação:** rodar `npx vercel --prod` **da raiz** quando a API voltar, e verificar o chunk no ar (não
 o hash do build local, que nunca bate). Ver `[[vercel-deploy-setup]]` na memória.
 
-## 3. ⏸️ PARADO ESPERANDO DECISÃO DO OWNER
+## 3. ✅ DECISÕES TOMADAS (21/08/2026 — owner delegou: "tome a decisão recomendada")
 
-| # | O quê | O que precisa ser decidido |
-|---|---|---|
-| **H1** | Exclusão de conta | O que "excluir conta" passa a significar; prazo de retenção de `shift_payments`/`service_terms`; texto da política dizendo que o termo aceito é retido **com nome e CPF** |
-| **H2** | FKs CASCADE para `auth.users` | Remover em `workers`/`companies`/`wallets` (aceita linhas órfãs por construção) |
-| **F13** | Multi-unidade / gerente | Empresa cria a credencial do gerente **ou** convida conta própria? (architect recomenda: conta própria + convite de 7 dias) |
-| **SOS** | Ligar em produção | Parecer jurídico/LGPD do consentimento — **incluindo CPF**, ver dívida #13 |
+Todas seguem a recomendação já produzida pelo `harness-architect` nos respectivos gates.
+**Onde eu escolhi um número que o contrato deixou em aberto, está marcado — esses pontos merecem
+confirmação de um advogado antes do piloto, e a implementação não depende disso para andar.**
 
-**Migration de anonimização (`20260821000000`) está escrita, revisada e PARADA.** Não aplicar sem H1+H2.
+### H1 — "Excluir conta" passa a significar perder o acesso + anonimizar, com retenção de 5 anos
+
+- **Anonimização com lápide pseudônima**, não exclusão física. Não existe caminho que cumpra o
+  art. 18, VI **e** preserve a trilha fiscal; a alternativa seria destruir `shift_payments`, que é
+  documento de auditoria.
+- **Prazo de retenção: 5 anos** de `shift_payments` e `service_terms`, contados de `paid_at` /
+  `accepted_at`. Base: prescrição civil (CC art. 206, §5º, I) — é o número que o próprio contrato
+  aponta como padrão de mercado. **Escolhido por mim; confirmar com advogado.** Decorrido o prazo,
+  expurgo — o que exige um cron que **não existe hoje** e passa a ser parte da entrega.
+- **A política e a tela precisam dizer, com todas as letras**, que o termo aceito é retido **com
+  nome e CPF** por esse período. Sem isso a promessa continua falsa, só que na direção oposta.
+- Nota de honestidade que fica no ADR: isto **não é anonimização** no sentido do art. 5º, XI — é
+  eliminação parcial com retenção justificada sobre chave pseudônima. Não chamar de anonimização
+  na política.
+
+### H2 — Remover as FKs CASCADE para `auth.users`
+
+Em `workers`, `companies` e `wallets`. **A cascata é o bug, não o RESTRICT:** trocar por CASCADE
+destruiria o livro-caixa (Article 9). Aceita-se linhas órfãs por construção — é o que torna a
+lápide possível.
+
+### F13 — O gerente cria a própria credencial; a conta-mãe convida
+
+Convite por **token de link** (`invite_company_manager` → `/convite-gerente/:token` →
+`accept_manager_invite`), precedente `ADR-20260702-worker-join-by-invite-token`. **Criação direta
+de credencial pela empresa é rejeitada:** a empresa criaria senha para outra pessoa, e exigiria uma
+Edge Function nova com `service_role` chamando `auth.admin.createUser` para resolver o que o token
+já resolve.
+
+O custo aceito: a conta-mãe **não** pode resetar a senha do gerente. O ganho: vínculo consentido,
+auditável, revogável em soft-delete, e a saída do gerente não leva o Elenco junto.
+
+### SOS — o consentimento passa a nomear CPF e data de nascimento
+
+Das duas saídas da dívida #13, escolhida a **(i) ampliar o texto**. A (ii) — restringir colunas no
+ramo operacional de `can_view_worker_profile` — é decisão de arquitetura que atinge **todas** as
+features que dependem daquele ramo, e não cabe às vésperas do piloto.
+
+O texto hoje promete "telefone e chave PIX"; a empresa passa a ver a **linha inteira**. Um opt-in
+que não diz o que expõe não é consentimento informado — e é essa defesa que sustenta a feature.
+
+> **O parecer jurídico do ADR do SOS continua pendente** e não é substituído por esta decisão. O que
+> foi decidido é qual correção implementar agora; a revisão jurídica segue como gate de pré-piloto.
 
 ## 4. ✅ Correção de segurança — APLICADA EM PRODUÇÃO (21/08)
 
