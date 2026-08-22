@@ -40,6 +40,7 @@ const CompanyOrdersReport = lazy(() => import('./pages/company/CompanyOrdersRepo
 const CompanyOperationAnalytics = lazy(() => import('./pages/company/CompanyOperationAnalytics'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
+const Organization = lazy(() => import('./pages/company/Organization'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -50,6 +51,7 @@ const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+const AcceptManagerInvite = lazy(() => import('./pages/AcceptManagerInvite'));
 const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
@@ -142,6 +144,13 @@ function App() {
                   */}
                   <Route path="/convite/:token" element={<InviteAccept />} />
 
+                  {/*
+                    Convite de gerente (F13, R8/R9) — rota PÚBLICA pelo mesmo motivo de
+                    /convite/:token acima: sem sessão, o guard mandaria o usuário para "/"
+                    antes do componente montar e o token se perderia.
+                  */}
+                  <Route path="/convite-gerente/:token" element={<AcceptManagerInvite />} />
+
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
 
@@ -185,6 +194,7 @@ function App() {
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="team" element={<CompanyTeam />} />
                       <Route path="indicacoes" element={<CompanyReferrals />} />
+                      <Route path="organization" element={<Organization />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="operacao" element={<CompanyOperationAnalytics />} />
                       <Route path="notifications" element={<Notifications />} />

@@ -6,15 +6,21 @@ import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
+import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 
 /**
  * Rede de segurança do item 11 (GTM): se o freela chegou ao login sem o ?redirect=
  * (ex.: confirmou email em outra aba e voltou pro /login "seco"), ainda tentamos
  * recuperar o convite pendente guardado pelo InviteAccept em sessionStorage.
+ *
+ * F13 (R8/R9): mesma rede para o convite de gerente — chave própria
+ * (`PENDING_MANAGER_INVITE_TOKEN_KEY`) para não colidir com o convite de equipe.
  */
 function resolvePendingInviteRedirect(explicitRedirect: string | null): string | null {
     if (explicitRedirect && explicitRedirect.startsWith('/')) return explicitRedirect;
     try {
+        const pendingManagerToken = sessionStorage.getItem(PENDING_MANAGER_INVITE_TOKEN_KEY);
+        if (pendingManagerToken) return `/convite-gerente/${pendingManagerToken}`;
         const pendingToken = sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
         if (pendingToken) return `/convite/${pendingToken}`;
     } catch {

@@ -159,6 +159,47 @@ export interface CompanyProfile {
 }
 
 // =============================================
+// MULTI-UNIDADE / GERENTE (F13) — .harness/spec/multi-unidade/ddl-aprovado.md §7
+// Shape do retorno de `get_my_companies()` (migration 20260818100300). É o ÚNICO resolvedor de
+// escopo de empresa do frontend (teamConnectionService.getAuthenticatedCompanyId(), CompanyProfile,
+// operationAnalyticsService.resolveCompanyScope() consomem esta RPC — nunca
+// `.eq('id', authUser.id).single()`).
+// =============================================
+export type CompanyRole = 'owner' | 'operator' | 'manager';
+
+export interface MyCompany {
+  company_id: string;
+  company_name: string | null;
+  role: CompanyRole;
+  organization_id: string;
+  organization_name: string | null;
+  onboarding_completed: boolean;
+  accepted_tos: boolean;
+}
+
+/**
+ * Linha de `company_members` (migration 20260818100000) — vínculo gerente x unidade. `user_id`
+ * é `null` enquanto o convite não foi aceito (R9). Projeção usada por `organizationService` /
+ * `pages/company/Organization.tsx` (R14-R16) — nunca dado financeiro/PII além do e-mail
+ * convidado, que a própria empresa digitou.
+ */
+export type CompanyMemberStatus = 'invited' | 'active' | 'removed';
+
+export interface CompanyMember {
+  id: string;
+  company_id: string;
+  user_id: string | null;
+  role: 'manager';
+  status: CompanyMemberStatus;
+  invited_email: string | null;
+  /** Só não-nulo enquanto `status='invited'` — queima (`NULL`) no aceite (R9). */
+  invite_token: string | null;
+  invited_at: string;
+  accepted_at: string | null;
+  expires_at: string;
+}
+
+// =============================================
 // JOB
 // =============================================
 

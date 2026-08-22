@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
 
@@ -36,7 +37,7 @@ export default function CompanyProfile() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
-    const [userId, setUserId] = useState<string | null>(null);
+    const [companyId, setCompanyId] = useState<string | null>(null);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -93,12 +94,24 @@ export default function CompanyProfile() {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) return;
-                setUserId(user.id);
+
+                // F13 (R12) — `get_my_companies()` é o único resolvedor de escopo de empresa:
+                // um gerente (`company_members` ativo) não tem linha própria em `companies`
+                // (`id = user.id` nunca casa), então esta tela ficava em branco/erro para ele.
+                // Resolve a unidade CORRENTE (respeita o seletor, R13) e usa o `company_id`
+                // dela — nunca mais `user.id` — para ler/editar/upload/link/reviews.
+                const companies = await getMyCompanies();
+                const current = pickCurrentCompany(companies);
+                if (!current) {
+                    addToast('Perfil de empresa não encontrado.', 'error');
+                    return;
+                }
+                setCompanyId(current.company_id);
 
                 const { data } = await supabase
                     .from('companies')
                     .select('*')
-                    .eq('id', user.id)
+                    .eq('id', current.company_id)
                     .single();
 
                 if (data) {
@@ -117,7 +130,7 @@ export default function CompanyProfile() {
     }, [addToast]);
 
     const handleSave = async () => {
-        if (!userId) return;
+        if (!companyId) return;
         setSaving(true);
         try {
             const basePayload = {
@@ -148,19 +161,19 @@ export default function CompanyProfile() {
             let { data, error } = await supabase
                 .from('companies')
                 .update({ ...basePayload, default_briefing: company.default_briefing, ...riskPayload })
-                .eq('id', userId)
+                .eq('id', companyId)
                 .select('id');
 
             if (error && /link_risk_alert_(enabled|threshold)/i.test(error.message || '')) {
                 ({ data, error } = await supabase
                     .from('companies')
                     .update({ ...basePayload, default_briefing: company.default_briefing })
-                    .eq('id', userId)
+                    .eq('id', companyId)
                     .select('id'));
             }
 
             if (error && /default_briefing/i.test(error.message || '')) {
-                ({ data, error } = await supabase.from('companies').update(basePayload).eq('id', userId).select('id'));
+                ({ data, error } = await supabase.from('companies').update(basePayload).eq('id', companyId).select('id'));
             }
 
             if (error) throw error;
@@ -212,7 +225,7 @@ export default function CompanyProfile() {
     // ... existing status state ...
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover') => {
-        if (!e.target.files || !e.target.files[0] || !userId) return;
+        if (!e.target.files || !e.target.files[0] || !companyId) return;
 
         const file = e.target.files[0];
 
@@ -230,7 +243,7 @@ export default function CompanyProfile() {
 
         try {
             const fileExt = file.name.split('.').pop();
-            const fileName = `${userId}/${type}_${Math.random()}.${fileExt}`;
+            const fileName = `${companyId}/${type}_${Math.random()}.${fileExt}`;
             const filePath = `${fileName}`;
 
             // Upload directly to 'avatars' bucket (assuming it's public)
@@ -254,7 +267,7 @@ export default function CompanyProfile() {
             const { data: dbData, error: dbError } = await supabase
                 .from('companies')
                 .update({ [field]: publicUrl })
-                .eq('id', userId)
+                .eq('id', companyId)
                 .select('id');
 
             if (dbError) throw dbError;
@@ -277,8 +290,8 @@ export default function CompanyProfile() {
     };
 
     const handleCopyMyLink = useCallback(async () => {
-        if (!userId) return;
-        const { url } = TeamConnectionService.generateInviteToken(userId);
+        if (!companyId) return;
+        const { url } = TeamConnectionService.generateInviteToken(companyId);
         try {
             await navigator.clipboard.writeText(url);
             setLinkCopied(true);
@@ -287,7 +300,7 @@ export default function CompanyProfile() {
         } catch {
             addToast('Não foi possível copiar o link.', 'error');
         }
-    }, [userId, addToast]);
+    }, [companyId, addToast]);
 
     // R3/R4: logout acessível no mobile (via item "Perfil" do BottomNav) — fonte única
     // AuthContext.signOut, com try/catch + toast de erro + estado de loading (A3/A4).
@@ -787,7 +800,7 @@ export default function CompanyProfile() {
             </div>
 
             {/* Avaliações recebidas de freelas */}
-            {userId && <ProfileReviews reviewedId={userId} reviewerRole="worker" />}
+            {companyId && <ProfileReviews reviewedId={companyId} reviewerRole="worker" />}
 
             {/* Meu link de perfil — a empresa compartilha o PRÓPRIO link para ser
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
@@ -801,7 +814,7 @@ export default function CompanyProfile() {
                 </p>
                 <button
                     onClick={handleCopyMyLink}
-                    disabled={!userId}
+                    disabled={!companyId}
                     className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {linkCopied ? <Check size={18} /> : <Copy size={18} />}

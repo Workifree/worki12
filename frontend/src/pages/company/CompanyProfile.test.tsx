@@ -20,6 +20,10 @@ vi.mock('../../lib/supabase', () => ({
       signOut: vi.fn(),
     },
     from: vi.fn(),
+    // F13 (R12) — CompanyProfile resolve a unidade via `get_my_companies()` (companyScopeService)
+    // em vez de `user.id` direto. Default: uma única linha role='owner' (o caso dominante hoje,
+    // A9) para não mudar o comportamento dos testes de fallback do LM-5 abaixo.
+    rpc: vi.fn(),
     storage: {
       from: vi.fn(() => ({
         upload: vi.fn(),
@@ -80,6 +84,24 @@ function setupMocks() {
     data: { user: { id: 'company-user-1' } },
     error: null,
   } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
+
+  vi.mocked(supabase.rpc).mockImplementation((fn: string) => {
+    if (fn === 'get_my_companies') {
+      return Promise.resolve({
+        data: [{
+          company_id: 'company-user-1',
+          company_name: 'Divino Fogão',
+          role: 'owner',
+          organization_id: 'org-1',
+          organization_name: 'Divino Fogão',
+          onboarding_completed: true,
+          accepted_tos: true,
+        }],
+        error: null,
+      }) as unknown as ReturnType<typeof supabase.rpc>
+    }
+    return Promise.resolve({ data: null, error: null }) as unknown as ReturnType<typeof supabase.rpc>
+  })
 
   const mockUpdate = vi.fn()
   const companiesChain = {

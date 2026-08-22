@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt, BarChart3, Share2 } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, Loader2, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,6 +6,8 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
 import { useEffect, useState } from 'react';
+import { getMyCompanies, pickCurrentCompany, setSelectedCompanyId } from '../services/companyScopeService';
+import type { MyCompany } from '../types';
 
 interface SidebarProps {
     type?: 'worker' | 'company';
@@ -23,6 +25,11 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     }
 
     const [workerData, setWorkerData] = useState<WorkerData | null>(null);
+    // F13 (R13) — seletor de unidade: só aparece quando a sessão opera mais de UMA empresa
+    // (gerente de duas lojas, ou sócio navegando por unidade). Para 100% das contas de hoje
+    // (uma linha), `myCompanies.length <= 1` e o seletor nunca renderiza.
+    const [myCompanies, setMyCompanies] = useState<MyCompany[]>([]);
+    const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
     const navigate = useNavigate();
     const { signOut } = useAuth();
     const { addToast } = useToast();
@@ -50,8 +57,21 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             if (!user) return;
 
             if (type === 'company') {
-                const { data } = await supabase.from('companies').select('name').eq('id', user.id).single();
-                if (data) setName(data.name);
+                // F13 (R11/R13) — `get_my_companies()` é o único resolvedor de escopo de empresa.
+                // `.eq('id', user.id)` nunca casava para um gerente (sem linha própria em
+                // `companies`), deixando o nome preso em "Carregando...". Resolve a lista inteira
+                // aqui: também alimenta o seletor de unidade quando há mais de uma.
+                try {
+                    const companies = await getMyCompanies();
+                    setMyCompanies(companies);
+                    const current = pickCurrentCompany(companies);
+                    if (current) {
+                        setName(current.company_name ?? '');
+                        setCurrentCompanyId(current.company_id);
+                    }
+                } catch (error) {
+                    logError('Sidebar.fetchCompanyScope', error);
+                }
                 setIsVerified(!!user.email_confirmed_at);
             } else {
                 // Fetch from unified 'workers' table
@@ -83,6 +103,10 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: User, label: 'Meu Perfil', path: '/profile' },
     ];
 
+    const currentCompany = myCompanies.find(c => c.company_id === currentCompanyId) ?? null;
+    // R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização.
+    const canSeeOrganization = currentCompany?.role === 'owner' || currentCompany?.role === 'operator';
+
     const companyNavItems = [
         { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
         { icon: Users, label: 'Meu Elenco', path: '/company/team' },
@@ -92,11 +116,22 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
         { icon: BarChart3, label: 'Operação', path: '/company/operacao' },
+        ...(canSeeOrganization ? [{ icon: Network, label: 'Organização', path: '/company/organization' }] : []),
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];
 
     const navItems = type === 'company' ? companyNavItems : workerNavItems;
     const isCompany = type === 'company';
+
+    // F13 (R13) — troca de unidade: grava a seleção (companyScopeService, singleton + sessionStorage)
+    // e recarrega a página. Um reload total é a forma mais simples e segura de garantir que TODA
+    // tela já montada (que resolve `company_id` no próprio `useEffect` de montagem) releia o dado
+    // da unidade nova, sem precisar plumbar um contexto reativo por todas as páginas de empresa.
+    const handleSwitchCompany = (companyId: string) => {
+        if (companyId === currentCompanyId) return;
+        setSelectedCompanyId(companyId);
+        window.location.assign('/company/dashboard');
+    };
 
     return (
         <aside aria-label="Menu lateral" className="hidden md:flex flex-col w-72 h-[calc(100vh-32px)] m-4 sticky top-4 
@@ -116,6 +151,30 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     <NotificationBell className={isCompany ? "text-gray-500 hover:bg-gray-100" : "text-gray-400 hover:bg-white/10"} />
                 </div>
             </div>
+
+            {/* Seletor de unidade (F13 R13) — só aparece quando a sessão opera mais de uma
+                empresa (gerente de duas lojas, ou sócio navegando por unidade). Zero mudança
+                visual para as contas de hoje (uma unidade). */}
+            {isCompany && myCompanies.length > 1 && (
+                <div className="px-4 pt-4">
+                    <label htmlFor="sidebar-company-switch" className="sr-only">Trocar de unidade</label>
+                    <div className="relative">
+                        <select
+                            id="sidebar-company-switch"
+                            value={currentCompanyId ?? ''}
+                            onChange={(e) => handleSwitchCompany(e.target.value)}
+                            className="w-full appearance-none bg-gray-50 border-2 border-black rounded-xl pl-3 pr-9 py-2.5 text-xs font-black uppercase tracking-wide text-gray-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                            {myCompanies.map((c) => (
+                                <option key={c.company_id} value={c.company_id}>
+                                    {c.company_name || 'Unidade sem nome'}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    </div>
+                </div>
+            )}
 
             {/* Navigation */}
             <nav className="flex-1 px-4 py-8 flex flex-col gap-3 overflow-y-auto">
