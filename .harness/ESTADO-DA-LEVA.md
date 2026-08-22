@@ -20,16 +20,31 @@
 | **Dívida #9** `reviews` escopado por vínculo | 21/08 | policy única de SELECT (exigiu 2 tentativas — ver `patterns.md`) |
 | Frontend F5–F8 | 21/08 | `worki-opal.vercel.app`, verificado por chunk |
 
-## 2. Prontas, aguardando commit/aplicação
+## 2. ✅ F9–F12 — commitadas, mergeadas em `main`, migrations APLICADAS
 
-| Feature | Backend | UI | Segurança | Frontend | Evaluator |
-|---|---|---|---|---|---|
-| **F9** analytics de operação | ✅ | ✅ | ✅ | ✅ | 🔄 reavaliando |
-| **F10** indicação entre empresas | ✅ | ✅ | ✅ | ✅ | ❌ → correções 🔄 |
-| **F11** SOS | ✅ | ✅ | ✅ | ✅ | ❌ → corrigido, 🔄 reavaliando |
-| **F12** badges | ✅ | ✅ | ✅ | ✅ | ✅ **APROVADA** |
+PR #216 mergeado. Migrations `20260821000300` (DS-PII), `20260817001400` (F12), `001500` (F10) e
+`001600` (F11) aplicadas e **verificadas no catálogo**.
 
-Migrations escritas e **não aplicadas**: `20260817001400` (F12), `001500` (F10), `001600` (F11).
+**V8 do SOS (gate de não-subida) PASSOU:** `claim_shift_slot` preserva a checagem de
+`jobs.status='deleted'` e o lock continua em `jobs`. O trigger de `origin` é **BEFORE** — se virasse
+AFTER, as duas policies novas deixariam de valer em silêncio.
+
+### 🔴 PENDENTE: deploy do frontend NÃO entrou
+
+`api.vercel.com` está inalcançável desta máquina (`curl` devolve `000`; `vercel.com` e GitHub
+respondem). O bundle no ar continua sendo `index-BLTg-_4j.js`, o mesmo da leva F5–F8 — nenhuma tela
+nova está publicada.
+
+**Isso não quebrou nada** (a ordem migration-antes-do-frontend foi respeitada), **mas há uma janela
+de risco aberta:**
+
+> O frontend no ar ainda usa o embed `worker:workers(...)` em `listAllConnections`, que a DS-PII
+> esvaziou para linhas `pending`. Hoje há **0 conexões pendentes**, então nada acontece. Se alguém
+> criar um convite antes do deploy, o cartão aparece **sem o nome do freela e sem erro nenhum** —
+> exatamente a falha silenciosa que `list_team_connection_cards()` existe para evitar.
+
+**Ação:** rodar `npx vercel --prod` **da raiz** quando a API voltar, e verificar o chunk no ar (não
+o hash do build local, que nunca bate). Ver `[[vercel-deploy-setup]]` na memória.
 
 ## 3. ⏸️ PARADO ESPERANDO DECISÃO DO OWNER
 
