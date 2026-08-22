@@ -1324,3 +1324,50 @@ que só aparece o que você tocou.
 
 **Sinal:** o próprio `git commit` lista os arquivos. Se aparecer arquivo que você não editou nesta
 tarefa, o commit está errado — desfazer é barato antes do push, caro depois.
+
+---
+
+## ✓ Padrão: simular a migration contra produção, com `RAISE EXCEPTION` no fim
+
+**Origem:** 22/08/2026, a seção 2B da migration de LGPD. Duas descobertas em sequência, ambas
+impossíveis por leitura.
+
+**Descoberta 1 — a leva não entregava a própria promessa.** A migration existe para destravar o
+`deleteUser`. Simulei o `DELETE FROM auth.users` contra um freela **real**:
+`23503 — violates foreign key constraint "applications_worker_id_fkey"`. A seção só derrubava as FKs
+de `workers`/`companies`/`wallets`, e a asserção só inventariava `confdeltype = 'c'` (CASCADE). As
+`NO ACTION` diretas — `applications`, `reviews`, `analytics_events` — sobreviviam. **Um guarda que
+procura cascata não acha bloqueio por NO ACTION.**
+
+**Descoberta 2 — o conserto era inaplicável.** A reescrita passou a derrubar *toda* FK para
+`auth.users` menos uma allow-list. Simulei de novo: `42501: must be owner of table identities`. O
+laço alcançava **oito tabelas internas do Supabase** (`sessions`, `identities`, `mfa_factors`,
+`one_time_tokens`, `oauth_*`, `webauthn_*`) — o mecanismo pelo qual o Auth limpa sessão ao excluir
+conta. A migration abortava na primeira, então era **inaplicável, e só não era destrutiva por
+acidente de permissão**. Faltava `AND ns.nspname = 'public'`.
+
+Nenhuma das duas apareceria em revisão de código: a primeira exige saber quais FKs existem no banco
+**hoje**; a segunda, saber que `auth` também referencia `auth.users`.
+
+**A técnica.** Envolver a parte destrutiva num `DO $$ … END $$` e terminar com
+`RAISE EXCEPTION` carregando o resultado da leitura. A exceção **transporta o diagnóstico e desfaz a
+escrita no mesmo gesto** — teste que não vaza por esquecimento de limpar, porque a limpeza não é um
+passo que alguém possa esquecer.
+
+```sql
+DO $$
+DECLARE v_res text;
+BEGIN
+    -- ... a parte destrutiva, tal como a migration a executa ...
+    -- ... a leitura que prova o efeito ...
+    RAISE EXCEPTION 'ROLLBACK PROPOSITAL — %', v_res;
+END $$;
+```
+
+**Quando usar:** toda migration que derrube constraint, altere FK, adicione CHECK em tabela viva ou
+mexa em RPC de autorização. Custa uma consulta. Nesta sessão pagou-se sozinha quatro vezes
+(a lápide, os CHECKs de domínio, o reconvite de gerente, o autoprovisionamento de organização).
+
+**Regra irmã, do mesmo dia:** predicado de guarda também se roda antes de confiar. `regclass::text`
+sem schema, `_` como curinga no `LIKE`, `HAVING` sem `GROUP BY` e `CHECK` de comprimento passando por
+enum — quatro guardas que **pareciam** funcionar e nenhum foi pego por leitura.
