@@ -340,3 +340,16 @@ Function. Mesma família da regra já registrada "migration antes do frontend".
 - **Texto de consentimento do SOS** — revisão jurídica.
 - **Retenção do token de cartão no Asaas** — sem endpoint de revogação confirmado; ou se confirma
   com o Asaas, ou se remove o cliente lá, ou se declara a retenção na Política de Privacidade.
+
+### ⚠️ Cópia velha da migration de LGPD no worktree
+
+`../worki12-multi-unidade/supabase/migrations/20260821000000_lgpd_account_anonymization.sql` é a
+versão de quando a branch `feat/multi-unidade` nasceu — **diverge** da do repositório principal e
+ainda tem o `regclass::text` quebrado em 5 pontos.
+
+Não há risco vigente: as migrations de LGPD são aplicadas a partir do repositório principal, e do
+worktree só saem arquivos de F13. Mas o arquivo existe nos dois lugares com conteúdo diferente, e
+"aplicar do worktree" foi exatamente o que fiz hoje para a F13 — o hábito é o risco.
+
+**Ao fechar a branch:** trazer `main` para dentro dela antes de qualquer aplicação futura a partir
+do worktree, e conferir que o arquivo de LGPD ficou igual ao do principal.
