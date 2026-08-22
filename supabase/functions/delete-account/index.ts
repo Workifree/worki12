@@ -6,10 +6,10 @@
  * indicações/notificações/payment_methods/company_members/organization_members) vive INTEIRA
  * na RPC transacional `public.anonymize_account` (supabase/migrations/20260821000000_*.sql).
  * Esta função NUNCA anonimiza campo a campo — isso saiu do TypeScript de propósito (§4.2):
- * a versão manual anterior cobria 7/12 colunas de workers e 5/11 de companies, o que é PIOR
+ * a versão manual anterior cobria 7/19 colunas de workers e 5/11 de companies, o que é PIOR
  * que não existir (dava falsa sensação de cobertura — achado do evaluator C-LGPD-EDGE-4).
  *
- * Ordem que NÃO pode ser invertida (§4.3): deleteUser SÓ depois de outcome='anonimized'.
+ * Ordem que NÃO pode ser invertida (§4.3): deleteUser SÓ depois de outcome='anonymized'.
  * Se a credencial cair antes e a RPC falhar, sobra uma linha com CPF/PIX sem titular capaz de
  * pedir a exclusão de novo.
  */
@@ -103,36 +103,69 @@ serve(async (req) => {
     //    Storage: avatar/cover/logo vivem todos no bucket 'avatars', sob o prefixo
     //    `${userId}/...` (mesma convenção em Profile.tsx e CompanyProfile.tsx — o
     //    path é derivado do userId, não precisa ler a coluna avatar_url/cover_url).
-    //    payment_methods: token do cartão da empresa, para revogar no Asaas depois.
+    //    payment_methods: SÓ a CONTAGEM (nunca o token) de métodos de pagamento que a RPC
+    //    vai apagar — usada apenas para registrar em log que sobraram tokens sem revogação
+    //    no Asaas (ver bloco 4b). Trazer o token para a memória do processo, mesmo sem
+    //    logá-lo, não se sustenta dentro de uma rotina de LGPD (M-2).
     //    (Companies do titular resolvidas com a MESMA ancoragem dupla da RPC — leitura,
     //    não decisão de autorização; a RPC decide de novo, de forma independente.)
     // -------------------------------------------------------------------
-    let storageObjectPaths: string[] = [];
+    const storageObjectPaths: string[] = [];
     try {
-      const { data: storageList } = await supabaseAdmin.storage.from('avatars').list(userId);
-      storageObjectPaths = (storageList ?? []).map((f) => `${userId}/${f.name}`);
+      // Paginado: o default de `list()` é 100 objetos. CompanyProfile.tsx gera nome novo
+      // a cada upload (Math.random(), sem upsert), então uma conta antiga pode ter mais de
+      // 100 arquivos — sem paginação, o excedente sobreviveria em silêncio num bucket
+      // público (M-4). Segue até a página devolver menos que o solicitado.
+      const pageSize = 1000;
+      let offset = 0;
+      for (;;) {
+        const { data: storageList, error: storageListError } = await supabaseAdmin.storage
+          .from('avatars')
+          .list(userId, { limit: pageSize, offset });
+        if (storageListError) {
+          console.error(
+            'delete-account: falha ao listar storage antes da anonimização — avatar/cover podem sobreviver em bucket público',
+            storageListError
+          );
+          break;
+        }
+        const page = storageList ?? [];
+        storageObjectPaths.push(...page.map((f) => `${userId}/${f.name}`));
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
     } catch (storageListError) {
-      console.error('delete-account: falha ao listar storage antes da anonimização', storageListError);
+      console.error('delete-account: exceção ao listar storage antes da anonimização', storageListError);
     }
 
-    let cardTokensToRevoke: string[] = [];
+    let strandedCardTokenCount = 0;
     try {
-      const { data: companiesOfTitular } = await supabaseAdmin
+      const { data: companiesOfTitular, error: companiesReadError } = await supabaseAdmin
         .from('companies')
         .select('id')
         .or(`id.eq.${userId},owner_id.eq.${userId}`);
+      if (companiesReadError) {
+        console.error(
+          'delete-account: falha ao ler companies do titular antes da anonimização (contagem de cartão pode ficar incompleta)',
+          companiesReadError
+        );
+      }
       const companyIdsPre = (companiesOfTitular ?? []).map((c: { id: string }) => c.id);
       if (companyIdsPre.length > 0) {
-        const { data: paymentMethods } = await supabaseAdmin
+        const { count, error: paymentMethodsReadError } = await supabaseAdmin
           .from('payment_methods')
-          .select('asaas_credit_card_token')
+          .select('id', { count: 'exact', head: true })
           .in('company_id', companyIdsPre);
-        cardTokensToRevoke = (paymentMethods ?? [])
-          .map((pm: { asaas_credit_card_token: string }) => pm.asaas_credit_card_token)
-          .filter(Boolean);
+        if (paymentMethodsReadError) {
+          console.error(
+            'delete-account: falha ao contar payment_methods antes da anonimização',
+            paymentMethodsReadError
+          );
+        }
+        strandedCardTokenCount = count ?? 0;
       }
     } catch (paymentMethodsReadError) {
-      console.error('delete-account: falha ao ler payment_methods antes da anonimização', paymentMethodsReadError);
+      console.error('delete-account: exceção ao contar payment_methods antes da anonimização', paymentMethodsReadError);
     }
 
     // -------------------------------------------------------------------
@@ -171,12 +204,20 @@ serve(async (req) => {
     const isWorker = !!result.is_worker;
     const companyIds = result.company_ids ?? [];
 
+    // M-3: os 10 valores de ApplicationStatus (frontend/src/types/index.ts) são pending,
+    // reviewing, interview, hired, in_progress, completed, rejected, invited, declined,
+    // cancelled. Cancelamos os SEIS ativos (a candidatura ainda pode virar algo depois que o
+    // titular já foi anonimizado): pending/reviewing/interview (pull, antes da decisão),
+    // invited (push, aguardando aceite), hired/in_progress (turno ainda vai ou está
+    // acontecendo). Ficam de fora os QUATRO terminais, que não têm mais transição possível
+    // e são histórico que a plataforma precisa manter (recibo, badges, agregados):
+    // completed, rejected, declined, cancelled (este já é o estado-alvo — incluir seria no-op).
     if (isWorker) {
       await supabaseAdmin
         .from('applications')
         .update({ status: 'cancelled' })
         .eq('worker_id', userId)
-        .in('status', ['pending', 'interview', 'invited', 'hired', 'in_progress']);
+        .in('status', ['pending', 'reviewing', 'interview', 'invited', 'hired', 'in_progress']);
     }
 
     if (companyIds.length > 0) {
@@ -191,11 +232,12 @@ serve(async (req) => {
         .in('company_id', companyIds);
       const jobIds = (companyJobs ?? []).map((j: { id: string }) => j.id);
       if (jobIds.length > 0) {
+        // Mesma lista de status ativos do ramo worker acima (M-3) — ver comentário lá.
         await supabaseAdmin
           .from('applications')
           .update({ status: 'cancelled' })
           .in('job_id', jobIds)
-          .in('status', ['pending', 'interview', 'invited', 'hired', 'in_progress']);
+          .in('status', ['pending', 'reviewing', 'interview', 'invited', 'hired', 'in_progress']);
       }
     }
 
@@ -239,9 +281,9 @@ serve(async (req) => {
     // perde a referência — mas o dado permanece no processador. Registrado em
     // `.harness/memory-bank/debitos-pre-piloto.md`; exige confirmação contra a API do Asaas
     // (ou contato com o suporte deles) ANTES de a rotina ser publicada ao usuário.
-    if (cardTokensToRevoke.length > 0) {
+    if (strandedCardTokenCount > 0) {
       console.warn(
-        `delete-account: ${cardTokensToRevoke.length} token(s) de cartao permanecem no Asaas apos ` +
+        `delete-account: ${strandedCardTokenCount} token(s) de cartao permanecem no Asaas apos ` +
         `a exclusao (endpoint de revogacao nao confirmado). Ver debitos-pre-piloto.md.`
       );
     }
