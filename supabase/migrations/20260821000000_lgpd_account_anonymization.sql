@@ -139,7 +139,17 @@ DECLARE
         -- Sem esta linha, a F13 (que cria company_members REFERENCES companies) faz ESTA
         -- migration HALTar em todo replay de CI/staging a partir de zero, porque
         -- 20260818100000 ordena ANTES de 20260821000000.
-        'public.company_members'              -- SOFT-REMOVE (status='removed') + purga de PII
+        'public.company_members',             -- SOFT-REMOVE (status='removed') + purga de PII
+        -- EMENDA 2026-08-22 (2) — achadas pela PRÓPRIA asserção (c) depois que o conserto do
+        -- `regclass::text` acima a fez funcionar de verdade: ela acusou `applications` e `jobs`.
+        -- NÃO é "adicionar para fazer passar" — a decisão já estava escrita em §2.1 "Demais
+        -- tabelas": RETIDAS, chaves pseudônimas + timestamps, sem conteúdo pessoal, sustentando
+        -- o BI e a integridade referencial de `shift_payments`. O que faltava era o NOME aqui.
+        -- (As irmãs `shift_calls`/`shift_call_targets`/`shift_attendance_confirmations` NÃO
+        --  aparecem porque penduram em `jobs`, não em workers/companies — a asserção só enxerga
+        --  dependência DIRETA das duas âncoras, e é assim que deve ser.)
+        'public.applications',                -- RETIDA (§2.1) — worker_id pseudônimo
+        'public.jobs'                         -- RETIDA (§2.1) — company_id pseudônimo
     ];
 
     -- EMENDA 2026-08-22 — asserções (d)/(e): o universo do sweep POR NOME (ver §2.1.1).
@@ -499,6 +509,7 @@ DECLARE
     v_counts        jsonb := '{}'::jsonb;
     v_n             integer;
     v_txt           text;          -- EMENDA 2026-08-22 (GUARDA 4, fronteira F13)
+    v_is_member     boolean := false;  -- EMENDA 2026-08-22 (classe GERENTE/SOCIO, fronteira F13)
     c_worker_label  constant text := '[Conta Deletada]';
     c_company_label constant text := '[Empresa Deletada]';
     c_redacted      constant text :=
@@ -518,7 +529,34 @@ BEGIN
     WHERE c.id = p_user_id OR c.owner_id = p_user_id;
     v_company_ids := coalesce(v_company_ids, ARRAY[]::uuid[]);
 
-    IF NOT v_is_worker AND cardinality(v_company_ids) = 0 THEN
+    -- ---- EMENDA 2026-08-22: a classe GERENTE/SOCIO tambem e titular ----
+    -- Sem isto, `not_found` era devolvido para um usuario LEGITIMO. O gerente da F13, depois de
+    -- `accept_manager_invite`, NAO tem linha em `companies` (a casca e APAGADA de proposito,
+    -- 20260818100300) e nunca teve linha em `workers`: as duas ancoras acima dao vazio. O socio
+    -- de rede que nao e dono de nenhuma unidade cai no mesmo buraco.
+    --
+    -- Tratar isso apenas como "a Edge Function aborta antes do deleteUser" fecharia o furo de
+    -- SEGURANCA (credencial apagada com o vinculo ativo) as custas de criar um furo de DIREITO:
+    -- essa pessoa ficaria PERMANENTEMENTE impedida de excluir a propria conta -- violando o
+    -- art. 18, VI dentro da rotina que existe justamente para cumpri-lo. O portao correto e
+    -- reconhecer a classe, nao recusa-la.
+    --
+    -- O corpo da rotina ja atende este caso sem nenhuma outra mudanca: os blocos de
+    -- workers/companies nao acham linha e nao fazem nada, e os blocos de
+    -- company_members/organization_members fecham o vinculo pelo predicado `user_id = $1`
+    -- (o ramo por `company_id` recebe array vazio e e inofensivo).
+    IF pg_catalog.to_regclass('public.company_members') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.company_members WHERE user_id = $1)'
+           INTO v_is_member USING p_user_id;
+    END IF;
+    IF NOT v_is_member AND pg_catalog.to_regclass('public.organization_members') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.organization_members WHERE user_id = $1)'
+           INTO v_is_member USING p_user_id;
+    END IF;
+
+    IF NOT v_is_worker AND cardinality(v_company_ids) = 0 AND NOT v_is_member THEN
+        -- Agora `not_found` significa mesmo "nao existe titular", e segue valendo como FALHA
+        -- para a Edge Function (§4): nunca seguir para o deleteUser depois deste retorno.
         RETURN jsonb_build_object('outcome', 'not_found');
     END IF;
 
