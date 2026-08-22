@@ -166,3 +166,53 @@ deploy fecha o par.
   e V6 (forjar `origin='sos'` → 42501) são gate de não-subida.
 - `pg_cron` do F8 exercitado.
 - Ordem obrigatória: **migration antes do frontend** (coluna ausente = `42703` derruba a query inteira).
+
+---
+
+## F13 (multi-unidade) — portão de pré-voo RODADO em produção (22/08)
+
+**Q0 (BLOQUEANTE) = 0 em todas as cinco linhas.** Nenhum `jobs`/`team_connections`/`shift_payments`/
+`team_lists`/`job_series` ancorado em empresa inexistente. O narrowing da D3 não tira acesso de ninguém.
+
+**Q1 = 0.** Nenhuma das 7 empresas tem `owner_id` diferente de `id`. A Fase 2 é no-op **verificado**,
+não presumido — que é justamente o que a V6 do contrato mandava conferir em vez de assumir.
+
+### ⚠️ Achado que mudou o lote: `20260821001100` NÃO entra
+
+O plano dizia "Fases 0/1/2 + as irmãs". Mas `20260821001100_accept_manager_invite_dep_guard.sql` faz
+`CREATE OR REPLACE FUNCTION public.accept_manager_invite` — função que **nasce na Fase 3**
+(`20260818100300`). Aplicá-la agora não daria erro: **criaria** a RPC de aceite num banco sem Fase 3.
+Resultado seria um gerente conseguindo aceitar convite sem nenhuma tela para operar depois — o estado
+exato que a decisão de parar antes da Fase 3 existe para impedir. `CREATE OR REPLACE` não avisa que
+está criando em vez de substituir; a dependência só aparece lendo o corpo.
+
+Lote real: `20260818100000` → `20260818100100` → `20260818100200` → `20260821001000`. Só.
+
+### Correção antes de aplicar
+
+`20260821001000` citava `is_company_owner (20260818100400)` em 9 comentários — número morto desde o
+rename para `20260821001000`. A função vem de `20260818100200`. Corrigido.
+
+## LGPD — três varreduras rodadas contra produção ANTES de aplicar
+
+Extraí as asserções (c)/(d)/(e) e rodei em modo leitura. (d) e (e) limpas. **A (c) acusou
+`public.applications` e `public.jobs`.**
+
+Não era tabela sem decisão: §2.1 "Demais tabelas" já as declara RETIDAS. Faltava o **nome** na
+`v_classified_deps`. Adicionado com a justificativa.
+
+**O que isso prova:** o bug do `regclass::text` (que o architect achou) estava **mascarando** estas
+duas omissões — a asserção acusaria *todas* as tabelas, então ninguém olharia a lista. Consertar o
+mecanismo fez ele achar defeito real no mesmo dia. Asserção que nunca rodou não é asserção.
+
+## LGPD — a classe GERENTE/SÓCIO deixou de ser recusada
+
+O ADR-20260822 propunha tratar `not_found` como falha e abortar antes do `deleteUser`. Isso fecha o
+furo de **segurança** (credencial some com o vínculo ativo) abrindo um furo de **direito**: o gerente
+da F13 não tem linha em `workers` nem em `companies` (a casca é apagada no aceite), então ficaria
+**permanentemente impedido de excluir a própria conta** — art. 18, VI violado dentro da rotina criada
+para cumpri-lo.
+
+`anonymize_account` agora reconhece a classe (consulta `company_members`/`organization_members` por
+`user_id`, guardada por `to_regclass`). `not_found` volta a significar "não há titular" e segue sendo
+falha para a Edge Function. Em avaliação pelo evaluator — eu escrevi, não me aprovo.
