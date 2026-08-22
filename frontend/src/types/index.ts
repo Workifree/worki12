@@ -159,6 +159,25 @@ export interface CompanyProfile {
 }
 
 // =============================================
+// MULTI-UNIDADE / GERENTE (F13) — .harness/spec/multi-unidade/ddl-aprovado.md §7
+// Shape do retorno de `get_my_companies()` (migration 20260818100300). É o ÚNICO resolvedor de
+// escopo de empresa do frontend (teamConnectionService.getAuthenticatedCompanyId(), CompanyProfile,
+// operationAnalyticsService.resolveCompanyScope() consomem esta RPC — nunca
+// `.eq('id', authUser.id).single()`).
+// =============================================
+export type CompanyRole = 'owner' | 'operator' | 'manager';
+
+export interface MyCompany {
+  company_id: string;
+  company_name: string | null;
+  role: CompanyRole;
+  organization_id: string;
+  organization_name: string | null;
+  onboarding_completed: boolean;
+  accepted_tos: boolean;
+}
+
+// =============================================
 // JOB
 // =============================================
 
