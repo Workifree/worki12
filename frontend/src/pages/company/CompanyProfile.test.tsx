@@ -85,6 +85,24 @@ function setupMocks() {
     error: null,
   } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
 
+  vi.mocked(supabase.rpc).mockImplementation((fn: string) => {
+    if (fn === 'get_my_companies') {
+      return Promise.resolve({
+        data: [{
+          company_id: 'company-user-1',
+          company_name: 'Divino Fogão',
+          role: 'owner',
+          organization_id: 'org-1',
+          organization_name: 'Divino Fogão',
+          onboarding_completed: true,
+          accepted_tos: true,
+        }],
+        error: null,
+      }) as unknown as ReturnType<typeof supabase.rpc>
+    }
+    return Promise.resolve({ data: null, error: null }) as unknown as ReturnType<typeof supabase.rpc>
+  })
+
   const mockUpdate = vi.fn()
   const companiesChain = {
     select: vi.fn().mockReturnValue({

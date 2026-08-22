@@ -8,6 +8,21 @@ import TosGateModal from './TosGateModal';
 import { getMyCompanies, pickCurrentCompany } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
+/**
+ * Isolamento de papel — avisa uma vez (`useEffect` com dep no destino, não a cada render) e
+ * navega. Componente próprio em vez de `addToast` direto no corpo de `ProtectedRoute`: o alvo é
+ * recomputado a cada render (nunca guardado em state, ver comentário acima), então chamar
+ * `addToast` ali disparava o toast em loop enquanto a navegação não completava.
+ */
+function RoleRedirect({ to }: { to: string }) {
+    const { addToast } = useToast();
+    useEffect(() => {
+        addToast('Você não tem permissão para acessar esta página.', 'error');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [to]);
+    return <Navigate to={to} replace />;
+}
+
 export default function ProtectedRoute() {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<{ id: string; user_metadata?: { user_type?: string } } | null>(null);
@@ -16,9 +31,7 @@ export default function ProtectedRoute() {
     const [tosAccepted, setTosAccepted] = useState<boolean | null>(null);
     const [detectedRole, setDetectedRole] = useState<'worker' | 'company'>('worker');
     const [companyRole, setCompanyRole] = useState<CompanyRole | null>(null);
-    const [roleRedirect, setRoleRedirect] = useState<string | null>(null);
     const location = useLocation();
-    const { addToast } = useToast();
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -142,34 +155,34 @@ export default function ProtectedRoute() {
         return <Navigate to={onboardingRedirect} replace />;
     }
 
-    // Role isolation: prevent wrong role from accessing wrong routes
-    if (user && !roleRedirect) {
-        const userType = user.user_metadata?.user_type;
-        const pathname = location.pathname;
-        const workerOnlyPaths = ['/dashboard', '/my-jobs', '/carteira', '/messages', '/profile', '/notifications', '/empresa', '/recebimentos'];
+    // Role isolation: prevent wrong role from accessing wrong routes. Derivado PURAMENTE do
+    // pathname corrente a cada render (nunca guardado em state) — como este componente
+    // permanece montado ao navegar entre rotas irmãs (mesmo <Route element={<ProtectedRoute/>}>
+    // envolve worker e company), um `roleRedirect` gravado em state travaria a sessão
+    // navegando para o MESMO destino para sempre, mesmo depois de chegar lá.
+    const userType = user.user_metadata?.user_type;
+    const pathname = location.pathname;
+    const workerOnlyPaths = ['/dashboard', '/my-jobs', '/carteira', '/messages', '/profile', '/notifications', '/empresa', '/recebimentos'];
 
-        if (userType === 'work' && pathname.startsWith('/company/')) {
-            addToast('Você não tem permissão para acessar esta página.', 'error');
-            setRoleRedirect('/dashboard');
-        } else if (userType === 'hire' && workerOnlyPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
-            addToast('Você não tem permissão para acessar esta página.', 'error');
-            setRoleRedirect('/company/dashboard');
-        } else if (
-            userType === 'hire'
-            && pathname.startsWith('/company/organization')
-            && companyRole !== null
-            && companyRole !== 'owner'
-            && companyRole !== 'operator'
-        ) {
-            // R16: /company/organization só é acessível a sócio/operador (organization_members
-            // ativo) — mesma técnica do bloqueio worker⇎company acima. Gerente comum (role
-            // 'manager') não vê a visão consolidada da organização (fora do escopo dele, R14).
-            addToast('Apenas sócio/operador pode acessar a Organização.', 'error');
-            setRoleRedirect('/company/dashboard');
-        }
+    let roleRedirectTarget: string | null = null;
+    if (userType === 'work' && pathname.startsWith('/company/')) {
+        roleRedirectTarget = '/dashboard';
+    } else if (userType === 'hire' && workerOnlyPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+        roleRedirectTarget = '/company/dashboard';
+    } else if (
+        userType === 'hire'
+        && pathname.startsWith('/company/organization')
+        && companyRole !== null
+        && companyRole !== 'owner'
+        && companyRole !== 'operator'
+    ) {
+        // R16: /company/organization só é acessível a sócio/operador (organization_members
+        // ativo) — mesma técnica do bloqueio worker⇎company acima. Gerente comum (role
+        // 'manager') não vê a visão consolidada da organização (fora do escopo dele, R14).
+        roleRedirectTarget = '/company/dashboard';
     }
 
-    if (roleRedirect) return <Navigate to={roleRedirect} replace />;
+    if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} />;
 
     // Pular gate de TOS durante onboarding para nao confundir o usuario
     const isOnboardingRoute = location.pathname.includes('/onboarding');

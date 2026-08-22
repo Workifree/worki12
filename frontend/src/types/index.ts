@@ -192,6 +192,8 @@ export interface CompanyMember {
   role: 'manager';
   status: CompanyMemberStatus;
   invited_email: string | null;
+  /** Só não-nulo enquanto `status='invited'` — queima (`NULL`) no aceite (R9). */
+  invite_token: string | null;
   invited_at: string;
   accepted_at: string | null;
   expires_at: string;

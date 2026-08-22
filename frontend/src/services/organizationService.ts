@@ -146,7 +146,7 @@ export async function revokeManager(companyId: string, userId: string | null): P
 export async function listCompanyManagers(companyId: string): Promise<CompanyMember[]> {
   const { data, error } = await supabase
     .from('company_members')
-    .select('id, company_id, user_id, role, status, invited_email, invited_at, accepted_at, expires_at')
+    .select('id, company_id, user_id, role, status, invited_email, invite_token, invited_at, accepted_at, expires_at')
     .eq('company_id', companyId)
     .neq('status', 'removed')
     .order('invited_at', { ascending: false });
