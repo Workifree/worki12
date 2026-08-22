@@ -182,6 +182,63 @@ integridade referencial — apagá-la nunca esteve em jogo) e o **conteúdo** sa
   **HALT**. Isto só pôde ser escrito **depois** do catálogo: enumerar às cegas produziria HALT
   garantido e lista inventada — guarda fail-closed com lista inventada é pior que guarda ausente,
   e por isso a lacuna ficou registrada como pendência (Hh2) até o dado chegar.
+- **A retenção passa a ter CLASSE DE EVIDÊNCIA, e a guarda verifica a própria evidência
+  (D6.3 — asserção `(b3)`).** Uma coluna textual pode ser retida por três motivos, e eles não
+  valem o mesmo:
+  1. **`CHECK` que ENUMERA valores** (`v_enum_text`) — garantia do **banco**: não *pode* conter
+     texto livre. É a classe forte, e a varredura completa de 22/08 fechou-a em **8 colunas**:
+     `shift_attendance_confirmations.source/response`, `shift_call_targets.origin/response`
+     (o que trouxe as duas tabelas-evento para dentro do fecho de (b2)),
+     `applications.invitation_response` e `shift_calls.reason/status/origin`.
+
+     ⚠️ **É "`CHECK` que enumera", não "`CHECK` existe" — e a diferença quase inverteu uma decisão
+     desta leva.** `jobs.certification_requirement` **tem** `CHECK`:
+     `char_length(certification_requirement) <= 200`. Uma regra de promoção por *existência* de
+     `CHECK` a levaria para a classe forte e a **tiraria da redação** — justamente a coluna de
+     texto livre que D6 acabou de mandar redigir. **`CHECK` de comprimento limita o tamanho da
+     prosa, não o fato de ser prosa.** A asserção (b3) exige a forma `<coluna> = ANY (ARRAY[…])`
+     **adjacente ao nome da coluna** (o que também barra carona em `CHECK` composto) e usa
+     `EXISTS`, o que resolve colunas presentes em mais de um `CHECK` — as de coerência
+     (`(response IS NULL) = (responded_at IS NULL)`) simplesmente não casam. Regressão em V22.
+  2. **Decisão escrita** (`jobs.title`, `jobs.location`) — o banco não impede nada; o contrato é
+     que decidiu, com justificativa.
+  3. **Constante do cliente, sem enforcement no banco** — a classe **fraca**. `jobs.scope`,
+     `jobs.status`, `jobs.type`, `jobs.category`, `jobs.budget_type`, `applications.status`:
+     **nenhuma tem `CHECK`** (conferido em `pg_constraint`). O que as mantém com cara de enum é
+     `CompanyCreateJob.tsx` gravando `'on-site'`/`'freelance'`/`'daily'` como constantes
+     literais — ou seja, a classificação repousa **exatamente na camada que o Article 4 da
+     constitution declara não ser garantia** ("filtro no client é só UX; a defesa dura é o
+     banco"). Um `PATCH` via PostgREST escreve texto livre nelas hoje. Não são redigidas
+     (`status` é máquina de estados; as demais sustentam filtro e BI): o fecho correto é `CHECK`
+     em leva própria (Hh5), não redação que quebraria o produto.
+
+  **Sobre o rebaixamento preventivo de `shift_calls.reason/status/origin`:** foram mantidas na
+  classe fraca mesmo com `CHECK` declarado no repositório, porque repositório **não é** catálogo
+  (`architecture.md`: "esta seção já esteve errada duas vezes"). A varredura absolveu as três — os
+  `CHECK`s estão no catálogo, idênticos. **A disciplina custou uma rodada e não custou nada**: o
+  preço de desconfiar do repositório é uma consulta; o preço de confiar nele foi pago duas vezes
+  neste projeto.
+
+  **A verificação de Hh4 mudou a redação de uma classe inteira, não a de uma coluna.** Perguntou-se
+  pelo `CHECK` de duas colunas; a resposta expôs seis sem enforcement nenhum. Vale como método: a
+  classe de evidência **não se herda por semelhança** ("parece enum, o vizinho é enum"), tem de ser
+  conferida uma a uma — foi assim que `jobs.certification_requirement` escapou da primeira lista.
+
+  **Por que a lista à mão NÃO foi substituída por uma regra derivada** ("coluna textual sem
+  `CHECK` fechado ⇒ HALT"), que era a alternativa mais elegante: ela HALTaria **para sempre** em
+  `jobs.title` e `jobs.location` — precisamente as duas colunas cuja retenção é a decisão mais
+  deliberada deste contrato, e que não têm (nem devem ter) `CHECK`. A lista de exceção seria
+  inevitável, e uma vez que ela existe, derivar **acrescenta** um mecanismo sem remover o outro.
+  O que o `CHECK` compra não é substituir a declaração — é **verificá-la**: `(b3)` re-confere a
+  cada aplicação que o `CHECK` invocado como justificativa ainda existe. Um `DROP CONSTRAINT`
+  transforma a coluna em texto livre e faria a classificação mentir em silêncio; agora HALTa.
+- **Um risco residual foi ANULADO, não mitigado.** O contrato registrava
+  `shift_attendance_confirmations.metadata jsonb` como fora do alcance de qualquer asserção
+  textual. **Essa coluna não existe** — nem `confirmation_status`, nem `created_at`, e os nomes
+  reais são `requested_at`/`responded_at`. O risco veio do `architecture.md`, que descreve a
+  tabela errado em seis pontos. Lição que fica: **memory-bank não é catálogo.** Um risco residual
+  derivado de documentação, sem conferência, é um risco inventado — e ele custa o mesmo que um
+  real: entra em lista, é lido por quem decide, e desloca atenção.
 - **Marcador, não `NULL`:** `jobs.title`/`location` mostram que este schema tem coluna textual
   `NOT NULL` e a lista vai crescer — um `NULL` em coluna `NOT NULL` estouraria **dentro** da
   transação destrutiva, com metade da conta já anonimizada. O marcador também explica o vazio para
@@ -222,10 +279,11 @@ porque a migration nunca foi aplicada. Trocado por `format('%I.%I', ns.nspname, 
 
 ### Negativas / Trade-offs (revisão 22/08)
 
-- A varredura fechada cobre `jobs`, `applications` e `shift_calls`, mas **não**
-  `shift_call_targets` nem `shift_attendance_confirmations` (não inventariadas), e (b2) por
-  construção **não alcança `metadata jsonb`** — nenhuma asserção textual alcança. Registrado em
-  §5.3; fechar exige o mesmo trabalho de catálogo.
+- A varredura fechada cobre as **cinco** tabelas retidas do domínio de turno. O que sobra é
+  **classe de evidência**, não cobertura: `jobs.scope` e `applications.invitation_response` seguem
+  retidas por observação até o `CHECK` ser conferido (Hh4). E (b2)/(b3) só falam de colunas
+  **textuais** — uma coluna `jsonb` com texto de pessoa continuaria invisível a elas. Hoje isso é
+  princípio, não risco vigente: não há coluna `jsonb`/`json` em nenhuma das cinco.
 - (b2) é uma allow-list mantida à mão: vai HALTar em toda coluna textual nova dessas três tabelas,
   inclusive as óbvias e inofensivas. É o custo aceito — o mesmo já pago em (c)/(d)/(e) — para que
   a decisão sobre texto livre seja sempre **escrita**, nunca implícita.

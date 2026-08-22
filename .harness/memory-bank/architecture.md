@@ -3,6 +3,11 @@
 > Como as partes do sistema se compõem. Atualizar quando: introduzir camada, trocar tecnologia macro,
 > adicionar serviço externo, mudar o fluxo de pagamento.
 
+> **Aviso de verificação (22/08/2026):** As afirmações de schema abaixo (tabelas, colunas, índices, RPCs, policies)
+> foram conferidas contra o catálogo de produção (`information_schema`, `pg_policies`, `pg_proc`, `pg_indexes`, `cron.job`).
+> Este arquivo descreve a **intenção** das migrations; nada no build/lint/teste cruza isso com o banco em runtime.
+> **Schema aqui vale o que o catálogo diz** — não o histórico de migrations. Ver seção "Estado do banco de produção".
+
 ## Visão macro
 
 SPA React 19 em Vite, servida pela Vercel como estático. Backend é Supabase (PostgreSQL + PostgREST +
@@ -179,8 +184,8 @@ INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria 
 > folgas dominicais, escalas fixas. Sem isso, a plataforma é botão de emergência 2-3×/mês e elenco desatualizado faz falhar justamente quando importa."
 
 **Tabelas (migrations `20260817000400`–`20260817000500`):**
-- `job_series` — `(id uuid PK, company_id uuid NOT NULL, recurrence_type 'weekly'|'daily', weekdays int[], range_start_date date, range_end_date date, status 'active'|'stopped', job_template jsonb, created_at, updated_at)`. RLS via `is_company_owner(company_id)` (ancoragem dupla idêntica a F1/F2). Máximo 60 ocorrências por série (constraint SQL + trigger de statement + validação client).
-- `jobs` — duas colunas novas (nullable): `series_id uuid`, `series_occurrence_date date`. Um `jobs` com `series_id` é ocorrência materializável; sem `series_id`, é turno avulso (pull legado ou job single-shot). Índice composto `(series_id, series_occurrence_date)` para evitar datas duplicadas em uma criação lote. NÃO há FK `job_series` — a série pode ser deletada (soft-delete `status='stopped'`) sem afetar ocorrências (histórico/auditoria).
+- `job_series` — `(id uuid PK, company_id uuid NOT NULL, recurrence_type 'weekly'|'daily', weekdays int[], range_start_date date, range_end_date date, occurrences_generated integer NOT NULL DEFAULT 0, status 'active'|'stopped', created_by uuid NOT NULL, created_at timestamptz)`. RLS via `is_company_owner(company_id)` (ancoragem dupla idêntica a F1/F2). Máximo 60 ocorrências por série (constraint SQL + trigger de statement + validação client). (`p_job_template jsonb` existe só como parâmetro de `create_job_series`, não como coluna armazenada.)
+- `jobs` — duas colunas novas (nullable): `series_id uuid`, `series_occurrence_date date`. Um `jobs` com `series_id` é ocorrência materializável; sem `series_id`, é turno avulso (pull legado ou job single-shot). FK `jobs_series_id_fkey` de `series_id` → `job_series(id)` com `ON DELETE SET NULL` — delete da série apaga o vínculo das ocorrências, perdendo rastreabilidade "veio daquela série". Índice UNIQUE parcial `idx_jobs_series_occurrence_unique (series_id, series_occurrence_date) WHERE series_id IS NOT NULL AND status <> 'deleted'` para evitar datas duplicadas em uma criação lote.
 
 **Geração EAGER:** Ao criar a série, `create_job_series` (RPC INVOKER) materializa **todos** os `jobs` de uma vez (não lazy no aceite/pull). Datas são calculadas **no cliente** (`lib/recurrence.ts`, `generateOccurrenceDates`), repassadas como array à RPC. Motivo: (1) teste determinístico sem mock de servidor; (2) UI mostra "isso vai criar N turnos" antes de confirmar; (3) limpa o conceito ("serie" é só config; "ocorrência" é turno concreto). A RPC roda em transação única: ou todas as ocorrências são criadas ou nenhuma é (Article 8 intacto — `INSERT jobs` não move saldo).
 
@@ -201,33 +206,33 @@ INVOKER porque `companies` tem SELECT `USING (true)` — como DEFINER compraria 
 > (descobrir o furo com 12h de antecedência em vez de 2h30 antes da hora).
 
 **Tabelas (migrations `20260817000600`):**
-- `shift_attendance_confirmations` — tabela-evento. Colunas **conferidas no catálogo de produção em 22/08/2026** (`pg_attribute`, na ordem real): `id uuid, application_id uuid, job_id uuid, worker_id uuid, source text, requested_by uuid, requested_at timestamptz, response text, responded_at timestamptz`. Índice composto `(job_id, worker_id)` sem UNIQUE (várias tentativas permitidas). RLS **SELECT-only** (não há UPDATE/INSERT via client — tudo por RPC DEFINER).
+- `shift_attendance_confirmations` — tabela-evento. Colunas **conferidas no catálogo de produção em 22/08/2026** (`pg_attribute`, na ordem real): `id uuid, application_id uuid, job_id uuid, worker_id uuid, source text, requested_by uuid, requested_at timestamptz, response text, responded_at timestamptz`. Índices: `idx_sac_application (application_id)`, `idx_sac_job (job_id)`, `idx_sac_worker_open (worker_id) WHERE response IS NULL`, **`uq_sac_auto_once UNIQUE (application_id) WHERE source='auto'`** (automático é uma tentativa; manual repete). RLS **SELECT-only** (não há UPDATE/INSERT via client — tudo por RPC DEFINER).
   - `source` ∈ `{auto, manual}` e `response` ∈ `{confirmed, cannot_attend}` (ou NULL) — **CHECK fechado**, então nenhuma das duas pode carregar texto livre por construção. Dois CHECKs de coerência: `sac_author` (`manual` exige `requested_by`; `auto` exige `requested_by IS NULL` — o cron não tem autor) e `sac_response_pair` (`response` e `responded_at` são nulos juntos ou preenchidos juntos).
   - ⚠️ **A versão anterior desta linha estava errada em seis pontos** e sobreviveu por meses: inventava `confirmation_status`, `metadata jsonb` e `created_at` (nenhuma das três existe), trocava `requested_at`/`responded_at` por `request_sent_at`/`worker_responded_at`, e omitia `application_id` e `source`. Custo real: a revisão de LGPD registrou "`metadata jsonb` é risco inalcançável por asserção textual" — um risco **vazio**, sobre coluna inexistente, que quase virou dívida escrita. Schema aqui vale o que o catálogo diz; contrato de migration e memória descrevem a intenção, não o estado.
 
 **Helpers SECURITY DEFINER (migração `20260817000600`):**
-- `job_local_date(job_id uuid) → date` — retorna data local do turno convertida do UTC `job.start_date` via fuso `settings.app_timezone` (ou 'America/Sao_Paulo' default). Usado por cron para saber "é hoje 20h se eu enviar confirmação agora?". Problema: cron roda sem sessão (`auth.uid()` NULL), logo não pode depender de policy de SELECT simples em `jobs`. Solução: **`SECURITY DEFINER` obrigatório** (predicado sem sessão = deve ter DEFINER).
+- `job_local_date(job_id uuid) → date` — retorna data local do turno convertida do UTC `job.start_date` via fuso 'America/Sao_Paulo' (configurado via GUC `proconfig` da função; não consultável em runtime). Corpo: `SELECT j.start_date::timestamptz::date FROM public.jobs j WHERE j.id = p_job_id;`. Usado por cron para saber "é hoje 20h se eu enviar confirmação agora?". Problema: cron roda sem sessão (`auth.uid()` NULL), logo não pode depender de policy de SELECT simples em `jobs`. Solução: **`SECURITY DEFINER` obrigatório** (predicado sem sessão = deve ter DEFINER).
 - `job_is_active(job_id uuid) → boolean` — retorna true se turno não foi deletado (`status <> 'deleted'`), não está no passado, e tem freelas candidatos. Também SECURITY DEFINER (mesma razão: cron lê sem sessão).
 
 **Gatilho de tentativa (trigger, migração `20260817000600`):**
-- `trg_notify_worker_on_attendance_request` (BEFORE INSERT ON shift_attendance_confirmations) — SECURITY DEFINER, insere notificação bilateral (`worker` recebe, `company` também avisada).
+- `trg_notify_worker_on_attendance_request` (AFTER INSERT ON shift_attendance_confirmations) — SECURITY DEFINER, insere notificação apenas para o freela (`worker` recebe; link `/my-jobs`).
 
 **RPCs de mutação (migração `20260817000700`, todas SECURITY DEFINER + search_path=''):**
-- `request_attendance_confirmation(job_id, worker_id)` — empresa pede confirmação de presença ao freela para turno de amanhã (7 dias no máximo). Insere linha em `shift_attendance_confirmations` + dispara notificação.
-- `respond_attendance_confirmation(confirmation_id, response_text)` — freela responde (ex.: "Confirmo" / "Não consigo"). Seta `worker_responded_at` + `response` + `confirmation_status`.
-- `request_attendance_confirmations_due` — RPC de leitura (SECURITY DEFINER, STABLE): retorna array de `job_id` que precisam confirmação "por hoje até 20h". Usado pela UI worker em `MyJobs` (R2/R3) para destacar "⚠️ Confirme presença em X turno(s)".
+- `request_attendance_confirmation(p_application_id uuid)` — VOLATILE. Empresa pede confirmação de presença ao freela para turno. Insere linha em `shift_attendance_confirmations` com `source='manual'` + dispara notificação.
+- `respond_attendance_confirmation(p_application_id uuid, p_response text)` — VOLATILE. Freela responde (ex.: "confirmed" / "cannot_attend"). Seta `responded_at` + `response`.
+- `request_attendance_confirmations_due()` — RPC de leitura (SEM parâmetro), VOLATILE. **Mutador em lote do cron:** insere `shift_attendance_confirmations` com `source='auto'` via `ON CONFLICT (application_id) WHERE source='auto' DO NOTHING`, devolve `{outcome, requested}`. **GRANT exclusivo a `postgres` e `service_role`** — `authenticated` NÃO tem EXECUTE, logo não é acessível à UI worker (`MyJobs`).
 
 **Agendador (migração `20260817000800`, `pg_cron`) — MANDATÓRIO para cumprir promessa**
 ```sql
 IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
   SELECT cron.schedule(
-    'request_attendance_confirmations_7d',
-    '20 * * * *',                 -- 20h UTC (madrugada Brasil, alcance máximo antes de 8h30)
-    $$SELECT public.batch_request_attendance_confirmations_7d();$$
+    'shift-attendance-confirmations-d1',
+    '0 21 * * *',                 -- 21h UTC = 18h BRT (descobre furos 12h antes de 8h30 do turno)
+    $$SELECT public.request_attendance_confirmations_due();$$
   );
 END IF;
 ```
-**Proteção graceful:** `IF EXISTS` garante que migração passa sem erro se pg_cron não instalado. **Mas a feature é incompleta sem cron** — a promessa ("descobrir furo 12h antes") depende do alcance proativo. Sem agendador: empresa teria de lembrar de apertar botão manual na véspera = **comportamento humano que F4 existe para substituir** (feedback do evaluator: "ALTO" blocker). RPC `batch_request_attendance_confirmations_7d` (SECURITY DEFINER) roda diariamente às 20h UTC (coordenada) alcançando **freelas que não abriram o app** — diferencial vs. F1.
+**Proteção graceful:** `IF EXISTS` garante que migração passa sem erro se pg_cron não instalado. **Mas a feature é incompleta sem cron** — a promessa ("descobrir furo 12h antes") depende do alcance proativo. Sem agendador: empresa teria de lembrar de apertar botão manual na véspera = **comportamento humano que F4 existe para substituir** (feedback do evaluator: "ALTO" blocker). RPC `request_attendance_confirmations_due()` roda diariamente às 21h UTC (18h BRT) alcançando **freelas que não abriram o app** — diferencial vs. F1.
 
 **Pre-requisito:** ops habilita `pg_cron` como passo de validação em produção. Não é "TODO futuro" — é gate de entrega.
 
@@ -316,7 +321,7 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 - **`workers.pix_key`** (coluna existente, agora central no modo A): chave PIX do freela (CPF/CNPJ/e-mail/telefone/aleatória), coletada no onboarding
   (`WorkerOnboarding` R1.1) e normalizada (`normalizePixKeyForStorage` em `lib/validation.ts`). Exibida para empresa com `team_connections` aceita/pendente (R1.2, R1.3) 
   e no modal de "Registrar Pagamento" (R1.4). **Jamais** exposta a quem não tem vínculo (policy de SELECT em `workers` bloqueia).
-- **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, is_default, created_at)`.
+- **`payment_methods`** (nova tabela): `(id, company_id, asaas_credit_card_token, brand, last4, holder_name, is_default, created_at, updated_at)`.
   RLS por `company_id`. NUNCA carrega PAN/CVV (Article 10).
 - **`shift_payments`** (modo A — pagamento externo registrado): `(id, job_id, worker_id, company_id, application_id, amount, source, paid_at, status, scheduled_for, recorded_by, worker_confirmed_at, voided_at, void_reason, note, created_at)`.
   Status: `scheduled | recorded | voided`. `scheduled_for` (data prevista) é material/imutável; `paid_at` é nullable (NULL em scheduled, setado na efetivação) e depois imutável.
@@ -333,8 +338,7 @@ Cancelamento/no-show ──→ asaas-release-hold ──→ release_hold_postpag
 
 - **Carteira central:** uma conta master Asaas; NÃO há subcontas. Saldo por usuário é só DB.
 - **Atomicidade:** todas as operações de escrow (reserve/release/authorize/capture/release_hold/refund) são RPCs Postgres atômicas.
-- **Idempotência:** `wallet_transactions` UNIQUE `(wallet_id, reference_id)` evita crédito duplicado. Postpago usa `reference_id` estável
-  (`job_id:worker_id:attempt_#`) para retry-safe.
+- **Idempotência:** `wallet_transactions` com índice parcial UNIQUE `idx_wallet_tx_unique_reference (wallet_id, reference_id) WHERE reference_id IS NOT NULL` evita crédito duplicado para linhas com `reference_id` preenchido. Postpago usa `reference_id` estável (`job_id:worker_id:attempt_#`) para retry-safe.
 - **Taxa de plataforma:** 5% no saque (worker), TBD no escrow (empresa).
 - **Coexistência:** prepago e postpago rodam em paralelo por `kind`. Ramificação acontece em `walletService.releaseOrCaptureEscrow(jobId, workerId, kind)`
   que despacha para `asaas-checkout` (prepago) ou `asaas-capture-payment` (postpago).
@@ -490,7 +494,7 @@ Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get
 
 **Tabela `service_terms`:**
 - Relação 1:1 com `shift_payments` (FK `shift_payment_id` NOT NULL UNIQUE)
-- Campos: `job_id`, `worker_id`, `company_id` (denormalizados para RLS + snapshot), `term_version`, `term_text`, `amount` (cópia de `shift_payments.amount`, NÃO SALDO), `accepted_at`, `accepted_ip`, `accepted_user_agent`
+- Campos: `id, job_id, worker_id, company_id` (denormalizados para RLS + snapshot), `shift_payment_id, term_version, term_text, amount` (cópia de `shift_payments.amount`, NÃO SALDO), `accepted_at, accepted_ip, accepted_user_agent, created_at, anonymized_at`
 - UNIQUE `(id, job_id, worker_id, company_id)` na parent `shift_payments` para garantir denormalizados casam
 
 **Máquina de estados do termo:**
@@ -498,10 +502,10 @@ Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get
 - Aceite: RPC `accept_service_term` re-renderiza term_text + grava `accepted_at + accepted_ip + accepted_user_agent` **em um UPDATE** (atomicamente)
 - Congelado: Depois do aceite, `term_text` é imutável (trigger `enforce_service_term_immutability`, SECURITY DEFINER). Nem service_role consegue mudar.
 
-**Função de renderização `render_service_term_text` (SECURITY INVOKER):**
+**Função de renderização `render_service_term_text(p_worker_name text, p_worker_cpf text, p_company_name text, p_company_cnpj text, p_job_title text, p_job_date date, p_amount numeric, p_term_version text)` (SECURITY INVOKER):**
 - Monta o texto HTML que o freela lê
 - 4 seções: turno (data, hora, local, duração), equipamento/segurança, cláusulas de trabalho, cláusula de não-responsabilidade Worki (congelada no texto)
-- Testa conteúdo do worker (CPF, nome, email) — se missing, texto diz "não informado" (não bloqueia aceite, UI avisa)
+- Testa conteúdo do worker (CPF, nome) — se missing, texto diz "não informado" (não bloqueia aceite, UI avisa)
 
 **Componente `ServiceTermSection`:**
 - Renderiza o termo (ler) + checkbox "Concordo com os termos"
@@ -515,10 +519,11 @@ Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get
 > Entrevista 17/08/2026 (sócio de 10 unidades Divino Fogão): "Alguns freelas só trabalham terça a sexta. É informação que muda, que a gente usa pra não convidar em vão."
 
 **Coluna `workers.availability_days` (jsonb):**
-- Array de inteiros 0–6 (segunda–domingo, convenção ISO `getDay()`)
-- Exemplo: `[1,2,3,4,5]` = terça a sábado (dias uteis brasileiros); `null` = sem restrição
-- Validação SQL: `CHECK (availability_days <@ ARRAY[0,1,2,3,4,5,6]::int[])`
-- Limite de cardinalidade: 7 (máximo — sem efeito; tautologia no CHECK)
+- Objeto com chaves `"0"`..`"6"`, **`0` = domingo … `6` = sábado**, e valores subconjunto de `["manha","tarde","noite"]` (máximo 3 períodos por dia)
+- Exemplo: `{"1":["manha","tarde"],"2":["noite"]}` = segundas manhã/tarde, terças à noite; `null` = sem restrição
+- ⚠️ O rótulo desta linha já dizia "0–6 (segunda–domingo, convenção ISO `getDay()`)" — **errado duas vezes**: `getDay()` não é a convenção ISO (a ISO-8601 é 1=segunda…7=domingo) e começa no **domingo**. O texto se contradizia sozinho, porque o exemplo ao lado tratava `1` como segunda, o que só fecha com `0` = domingo. Fonte da verdade, conferida: `lib/availability.ts:94`, `types/index.ts:10` e o teste canônico `getWeekdayIndex` em `lib/dateUtils.test.ts` (`domingo (2026-09-06) → 0`, `sábado (2026-09-12) → 6`). **Mesma convenção de `job_series.weekdays`** — é justamente para não existir uma segunda convenção de semana concorrente no projeto.
+- Validação SQL: CHECK `workers_availability_days_shape` (jsonb_typeof = 'object' + containment + jsonb_array_length ≤ 3 por dia)
+- Frontend (`types/index.ts`, `lib/availability.ts`) já implementa corretamente; erro era só da documentação.
 
 **Uso:**
 - `ShiftCallModal` (F1) + `InviteSeriesModal` (F3): mostrar badge de indisponibilidade se freela não trabalha naquele dia
@@ -535,7 +540,7 @@ Gera prova social: "o que outros freelas disseram sobre esta empresa?" (via `get
 a um freela dela).
 
 - `worker_certifications`: `id, worker_id, title, issuer, registration_number, issued_at, expires_at,
-  verified_by_company_id, verified_at, verified_note, notified_expired_at, created_at, updated_at`.
+  verified_by_company_id, verified_at, verified_note, notified_30d_at, notified_expired_at, created_at, updated_at`.
   **Quem confere é a EMPRESA** (`verified_by_company_id → companies`), nunca outro freela.
 - `worker_trainings`: `id, company_id, worker_id, title, completed_at, note, created_by, created_at,
   revoked_at, revoked_reason`. Treinamento **não se apaga, se revoga com motivo** — não há policy de
@@ -730,38 +735,37 @@ Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 
 ## Estado do banco de produção (Onda 1 — Revisão Piloto)
 
-As migrations da Onda 1 e as de **F1–F4** (`20260817000000`–`20260817000800`) foram aplicadas em
+As migrations da Onda 1 e as de **F1–F8** + **F10–F12** + **DS-PII** e **F13 Fases 0/1/2** foram aplicadas em
 produção (`vrklakcbkcsonarmhqhp`). Ver `supabase/migrations/APLICACAO-2026-08-16.md` para: divergência
 de timestamp entre repositório e histórico do banco, verificações executadas contra dados reais e
 lacunas declaradas.
 
-> ✅ **VERIFICADO CONTRA O CATÁLOGO em 21/08/2026** (não contra o `{"success": true}` da migration,
-> nem contra o histórico do repositório — os dois já mentiram nesta sessão).
+> ⚠️ **VERIFICADO CONTRA O CATÁLOGO em 22/08/2026** — **Estado de produção é a informação mais difícil de
+> manter honesta no memory-bank, porque muda **fora** do repositório: nenhum teste, lint ou build a
+> valida. Afirmações abaixo consultam o catálogo** (`information_schema`, `pg_policies`,
+> `pg_proc`, `cron.job`) — **não o histórico de migrations e não o relato de quem aplicou.**
 >
-> **APLICADAS e confirmadas em produção:**
+> **APLICADAS e confirmadas em produção (em 22/08):**
 > - `20260817000900` (F5 risco de vínculo), `001100` (F6 termos), `001200` (F7 disponibilidade),
->   `001300` (F8 certificações) — colunas, tabelas e cron conferidos um a um.
-> - `20260821000100` + `000200` (dívida #9 — `reviews` escopado por vínculo). **Exigiu duas
->   tentativas:** as colunas são `uuid` e não `text` como as migrations legadas declaram, e o
->   `DROP POLICY` mirava um nome inexistente, deixando a policy permissiva viva. Hoje `reviews`
->   tem **uma única** policy de SELECT.
+>   `001300` (F8 certificações) — colunas, tabelas e cron conferidos no catálogo.
+> - `20260821000100` + `000200` (dívida #9 — `reviews` escopado por vínculo). Exigiu duas
+>   tentativas no histórico: as colunas são `uuid` e não `text`, e o `DROP POLICY` era inerte.
+>   Hoje `reviews` tem uma única policy de SELECT.
 > - `20260821000300` (DS-PII) — `can_view_worker_profile` sem o ramo `'pending'`,
 >   `list_team_connection_cards()` DEFINER sem parâmetro, `get_profile_reviews` anulando
 >   `reviewer_id` para terceiro. `anon` sem EXECUTE nas três.
+> - **`20260817001400` (F12 badges)**, **`001500` (F10 indicação)**, **`001600` (F11 SOS)** — confirmado no catálogo: `worker_company_badge_prefs` existe, `worker_referrals` existe, `workers.discoverable_for_sos` existe, `create_sos_call` existe, `workers.badges_hidden` existe, `workers.accepts_referrals` existe, `shift_calls.origin` existe, `shift_call_targets.origin` existe, CHECK `team_connections_source_check` com `'referral'`, três policies reescritas de F11.
+> - **`20260821001000` + `20260822000000` (F13 Fases 0/1/2)** — `organizations`, `organization_members`, `company_members`, `companies.organization_id` NOT NULL, `is_organization_operator`, `is_organization_member`, `company_organization_id`, `session_operates_company_membership`, `autoprovision_company_organization`, `is_company_owner` com corpo BEGIN ATOMIC. Policies `"Company owner can manage jobs"` e `"Company owner can view own company"` foram removidas.
 >
-> **ESCRITAS, APROVADAS e NÃO aplicadas** (confirmado: os objetos não existem no banco):
-> `20260817001400` (F12 badges), `001500` (F10 indicação), `001600` (F11 SOS),
-> `20260821000000` (anonimização — **bloqueada por decisão do owner**, ver H1/H2 em
-> `.harness/ESTADO-DA-LEVA.md`).
+> **F13 Fase 3** — NÃO APLICADA.
+>
+> **`20260821000000` (anonimização)** — NÃO APLICADA: `anonymize_account` não existe no banco. (Bloqueada por decisão do owner.)
+>
+> **`service_terms.anonymized_at`** — Coluna **existe**, mas **NÃO VERIFICADO** de qual migration veio; não aparece em histórico visível.
 >
 > **Ordem de deploy obrigatória:** migration antes do frontend. Coluna que o `select` pede e não
 > existe devolve `42703` e derruba a **query inteira**, não só o campo — no F7 isso derrubaria o
 > roster do `ShiftCallModal` **e** o salvamento completo do perfil do freela.
->
-> ⚠️ **Esta seção já esteve errada duas vezes.** Estado de produção é a informação mais difícil de
-> manter honesta no memory-bank, porque muda **fora** do repositório: nenhum teste, lint ou build a
-> valida. Quem for atualizá-la **consulta o catálogo** (`information_schema`, `pg_policies`,
-> `pg_proc`, `cron.job`) — não o histórico de migrations e não o relato de quem aplicou.
 
 Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 

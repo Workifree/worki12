@@ -242,19 +242,65 @@ DECLARE
     -- HALT garantido e lista inventada — pior que guarda ausente.
     -- Coluna textual NOVA nestas três tabelas ⇒ HALT. A decisão é binária e tem de ser escrita:
     -- ou entra em v_redacted_text (texto livre) ou entra aqui (enum/operacional/estrutural).
+    -- EMENDA 2026-08-22 (3) — RETIDAS por GARANTIA DO BANCO, nao por observacao.
+    -- Estas colunas tem CHECK de conjunto fechado: nao PODEM conter texto livre, por construcao.
+    -- E uma classe de evidencia diferente (e melhor) do que "hoje so tem 2 valores distintos":
+    -- contagem de distintos descreve o dado de hoje; CHECK descreve o que o banco aceita amanha.
+    -- A assercao (b3) abaixo VERIFICA essa afirmacao a cada aplicacao: se alguem derrubar o
+    -- CHECK, a justificativa da retencao evapora e a migration HALTa -- a guarda confere a
+    -- propria evidencia em vez de confiar na lista.
+    v_enum_text text[] := ARRAY[
+        'shift_attendance_confirmations.source',    -- CHECK: 'auto' | 'manual'
+        'shift_attendance_confirmations.response',  -- CHECK: NULL | 'confirmed' | 'cannot_attend'
+        'shift_call_targets.origin',                -- CHECK: 'team' | 'sos'
+        'shift_call_targets.response',              -- CHECK: NULL | accepted|declined|closed
+        -- PROMOVIDA em 22/08 (Hh4): tem CHECK fechado de verdade. Estava classificada por
+        -- observacao ("1 valor distinto"); a evidencia subiu de "hoje so tem um valor" para
+        -- "o banco nao aceita outro", e (b3) passa a vigia-la.
+        'applications.invitation_response',         -- CHECK: NULL | 'accepted' | 'declined'
+        -- PROMOVIDAS em 22/08 pela varredura completa: os tres CHECKs ESTAO no catalogo,
+        -- identicos ao que o repositorio declara (20260817000100, 20260817001600). O
+        -- rebaixamento preventivo anterior ("repo nao e catalogo") era disciplina correta, e a
+        -- varredura a absolveu -- aqui, desta vez, repo e catalogo coincidem.
+        'shift_calls.reason',                       -- CHECK: falta|demissao|...|outro
+        'shift_calls.status',                       -- CHECK: open|filled|cancelled|expired
+        'shift_calls.origin'                        -- CHECK: 'team' | 'sos'
+    ];
+
+    -- RETIDAS por DECISAO ESCRITA ou por observacao do dado. Evidencia mais fraca que v_enum_text
+    -- de proposito: `jobs.title`/`location` NAO tem (nem devem ter) CHECK -- sao retidas porque a
+    -- decisao de §2.1 diz que sao, nao porque o banco impeca texto livre nelas. E por isso que a
+    -- lista a mao NAO pode ser substituida por uma regra derivada "sem CHECK => HALT": ela
+    -- HALTaria para sempre justamente nas duas colunas cuja retencao e a decisao mais deliberada
+    -- deste contrato.
     v_retained_text text[] := ARRAY[
         -- jobs: rótulo, enums em coluna text, e os dois RETIDOS por decisão (§2.1)
         'jobs.title',            -- RETIDO por decisão: rótulo operacional, congelado no term_text
         'jobs.location',         -- RETIDO por decisão: idem. Endereços reais — risco em §5.3
-        'jobs.category', 'jobs.type', 'jobs.budget_type', 'jobs.status',
-        'jobs.scope',            -- enum de fato (2 valores distintos, 7 chars)
-        'jobs.work_start_time', 'jobs.work_end_time',
+        -- ⚠️ SEIS COLUNAS SEM ENFORCEMENT NENHUM NO BANCO (conferido em pg_constraint, 22/08):
+        --    jobs.scope, jobs.status, jobs.type, jobs.category, jobs.budget_type e
+        --    applications.status NAO TEM CHECK NENHUM. O que as mantem com cara de enum e CODIGO DE
+        --    FRONTEND -- `CompanyCreateJob.tsx` grava 'on-site'/'freelance'/'daily' como
+        --    CONSTANTES e `category` vem de selecao validada.
+        --    Chama-las de "enum" e impreciso e envelhece mal: Article 4 da constitution diz que
+        --    filtro no client e so UX e que a defesa dura e o banco. Um PATCH direto via
+        --    PostgREST (a empresa dona do turno passa na policy de UPDATE) escreve o que quiser
+        --    nelas HOJE. Logo a frase honesta nao e "sao enums", e "sao CONSTANTES DO CLIENTE,
+        --    sem enforcement no banco" -- risco declarado em ddl-aprovado §5.3, e proposta de
+        --    CHECK adiada para leva propria (§5.5 Hh5): adicionar CHECK em `jobs.status` vivo
+        --    exige varrer os valores existentes antes, e isso e migration com risco proprio.
+        --    NAO redigir nenhuma delas: `status` e maquina de estados (todo consumidor faz
+        --    `.neq('status','deleted')`) e as outras quatro sustentam filtro e BI.
+        'jobs.scope',                                   -- constante do cliente: 'on-site'
+        'jobs.type', 'jobs.budget_type',                -- constantes: 'freelance' / 'daily'
+        'jobs.category',                                -- selecao validada no client
+        'jobs.status',                                  -- maquina de estados (client + RPCs)
+        'jobs.work_start_time', 'jobs.work_end_time',   -- horario 'HH:MM', formato do client
         -- applications
-        'applications.status',
-        'applications.invitation_response',  -- enum de fato (accepted/declined)
-        -- shift_calls
-        'shift_calls.reason',    -- enum do F1 (falta|demissao|pico_previsto|...)
-        'shift_calls.status', 'shift_calls.origin'
+        'applications.status'                           -- idem: maquina de estados, sem CHECK
+        -- `shift_calls` nao tem mais coluna aqui: reason/status/origin foram PROMOVIDAS para
+        -- v_enum_text (CHECK conferido no catalogo) e `message` e REDIGIDA. Inventario das cinco
+        -- tabelas fechado em 22/08: 25 colunas textuais distintas, nenhuma sem classificacao.
     ];
 
     v_col     text;
@@ -342,12 +388,17 @@ BEGIN
     JOIN pg_namespace  ns ON ns.oid = cl.relnamespace
     WHERE ns.nspname = 'public'
       AND cl.relkind = 'r'
-      AND cl.relname IN ('jobs', 'applications', 'shift_calls')
+      AND cl.relname IN ('jobs', 'applications', 'shift_calls',
+                         -- EMENDA 2026-08-22 (3): as duas ultimas tabelas RETIDAS entram no
+                         -- fecho. Catalogo conferido; as quatro colunas textuais delas tem
+                         -- CHECK de conjunto fechado (v_enum_text) e sao verificadas em (b3).
+                         'shift_call_targets', 'shift_attendance_confirmations')
       AND a.attnum > 0
       AND NOT a.attisdropped
       AND a.atttypid = ANY (ARRAY['text', 'character varying', 'character']::regtype[])
       AND format('%s.%s', cl.relname, a.attname) <> ALL (v_redacted_text)
-      AND format('%s.%s', cl.relname, a.attname) <> ALL (v_retained_text);
+      AND format('%s.%s', cl.relname, a.attname) <> ALL (v_retained_text)
+      AND format('%s.%s', cl.relname, a.attname) <> ALL (v_enum_text);
     IF v_unknown IS NOT NULL THEN
         RAISE EXCEPTION
           'ASSERCAO (b2): coluna TEXTUAL nao classificada em tabela RETIDA: %. '
@@ -355,6 +406,59 @@ BEGIN
           'livre nao classificado sobrevive a exclusao da conta EM SILENCIO. Decida: redigir '
           '(ddl-aprovado 2.1) ou reter com justificativa escrita. HALT -> architect.', v_unknown;
     END IF;
+
+    -- (b3) EMENDA 2026-08-22 (3) — a guarda CONFERE A PROPRIA EVIDENCIA.
+    --      Toda coluna declarada em v_enum_text foi retida com a justificativa "tem CHECK de
+    --      conjunto fechado, logo nao PODE conter texto livre". Isso e uma afirmacao sobre o
+    --      SCHEMA, e schema muda: um `DROP CONSTRAINT` num sabado transforma a coluna em texto
+    --      livre e a classificacao passa a mentir EM SILENCIO -- exatamente o modo de falha que
+    --      esta migration inteira existe para eliminar. Aqui a afirmacao e re-verificada a cada
+    --      aplicacao. Se o CHECK sumiu, HALT: ou o CHECK volta, ou a coluna e reclassificada.
+    FOREACH v_col IN ARRAY v_enum_text LOOP
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class     cl ON cl.oid = con.conrelid
+            JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+            WHERE ns.nspname = 'public'
+              AND cl.relname = split_part(v_col, '.', 1)
+              AND con.contype = 'c'
+              -- ⚠️ O PREDICADO E "CHECK QUE ENUMERA VALORES DESTA COLUNA", NAO "CHECK EXISTE".
+              -- Contra-exemplo real, achado na varredura de 22/08 e que quase inverteu uma
+              -- decisao desta mesma leva:
+              --   CHECK ((certification_requirement IS NULL)
+              --          OR (char_length(certification_requirement) <= 200))
+              -- `jobs.certification_requirement` TEM check_def nao-nulo -- e e exatamente a
+              -- coluna de TEXTO LIVRE que esta migration REDIGE. Uma regra "tem CHECK => classe
+              -- forte" a promoveria para v_enum_text e a TIRARIA da redacao, em silencio.
+              -- CHECK de COMPRIMENTO nao e evidencia de conjunto fechado: limita o tamanho da
+              -- prosa, nao o fato de ser prosa. Por isso a exigencia e a forma
+              -- `<coluna> = ANY (ARRAY[...])`, que e como o Postgres renderiza tanto
+              -- `= ANY (ARRAY[..])` quanto `IN (..)`.
+              -- Colateral resolvido pelo EXISTS: colunas que participam de MAIS DE UM CHECK
+              -- (ex.: shift_attendance_confirmations.response tambem aparece em
+              -- `(response IS NULL) = (responded_at IS NULL)`) passam pela linha que ENUMERA,
+              -- e as de coerencia simplesmente nao casam. Uma leitura "primeira linha da
+              -- coluna" pegaria a errada; EXISTS nao.
+              -- A ENUMERACAO TEM DE SER DESTA COLUNA: o `= ANY (ARRAY[` vem ADJACENTE ao nome
+              -- (com no maximo `)` de fecho de cast e um `::tipo` no meio, que e como o Postgres
+              -- renderiza coluna varchar). Sem a adjacencia, um CHECK composto do tipo
+              -- `CHECK (foo = 'x' AND bar = ANY (ARRAY[...]))` faria `foo` -- texto livre --
+              -- passar de carona pela enumeracao de `bar`.
+              AND pg_catalog.pg_get_constraintdef(con.oid)
+                    ~ ('(^|[^a-zA-Z0-9_])' || split_part(v_col, '.', 2) ||
+                       '\)?[[:space:]]*(::[a-zA-Z0-9_ ]+)?[[:space:]]*=[[:space:]]*ANY[[:space:]]*\(ARRAY\[')
+        ) THEN
+            RAISE EXCEPTION
+              'ASSERCAO (b3): public.% foi RETIDA em §2.1 sob a justificativa "CHECK de conjunto '
+              'fechado, nao pode conter texto livre" -- e nao ha mais (ou nunca houve) CHECK que '
+              'ENUMERE valores dela. Atencao: CHECK de comprimento (char_length <= N) NAO conta '
+              'e nao deve ser aceito como substituto -- limita o tamanho da prosa, nao o fato de '
+              'ser prosa. A retencao ficou sem evidencia: a coluna passou a aceitar texto livre e '
+              'sobreviveria a exclusao da conta EM SILENCIO. Restaure o CHECK ou reclassifique a '
+              'coluna (redigir, ou reter com justificativa NOVA). HALT -> architect.', v_col;
+        END IF;
+    END LOOP;
 
     -- (c) EMENDA 2026-08-21 — nenhuma TABELA dependente pode ficar fora da classificação.
     --     Por que existe (§2.1.0): a lápide nunca é apagada, logo NENHUM ON DELETE pendurado em
@@ -1088,8 +1192,10 @@ COMMENT ON FUNCTION public.anonymize_account(uuid) IS
     'requirements/certification_requirement, applications.cover_letter/message e '
     'shift_calls.message viram marcador; a LINHA fica (ancora de shift_payments/BI), o TEXTO sai. '
     'jobs.title/location sao RETIDOS de proposito (o termo aceito ja os congela como prova e a '
-    'contraparte le no proprio recibo). A classificacao textual dessas tres tabelas e FECHADA '
-    'pela assercao (b2): coluna de texto nova nelas HALTa a migration.';
+    'contraparte le no proprio recibo). A classificacao textual das CINCO tabelas retidas do '
+    'dominio de turno e FECHADA pela assercao (b2) -- coluna de texto nova nelas HALTa a '
+    'migration -- e a (b3) re-verifica que as colunas retidas "por serem enum" ainda tem CHECK '
+    'de conjunto fechado.';
 
 REVOKE ALL ON FUNCTION public.anonymize_account(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
@@ -1199,11 +1305,27 @@ GRANT EXECUTE ON FUNCTION public.anonymize_account(uuid) TO service_role;
 --      SELECT public.anonymize_account('<uuid-de-gerente-sem-workers-sem-companies>');
 --      ⇒ outcome='anonymized', is_worker=false, company_ids=[], **is_member=true**, e `counts`
 --        com TODAS as chaves presentes (zeros onde não havia nada) — nunca chave ausente.
--- V21. EMENDA 2026-08-22 (2) — a classificação textual de `jobs`/`applications`/`shift_calls` é
---      FECHADA. Re-executar o bloco DO da seção 1 num banco onde alguém adicionou coluna de
---      texto a uma delas ⇒ HALT em (b2) com o nome da coluna. É o comportamento CORRETO: a
---      decisão é binária (redigir OU reter com justificativa escrita em §2.1) e nunca implícita.
---      Baseline conferido contra o catálogo de produção em 22/08/2026.
+-- V21. EMENDA 2026-08-22 (2/3) — a classificação textual das CINCO tabelas retidas do domínio de
+--      turno (`jobs`, `applications`, `shift_calls`, `shift_call_targets`,
+--      `shift_attendance_confirmations`) é FECHADA. Re-executar o bloco DO da seção 1 num banco
+--      onde alguém adicionou coluna de texto a uma delas ⇒ HALT em (b2) com o nome da coluna. É
+--      o comportamento CORRETO: a decisão é binária (redigir OU reter com justificativa escrita
+--      em §2.1) e nunca implícita. Baseline conferido contra o catálogo de produção em 22/08.
+-- V22. EMENDA 2026-08-22 (3) — a evidência das colunas retidas "por serem enum" é verificada, não
+--      declarada. Ensaio em banco de TESTE:
+--        ALTER TABLE public.shift_call_targets DROP CONSTRAINT <check_do_origin>;
+--        <re-executar o bloco DO da seção 1>
+--      ⇒ HALT em (b3) nomeando `shift_call_targets.origin`. Restaurar o CHECK ⇒ silêncio.
+--      É o que impede a classificação de continuar verde depois que o schema deixou de
+--      sustentá-la.
+--      SEGUNDA metade do ensaio (a que pega o erro sutil): substituir o CHECK de conjunto por um
+--      de COMPRIMENTO —
+--        ALTER TABLE public.shift_call_targets
+--          ADD CONSTRAINT sct_origin_len CHECK (origin IS NULL OR char_length(origin) <= 8);
+--      ⇒ (b3) tem de continuar HALTando. Se passar, o predicado degenerou para "existe CHECK" e
+--        a guarda perdeu o sentido: é exatamente por aí que `jobs.certification_requirement`
+--        (que TEM CHECK, de char_length <= 200, e é TEXTO LIVRE que esta rotina REDIGE) entraria
+--        na classe forte e sairia da redação em silêncio.
 --
 -- V12. Ocorrências de série SOBREVIVERAM ao DELETE de job_series (não há FK):
 --      SELECT count(*) FROM public.jobs WHERE series_id='<serie-da-empresa>'; ⇒ igual a antes.
