@@ -225,7 +225,27 @@ O próprio contrato exige que "o consentimento cubra o que realmente acontece". 
 
 **Gate:** entra no parecer jurídico/LGPD que o ADR do SOS já exigia. **Este é o item mais forte
 desse parecer** — é a primeira vez no produto que uma empresa vê CPF de alguém com quem não tinha
-nenhum vínculo prévio, e o consentimento que autoriza isso não menciona CPF.
+nenhum vínculo prévio.
+
+> ✅ **PARCIALMENTE RESOLVIDO em 22/08/2026 — a saída 1 foi adotada e está EM PRODUÇÃO.**
+> O texto acima ("o consentimento não menciona CPF") está DESATUALIZADO. `SosDiscoverySection.tsx`
+> (linhas 117-119) hoje diz, e o mesmo texto foi conferido no bundle publicado:
+>
+> > "Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação —
+> > telefone, CPF, data de nascimento e chave PIX — para poder te pagar. Recusar não tem nenhum
+> > efeito no seu perfil. Você pode desligar isto a qualquer momento."
+>
+> O consentimento agora **cobre o que realmente acontece**, que era a exigência do contrato: cita as
+> quatro colunas nominalmente, explica a finalidade ("para poder te pagar"), declara a gratuidade da
+> recusa e diz como desligar.
+>
+> **O que AINDA depende do parecer jurídico:** não se a copy é honesta — é —, mas se **consentimento
+> em checkbox é base legal suficiente** para expor CPF e data de nascimento a uma empresa sem
+> vínculo prévio, ou se esse alcance precisa de outra base/desenho. A saída 2 (restringir as colunas
+> nesse ramo de `can_view_worker_profile`) continua disponível se o parecer disser que não.
+>
+> Corrigido aqui porque uma dívida que descreve como aberto um problema já resolvido faz o jurídico
+> analisar a pergunta errada.
 
 ## 14. O painel de analytics mente a favor do SOS
 
