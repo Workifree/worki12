@@ -211,16 +211,31 @@ export const WalletService = {
       escrowKind?: 'prepaid' | 'postpaid'
     ): Promise<{ success: boolean; error?: string }> {
       try {
-        // Se kind não foi passado, buscar do DB
-        let kind = escrowKind;
-        if (!kind) {
-          const { data: escrow } = await supabase
-            .from('escrow_transactions')
-            .select('kind')
-            .eq('job_id', jobId)
-            .maybeSingle();
-          kind = (escrow?.kind as 'prepaid' | 'postpaid' | undefined) ?? 'prepaid';
+        // ⏸️ PAGAMENTO PAUSADO (ADR-20260822): não há escrow ATIVO para liberar em modo A, e as
+        // Edge Functions do Asaas foram removidas de produção. Sem esta guarda, `handleConfirmDelivery`
+        // (CompanyJobCandidates) chamaria `asaas-checkout`, tomaria 404, e **abortaria antes de marcar
+        // o turno como `completed`** — ou seja, a empresa não conseguiria concluir turno nenhum.
+        //
+        // A guarda é sobre o ESTADO, não sobre a pausa: "não há nada a liberar" é resposta correta
+        // mesmo com pagamento ligado (turno de modo A nunca teve escrow). Por isso ela FICA quando o
+        // processamento voltar — quem tem escrow `reserved`/`authorized` continua caindo no fluxo
+        // normal abaixo, sem nenhuma flag para alguém lembrar de virar.
+        const { data: escrowRow } = await supabase
+          .from('escrow_transactions')
+          .select('kind, status')
+          .eq('job_id', jobId)
+          .in('status', ['reserved', 'authorized'])
+          .maybeSingle();
+
+        if (!escrowRow && !escrowKind) {
+          // Sucesso honesto: não havia nada a liberar. NÃO é erro, e tratar como erro foi
+          // exatamente o que travava a conclusão do turno.
+          return { success: true };
         }
+
+        const kind = escrowKind
+          ?? (escrowRow?.kind as 'prepaid' | 'postpaid' | undefined)
+          ?? 'prepaid';
 
         let result: { success: boolean; error?: string };
         if (kind === 'postpaid') {

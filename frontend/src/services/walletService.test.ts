@@ -8,7 +8,15 @@ const mockSingle = vi.fn()
 const mockSelect = vi.fn(() => ({
   single: mockSingle,
   maybeSingle: mockSingle,
-  eq: vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle })),
+  // `.in()` faz parte da cadeia desde a guarda de escrow ATIVO em `releaseOrCaptureEscrow`
+  // (ADR-20260822, pausa do pagamento): `.select().eq().in(['reserved','authorized']).maybeSingle()`.
+  // Sem ele aqui o mock lança "in is not a function" — e o teste falharia por defeito do MOCK, não
+  // do código, que é a pior forma de teste vermelho.
+  eq: vi.fn(() => ({
+    single: mockSingle,
+    maybeSingle: mockSingle,
+    in: vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle })),
+  })),
   order: vi.fn(() => ({ data: [] })),
 }))
 const mockEq = vi.fn(() => ({ single: mockSingle, maybeSingle: mockSingle, select: mockSelect, order: vi.fn(() => ({ data: [] })) }))
@@ -336,5 +344,61 @@ describe('WalletService methods', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toBe('Valor invalido')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// releaseOrCaptureEscrow — guarda de escrow ATIVO (ADR-20260822, pausa do pagamento)
+//
+// POR QUE ESTE TESTE EXISTE, e por que ele é o mais importante deste arquivo:
+// `CompanyJobCandidates.handleConfirmDelivery` chama esta função ANTES de marcar o turno como
+// `completed`, e ABORTA se ela devolver `success: false`. Enquanto a função tratava "não há escrow"
+// como falha, a empresa não conseguia concluir turno nenhum — e no modo A (único modo desde a pausa)
+// turno NUNCA tem escrow. O sintoma seria "Erro ao liberar pagamento" numa operação que não envolve
+// pagamento nenhum.
+//
+// A guarda é sobre o ESTADO ("não há nada a liberar"), não sobre a pausa. Por isso estes testes
+// continuam válidos se o processamento de pagamento voltar.
+// ---------------------------------------------------------------------------
+describe('WalletService.releaseOrCaptureEscrow — guarda de escrow ativo', () => {
+  it('sem escrow ativo devolve success:true (turno de modo A conclui)', async () => {
+    // `.maybeSingle()` do lookup de escrow devolve linha ausente — o caso do modo A.
+    mockSingle.mockResolvedValueOnce({ data: null, error: null })
+
+    const { WalletService } = await import('./walletService')
+    const { invokeFunction } = await import('./api')
+    const result = await WalletService.releaseOrCaptureEscrow('job-modo-a', 'worker-1')
+
+    expect(result.success).toBe(true)
+    // E o ponto que o `success: true` sozinho não prova: NENHUMA Edge Function foi chamada.
+    // As funções do Asaas foram removidas de produção; chamar qualquer uma seria 404.
+    expect(invokeFunction).not.toHaveBeenCalled()
+  })
+
+  it('não chama Edge Function nem quando o escrow existe mas já é terminal', async () => {
+    // O filtro é `.in(['reserved','authorized'])`, então um escrow `refunded`/`released` não volta
+    // do banco — mesmo caminho de "não há nada a liberar". Cobre as 4 linhas que a migration de
+    // encerramento marcou como `refunded`.
+    mockSingle.mockResolvedValueOnce({ data: null, error: null })
+
+    const { WalletService } = await import('./walletService')
+    const { invokeFunction } = await import('./api')
+    const result = await WalletService.releaseOrCaptureEscrow('job-com-escrow-encerrado', 'worker-2')
+
+    expect(result.success).toBe(true)
+    expect(invokeFunction).not.toHaveBeenCalled()
+  })
+
+  it('com `escrowKind` explícito NÃO usa a guarda — o fluxo de escrow segue intacto', async () => {
+    // Prova que a guarda não desligou o caminho de pagamento: quem já sabe o `kind` (o chamador do
+    // fluxo prepago/postpago) passa direto. Se o processamento voltar, isto continua valendo sem
+    // ninguém precisar lembrar de virar flag nenhuma.
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'sem saldo' } })
+
+    const { WalletService } = await import('./walletService')
+    const result = await WalletService.releaseOrCaptureEscrow('job-x', 'worker-3', 'prepaid')
+
+    // Não asseramos sucesso: o ponto é que ele ENTROU no fluxo em vez de sair pela guarda.
+    expect(result.success).toBe(false)
   })
 })
