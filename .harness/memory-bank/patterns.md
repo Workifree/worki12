@@ -1192,3 +1192,39 @@ não o efeito colateral.
 
 **Enumeração automática decide o que existe; a lista à mão decide o que é seguro. As duas juntas,
 nunca uma só.**
+
+---
+
+## ✗ Antipadrão: explicar uma AUSÊNCIA por plausibilidade em vez de conferir a origem
+
+**Quem cometeu:** o orquestrador (esta sessão), 22/08/2026 — terceira ocorrência da mesma forma
+nesta leva. As duas anteriores estão registradas acima; esta fecha o padrão.
+
+**O caso.** A asserção (c) do LGPD acusou `applications` e `jobs`. Notei que as irmãs
+`shift_calls`/`shift_call_targets`/`shift_attendance_confirmations` **não** apareciam, e escrevi no
+código a explicação: *"não aparecem porque penduram em `jobs`, não em workers/companies — a asserção
+só enxerga dependência DIRETA das duas âncoras, e é assim que deve ser."*
+
+Plausível, coerente com o resto do arquivo, e **falso**. O catálogo diz que `shift_calls.company_id`,
+`shift_calls.created_by`, `shift_call_targets.worker_id` e `shift_attendance_confirmations.worker_id`
+são **uuid nu, sem FK nenhuma**. Elas somem da (c) por ausência TOTAL de FK — o ponto cego que
+motivou as varreduras (d)/(e) — e não por dependência transitiva.
+
+**Por que o comentário era pior que o erro.** O trecho "e é assim que deve ser" ensinava ao próximo
+leitor que dependência via `jobs` estaria coberta. Não está: `jobs` também nunca é apagada, então
+nada cascateia de lá tampouco. Se `shift_calls` saísse de `v_classified_tables`, passaria em
+silêncio — e o comentário diria que isso é correto. Comentário errado sobre um GUARDA desarma o
+guarda para quem vier depois.
+
+**A forma comum das três ocorrências:** eu observo um fato (a tabela não apareceu), produzo uma causa
+que explicaria o fato, e **escrevo a causa como se a tivesse verificado**. A causa nunca foi
+consultada — foi inferida. O erro não está no raciocínio, está em registrar inferência com a
+gramática de constatação.
+
+**Regra.** Todo comentário que explica **por que algo está ausente** (não aparece, não dispara, não
+cascateia, não é alcançável) é afirmação sobre o catálogo ou sobre o código-fonte, e vai conferido
+**na origem** antes de ser escrito — nunca derivado do que faria sentido. Ausência não se explica de
+memória: `pg_constraint`, `pg_policies`, `pg_proc` ou o arquivo que cria o objeto.
+
+**Sinal de alerta na própria escrita:** as palavras "porque", "só", "e é assim que deve ser" num
+comentário sobre ausência. Se a frase justifica um vazio, ela precisa de fonte.
