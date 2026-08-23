@@ -516,3 +516,22 @@ Cobertura de `collectRawData`/`resolveCompanyScope`. Duas tentativas caíram por
 primeira chegou a escrever o comentário de cabeçalho declarando a dívida FECHADA, prometendo testes
 que nunca escreveu — **revertido**. Comentário que afirma cobertura inexistente é pior que dívida
 aberta. Não é regressão: a dívida já existia antes desta sessão.
+
+## ⚠️ Política de Privacidade: RASCUNHO COMMITADO, NÃO PUBLICADO
+
+`frontend/src/pages/Privacy.tsx` foi alterado e está **no repositório**, mas **não foi ao ar**.
+É texto jurídico — a decisão de publicar é do owner.
+
+**⚠️ O PRÓXIMO DEPLOY DE FRONTEND LEVA ESSAS MUDANÇAS JUNTO.** Se for publicar outra coisa antes do
+aval, reverter este commit primeiro (ou fazer o deploy a partir de um ponto anterior).
+
+Cinco correções, todas de coisas que a política **afirma e não são verdade**:
+1. "Após exclusão, removidos em até 30 dias" — falso sob a lápide. Reescrito para separar o que some
+   (dados pessoais) do que fica (registro de turno/pagamento/termo, sem identificação), com o porquê.
+2. "elenco aceito **ou pendente**" — já é falso HOJE: a DS-PII removeu o ramo pendente ontem. Só o
+   aceite do freela concede acesso a PIX/telefone.
+3. "5 anos" → **6 anos**, que é a decisão registrada do owner.
+4. Bloqueio feito pelo freela é indelével para a empresa — passou a constar.
+5. **Dívida 1 fechada junto:** três categorias que coletamos e a política não declarava —
+   disponibilidade declarada, certificações/treinamentos (com a delimitação explícita de que NÃO
+   coletamos documento de saúde nem o arquivo do certificado), e o termo congelado com CPF.
