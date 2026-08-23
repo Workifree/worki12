@@ -1404,3 +1404,32 @@ duto. As duas decisões estavam certas.
 2. Para SQL, checagem barata que teria pego: contar `DO $$` contra `END $$;`. Desbalanço = quebrado.
 3. Um duto que lê o arquivo inteiro é, de graça, um verificador de integridade. Vale mantê-lo
    burro de propósito: ele reporta e para, em vez de "consertar" e mascarar.
+
+---
+
+## ✗ Antipadrão: `HTTP 200` como prova de que o asset existe (SPA com rewrite curinga)
+
+**Origem:** 22/08/2026, na verificação final do deploy.
+
+A Vercel serve o Worki como SPA com rewrite curinga: **qualquer** caminho desconhecido devolve
+`200` com o `index.html`. Conferi cinco chunks de serviço com
+`curl -o /dev/null -w "%{http_code}"`, vi `200` nos cinco, e concluí que estavam publicados. Não
+estavam — eu tinha pegado hashes **antigos**, de downloads anteriores no scratchpad. Os cinco
+"arquivos" tinham 1.337 bytes idênticos: a página inicial.
+
+O erro seguinte veio de brinde: como o conteúdo era HTML, o `grep` pela string da feature falhou, e
+eu quase reportei **seis features ausentes** que estavam no ar o tempo todo.
+
+**Duas regras:**
+1. `200` não prova existência num SPA. Provar é olhar o **conteúdo**:
+   `head -c 15 arquivo | grep -qi "<!doctype"` ⇒ é a página, não o asset. Descartar.
+2. **Nome de chunk tem hash de build.** Nunca reaproveitar nome de download anterior — extrair
+   sempre do `index.js` do deploy corrente, e seguir o grafo (`index` → chunks de rota → chunks de
+   serviço). O nome que funcionou ontem aponta para um arquivo que não existe mais hoje.
+
+**O que funciona:** baixar o grafo inteiro a partir do `index` publicado, descartar os que são
+fallback, e só então procurar a string. Foi assim que os 13 itens fecharam — 209 chunks reais.
+
+**Regra irmã, do mesmo dia:** procurar a string no chunk errado dá o mesmo falso negativo. O código
+é dividido por rota; `team_lists` não está no `index` nem na página do Elenco, está em
+`teamListService-*.js`. Varrer o grafo todo em vez de adivinhar onde a string mora.
