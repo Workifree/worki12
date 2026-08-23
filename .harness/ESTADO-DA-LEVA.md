@@ -535,3 +535,56 @@ Cinco correções, todas de coisas que a política **afirma e não são verdade*
 5. **Dívida 1 fechada junto:** três categorias que coletamos e a política não declarava —
    disponibilidade declarada, certificações/treinamentos (com a delimitação explícita de que NÃO
    coletamos documento de saúde nem o arquivo do certificado), e o termo congelado com CPF.
+
+---
+
+# ✅ LGPD APLICADA EM PRODUÇÃO (22/08/2026)
+
+`20260821000000` (anonimização) e `20260821000400` (expurgo por prazo), nesta ordem, mais a Edge
+Function `delete-account` (versão 9 → 10) publicada **antes** delas.
+
+## Prova de que entrega a promessa (rollback proposital, freela real)
+
+```
+outcome:        anonymized
+PII que sobrou: (nenhuma)      cpf, phone, pix_key, birth_date, goal, address, income_value
+                               limpos; full_name virou a lápide
+deleteUser:     PASSOU         o 23503 que travava a exclusão sumiu
+```
+
+## Estado verificado no catálogo
+
+- FKs de `public` para `auth.users`: **1** (`notifications`, cascata desejada).
+  ⚠️ Eu esperava 3 e estava errado: `Message` e `Conversation` estão na allow-list mas **nunca
+  tiveram FK**. A allow-list tem 3 nomes; só 1 corresponde a FK real.
+- FKs **internas do Supabase**: **8, INALTERADAS** — `sessions`, `identities`, `mfa_factors`,
+  `one_time_tokens`, `oauth_*`, `webauthn_*`. Era o risco de quebrar a autenticação do projeto.
+- `lgpd_retention_interval()` = **6 anos**; `purge_expired_personal_data` criada; cron
+  `lgpd-retention-purge @ 30 3 * * *` agendado; `enforce_service_term_immutability` com o
+  corpo-superset.
+
+## A ordem correta era o INVERSO do que eu tinha registrado
+
+Eu havia escrito "migration antes da Edge Function". **Estava errado.** Com a migration primeiro, a
+função **velha** (anonimização parcial de 7 colunas) passaria a funcionar e apagaria credencial
+deixando PII para trás. Com a função nova primeiro, exclusões falham com 500 — quebrado, mas
+**seguro**, porque ela aborta antes do `deleteUser`. Publiquei a função primeiro.
+
+## Três HALTs, todos achados reais
+
+A migration se recusou a aplicar **três vezes**, e nenhuma foi ruído:
+1. **Fragmento órfão** de edição interrompida (um agente morreu por rede no meio da reescrita) — o
+   arquivo estava sintaticamente inválido. Pego pelo duto ao ler o arquivo INTEIRO; eu havia
+   revisado a seção com `sed` e não vi.
+2. **10 colunas de `workers`** sem classificação: `goal`, endereço completo, renda declarada,
+   resíduo de Stripe, agregados.
+3. **7 colunas de `companies`**: cinco gêmeas exatas das de `workers` (mesmo cadastro Asaas), mais
+   `size` e `company_type`.
+
+Sem essas guardas, endereço residencial e renda sobreviveriam à exclusão de conta em silêncio.
+
+## Registro no histórico
+
+`db query --linked --file` aplica byte a byte mas **não registra** em
+`supabase_migrations.schema_migrations`. Inseri as duas linhas à mão, com `created_by` dizendo por
+qual caminho subiram. Sem isso o banco ficaria à frente do repositório outra vez.
