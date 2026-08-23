@@ -189,6 +189,18 @@ export default function WorkerOnboarding() {
                     birth_date: formData.birthDate,
                     pix_key: normalizePixKeyForStorage(formData.pixKeyType, formData.pixKey),
                     roles: formData.roles,
+                    // A empresa NUNCA vê `roles`. Todas as telas dela — cartão do Elenco
+                    // (MemberCard/PendingCard), ShiftCallModal, InviteSeriesModal,
+                    // CompanyCreateJob, CompanyJobCandidates, CompanyDashboard — exibem
+                    // `primary_role`, e até 22/08/2026 o onboarding não o gravava: só a página de
+                    // Perfil escrevia. Efeito medido em produção nesse dia: 11 dos 16 freelas
+                    // tinham declarado a especialidade aqui e apareciam SEM FUNÇÃO para a empresa,
+                    // inclusive sumindo da busca por função do ShiftCallModal (que filtra por
+                    // `primary_role`). A pergunta "QUAIS SUAS ESPECIALIDADES?" era coletada e
+                    // jogada fora.
+                    // A primeira especialidade marcada vira a principal; o freela troca depois no
+                    // Perfil, que continua sendo o único lugar de edição.
+                    primary_role: formData.roles[0] ?? null,
                     experience_years: formData.experienceYears,
                     bio: formData.bio,
                     availability: formData.availability,
