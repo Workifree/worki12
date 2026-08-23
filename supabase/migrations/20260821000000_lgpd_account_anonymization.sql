@@ -748,13 +748,6 @@ BEGIN
           'CASCADE por decisao escrita em ddl-aprovado 2.1. HALT -> architect.', v_notcasc;
     END IF;
 END $$;
-      ]);
-    IF v_leftover IS NOT NULL THEN
-        RAISE EXCEPTION
-          'ASSERCAO: FK CASCADE para auth.users nao revisada em: %. deleteUser apagaria esse dado. HALT -> architect.',
-          v_leftover;
-    END IF;
-END $$;
 
 -- =============================================
 -- 3. MARCADOR DE LÁPIDE
