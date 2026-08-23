@@ -754,7 +754,7 @@ export default function CompanyProfile() {
 
                         <div className={`mt-2 ${company.link_risk_alert_enabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
                             <label htmlFor="link-risk-threshold" className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">
-                                Avisar a partir de quantas vezes por semana
+                                Avisar quando passar de quantas vezes por semana
                             </label>
                             <input
                                 id="link-risk-threshold"
@@ -774,7 +774,7 @@ export default function CompanyProfile() {
                                 className="w-24 font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50"
                             />
                             <p className="text-xs text-gray-500 mt-2">
-                                Padrão: {DEFAULT_LINK_RISK_THRESHOLD}. Mínimo 1, máximo 7 vezes na mesma semana (dom–sáb).
+                                Padrão: {DEFAULT_LINK_RISK_THRESHOLD} — o selo aparece a partir da {DEFAULT_LINK_RISK_THRESHOLD + 1}ª vez. Mínimo 1, máximo 7 (dom–sáb).
                             </p>
                         </div>
                     </>
@@ -784,7 +784,7 @@ export default function CompanyProfile() {
                             <p className="font-black text-sm uppercase">Avisar sobre frequência do mesmo freela</p>
                             <p className="text-xs font-bold text-gray-500 mt-0.5">
                                 {company.link_risk_alert_enabled !== false
-                                    ? `Avisando a partir de ${company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}x na mesma semana (dom–sáb), contando só turnos da sua empresa.`
+                                    ? `Avisando quando passar de ${company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}x na mesma semana (dom–sáb), contando só turnos da sua empresa.`
                                     : 'Aviso desligado.'}
                             </p>
                         </div>

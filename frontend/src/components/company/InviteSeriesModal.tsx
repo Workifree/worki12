@@ -236,8 +236,8 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
 
                         {teamMembers.length > 0 && riskEnabled && (
                             <p className="text-[11px] font-bold text-gray-400 mt-3">
-                                Sua empresa avisa a partir de {riskThreshold}x na mesma semana (dom–sáb) para o
-                                mesmo freela. A decisão de convidar é sua — consulte seu contador/jurídico se
+                                Sua empresa tolera até {riskThreshold}x na mesma semana (dom–sáb) para o mesmo
+                                freela — o aviso aparece acima disso. A decisão de convidar é sua — consulte seu contador/jurídico se
                                 tiver dúvida sobre frequência e risco de vínculo.
                             </p>
                         )}

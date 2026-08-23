@@ -613,7 +613,7 @@ export function ShiftCallModal({
                   </p>
                 ))}
                 <p>
-                  Sua empresa configurou o aviso a partir de {riskThreshold}x/semana. A decisão de
+                  Sua empresa tolera até {riskThreshold}x/semana — este aviso aparece acima disso. A decisão de
                   chamar é sua — consulte seu contador/jurídico se tiver dúvida sobre frequência e
                   risco de vínculo.
                 </p>
