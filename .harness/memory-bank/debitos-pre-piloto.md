@@ -410,7 +410,20 @@ uma asserção genuinamente bilateral.**
 **Latente, não é defeito desta entrega:** como o limiar não tem piso, um check-in **23h adiantado**
 conta como pontual. É pergunta de produto sobre a métrica, não bug de implementação.
 
-## Token de cartão permanece no Asaas após exclusão de conta
+## ✅ SEM OBJETO — Token de cartão permanece no Asaas após exclusão de conta
+
+> **ANULADA em 22/08/2026.** Esta dívida supunha tokens de cartão retidos no processador. Conferido
+> no catálogo: **`payment_methods` tem ZERO linhas** — nunca houve cartão tokenizado neste produto.
+> Somado à decisão do owner de abandonar o Asaas e pausar o processamento de pagamento
+> (`ADR-20260822-pausa-do-processamento-de-pagamento.md`), não há token a revogar, nem pergunta a
+> fazer ao suporte deles, nem escolha de owner/jurídico pendente. O item **J5** do contrato de LGPD
+> sai da lista de pendências.
+>
+> As sete Edge Functions do Asaas foram **removidas de produção** na mesma decisão; o código
+> permanece no repositório caso o processamento volte.
+>
+> O texto original fica abaixo como registro do raciocínio — ele continua correto SE o pagamento for
+> retomado e cartões passarem a ser tokenizados. Nesse dia, esta dívida reabre.
 
 **Estado:** ABERTO. Bloqueia **publicar** a rotina de exclusão ao usuário; não bloqueia aplicar a migration.
 
