@@ -17,7 +17,12 @@ interface NextJobData {
     job: {
         title: string;
         start_date: string;
-        start_time: string;
+        // A tabela `jobs` NAO tem coluna `start_time`. Esta interface declarava que tinha, e o
+        // cast `as unknown as NextJobData[]` impedia o TypeScript de reclamar: o campo vinha
+        // sempre `undefined` e o cartao "PROXIMO TURNO" dizia "Horario indefinido" para todo
+        // freela, sempre -- inclusive para turnos com horario preenchido.
+        work_start_time: string | null;
+        work_end_time: string | null;
         company: { name: string };
     };
 }
@@ -251,7 +256,11 @@ export default function Dashboard() {
                                     </span>
                                 </div>
                                 <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
-                                <p className="text-sm text-gray-400">{nextJob.job.start_time || 'Horário indefinido'}</p>
+                                <p className="text-sm text-gray-400">
+                                    {nextJob.job.work_start_time
+                                        ? `${nextJob.job.work_start_time}${nextJob.job.work_end_time ? ` – ${nextJob.job.work_end_time}` : ''}`
+                                        : 'Horário indefinido'}
+                                </p>
                             </div>
                             <button onClick={() => navigate('/my-jobs')} className="w-full bg-white text-black font-black uppercase py-3 rounded-xl hover:bg-primary hover:text-white transition-colors">
                                 Ver Detalhes

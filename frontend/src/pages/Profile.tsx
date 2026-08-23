@@ -99,6 +99,41 @@ interface FormData {
     roles: string;
 }
 
+/**
+ * Soma as horas REAIS de turno do freela, a partir do par check-in/check-out de cada
+ * `applications` concluida.
+ *
+ * Antes isso era `completed_jobs_count * 6` -- um chute de seis horas por turno, exibido ao
+ * freela sob o rotulo "Horas Totais" como se fosse medida. Um turno de 1 minuto contava 6h.
+ * O dado verdadeiro sempre esteve na propria linha (`worker_checkin_at`/`worker_checkout_at`),
+ * e o recibo ja o calculava -- as duas telas do mesmo app discordavam sobre a mesma jornada.
+ *
+ * Turno concluido sem check-in ou sem check-out soma zero: nao ha o que medir, e estimar de novo
+ * seria repetir o erro. Falha de leitura devolve 0 em vez de derrubar o perfil.
+ */
+async function somarHorasRegistradas(workerId: string): Promise<number> {
+    try {
+        const { data, error } = await supabase
+            .from('applications')
+            .select('worker_checkin_at, worker_checkout_at')
+            .eq('worker_id', workerId)
+            .eq('status', 'completed');
+        if (error || !data) return 0;
+
+        const ms = data.reduce((total, row) => {
+            if (!row.worker_checkin_at || !row.worker_checkout_at) return total;
+            const entrada = new Date(row.worker_checkin_at).getTime();
+            const saida = new Date(row.worker_checkout_at).getTime();
+            if (Number.isNaN(entrada) || Number.isNaN(saida) || saida <= entrada) return total;
+            return total + (saida - entrada);
+        }, 0);
+
+        return Math.floor(ms / 3_600_000);
+    } catch {
+        return 0;
+    }
+}
+
 export default function Profile() {
     const navigate = useNavigate();
     const { signOut } = useAuth();
@@ -172,6 +207,7 @@ export default function Profile() {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, [isDirty, handleBeforeUnload]);
+
 
     const [stats, setStats] = useState({
         completedJobs: 0,
@@ -255,7 +291,7 @@ export default function Profile() {
                 setStats({
                     completedJobs: data.completed_jobs_count || 0,
                     totalEarnings: data.earnings_total || 0,
-                    hoursWorked: Math.floor((data.completed_jobs_count || 0) * 6)
+                    hoursWorked: await somarHorasRegistradas(user.id),
                 });
             }
             setLoading(false);
