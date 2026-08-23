@@ -188,3 +188,73 @@ notificação de convite de elenco nos dois sentidos.
 - **Teste que passa não prova que pega**: dois testes meus sobreviveram à mutação nesta sessão
   (um do analytics, um do `formatHistoryDate`). Só reverter o fix e ver o teste falhar distingue
   guarda de decoração.
+
+---
+
+# Terceira passagem — features que faltavam (23/08/2026)
+
+Cobertura: dispensa/cancelamento, recusa de chamado, F11 SOS (quatro portões + disparo real),
+F13 convite de gerente ponta a ponta, F8 certificações e treinamentos, F7 grade de
+disponibilidade, F12 selos com privacidade, veto indelével do freela.
+
+## 🔴 Impediam a pessoa de usar a feature
+
+### 20. Convite de gerente levava a criar conta de FREELA
+O link redireciona para `/login?redirect=...` **sem `type`**, e o Login faz
+`explicitType || 'work'`: o convidado era recebido com "COMECE A TRABALHAR — ganhe dinheiro no
+seu próprio horário". Quem se cadastrasse por ali viraria worker, e worker não pode ser gerente
+(a RPC tem o outcome `worker_cannot_be_manager`). O convite ficava inutilizável exatamente pela
+única pessoa a quem foi enviado — e o erro só apareceria depois da conta criada.
+
+### 21. Telas de empresa assumiam que o usuário logado É a empresa
+Seis telas escrevem `company_id = user.id`, o que só vale para o dono. Entrei como gerente:
+`/company/team` mostrava o elenco certo (usa o seam `getAuthenticatedCompanyId`), mas o dashboard
+dizia "Bem-vindo de volta, Empresa" com 0 turnos e `/company/jobs` vinha vazio — para uma unidade
+com 12 turnos. `CompanyCreateJob` mandava `company_id: user.id` no INSERT, que a RLS recusaria.
+
+O banco nunca esteve em risco: `is_company_owner(próprio_id)` = false e
+`is_company_owner(unidade)` = true, conferido em produção. Era fiação de frontend, não fase
+adiada — **as quatro RPCs da "Fase 3" existem e o fluxo inteiro roda**; a nota do memory-bank
+dizendo "F13 Fase 3 — NÃO APLICADA" está desatualizada.
+
+## 🟠 Diziam coisas que não são verdade
+
+### 22. Freela sem nenhuma avaliação aparecia com nota 5.0
+`rating_average ? … : '5.0'` no cartão onde a empresa decide quem chamar, e o mesmo `|| 5.0` no
+selo do perfil da empresa — que é a prova social que o freela lê antes de aceitar convite. Nota
+cheia lê como "excelente" quando o que existe é ausência de dado.
+
+### 23. As notificações escritas em SQL eram as únicas do produto sem acento
+Cinco funções: `claim_shift_slot`, `decline_shift_call`, `create_sos_call`,
+`notify_on_worker_referral`, `notify_on_team_connection` — esta última escrita por mim horas
+antes, no mesmo dia. Corrigido lendo a definição do catálogo e recriando, com assertiva por par.
+Precisou de duas levas: meu inventário extraía literais por pareamento de aspas, método que sai
+de fase com `''` escapada, e dois textos de `claim_shift_slot` sumiram da lista sem aviso —
+justamente as frases que consolam quem **perde** a corrida do chamado.
+
+### 24. `cancelled` era rotulado "Descartado"
+Palavra de triagem de candidato para um freela que a empresa acabou de **dispensar**. Agora
+`cancelled` → "Dispensado", `declined` → "Recusou", `expired` → "Expirou".
+
+### 25. Mais plurais no singular
+"1 profissionais fora do seu Elenco foram avisados" (o SOS de um alvo só é o caso comum em
+cidade pequena), "(1 avaliações)" no cartão do candidato e no perfil público.
+
+## ✅ Verificado funcionando (sem defeito encontrado)
+Dispensa com modal de consequência e notificação ao freela; recusa neutra de chamado avisando a
+empresa; os **quatro portões do SOS** em sequência (`not_urgent` → `team_not_tried` →
+`team_call_still_open` → `ok`), pool calculado internamente, `pool_empty` recusado com mensagem,
+disparo real mostrando só a contagem, e o aceite **sem** entrar no elenco (C7 do ADR); convite de
+gerente ponta a ponta com bloqueio correto de `/company/organization` (R16); certificação com
+aviso de dado de saúde, conferência com copy jurídica e **guarda DS8** (editar o conteúdo zera a
+conferência); treinamento que se revoga, não se apaga; grade de disponibilidade F7 persistindo;
+selos F12 com assimetria correta (terceiro vê zero, dono vê `hidden=true` para reverter) e guarda
+DS3 (sem histórico, não grava); **veto do freela indelével** — empresa não consegue deletar nem
+reverter a linha bloqueada, e a indicação passa a ser recusada com `not_in_roster`.
+
+## Nota de método (terceira passagem)
+- **Ler a tela cedo demais produz falso "quebrado"**: duas páginas pareceram travadas em spinner
+  e as duas tinham apenas terminado de montar depois da minha leitura. Antes de afirmar hang,
+  reler com espera maior e inspecionar `#root`.
+- **Meu próprio inventário pode ser o defeito**: a assertiva na migration de acentos apontou o
+  que meu extrator de literais não via. Ferramenta de varredura também precisa de verificação.
