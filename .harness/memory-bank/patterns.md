@@ -1371,3 +1371,36 @@ mexa em RPC de autorização. Custa uma consulta. Nesta sessão pagou-se sozinha
 **Regra irmã, do mesmo dia:** predicado de guarda também se roda antes de confiar. `regclass::text`
 sem schema, `_` como curinga no `LIKE`, `HAVING` sem `GROUP BY` e `CHECK` de comprimento passando por
 enum — quatro guardas que **pareciam** funcionar e nenhum foi pego por leitura.
+
+---
+
+## ✗ Antipadrão: agente que morre no meio de uma edição deixa arquivo QUEBRADO, não incompleto
+
+**Origem:** 22/08/2026. O architect reescreveu a seção 2B da migration de LGPD e **morreu por erro
+de rede** no meio. Substituiu o miolo da asserção antiga e deixou a **cauda** para trás:
+
+```sql
+END $$;          -- fecha o bloco NOVO
+      ]);        -- <- fecho de um ARRAY[ que não existe mais
+    IF v_leftover IS NOT NULL THEN   -- <- variável de um escopo que já terminou
+    ...
+END $$;
+```
+
+O arquivo ficou **sintaticamente inválido**. Não "faltando um pedaço" — quebrado.
+
+**Por que passou por mim.** Eu revisei a seção 2B depois — li o laço, li a asserção nova, simulei o
+comportamento contra produção e aprovei. Só que li **o trecho que me interessava**, e o lixo estava
+logo abaixo do `END $$;` que eu tomei como fim da seção. Revisar o diff teria mostrado; revisar por
+`sed -n '<faixa>'` não mostrou.
+
+**Quem pegou:** o agente-duto, ao ler o arquivo INTEIRO para passá-lo à ferramenta. Ele parou antes
+de aplicar e **recusou consertar**, dizendo que corrigir corpo de migration está fora do mandato de
+duto. As duas decisões estavam certas.
+
+**Regras:**
+1. Quando um agente morre por erro de API/rede **durante uma edição**, o arquivo é suspeito por
+   inteiro — não só a parte que ele anunciou. Rodar `git diff` do arquivo, não `sed` da seção.
+2. Para SQL, checagem barata que teria pego: contar `DO $$` contra `END $$;`. Desbalanço = quebrado.
+3. Um duto que lê o arquivo inteiro é, de graça, um verificador de integridade. Vale mantê-lo
+   burro de propósito: ele reporta e para, em vez de "consertar" e mascarar.
