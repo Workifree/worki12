@@ -63,13 +63,13 @@ export function SpendCard({ block }: { block: SpendSummaryBlock }) {
 export function HiresCard({ block }: { block: HiresSummaryBlock }) {
   return (
     <CardShell label="Contratações no período">
-      <MetricStateWrapper block={block} emptyMessage="Nenhum turno criado neste período.">
+      <MetricStateWrapper block={block} emptyMessage="Nenhum turno programado para este período.">
         {(data) => (
           <div className="flex flex-col gap-1">
             <p className="text-2xl font-black tabular-nums">{data.count}</p>
             <DeltaBadge delta={data.delta} />
             <p className="text-[11px] text-gray-500">
-              de {data.jobsCreatedCount} vaga(s) criada(s)
+              de {data.jobsCreatedCount} turno(s) no período
             </p>
           </div>
         )}
