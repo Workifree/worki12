@@ -331,7 +331,9 @@ export function ShiftCallModal({
 
     addToast(
       result.invited > 1
-        ? `Chamado enviado para ${result.invited} freelas. Quem aceitar primeiro fica com a vaga.`
+        ? result.invited === 1
+          ? 'Convite enviado. Você é avisado assim que ele responder.'
+          : `Chamado enviado para ${result.invited} freelas. Quem aceitar primeiro fica com a vaga.`
         : 'Convite enviado.',
       'success',
     );
@@ -641,7 +643,9 @@ export function ShiftCallModal({
                 ? 'Selecione os freelas'
                 : selected.size === 1
                   ? 'Enviar convite'
-                  : `Chamar ${selected.size} freelas`}
+                  : selected.size === 1
+                    ? 'Chamar 1 freela'
+                    : `Chamar ${selected.size} freelas`}
           </button>
           {selected.size > 1 && (
             <p className="text-xs text-gray-500 text-center mt-2 font-bold">

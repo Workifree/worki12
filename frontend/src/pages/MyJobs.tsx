@@ -794,7 +794,7 @@ export default function MyJobs() {
                                     {invite.disputed && (
                                         <p className="text-xs font-bold text-yellow-700 mb-2 flex items-center gap-1">
                                             <Users size={12} />
-                                            {invite.targetsCount} freelas receberam este turno
+                                            {invite.targetsCount === 1 ? 'Você foi o único chamado' : `${invite.targetsCount} freelas receberam este turno`}
                                             {invite.slots > 1 ? ` · ${invite.slots} vagas` : ' · 1 vaga'}
                                         </p>
                                     )}

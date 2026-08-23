@@ -616,6 +616,26 @@ function jobsInPeriod(raw: RawAnalyticsData, start: Date, end: Date): JobRow[] {
   return raw.jobs.filter((j) => isInRange(jobPeriodDate(j), start, end));
 }
 
+/**
+ * Turnos do periodo que de fato ACONTECERAM.
+ *
+ * Tres metricas filtravam por `jobs.status === 'completed'` -- e nada, em lugar nenhum do
+ * produto, escreve esse valor. Conferido no banco de producao: `jobs.status` so assume 'open' e
+ * 'deleted'. O resultado era que "Custo por hora", "Horas realizadas / previstas" e a tabela de
+ * desempenho por freela diziam "Nenhum turno concluido neste periodo" para TODA empresa, sempre,
+ * mesmo com turno concluido e pago dentro do periodo -- cartoes que a entrevista pediu pelo nome.
+ *
+ * A conclusao, no modo A, mora em `applications.status='completed'`: e o que a empresa marca ao
+ * confirmar o turno, o que dispara os agregados do freela, e como as badges, o recibo e a agenda
+ * ja definem "concluido". Esta funcao alinha o analytics ao resto do produto.
+ */
+function completedJobsInPeriod(raw: RawAnalyticsData, start: Date, end: Date): JobRow[] {
+  const jobIdsConcluidos = new Set(
+    raw.applications.filter((a) => a.status === 'completed').map((a) => a.job_id),
+  );
+  return jobsInPeriod(raw, start, end).filter((j) => jobIdsConcluidos.has(j.id));
+}
+
 const HIRED_STATUSES = new Set(['hired', 'in_progress', 'completed']);
 
 function buildHiresBlock(raw: RawAnalyticsData, currentStart: Date, currentEnd: Date, prevStart: Date, prevEnd: Date): HiresSummaryBlock {
@@ -664,7 +684,7 @@ function computeCostPerHour(
   spend: SpendComputation,
   calculateWorkedHours: (a: string | null, b: string | null) => number | null,
 ): CostPerHourComputation {
-  const completedJobs = jobsInPeriod(raw, start, end).filter((j) => j.status === 'completed');
+  const completedJobs = completedJobsInPeriod(raw, start, end);
   if (completedJobs.length === 0) {
     return {
       totalSpend: spend.totalAmount,
@@ -773,7 +793,7 @@ function computeHoursRatio(
   end: Date,
   calculateWorkedHours: (a: string | null, b: string | null) => number | null,
 ): HoursRatioComputation {
-  const completedJobs = jobsInPeriod(raw, start, end).filter((j) => j.status === 'completed');
+  const completedJobs = completedJobsInPeriod(raw, start, end);
   if (completedJobs.length === 0) {
     return { realizedHours: 0, estimatedHours: 0, excludedNoEstimateCount: 0, excludedNoAttendanceCount: 0, hasSource: false };
   }
@@ -984,7 +1004,7 @@ function buildAttendanceBlock(raw: RawAnalyticsData, start: Date, end: Date, now
 }
 
 function buildPerformanceBlock(raw: RawAnalyticsData, start: Date, end: Date): WorkerPerformanceBlock {
-  const completedJobs = jobsInPeriod(raw, start, end).filter((j) => j.status === 'completed');
+  const completedJobs = completedJobsInPeriod(raw, start, end);
   if (completedJobs.length === 0) return { state: 'sem-fonte' };
   const completedJobIds = new Set(completedJobs.map((j) => j.id));
   const jobsById = new Map(completedJobs.map((j) => [j.id, j] as const));

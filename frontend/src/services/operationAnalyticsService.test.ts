@@ -590,14 +590,21 @@ describe('C-ANALYTICS-TRACO-MUDO — turno sem NENHUMA fonte de hora não vira "
     }
   });
 
-  // INFO do evaluator: o ramo "turno completed sem NENHUMA application" (nem uma linha em
-  // `raw.applications` para o job) nunca era exercitado — sem este teste, o `for (const jobId of
-  // completedJobIds)` que cobre esse buraco sobrevive a mutação silenciosamente.
-  it('turno completed SEM nenhuma application (ninguém registrado como tendo trabalhado): ainda soma em shiftsCount/noHoursSourceShiftsCount', () => {
+  // REGRESSAO (achado navegando o produto, 23/08/2026): custo/hora, horas realizadas/previstas e
+  // a tabela de desempenho filtravam os turnos por `jobs.status === 'completed'`. NADA no produto
+  // escreve esse valor -- conferido no banco de producao, `jobs.status` so assume 'open' e
+  // 'deleted'. Os tres cartoes diziam "Nenhum turno concluido neste periodo" para toda empresa,
+  // sempre, mesmo com turno concluido e pago dentro do periodo.
+  //
+  // Os dois testes abaixo sao as duas metades da regra, e cada um sozinho MORRE com o filtro
+  // antigo. (Uma primeira versao juntou os dois casos num teste so e a mutacao sobreviveu: o ramo
+  // "job completed sem nenhuma application" produz exatamente os mesmos contadores, entao os
+  // numeros nao distinguiam as duas implementacoes.)
+  it('turno com jobs.status="open" e application CONCLUIDA conta (o caso real de producao)', () => {
     const job = {
-      id: 'job-sem-application-nenhuma',
+      id: 'job-aberto-mas-concluido',
       company_id: 'company-1',
-      status: 'completed',
+      status: 'open', // <- como toda linha real de `jobs` em producao
       start_date: jobStartDate('2026-08-21'),
       created_at: jobStartDate('2026-08-21'),
       work_start_time: '08:00',
@@ -605,16 +612,45 @@ describe('C-ANALYTICS-TRACO-MUDO — turno sem NENHUMA fonte de hora não vira "
       estimated_hours: null,
       budget: 100,
     };
-    const raw = emptyRaw({ jobs: [job] }); // applications fica vazio (default de emptyRaw)
+    const raw = emptyRaw({
+      jobs: [job],
+      applications: [{
+        id: 'app-concluida',
+        job_id: job.id,
+        worker_id: 'worker-1',
+        status: 'completed',
+        worker_checkin_at: null,
+        worker_checkout_at: null,
+        company_checkin_confirmed_at: null,
+        company_checkout_confirmed_at: null,
+      }],
+      workers: new Map([['worker-1', { id: 'worker-1', full_name: 'Helio', rating_average: null }]]),
+    });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
 
+    // Com o filtro antigo nao havia turno "completed" nenhum: state caia em 'sem-fonte'.
     expect(result.costPerHour.state).toBe('ok');
     if (result.costPerHour.state === 'ok') {
       expect(result.costPerHour.shiftsCount).toBe(1);
-      expect(result.costPerHour.noHoursSourceShiftsCount).toBe(1);
-      expect(result.costPerHour.estimatedHoursShiftsCount).toBe(0);
-      expect(result.costPerHour.inconsistentDurationShiftsCount).toBe(0);
     }
+  });
+
+  it('jobs.status="completed" sem NENHUMA application concluida nao conta (coluna morta nao decide)', () => {
+    const fantasma = {
+      id: 'job-status-completed-sem-ninguem',
+      company_id: 'company-1',
+      status: 'completed', // valor que nenhum caminho do produto grava
+      start_date: jobStartDate('2026-08-21'),
+      created_at: jobStartDate('2026-08-21'),
+      work_start_time: '08:00',
+      work_end_time: '16:00',
+      estimated_hours: null,
+      budget: 100,
+    };
+    const result = aggregate(emptyRaw({ jobs: [fantasma] }), PERIOD_AUGUST, DEPS);
+
+    // Com o filtro antigo isso virava um turno concluido sem fonte de hora: state 'ok'.
+    expect(result.costPerHour.state).toBe('sem-fonte');
   });
 });
 

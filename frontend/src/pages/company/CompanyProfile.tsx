@@ -466,7 +466,7 @@ export default function CompanyProfile() {
                                         <span className="font-black text-yellow-700 text-lg">{Number(company.rating_average || 5.0).toFixed(1)}</span>
                                     </div>
                                     <div className="w-px h-6 bg-yellow-200 mx-1"></div>
-                                    <span className="text-xs font-bold uppercase text-yellow-800/70 tracking-wide">{company.reviews_count || 0} avaliações</span>
+                                    <span className="text-xs font-bold uppercase text-yellow-800/70 tracking-wide">{company.reviews_count === 1 ? '1 avaliação' : `${company.reviews_count || 0} avaliações`}</span>
                                 </div>
                             </div>
                         </div>
