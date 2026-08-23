@@ -1234,7 +1234,7 @@ export default function CompanyJobCandidates() {
                                                 <span className="flex items-center gap-1">
                                                     <Star size={12} className="text-yellow-500 fill-yellow-500" />
                                                     {app.worker?.rating_average ? Number(app.worker.rating_average).toFixed(1) : '5.0'}
-                                                    <span className="text-gray-400 font-medium ml-1">({app.worker?.reviews_count || 0} avaliações)</span>
+                                                    <span className="text-gray-400 font-medium ml-1">({app.worker?.reviews_count === 1 ? '1 avaliação' : `${app.worker?.reviews_count || 0} avaliações`})</span>
                                                 </span>
                                                 <span className="flex items-center gap-1"><Clock size={12} /> Convidado {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
                                             </div>
@@ -1331,7 +1331,7 @@ export default function CompanyJobCandidates() {
                                                                 app.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-500' :
                                                                     'bg-blue-50 border-blue-100 text-blue-600'
                                                             }`}>
-                                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : 'Descartado'}
+                                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
                                                         </span>
                                                     )}
 

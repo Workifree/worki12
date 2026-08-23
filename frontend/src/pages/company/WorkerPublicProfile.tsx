@@ -323,7 +323,7 @@ export default function WorkerPublicProfile() {
                                     ? Number(profile.rating_average).toFixed(1)
                                     : '—'}
                             </div>
-                            <p className="text-xs text-gray-500">({profile.reviews_count ?? 0} avaliações)</p>
+                            <p className="text-xs text-gray-500">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
                             <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Award size={14} /> XP Total</div>
