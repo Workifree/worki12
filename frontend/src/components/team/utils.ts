@@ -2,10 +2,30 @@
 // Utilitários compartilhados entre os componentes de `components/team/`.
 // ---------------------------------------------------------------------------
 
-/** Formata uma data "date-only" (YYYY-MM-DD) sem shift de fuso (mesmo padrão de ReceiptView). */
-export function formatHistoryDate(dateOnly: string): string {
-  const [y, m, d] = dateOnly.split('-').map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+/**
+ * Formata para dd/mm/aaaa aceitando as DUAS formas que os chamadores passam.
+ *
+ * Nasceu aceitando so "date-only" (YYYY-MM-DD), mas os dois call sites reais passam
+ * `jobs.start_date`, que e timestamptz ("2026-08-23T13:00:00+00:00"). O split('-') virava
+ * ["2026","08","23T13:00:00+00:00"], Number() do terceiro dava NaN, e o card do elenco exibia
+ * "ultimo em Invalid Date" para toda empresa que tivesse historico com o freela.
+ *
+ * As duas formas precisam de tratamento DIFERENTE, e por isso nao da para so fatiar 10 caracteres:
+ *   - date-only nao tem fuso; construir com `new Date(y, m-1, d)` evita o shift que UTC causaria.
+ *   - timestamptz tem instante real; a data que interessa e a LOCAL de quem le. Fatiar os 10
+ *     primeiros caracteres devolveria a data UTC, e um turno as 02:00 UTC de 24/08 apareceria
+ *     como 24/08 para alguem que o viveu as 23:00 de 23/08.
+ */
+export function formatHistoryDate(value: string): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return '—';
+
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const date = dateOnly
+    ? (() => { const [y, m, d] = raw.split('-').map(Number); return new Date(y, m - 1, d); })()
+    : new Date(raw);
+
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('pt-BR');
 }
 

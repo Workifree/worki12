@@ -93,7 +93,8 @@ export function MemberCard({ member, onRemove, history, onInvite }: MemberCardPr
           )}
           {typeof worker.completed_jobs_count === 'number' && (
             <span className="flex items-center gap-1 text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-xl">
-              <Briefcase size={12} /> {worker.completed_jobs_count} jobs
+              <Briefcase size={12} /> {worker.completed_jobs_count}{' '}
+              {worker.completed_jobs_count === 1 ? 'turno no total' : 'turnos no total'}
             </span>
           )}
           {worker.city && (
