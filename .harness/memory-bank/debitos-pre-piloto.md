@@ -447,3 +447,42 @@ de LGPD. Hoje a função emite um aviso único, explícito, apontando para este 
 **Para fechar:** confirmar contra a API do Asaas (documentação de referência completa ou suporte) se
 existe revogação de token; se existir, implementar; se não existir, decidir entre remover o cliente
 Asaas ou declarar a retenção na Política de Privacidade — decisão de owner + jurídico, junto de J1–J4.
+
+
+---
+
+## 19. Sete colunas mortas em `workers` — recomendação de `DROP COLUMN` (decisão de owner)
+
+**Não bloqueia nada.** As sete já estão classificadas como APAGADAS em
+`.harness/spec/lgpd-producao/ddl-aprovado.md` §2.1 e a rotina de LGPD as apaga. Isto aqui é a
+recomendação de derrubá-las de vez.
+
+| Coluna | Linhas em produção | Origem provável |
+|---|---|---|
+| `address`, `address_number`, `postal_code`, `province`, `income_value` | 0 | cadastro de `customer` do Asaas — campo a campo. Nunca escritas a partir de `workers`; a pausa do processamento de pagamento (ADR-20260822) torna a hipótese remota |
+| `stripe_account_id`, `stripe_onboarding_completed` | 0 | resíduo do Stripe |
+
+**Por que recomendo derrubar:** coluna que não existe não pode ser preenchida por acidente. É a
+única defesa que não depende de alguém lembrar de classificar. Enquanto elas existirem, endereço
+residencial e renda declarada continuam sendo campos válidos de escrita para o próprio titular
+(a policy de UPDATE de `workers` é `id = auth.uid()`).
+
+**Por que não é grátis — e por isso vai ao owner:**
+1. A migration do DROP **tem de recriar `public.anonymize_account`** sem as sete atribuições,
+   senão a RPC de LGPD quebra em runtime.
+2. Uma reaplicação de `20260821000000` passará a HALTar na asserção (a). Isso é o comportamento
+   **correto** (o schema deixou de ser o que aquele arquivo verificou), mas precisa estar escrito
+   antes de alguém encontrar o HALT e achar que é defeito.
+3. `DROP COLUMN` é irreversível quanto ao dado.
+
+**Ordem obrigatória: `20260821000000` primeiro, DROP depois.** O inverso trocaria um HALT
+diagnóstico por uma janela em que a rotina de LGPD referencia coluna inexistente.
+
+### Achado colateral: o Article 6 da constitution não é literalmente verdadeiro
+
+O Article 6 afirma que o **Stripe foi "100% removido"**. Foi removido de funções, pacotes e
+frontend — **não do schema**. `workers.stripe_account_id` e `workers.stripe_onboarding_completed`
+estão em produção hoje. A remoção parou na fronteira do banco, que é exatamente onde nenhum build,
+lint ou teste olha. Ou o DROP acontece (e o Article volta a ser literal), ou o Article ganha a
+redação honesta — decisão de owner, com data e justificativa, como manda o próprio documento.
+Registrado em `ADR-20260822-coluna-vazia-nao-e-coluna-morta.md`.

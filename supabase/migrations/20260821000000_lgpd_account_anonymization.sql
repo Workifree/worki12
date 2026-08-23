@@ -111,10 +111,24 @@ DO $$
 DECLARE
     -- Colunas que a rotina ESCREVE (apaga ou substitui por valor). Emenda 2026-08-21:
     -- +badges_hidden, +accepts_referrals, +discoverable_for_sos (F10/F11/F12) e +companies.city.
+    -- Emenda 2026-08-22 (HALT da assercao (b) em producao): +goal, +address, +address_number,
+    -- +postal_code, +province, +income_value, +stripe_account_id, +stripe_onboarding_completed.
+    -- `goal` NAO foi retida como enum: o conjunto fechado vive no radio do React, a coluna e
+    -- `text` SEM CHECK -- e a assercao (b3) abaixo existe exatamente para recusar essa classe
+    -- de justificativa. As 7 seguintes estao VAZIAS hoje (0 linhas); vazio nao e argumento de
+    -- retencao, e o custo de apagar coluna vazia e zero. Ver ddl-aprovado 2.1 (workers).
+    -- ⚠️ Se as 7 colunas mortas forem DERRUBADAS (DROP COLUMN, decisao do owner -- ver
+    --    debitos-pre-piloto), a migration que as derruba TEM de recriar
+    --    `public.anonymize_account` sem estas atribuicoes. A assercao (a) passar a HALTar
+    --    numa reaplicacao deste arquivo e o comportamento CORRETO: o schema deixou de ser o que
+    --    este arquivo verificou.
     v_expected_workers   text[] := ARRAY[
         'full_name','cpf','phone','birth_date','pix_key','bio','city','avatar_url','cover_url',
         'primary_role','roles','tags','availability','availability_days','experience_years',
-        'verified_identity','badges_hidden','accepts_referrals','discoverable_for_sos'
+        'verified_identity','badges_hidden','accepts_referrals','discoverable_for_sos',
+        'goal',
+        'address','address_number','postal_code','province','income_value',
+        'stripe_account_id','stripe_onboarding_completed'
     ];
     v_expected_companies text[] := ARRAY[
         'name','cnpj','city','email','address','website','description','industry','logo_url',
@@ -360,7 +374,12 @@ BEGIN
       AND c.column_name <> ALL (ARRAY[
             'id','xp','level','rating_average','reviews_count','completed_jobs_count',
             'earnings_total','profile_views','accepted_tos','tos_accepted_at','tos_version',
-            'onboarding_completed','created_at','updated_at','anonymized_at'
+            'onboarding_completed','created_at','updated_at','anonymized_at',
+            -- EMENDA 2026-08-22: agregados numericos sobre chave pseudonima, mesma classe de
+            -- `xp`/`profile_views`. O argumento SOBREVIVE ao dia em que forem preenchidas --
+            -- escalar/contar sobre pseudonimo nao identifica com 0 nem com 10.000.
+            -- `views` e contador legado sem consumidor (sucedido por `profile_views`).
+            'recommendation_score','views'
       ]);
     IF v_unknown IS NOT NULL THEN
         RAISE EXCEPTION 'ASSERCAO: colunas nao classificadas em public.workers: %. HALT -> architect.', v_unknown;
@@ -1299,6 +1318,22 @@ BEGIN
                availability_days = NULL,
                experience_years  = NULL,
                verified_identity = false,
+               -- EMENDA 2026-08-22 — preferencia de perfil declarada no onboarding. Mesma classe
+               -- de `primary_role`; NAO retida como enum (a coluna e text sem CHECK).
+               goal              = NULL,
+               -- EMENDA 2026-08-22 — endereco residencial e renda declarada. Vazias em producao
+               -- hoje; a classificacao existe para o dia em que nao estiverem. Residuo do
+               -- cadastro de `customer` do Asaas, que nunca chegou a escrever aqui.
+               address           = NULL,
+               address_number    = NULL,
+               postal_code       = NULL,
+               province          = NULL,
+               income_value      = NULL,
+               -- EMENDA 2026-08-22 — identificador da pessoa num terceiro (gateway) + a
+               -- afirmacao sobre ele. `false` pelo mesmo motivo de `verified_identity`: e um
+               -- fato sobre uma identidade que deixou de existir.
+               stripe_account_id           = NULL,
+               stripe_onboarding_completed = false,
                -- EMENDA 2026-08-21 — flags de alcance/exposição (F10/F11/F12).
                -- Não são "boolean sem conteúdo pessoal": governam quem alcança e quem enxerga
                -- o grafo desta pessoa. Ver §2.1 (workers) para o raciocínio de cada uma.
