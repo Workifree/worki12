@@ -588,3 +588,42 @@ Sem essas guardas, endereço residencial e renda sobreviveriam à exclusão de c
 `db query --linked --file` aplica byte a byte mas **não registra** em
 `supabase_migrations.schema_migrations`. Inseri as duas linhas à mão, com `created_by` dizendo por
 qual caminho subiram. Sem isso o banco ficaria à frente do repositório outra vez.
+
+---
+
+# ✅ FECHAMENTO — verificação final (22/08/2026)
+
+Deploy final publicado. `main` alinhado com produção. Build verde, lint **0 erros**,
+**915 testes em 77 arquivos**.
+
+## Os 7 itens da entrevista + F5–F13: TODOS no ar
+
+Verificados no **código servido em produção**, não no build local: baixei o grafo completo a partir
+do `index` publicado (209 chunks reais, descartando os que a Vercel devolve como fallback) e
+procurei a string de cada feature. Os 13 fecharam.
+
+## LGPD aplicada e provada
+
+`anonymize_account` limpa CPF, telefone, PIX, nascimento, endereço e renda; `deleteUser` passa; o
+expurgo tem corte em 2020-08-23 (6 anos) e roda por cron às 03:30. Edge Function na versão 10.
+
+## Política de Privacidade PUBLICADA
+
+Cinco afirmações falsas corrigidas e três categorias de dado declaradas. Conferido no chunk
+publicado: prazo de 6 anos, o texto do que permanece após a exclusão, o veto a documento de saúde,
+e a remoção do "elenco aceito **ou pendente**" — que já era falso desde a DS-PII.
+
+## Pausa do Asaas executada
+
+Sete Edge Functions removidas, saldos e escrows encerrados por operação declarada (valores
+originais preservados no razão), e o bug que travava a conclusão de turno corrigido.
+
+## O que fica ABERTO, e é decisão do owner
+
+**`DROP` de 12 colunas mortas**, em dois lotes: 3 do Stripe (a migration **já existe** desde março,
+`20260310000000_drop_stripe_columns.sql`, e nunca foi aplicada) e 9 do Asaas. Custo que vai junto: a
+migration do DROP **tem de recriar `anonymize_account`** sem as atribuições correspondentes, senão a
+rotina de LGPD quebra em execução. Ordem: nunca antes da #1.
+
+**Article 6 da constitution está factualmente errado** — afirma que o Stripe foi "100% removido" e
+as colunas seguem no banco. Emenda constitucional é decisão de owner, com data e justificativa.
