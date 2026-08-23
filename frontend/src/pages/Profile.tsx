@@ -16,6 +16,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../types';
+import { SHIFT_CATEGORIES } from '../components/company/shiftCategories';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -805,14 +806,35 @@ export default function Profile() {
 
                             {isEditing ? (
                                 <div className="space-y-2">
-                                    <input
-                                        type="text"
+                                    {/* Função principal é ESCOLHIDA, não digitada.
+                                        Era `<input type="text"` livre, e em 22/08/2026 a produção
+                                        tinha um freela com o próprio E-MAIL gravado como função, e
+                                        "Garcom" convivendo com "Garçom" — a busca por função do
+                                        ShiftCallModal compara texto, então quem digitou sem cedilha
+                                        não era encontrado por quem buscava com.
+                                        A lista é a mesma de SHIFT_CATEGORIES (função do turno), para
+                                        o que o freela declara e o que a empresa pede falarem a mesma
+                                        língua.
+                                        O valor atual entra como opção mesmo se estiver fora da lista:
+                                        um `<select>` estrito APAGARIA a função de quem já tem uma
+                                        legada assim que salvasse qualquer outra coisa no perfil. */}
+                                    <select
                                         value={formData.primary_role}
                                         onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
-                                        placeholder="Função Principal (ex: Garçom, Barista, Bartender, Cozinheiro)"
                                         aria-label="Funcao principal"
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none"
-                                    />
+                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none font-bold"
+                                    >
+                                        <option value="">Selecione sua função principal...</option>
+                                        {SHIFT_CATEGORIES.map(cat => (
+                                            <option key={cat.slug} value={cat.name}>{cat.name}</option>
+                                        ))}
+                                        {formData.primary_role
+                                            && !SHIFT_CATEGORIES.some(c => c.name === formData.primary_role) && (
+                                            <option value={formData.primary_role}>
+                                                {formData.primary_role} (atual)
+                                            </option>
+                                        )}
+                                    </select>
                                     <textarea
                                         value={formData.roles}
                                         onChange={(e) => setFormData({ ...formData, roles: e.target.value })}

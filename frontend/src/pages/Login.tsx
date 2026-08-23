@@ -9,6 +9,17 @@ import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 
 /**
+ * Subtítulo da tela de acesso da EMPRESA.
+ *
+ * Dizia "Acesse 10k+ profissionais avaliados." — e em 22/08/2026 havia **16** freelas cadastrados.
+ * Era a primeira frase que um cliente do piloto lia, e prometia o produto errado: o Worki não é
+ * um pool aberto onde a empresa garimpa desconhecidos, é elenco próprio montado por convite, com
+ * chamado 1→N para quem ela já confia. Número inflado atrai a expectativa que o produto não
+ * entrega e afunda a que ele entrega.
+ */
+const SUBTITULO_EMPRESA = 'Monte seu elenco e preencha turnos com quem você já confia.';
+
+/**
  * Rede de segurança do item 11 (GTM): se o freela chegou ao login sem o ?redirect=
  * (ex.: confirmou email em outra aba e voltou pro /login "seco"), ainda tentamos
  * recuperar o convite pendente guardado pelo InviteAccept em sessionStorage.
@@ -216,7 +227,7 @@ export default function Login() {
                         <p className="font-medium text-gray-500">
                             {isSignUp
                                 ? 'Preencha os dados para se cadastrar.'
-                                : (isHire ? 'Acesse 10k+ profissionais avaliados.' : 'Ganhe dinheiro no seu próprio horário.')}
+                                : (isHire ? SUBTITULO_EMPRESA : 'Ganhe dinheiro no seu próprio horário.')}
                         </p>
                     </div>
 
@@ -270,6 +281,7 @@ export default function Login() {
                                 <Mail className="absolute left-3 top-3.5 text-black" size={20} strokeWidth={2.5} />
                                 <input
                                     type="email"
+                                    autoComplete="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
@@ -286,6 +298,7 @@ export default function Login() {
                                 <Lock className="absolute left-3 top-3.5 text-black" size={20} strokeWidth={2.5} />
                                 <input
                                     type="password"
+                                    autoComplete={isSignUp ? "new-password" : "current-password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required

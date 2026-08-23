@@ -9,6 +9,41 @@ import PageMeta from '../../components/PageMeta';
 import { logError } from '../../lib/logger'
 import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
 
+import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../../types';
+
+/**
+ * Converte os cinco chips rápidos do cadastro na grade dia×período do F7.
+ *
+ * Os chips e a grade eram DOIS conceitos com o mesmo nome ("Disponibilidade"): o cadastro gravava
+ * só `workers.availability` (array de rótulos), que nenhuma tela de empresa lê e nenhuma RPC usa,
+ * enquanto o casamento com chamados de turno depende de `workers.availability_days`. Agora a mesma
+ * resposta alimenta as duas — o array continua para o histórico, a grade é o que vale.
+ *
+ * Regras, e por quê:
+ *  - "Madrugada" vira `noite`. A grade do F7 só tem manhã/tarde/noite, e a convenção do produto
+ *    (ver `periodOfDay` em `lib/availability.ts`) já dobra 00:00–04:59 em `noite`.
+ *  - "Fim de Semana" é eixo de DIA, não de período: restringe a grade a domingo (0) e sábado (6).
+ *  - Só "Fim de Semana", sem período: assume os três períodos nesses dois dias.
+ *  - Nada marcado: devolve `null` — que é "não declarou", diferente de `{}` (LM-8 do DDL do F7:
+ *    os dois não podem coexistir).
+ */
+function gradeAPartirDosChips(chips: string[]): AvailabilityDays | null {
+    if (!chips || chips.length === 0) return null;
+
+    const periodos: AvailabilityPeriod[] = [];
+    if (chips.includes('Manhã')) periodos.push('manha');
+    if (chips.includes('Tarde')) periodos.push('tarde');
+    if (chips.includes('Noite') || chips.includes('Madrugada')) periodos.push('noite');
+
+    const soFimDeSemana = chips.includes('Fim de Semana');
+    const dias: AvailabilityWeekday[] = soFimDeSemana ? ['0', '6'] : ['0', '1', '2', '3', '4', '5', '6'];
+    const periodosFinais: AvailabilityPeriod[] = periodos.length > 0 ? periodos : ['manha', 'tarde', 'noite'];
+
+    const grade: AvailabilityDays = {};
+    for (const dia of dias) grade[dia] = [...periodosFinais];
+    return grade;
+}
+
 const PIX_KEY_LABELS: Record<PixKeyType, string> = {
     cpf: 'CPF',
     cnpj: 'CNPJ',
@@ -155,14 +190,51 @@ export default function WorkerOnboarding() {
         }
     };
 
-    const canProceed = () => {
+    /**
+     * O que ainda falta no passo atual, em português, na ordem em que aparece na tela.
+     *
+     * Antes, o botão simplesmente ficava `disabled` e a pessoa não tinha **como saber qual campo
+     * estava faltando** — testando o cadastro no navegador em 22/08/2026 eu mesmo fiquei preso
+     * nesse estado, com todos os campos visivelmente preenchidos e o botão morto (o que faltava
+     * era o tipo da chave PIX, que o `<select>` exibia como "CPF" sem ter valor no estado).
+     *
+     * Esta lista é a FONTE ÚNICA: `canProceed()` deriva dela. Ter as duas regras separadas era o
+     * risco real — a mensagem diria uma coisa e o botão obedeceria outra.
+     */
+    const camposFaltantes = (): string[] => {
         switch (step) {
-            case 1: return !!(formData.fullName && formData.phone && formData.cpf.replace(/\D/g, '').length === 11 && formData.birthDate && formData.city && isValidPixKey());
-            case 2: return formData.roles.length > 0 && formData.experienceYears;
-            case 3: return formData.availability.length > 0 && tosAccepted;
-            default: return true;
+            case 1: {
+                const falta: string[] = [];
+                if (!formData.fullName.trim()) falta.push('nome completo');
+                if (formData.cpf.replace(/\D/g, '').length !== 11) falta.push('CPF (11 dígitos)');
+                if (!formData.birthDate) falta.push('data de nascimento');
+                if (!formData.phone.trim()) falta.push('celular');
+                if (!formData.city.trim()) falta.push('cidade');
+                if (!formData.pixKeyType) falta.push('tipo da chave PIX');
+                else if (!isValidPixKey()) {
+                    falta.push(formData.pixKey.trim()
+                        ? `chave PIX válida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}"`
+                        : 'chave PIX');
+                }
+                return falta;
+            }
+            case 2: {
+                const falta: string[] = [];
+                if (formData.roles.length === 0) falta.push('ao menos uma especialidade');
+                if (!formData.experienceYears) falta.push('tempo de experiência');
+                return falta;
+            }
+            case 3: {
+                const falta: string[] = [];
+                if (formData.availability.length === 0) falta.push('ao menos um período de disponibilidade');
+                if (!tosAccepted) falta.push('aceite dos Termos de Uso');
+                return falta;
+            }
+            default: return [];
         }
     };
+
+    const canProceed = () => camposFaltantes().length === 0;
 
     const handleNext = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -204,6 +276,20 @@ export default function WorkerOnboarding() {
                     experience_years: formData.experienceYears,
                     bio: formData.bio,
                     availability: formData.availability,
+                    // A MESMA resposta também preenche a grade do F7 (`availability_days`).
+                    //
+                    // Antes eram dois conceitos com o mesmo nome: o cadastro perguntava
+                    // "DISPONIBILIDADE" e gravava só este array — que NENHUMA tela de empresa lê e
+                    // NENHUMA RPC usa. Quem casa o freela com um chamado de turno é
+                    // `availability_days`, preenchida apenas no Perfil. Resultado testado no
+                    // navegador em 22/08/2026: a pessoa declarava disponibilidade no cadastro e
+                    // caía no dashboard lendo "Declare sua disponibilidade" — como se o que ela
+                    // acabara de responder não valesse. E, do lado da empresa, não valia mesmo.
+                    //
+                    // Em vez de encher o cadastro com a grade de 21 botões (fricção no pior
+                    // momento), os cinco chips ALIMENTAM a grade. O freela refina depois no Perfil,
+                    // que continua sendo o lugar de edição fina.
+                    availability_days: gradeAPartirDosChips(formData.availability),
                     goal: formData.goal,
                     onboarding_completed: true,
                     accepted_tos: true,
@@ -509,6 +595,18 @@ export default function WorkerOnboarding() {
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {/* Diz o que falta, em vez de deixar o botão morto sem explicação. Só
+                            aparece quando há pendência — não polui quem preencheu tudo. */}
+                        {camposFaltantes().length > 0 && (
+                            <p
+                                role="status"
+                                aria-live="polite"
+                                className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                            >
+                                Falta preencher: {camposFaltantes().join(', ')}.
+                            </p>
                         )}
 
                         <div className="pt-6 flex justify-between items-center border-t-2 border-gray-100 mt-8">
