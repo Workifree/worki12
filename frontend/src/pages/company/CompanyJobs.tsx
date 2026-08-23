@@ -14,6 +14,7 @@ import EditSeriesModal, { type SeriesJobSnapshot } from '../../components/compan
 import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
 import type { TeamMember, RecurrenceType } from '../../types';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1). Selo discreto na agenda
 // ("Série · toda quinta") deriva o dia da própria `series_occurrence_date` da ocorrência — uma
@@ -379,7 +380,7 @@ export default function CompanyJobs() {
             const { data: jobsData } = await supabase
                 .from('jobs')
                 .select('*')
-                .eq('company_id', user.id)
+                .eq('company_id', await getAuthenticatedCompanyId())
                 .neq('status', 'deleted') // Filter out deleted jobs
                 .order('created_at', { ascending: false });
 

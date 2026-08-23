@@ -8,6 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ReferralService } from '../../services/referralService';
 import { logError } from '../../lib/logger';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
@@ -52,9 +53,10 @@ export default function CompanyDashboard() {
     const { data: company, isLoading: isLoadingCompany, isError: isErrorCompany, refetch: refetchCompany } = useQuery({
         queryKey: ['companyProfile'],
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('No user');
-            const { data } = await supabase.from('companies').select('name').eq('id', user.id).single();
+            // Gerente de unidade (F13) NAO tem linha em `companies` com o proprio id: o
+            // `user.id` aqui trazia null e o cabecalho dizia "Bem-vindo de volta, Empresa".
+            const companyId = await getAuthenticatedCompanyId();
+            const { data } = await supabase.from('companies').select('name').eq('id', companyId).single();
             return data;
         }
     });
@@ -62,15 +64,14 @@ export default function CompanyDashboard() {
     const { data: jobs = [], isLoading: isLoadingJobs, isError: isErrorJobs, refetch: refetchJobs } = useQuery({
         queryKey: ['companyJobs'],
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return [];
+            const companyId = await getAuthenticatedCompanyId();
             // F3 (Escala Recorrente) pode gerar até 60 turnos por série: sem este filtro, uma
             // série cancelada em massa (soft delete, status='deleted') ficava inteira aqui —
             // cosmético antes, inutilizante agora (ADR-20260817).
             const { data } = await supabase
                 .from('jobs')
                 .select('*, views')
-                .eq('company_id', user.id)
+                .eq('company_id', companyId)
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false });
             return data || [];
@@ -81,12 +82,11 @@ export default function CompanyDashboard() {
     const { data: applications = [], isLoading: isLoadingApps, isError: isErrorApps, refetch: refetchApps } = useQuery({
         queryKey: ['companyApplications'],
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return [];
+            const companyId = await getAuthenticatedCompanyId();
             const { data } = await supabase
                 .from('applications')
                 .select('*, jobs!inner(title, company_id)')
-                .eq('jobs.company_id', user.id)
+                .eq('jobs.company_id', companyId)
                 .order('created_at', { ascending: false })
                 .limit(5);
             return data || [];
@@ -98,12 +98,11 @@ export default function CompanyDashboard() {
     const { data: inProgressCount = 0 } = useQuery({
         queryKey: ['companyInProgress'],
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return 0;
+            const companyId = await getAuthenticatedCompanyId();
             const { data } = await supabase
                 .from('applications')
                 .select('job_id, jobs!inner(company_id)')
-                .eq('jobs.company_id', user.id)
+                .eq('jobs.company_id', companyId)
                 .in('status', ['hired', 'in_progress']);
             return new Set((data || []).map((r: { job_id: string }) => r.job_id)).size;
         },
@@ -128,8 +127,7 @@ export default function CompanyDashboard() {
     const { data: activeShifts = [] } = useQuery<ActiveShiftRow[]>({
         queryKey: ['companyActiveShifts'],
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return [];
+            const companyId = await getAuthenticatedCompanyId();
             const { data } = await supabase
                 .from('applications')
                 .select(`
@@ -142,7 +140,7 @@ export default function CompanyDashboard() {
                     worker:workers(id, full_name, avatar_url, primary_role),
                     jobs!inner(id, title, location, work_start_time, work_end_time, company_id)
                 `)
-                .eq('jobs.company_id', user.id)
+                .eq('jobs.company_id', companyId)
                 .in('status', ['hired', 'in_progress'])
                 .order('created_at', { ascending: false });
             return (data ?? []) as unknown as ActiveShiftRow[];

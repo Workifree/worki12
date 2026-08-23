@@ -9,6 +9,7 @@ import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { formatDateOnly } from '../../lib/dateUtils';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -75,7 +76,7 @@ export default function CompanyJobDetails() {
                 .from('jobs')
                 .select('*')
                 .eq('id', id)
-                .eq('company_id', user.id)
+                .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
             if (error) throw error;

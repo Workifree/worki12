@@ -25,6 +25,7 @@ import type {
     ShiftAttendanceConfirmation,
     AttendanceConfirmationOutcome,
 } from '../../types';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Confirmação de véspera (D-1) — helpers puros (module scope, sem estado de componente),
@@ -305,7 +306,7 @@ export default function CompanyJobCandidates() {
                 .from('jobs')
                 .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement')
                 .eq('id', id)
-                .eq('company_id', user.id)
+                .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
             if (jobError || !job) { navigate('/company/jobs'); return; }
             setJobTitle(job.title);

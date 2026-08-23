@@ -123,6 +123,12 @@ beforeEach(() => {
   } as unknown as GetUserResult)
 })
 
+// F13: as paginas de empresa resolvem a unidade OPERADA (gerente nao e dono, e `user.id`
+// deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+}))
+
 describe('WorkerPublicProfile — sistema de avaliação', () => {
   it('renderiza "(7 avaliações)" quando reviews_count=7', async () => {
     const workerChain = buildChain({

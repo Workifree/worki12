@@ -11,6 +11,7 @@ import { TeamConnectionService } from '../../services/teamConnectionService';
 import WorkerCertificationsPanel from '../../components/company/WorkerCertificationsPanel';
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 export default function WorkerPublicProfile() {
     const { id } = useParams();
@@ -168,7 +169,7 @@ export default function WorkerPublicProfile() {
                         .from('applications')
                         .select('id, jobs!inner(company_id)')
                         .eq('worker_id', id)
-                        .eq('jobs.company_id', user.id)
+                        .eq('jobs.company_id', await getAuthenticatedCompanyId())
                         .order('created_at', { ascending: false })
                         .limit(1),
                     TeamConnectionService.getConnectionStatus(user.id, id),

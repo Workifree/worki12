@@ -34,6 +34,12 @@ import { supabase } from '../../lib/supabase'
 import { WalletService } from '../../services/walletService'
 import { useToast } from '../../contexts/ToastContext'
 
+// F13: as paginas de empresa resolvem a unidade OPERADA (gerente nao e dono, e `user.id`
+// deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+}))
+
 const JOB_DATA = {
   id: 'job-1',
   title: 'Garcom para Evento',

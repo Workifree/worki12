@@ -12,6 +12,7 @@ import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
 import type { TeamMember, RecurrenceType } from '../../types';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -98,7 +99,7 @@ export default function CompanyCreateJob() {
                 .from('jobs')
                 .select('*')
                 .eq('id', id)
-                .eq('company_id', user.id)
+                .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
             if (error) throw error;
@@ -288,7 +289,9 @@ export default function CompanyCreateJob() {
             }
 
             const payload = {
-                company_id: user.id,
+                // Gerente de unidade (F13) nao e dono: `user.id` aqui produzia um INSERT que a
+                // RLS (is_company_owner) recusa. A empresa correta e a que a sessao OPERA.
+                company_id: await getAuthenticatedCompanyId(),
                 title: formData.title,
                 category: formData.category,
                 type: formData.type,

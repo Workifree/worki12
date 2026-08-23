@@ -67,6 +67,13 @@ function getNextButton() {
   return screen.getByRole('button', { name: /próximo/i })
 }
 
+// F13: as paginas de empresa resolvem a unidade OPERADA (gerente nao e dono, e `user.id`
+// deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
+vi.mock('../../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+}))
+import { getAuthenticatedCompanyId } from '../../../services/companyScopeService'
+
 describe('CompanyCreateJob — validação por etapa (canProceed)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -179,6 +186,37 @@ describe('CompanyCreateJob — F8 (certification_requirement é ADVISORY, opcion
     // Campo optativo: preencher SÓ a descrição (nunca a certificação) já libera o "Próximo".
     expect(screen.getByLabelText('Certificação Exigida (opcional)')).toHaveValue('')
     expect(getNextButton()).not.toBeDisabled()
+  })
+
+  // REGRESSAO (achado navegando o produto, 23/08/2026): o payload levava `company_id: user.id`.
+  // Para um GERENTE de unidade (F13) isso e o id da PESSOA, nao de uma empresa -- conferido em
+  // producao, `is_company_owner(proprio_id)` devolve false, entao a RLS recusaria o INSERT e o
+  // gerente simplesmente nao conseguiria abrir turno na unidade que opera.
+  //
+  // O id operado aqui e DIFERENTE do id da sessao de proposito: se o codigo voltar a usar
+  // `user.id`, o payload sai com 'company-1' e este teste morre.
+  it('company_id do turno vem da unidade OPERADA, nunca do id da sessao', async () => {
+    vi.mocked(getAuthenticatedCompanyId).mockResolvedValueOnce('unidade-operada-9')
+
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Título do Turno'), { target: { value: 'Garçom para evento' } })
+    fireEvent.change(screen.getByLabelText('Função'), { target: { value: 'garcom' } })
+    fireEvent.click(getNextButton())
+    fireEvent.change(screen.getByLabelText('Descrição Completa'), { target: { value: 'Atendimento no salão.' } })
+    fireEvent.click(getNextButton())
+
+    fireEvent.change(screen.getByLabelText('Valor do orçamento'), { target: { value: '150' } })
+    fireEvent.change(screen.getByLabelText('Data de início'), { target: { value: '2099-01-01' } })
+    fireEvent.change(screen.getByLabelText('Horário de entrada'), { target: { value: '18:00' } })
+    fireEvent.change(screen.getByLabelText('Horário de saída'), { target: { value: '23:00' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /criar turno/i }))
+
+    await waitFor(() => {
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ company_id: 'unidade-operada-9' }),
+      )
+    })
   })
 
   it('o texto digitado em "Certificação Exigida" chega no payload de criação do turno (trim, sem filtrar nada)', async () => {

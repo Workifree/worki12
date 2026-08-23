@@ -211,6 +211,12 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+// F13: as paginas de empresa resolvem a unidade OPERADA (gerente nao e dono, e `user.id`
+// deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+}))
+
 describe('CompanyJobCandidates — renderiza candidatos com status in_progress', () => {
   it('exibe candidato com status Em Andamento', async () => {
     setupMocksWithApps(APP_IN_PROGRESS)
