@@ -130,9 +130,21 @@ DECLARE
         'address','address_number','postal_code','province','income_value',
         'stripe_account_id','stripe_onboarding_completed'
     ];
+    -- Emenda 2026-08-22 (HALT da assercao (b) em `companies`): +company_type, +size,
+    -- +postal_code, +address_number, +province, +income_value, +stripe_customer_id.
+    -- `company_type` e `size` NAO foram retidas como enum (select/radio no React, coluna `text`
+    -- SEM CHECK -- assercao (b3)). `company_type` grava literalmente 'MEI'/'INDIVIDUAL_PERSON':
+    -- e a coluna que DECLARA que a empresa e pessoa natural. `size` nao e porte da empresa apesar
+    -- do nome: CompanyOnboarding grava `size: formData.hiringVolume` ("turnos por mes",
+    -- 1-5/6-20/20+) -- intencao autodeclarada, e o numero real vive em jobs/shift_payments.
+    -- As 5 ultimas estao VAZIAS hoje (0 linhas) e sao gemeas das de `workers`. Mesma ressalva
+    -- de DROP COLUMN daquela lista se aplica aqui (ver debitos-pre-piloto 19 / Hh7).
     v_expected_companies text[] := ARRAY[
         'name','cnpj','city','email','address','website','description','industry','logo_url',
-        'cover_url','default_briefing'
+        'cover_url','default_briefing',
+        'company_type','size',
+        'postal_code','address_number','province','income_value',
+        'stripe_customer_id'
     ];
 
     -- Emenda 2026-08-21 — asserção (c): dependentes de workers/companies JÁ CLASSIFICADOS em §2.1.
@@ -1360,6 +1372,21 @@ BEGIN
                logo_url         = NULL,
                cover_url        = NULL,
                default_briefing = NULL,
+               -- EMENDA 2026-08-22 — `company_type` grava 'MEI'/'INDIVIDUAL_PERSON': afirma
+               -- pessoa natural de forma literal, onde `cnpj` so permitia inferir. `size` e
+               -- estimativa autodeclarada de turnos/mes (o nome mente; ver ddl-aprovado 2.1),
+               -- mesma classe de `workers.goal`. Nenhuma das duas tem CHECK -> nao sao enum.
+               company_type     = NULL,
+               size             = NULL,
+               -- EMENDA 2026-08-22 — gemeas exatas das de `workers`: partes de endereco e renda
+               -- declarada (cadastro de `customer` do Asaas) + identificador em gateway terceiro.
+               -- Vazias hoje; `address` acima ja saiu, e reter as PARTES do endereco seria
+               -- re-derivar o que a linha anterior apagou.
+               postal_code      = NULL,
+               address_number   = NULL,
+               province         = NULL,
+               income_value     = NULL,
+               stripe_customer_id = NULL,
                anonymized_at    = coalesce(c.anonymized_at, v_now)
          WHERE c.id = ANY (v_company_ids);
         GET DIAGNOSTICS v_n = ROW_COUNT;
