@@ -51,7 +51,12 @@ export default function Login() {
     // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
     // 'type' — nesse caso não há intenção explícita de papel a comparar (R1).
     const explicitType = searchParams.get('type');
-    const type = explicitType || 'work'; // 'work' or 'hire' — usado só para tema visual
+    // Convite de GERENTE exige conta de empresa. Quando o token vem do sessionStorage (o
+    // usuario voltou ao /login "seco"), nao ha `type` na URL para declarar isso — sem esta
+    // deducao a tela recebe o convidado com a copy de freela e ele cria a conta errada.
+    const destinoPendente = resolvePendingInviteRedirect(searchParams.get('redirect'));
+    const type = explicitType
+        || (destinoPendente?.startsWith('/convite-gerente/') ? 'hire' : 'work');
     const reason = searchParams.get('reason');
     // Preserva o destino pretendido (ex.: /convite/<token>) quando o usuário chega ao
     // login vindo de um link que exigia sessão — ver InviteAccept.tsx (item 11 do GTM).

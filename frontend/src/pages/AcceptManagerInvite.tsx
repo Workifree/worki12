@@ -53,7 +53,14 @@ export default function AcceptManagerInvite() {
         } catch {
           // sessionStorage indisponível — segue só com o query param
         }
-        navigate(`/login?redirect=${encodeURIComponent(`/convite-gerente/${token}`)}`, { replace: true });
+        // `type=hire` NAO e tema visual aqui: sem ele o /login assume 'work' por default e
+        // recebe o convidado com a copy de freela ("Comece a trabalhar"). Quem cria a conta
+        // por esse caminho vira worker -- e worker nao pode ser gerente (`worker_cannot_be_manager`),
+        // entao o convite fica inutilizavel pela unica pessoa a quem foi enviado.
+        navigate(
+            `/login?type=hire&redirect=${encodeURIComponent(`/convite-gerente/${token}`)}`,
+            { replace: true },
+        );
         return;
       }
 
