@@ -461,9 +461,13 @@ export default function CompanyProfile() {
 
                                 {/* Review Stats Badge */}
                                 <div className="flex items-center gap-2 bg-yellow-50 px-4 py-2 rounded-xl border border-yellow-100 shadow-sm">
+                                    {/* `|| 5.0` mostrava nota cheia para empresa sem nenhuma avaliação --
+                                        e este selo e a prova social que o freela le antes de aceitar convite. */}
                                     <div className="flex items-center gap-1">
-                                        <Star size={18} className="text-yellow-500 fill-yellow-500" />
-                                        <span className="font-black text-yellow-700 text-lg">{Number(company.rating_average || 5.0).toFixed(1)}</span>
+                                        <Star size={18} className={(company.reviews_count || 0) > 0 ? 'text-yellow-500 fill-yellow-500' : 'text-yellow-500/40'} />
+                                        <span className="font-black text-yellow-700 text-lg">
+                                            {(company.reviews_count || 0) > 0 ? Number(company.rating_average).toFixed(1) : '—'}
+                                        </span>
                                     </div>
                                     <div className="w-px h-6 bg-yellow-200 mx-1"></div>
                                     <span className="text-xs font-bold uppercase text-yellow-800/70 tracking-wide">{company.reviews_count === 1 ? '1 avaliação' : `${company.reviews_count || 0} avaliações`}</span>

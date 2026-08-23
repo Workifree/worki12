@@ -92,8 +92,13 @@ export function SosCallButton({ jobId, refreshKey, onDispatched }: SosCallButton
       return;
     }
 
+    // O SOS de UM alvo e comum (cidade pequena, pool apertado): o painel logo abaixo ja
+    // flexionava certo, so o toast dizia "1 profissionais".
+    const avisados = result.targetsCount ?? 0;
     addToast(
-      `${result.targetsCount ?? 0} profissionais fora do seu Elenco foram avisados. Você verá quem aceitar.`,
+      avisados === 1
+        ? '1 profissional fora do seu Elenco foi avisado. Você verá se ele aceitar.'
+        : `${avisados} profissionais fora do seu Elenco foram avisados. Você verá quem aceitar.`,
       'success',
     );
     setModalOpen(false);

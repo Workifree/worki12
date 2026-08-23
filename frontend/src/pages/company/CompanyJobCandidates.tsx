@@ -1231,11 +1231,20 @@ export default function CompanyJobCandidates() {
                                             </h3>
                                             <div className="flex items-center gap-4 text-xs font-bold text-gray-500 mt-1">
                                                 <span className="flex items-center gap-1"><MapPin size={12} /> {app.worker?.city || 'Não informado'}</span>
-                                                <span className="flex items-center gap-1">
-                                                    <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                                                    {app.worker?.rating_average ? Number(app.worker.rating_average).toFixed(1) : '5.0'}
-                                                    <span className="text-gray-400 font-medium ml-1">({app.worker?.reviews_count === 1 ? '1 avaliação' : `${app.worker?.reviews_count || 0} avaliações`})</span>
-                                                </span>
+                                                {/* Sem avaliação, isto mostrava "5.0 (0 avaliações)" -- nota
+                                                    maxima inventada para quem nunca foi avaliado, no lugar exato
+                                                    onde a empresa decide quem chamar. "Novo" diz a verdade. */}
+                                                {app.worker?.rating_average && (app.worker?.reviews_count ?? 0) > 0 ? (
+                                                    <span className="flex items-center gap-1">
+                                                        <Star size={12} className="text-yellow-500 fill-yellow-500" />
+                                                        {Number(app.worker.rating_average).toFixed(1)}
+                                                        <span className="text-gray-400 font-medium ml-1">({app.worker.reviews_count === 1 ? '1 avaliação' : `${app.worker.reviews_count} avaliações`})</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1 text-gray-400">
+                                                        <Star size={12} /> Sem avaliações ainda
+                                                    </span>
+                                                )}
                                                 <span className="flex items-center gap-1"><Clock size={12} /> Convidado {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
                                             </div>
                                         </div>
