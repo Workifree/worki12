@@ -1,12 +1,120 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { calculateWorkedHours, formatDurationMs } from '../lib/dateUtils';
 import {
   aggregate,
   MAX_PLAUSIBLE_SHIFT_HOURS,
   LATE_TOLERANCE_MINUTES,
+  PAGE_SIZE,
+  MAX_PAGES,
+  OperationAnalyticsService,
   type RawAnalyticsData,
   type OperationAnalyticsPeriod,
 } from './operationAnalyticsService';
+
+// ---------------------------------------------------------------------------
+// Mock de `supabase` para exercitar `collectRawData`/`resolveCompanyScope` (dívida #17 —
+// `C-ANALYTICS-A15-SEM-PROVA`). Cada `.from(table)` devolve uma cadeia encadeável que registra
+// TODAS as chamadas (`select`, `eq`, `in`, `neq`, `gte`, `lte`, `range`, `order`) em um log por
+// invocação — permite assertar tanto a string do `.select()` quanto os argumentos de `.in(...)`
+// (ancoragem dupla) sem exportar nada de produção (só a API pública `getOperationAnalytics` é
+// chamada). Precedente: `teamConnectionService.test.ts` assere a string do `.select()`.
+//
+// Cada chamada a `supabase.from(table)` cria uma cadeia NOVA (mesmo padrão de `fetchAllPaged`,
+// que chama `supabase.from(...)` de novo a cada página) — por isso a fila de respostas é por
+// TABELA, consumida em ordem, e o log de chamadas é uma lista de invocações (uma por página).
+// ---------------------------------------------------------------------------
+
+interface ChainCall {
+  method: string;
+  args: unknown[];
+}
+
+interface QueueItem {
+  data: unknown[] | null;
+  error: { message: string } | null;
+}
+
+type ChainMethod = 'select' | 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'order' | 'range';
+
+type Chain = Record<ChainMethod, (...args: unknown[]) => Chain> & {
+  then: <TResult1 = QueueItem, TResult2 = never>(
+    onfulfilled?: ((value: QueueItem) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) => Promise<TResult1 | TResult2>;
+};
+
+const CHAIN_METHODS: ChainMethod[] = ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'order', 'range'];
+
+const tableQueues = new Map<string, QueueItem[]>();
+const tableCallLogs = new Map<string, ChainCall[][]>();
+
+function setQueue(table: string, items: QueueItem[]) {
+  tableQueues.set(table, [...items]);
+}
+
+function popResponse(table: string): QueueItem {
+  const queue = tableQueues.get(table);
+  if (!queue || queue.length === 0) return { data: [], error: null };
+  // Mantém o último item na fila (não esvazia) — chamadas extras além do planejado devolvem a
+  // última resposta configurada, em vez de cair silenciosamente no default `{data: [], error: null}`
+  // e mascarar um laço que roda mais vezes do que o teste previu.
+  return queue.length > 1 ? (queue.shift() as QueueItem) : queue[0];
+}
+
+function callLogsFor(table: string): ChainCall[][] {
+  return tableCallLogs.get(table) ?? [];
+}
+
+function selectArgOf(table: string, invocation = 0): string {
+  const calls = callLogsFor(table)[invocation] ?? [];
+  const selectCall = calls.find((c) => c.method === 'select');
+  return (selectCall?.args[0] as string) ?? '';
+}
+
+function inArgsOf(table: string, column: string, invocation = 0): unknown[] | undefined {
+  const calls = callLogsFor(table)[invocation] ?? [];
+  const inCall = calls.find((c) => c.method === 'in' && c.args[0] === column);
+  return inCall?.args[1] as unknown[] | undefined;
+}
+
+function buildChain(table: string, callLog: ChainCall[]): Chain {
+  const chain = {} as Chain;
+  for (const method of CHAIN_METHODS) {
+    chain[method] = (...args: unknown[]) => {
+      callLog.push({ method, args });
+      return chain;
+    };
+  }
+  chain.then = (onfulfilled, onrejected) => Promise.resolve(popResponse(table)).then(onfulfilled ?? undefined, onrejected ?? undefined);
+  return chain;
+}
+
+const mockFrom = vi.fn((table: string): Chain => {
+  const callLog: ChainCall[] = [];
+  const logs = tableCallLogs.get(table) ?? [];
+  logs.push(callLog);
+  tableCallLogs.set(table, logs);
+  return buildChain(table, callLog);
+});
+
+const mockGetUser = vi.fn();
+
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
+    from: (table: string) => mockFrom(table),
+  },
+}));
+
+vi.mock('../lib/logger', () => ({ logError: vi.fn(), logWarn: vi.fn() }));
+
+function resetSupabaseMock() {
+  tableQueues.clear();
+  tableCallLogs.clear();
+  mockFrom.mockClear();
+  mockGetUser.mockReset();
+  mockGetUser.mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+}
 
 // ---------------------------------------------------------------------------
 // `aggregate` é PURA (D5.4 do PRD) — sem Supabase. Todos os testes constroem `RawAnalyticsData`
@@ -966,6 +1074,173 @@ describe('D5.3 — linhas por freela carregam companyId de origem', () => {
     expect(result.acceptanceByWorker.state).toBe('ok');
     if (result.acceptanceByWorker.state === 'ok') {
       expect(result.acceptanceByWorker.rows[0].companyId).toBe('company-xyz');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dívida #17 (`C-ANALYTICS-A15-SEM-PROVA`) — cobertura de `collectRawData`/`resolveCompanyScope`/
+// strings de `select`, através da API pública `OperationAnalyticsService.getOperationAnalytics`
+// (nada foi exportado de produção só para testar). Usa o mock de `supabase` acima.
+// ---------------------------------------------------------------------------
+
+const PERIOD_COLLECT: OperationAnalyticsPeriod = { from: '2026-08-01', to: '2026-08-31' };
+
+function makeJobRow(id: string, dateOnly: string | null, overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id,
+    company_id: 'owner-1',
+    status: 'completed',
+    start_date: dateOnly ? jobStartDate(dateOnly) : null,
+    created_at: dateOnly ? jobStartDate(dateOnly) : null,
+    work_start_time: null,
+    work_end_time: null,
+    estimated_hours: null,
+    budget: 100,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  resetSupabaseMock();
+});
+
+describe('resolveCompanyScope — ancoragem dupla (A15, dívida #17)', () => {
+  it('empresa com companies.id = auth.uid() (sem outra empresa por owner_id): escopo é só o próprio id', async () => {
+    setQueue('companies', [{ data: [], error: null }]);
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.scopeCompanyIds).toEqual(['owner-1']);
+    expect(result.hasError).toBe(false);
+  });
+
+  it('empresa com owner_id = auth.uid() e id diferente: escopo inclui os dois ids, e jobs é lido com os dois', async () => {
+    setQueue('companies', [{ data: [{ id: 'company-owned-2' }], error: null }]);
+    setQueue('jobs', [{ data: [makeJobRow('job-1', '2026-08-10')], error: null }]);
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.scopeCompanyIds).toEqual(['owner-1', 'company-owned-2']);
+    // Prova que a ancoragem dupla não é só devolvida — é USADA na query de `jobs` (guarda 1 do PRD).
+    expect(inArgsOf('jobs', 'company_id')).toEqual(['owner-1', 'company-owned-2']);
+  });
+
+  it('sem sessão (sem vínculo): devolve analytics vazio e não toca nenhuma outra fonte', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.scopeCompanyIds).toEqual([]);
+    expect(result.hasError).toBe(false);
+    expect(result.hires).toEqual({ state: 'sem-fonte' });
+    expect(callLogsFor('jobs').length).toBe(0);
+    expect(callLogsFor('companies').length).toBe(0);
+  });
+
+  it('erro ao ler companies: hasError sobe, e o escopo cai para [userId] em vez de travar', async () => {
+    setQueue('companies', [{ data: null, error: { message: 'boom' } }]);
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.hasError).toBe(true);
+    expect(result.scopeCompanyIds).toEqual(['owner-1']);
+  });
+});
+
+describe('collectRawData — strings de select coluna a coluna (dívida #17)', () => {
+  it('as 9 fontes selecionam exatamente as colunas esperadas, nenhuma a mais nem a menos', async () => {
+    setQueue('companies', [{ data: [], error: null }]);
+    setQueue('jobs', [{ data: [makeJobRow('job-1', '2026-08-10')], error: null }]);
+    setQueue('applications', [
+      {
+        data: [
+          {
+            id: 'app-1',
+            job_id: 'job-1',
+            worker_id: 'worker-1',
+            status: 'completed',
+            worker_checkin_at: null,
+            worker_checkout_at: null,
+            company_checkin_confirmed_at: null,
+            company_checkout_confirmed_at: null,
+          },
+        ],
+        error: null,
+      },
+    ]);
+    setQueue('shift_calls', [
+      {
+        data: [
+          {
+            id: 'call-1',
+            job_id: 'job-1',
+            company_id: 'owner-1',
+            reason: 'falta',
+            status: 'filled',
+            created_at: jobStartDate('2026-08-10'),
+            first_claim_at: jobStartDate('2026-08-10'),
+          },
+        ],
+        error: null,
+      },
+    ]);
+    setQueue('shift_call_targets', [
+      { data: [{ call_id: 'call-1', worker_id: 'worker-1', responded_at: jobStartDate('2026-08-10'), response: 'accepted' }], error: null },
+    ]);
+    setQueue('workers', [{ data: [{ id: 'worker-1', full_name: 'Ana', rating_average: 4.5 }], error: null }]);
+
+    await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(selectArgOf('companies')).toBe('id');
+    expect(selectArgOf('jobs')).toBe(
+      'id, company_id, status, start_date, created_at, work_start_time, work_end_time, estimated_hours, budget',
+    );
+    expect(selectArgOf('applications')).toBe(
+      'id, job_id, worker_id, status, worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at',
+    );
+    expect(selectArgOf('shift_payments')).toBe('job_id, worker_id, amount, status, paid_at');
+    expect(selectArgOf('escrow_transactions')).toBe('job_id, application_id, amount, status, released_at, captured_at');
+    expect(selectArgOf('shift_calls')).toBe('id, job_id, company_id, reason, status, created_at, first_claim_at');
+    expect(selectArgOf('shift_call_targets')).toBe('call_id, worker_id, responded_at, response');
+    expect(selectArgOf('shift_attendance_confirmations')).toBe('job_id, requested_at, responded_at, response');
+    expect(selectArgOf('workers')).toBe('id, full_name, rating_average');
+  });
+});
+
+describe('collectRawData — laço de paginação que PRODUZ truncated (dívida #17)', () => {
+  it(`atinge MAX_PAGES (${MAX_PAGES} páginas cheias de ${PAGE_SIZE}) → truncated sobe true`, async () => {
+    const pages: QueueItem[] = Array.from({ length: MAX_PAGES }, (_, page) => ({
+      data: Array.from({ length: PAGE_SIZE }, (_, i) => makeJobRow(`capA-${page}-${i}`, null)),
+      error: null,
+    }));
+    setQueue('jobs', pages);
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.truncated).toBe(true);
+    // Prova que o laço de fato rodou MAX_PAGES vezes (uma invocação de `.from('jobs')` por página),
+    // não que `truncated` veio hardcoded de alguma outra fonte.
+    expect(callLogsFor('jobs').length).toBe(MAX_PAGES);
+  });
+
+  it('duas páginas (uma cheia, uma incompleta) → truncated false, e as linhas das DUAS páginas são agregadas', async () => {
+    const page0 = Array.from({ length: PAGE_SIZE }, (_, i) => makeJobRow(`pageB0-${i}`, '2026-08-10'));
+    const page1 = Array.from({ length: 3 }, (_, i) => makeJobRow(`pageB1-${i}`, '2026-08-10'));
+    setQueue('jobs', [
+      { data: page0, error: null },
+      { data: page1, error: null },
+    ]);
+
+    const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
+
+    expect(result.truncated).toBe(false);
+    expect(callLogsFor('jobs').length).toBe(2);
+    expect(result.hires.state).toBe('ok');
+    if (result.hires.state === 'ok') {
+      // Se o laço parasse na primeira página, isto daria 1000 — só bate 1003 se as DUAS páginas
+      // (1000 + 3) tiverem sido de fato coletadas e repassadas para `aggregate`.
+      expect(result.hires.jobsCreatedCount).toBe(PAGE_SIZE + 3);
     }
   });
 });
