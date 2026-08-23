@@ -18,7 +18,7 @@
  * Padrão do projeto: useState + useEffect + supabase direto (Art. 5 — sem React Query).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ShiftInviteService } from '../services/shiftInviteService';
@@ -120,12 +120,29 @@ export interface UseWorkerInvitesResult {
   refresh: () => void;
 }
 
+/**
+ * `useWorkerInvites` roda em DUAS instancias ao mesmo tempo: uma no `InviteTakeover` (que vive no
+ * MainLayout, ao lado da pagina) e outra na propria pagina (`MyJobs`, `Dashboard`). Cada uma tem
+ * seu proprio `useState`, entao quando o freela aceitava pelo takeover, so a instancia do takeover
+ * recarregava: o overlay fechava e o MESMO convite continuava listado atras dele, com o botao
+ * ACEITAR ativo. O aceite tinha funcionado (application 'hired', chamado 'filled'), mas a tela
+ * dizia o contrario e convidava a clicar de novo.
+ *
+ * Sem store global (Article 5: useState/useEffect direto), as instancias se avisam por evento de
+ * janela. `origem` evita que quem disparou recarregue duas vezes.
+ */
+const EVENTO_CONVITES = 'worki:convites-mudaram';
+let proximaInstancia = 0;
+
 export function useWorkerInvites(): UseWorkerInvitesResult {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { addToast } = useToast();
+  const instanciaIdRef = useRef<number | null>(null);
+  if (instanciaIdRef.current === null) instanciaIdRef.current = ++proximaInstancia;
+  const instanciaId = instanciaIdRef.current;
 
   const fetchInvites = useCallback(async (): Promise<PendingInvite[]> => {
     // As duas origens em paralelo — nenhuma depende da outra.
@@ -181,6 +198,16 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     };
   }, [navigate, fetchInvites]);
 
+  // Outra instancia respondeu um convite — esta precisa refletir isso.
+  useEffect(() => {
+    const aoMudar = (e: Event) => {
+      if ((e as CustomEvent<{ origem?: number }>).detail?.origem === instanciaId) return;
+      void load();
+    };
+    window.addEventListener(EVENTO_CONVITES, aoMudar);
+    return () => window.removeEventListener(EVENTO_CONVITES, aoMudar);
+  }, [load, instanciaId]);
+
   const respond = useCallback(
     async (inviteId: string, response: InvitationResponse): Promise<boolean> => {
       const invite = pendingInvites.find((item) => item.id === inviteId);
@@ -213,9 +240,11 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
       setRespondingId(null);
       // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
       load();
+      // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
+      window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail: { origem: instanciaId } }));
       return ok;
     },
-    [pendingInvites, addToast, load],
+    [pendingInvites, addToast, load, instanciaId],
   );
 
   return { pendingInvites, loading, respondingId, respond, refresh: load };
