@@ -25,6 +25,9 @@ import type { WorkerReferral } from '../types';
 interface PendingReferralRow extends WorkerReferral {
   referringCompanyName?: string;
   referringCompanyLogo?: string | null;
+  /** A empresa que quer se conectar. Sem o nome dela, o "sim" nao e consentimento informado. */
+  requestingCompanyName?: string;
+  requestingCompanyLogo?: string | null;
 }
 
 export default function QuemTeIndicou() {
@@ -46,7 +49,11 @@ export default function QuemTeIndicou() {
     setLoading(true);
     const referrals = await ReferralService.listMyPendingReferrals();
 
-    const companyIds = Array.from(new Set(referrals.map((r) => r.referring_company_id)));
+    // As DUAS pontas: quem indicou (prova social) e quem quer se conectar (o objeto do aceite).
+    // Antes so o indicador era resolvido, e o freela decidia se aceitar uma empresa sem nome.
+    const companyIds = Array.from(
+      new Set(referrals.flatMap((r) => [r.referring_company_id, r.requesting_company_id])),
+    );
     let companies: Record<string, { name: string; logo_url?: string | null }> = {};
     if (companyIds.length > 0) {
       const { data, error } = await supabase
@@ -70,6 +77,8 @@ export default function QuemTeIndicou() {
         ...r,
         referringCompanyName: companies[r.referring_company_id]?.name,
         referringCompanyLogo: companies[r.referring_company_id]?.logo_url,
+        requestingCompanyName: companies[r.requesting_company_id]?.name,
+        requestingCompanyLogo: companies[r.requesting_company_id]?.logo_url,
       })),
     );
     setLoading(false);
@@ -149,16 +158,21 @@ export default function QuemTeIndicou() {
               </div>
               <div>
                 <p className="font-black uppercase">{item.referringCompanyName ?? 'Uma empresa do seu elenco'}</p>
-                <p className="text-xs text-gray-500 font-bold uppercase">indicou você</p>
+                <p className="text-xs text-gray-500 font-bold uppercase">
+                  indicou você para{' '}
+                  <span className="text-black">
+                    {item.requestingCompanyName ?? 'outra empresa'}
+                  </span>
+                </p>
               </div>
             </div>
 
             {item.message && <p className="text-sm text-gray-600 italic mt-4">"{item.message}"</p>}
 
             <div className="bg-primary-light text-primary rounded-xl p-4 mt-4 text-sm font-bold">
-              Se aceitar, a empresa indicada passa a te ver e pode te chamar para turnos —
-              assim como qualquer empresa do seu elenco hoje. Se recusar, nada muda: você
-              continua no elenco de quem te indicou normalmente.
+              Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
+              pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
+              recusar, nada muda: você continua no elenco de quem te indicou normalmente.
             </div>
 
             <div className="flex gap-3 mt-4">
