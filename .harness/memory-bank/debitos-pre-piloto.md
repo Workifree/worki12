@@ -351,7 +351,29 @@ A migration `20260817001600_sos_discovery.sql` **não foi aplicada**. Antes de l
   `SELECT prosrc LIKE '%j.status%' FROM pg_proc WHERE proname='claim_shift_slot';`
   O `{"success": true}` da migration não prova estado final — padrão já registrado em `patterns.md`.
 
-## 17. F9 — `collectRawData`/`resolveCompanyScope` sem cobertura (A15 sem prova)
+## 17. ✅ RESOLVIDO — `collectRawData`/`resolveCompanyScope` sem cobertura (A15 sem prova)
+
+> ✅ **PAGA em 22/08/2026.** `operationAnalyticsService.test.ts` ganhou 10 testes que mockam
+> `supabase.from(...)` e exercitam a API pública `getOperationAnalytics` (nada exportado de
+> produção só para testar):
+> - Ancoragem dupla (A15) de `resolveCompanyScope`: `companies.id = auth.uid()` sem outra empresa,
+>   `owner_id = auth.uid()` com `id` diferente (e prova que a query de `jobs` usa `.in('company_id',
+>   ids)` com os DOIS ids), sem sessão, e erro de leitura de `companies` (hasError sobe, escopo
+>   cai para `[userId]`).
+> - As 9 strings de `.select()` (companies, jobs, applications, shift_payments,
+>   escrow_transactions, shift_calls, shift_call_targets, shift_attendance_confirmations, workers),
+>   coluna a coluna, `toBe` exato — não `expect.any(String)`.
+> - O laço de paginação que **produz** `truncated`: caso que atinge `MAX_PAGES` (10 páginas cheias
+>   de `PAGE_SIZE`) e caso de duas páginas (uma cheia, uma incompleta) que prova que as linhas das
+>   DUAS páginas foram agregadas (via `hires.jobsCreatedCount`), não só a primeira.
+>
+> **Verificado por mutante** (3 mutantes, cada um confirmado como matando o teste antes de
+> reverter): remover uma coluna do `.select()` de `jobs` (pega pelo teste de strings), zerar o
+> laço que soma ids de `companies` em `resolveCompanyScope` (pega pelo teste de ancoragem dupla) e
+> forçar a paginação a parar sempre na primeira página (pega pelos dois testes de `truncated`).
+>
+> O comentário do arquivo que declarava a lacuna foi atualizado para apontar para a cobertura nova
+> em vez de continuar descrevendo um buraco fechado.
 
 **Origem:** evaluator do F9 (`C-ANALYTICS-A15-SEM-PROVA`), aceito como dívida consciente.
 

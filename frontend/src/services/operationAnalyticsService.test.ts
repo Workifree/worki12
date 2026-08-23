@@ -122,15 +122,15 @@ function resetSupabaseMock() {
 // (`calculateWorkedHours`/`formatDurationMs`), o mesmo par usado em produção — não mocka nada, só
 // evita o round-trip de rede. Se a lógica de agregação quebrar, estes testes falham.
 //
-// ⚠️ O QUE ESTES TESTES **NÃO** PROVAM (corrigido em 21/08/2026 — o comentário anterior afirmava
-// o contrário e era falso): eles NÃO pegam uma coluna que suma do `select`. `JobRow` e as demais
-// linhas brutas são tipos deste mesmo módulo, e o teste constrói o objeto a partir deles — um
-// `.select()` incompleto continua tipando, continua compilando e continua passando aqui.
-// **Nenhum teste toca `collectRawData`, `resolveCompanyScope` nem as strings de `select`.**
-// Essa é a superfície sem cobertura, registrada como dívida (`C-ANALYTICS-A15-SEM-PROVA`).
-// Para o padrão que de fato protege contra isso, ver o teste de regressão de `listTeamMembers`
-// em `teamConnectionService.test.ts`, que assere a string do `select` e foi verificado por
-// mutante. Comentário errado em teste é pior que comentário ausente: a próxima pessoa confia.
+// ⚠️ O QUE ESTES TESTES **NÃO** PROVAM: eles NÃO pegam uma coluna que suma do `select`. `JobRow`
+// e as demais linhas brutas são tipos deste mesmo módulo, e o teste constrói o objeto a partir
+// deles — um `.select()` incompleto continua tipando, continua compilando e continua passando
+// aqui. Essa superfície (`collectRawData`, `resolveCompanyScope`, as 8 strings de `select`) tinha
+// ficado sem cobertura (dívida `C-ANALYTICS-A15-SEM-PROVA`, item #17 de `debitos-pre-piloto.md`)
+// — **fechada abaixo**, no describe `Dívida #17`, que mocka `supabase.from(...)` e exercita a API
+// pública `getOperationAnalytics` (nada exportado de produção só para testar). Precedente que
+// inspirou o padrão: `teamConnectionService.test.ts`, que assere a string do `select` de
+// `listTeamMembers` e foi verificado por mutante.
 // ---------------------------------------------------------------------------
 
 const PERIOD_AUGUST: OperationAnalyticsPeriod = { from: '2026-08-01', to: '2026-08-31' };
