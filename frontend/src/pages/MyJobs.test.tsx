@@ -118,7 +118,11 @@ const PENDING_CONFIRMATION = {
   responded_at: null,
 }
 
-function setupMocks() {
+function setupMocks(startDateIso: string = TOMORROW_ISO) {
+  const applicationRow = {
+    ...APPLICATION_ROW,
+    job: { ...APPLICATION_ROW.job, start_date: startDateIso },
+  }
   const mockAddToast = vi.fn()
   vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
 
@@ -129,7 +133,7 @@ function setupMocks() {
 
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'applications') {
-      return thenableChain({ data: [APPLICATION_ROW], error: null }) as unknown as ReturnType<typeof supabase.from>
+      return thenableChain({ data: [applicationRow], error: null }) as unknown as ReturnType<typeof supabase.from>
     }
     if (table === 'reviews') {
       return thenableChain({ data: [], error: null }) as unknown as ReturnType<typeof supabase.from>
@@ -155,6 +159,34 @@ beforeEach(() => {
 })
 
 describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
+  // REGRESSAO (achado navegando o produto, 23/08/2026): o titulo era o literal "Confirma seu
+  // turno de amanhã?", mas `request_attendance_confirmation` aceita turno de ate 7 dias. Pedi
+  // confirmacao de um turno de 28/08 no dia 23 e o app disse ao freela que o turno era AMANHA,
+  // enquanto a notificacao do mesmo pedido dizia "28/08" — dois canais se contradizendo sobre
+  // o dia de comparecer.
+  it('turno a 5 dias mostra a DATA, nao "amanhã" (os dois canais tem de dizer o mesmo dia)', async () => {
+    const em5dias = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
+    setupMocks(em5dias.toISOString())
+    renderComponent()
+
+    const diaMes = em5dias.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    await waitFor(() => {
+      expect(screen.getByText(`Confirma seu turno de ${diaMes}?`)).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Confirma seu turno de amanhã?')).not.toBeInTheDocument()
+  })
+
+  it('turno de HOJE diz "de hoje", nao a data seca', async () => {
+    const hoje = new Date()
+    hoje.setHours(hoje.getHours() + 2)
+    setupMocks(hoje.toISOString())
+    renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Confirma seu turno de hoje?')).toBeInTheDocument()
+    })
+  })
+
   it('mostra o card de confirmação pendente com os dados do turno de amanhã', async () => {
     setupMocks()
     renderComponent()

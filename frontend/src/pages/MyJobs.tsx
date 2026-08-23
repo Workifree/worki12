@@ -93,6 +93,22 @@ export interface JobApplication {
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
 
+// Rotulo de "quando" para o card de confirmacao de vespera.
+// O texto era chumbado em "amanha", mas `request_attendance_confirmation` aceita turno de ate
+// 7 dias — e um pedido feito com 5 dias de antecedencia dizia ao freela que o turno era amanha.
+// Devolve o mesmo vocabulario da notificacao ("Confirma seu turno de 28/08?"), para os dois
+// canais nao se contradizerem.
+function rotuloDeQuando(rawDate: string | null): string {
+    if (!rawDate) return 'do próximo turno';
+    const d = new Date(rawDate);
+    if (Number.isNaN(d.getTime())) return 'do próximo turno';
+    const soData = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const dias = Math.round((soData(d) - soData(new Date())) / 86400000);
+    if (dias === 0) return 'de hoje';
+    if (dias === 1) return 'de amanhã';
+    return `de ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+}
+
 // Formata timestamp ISO para HH:mm (pt-BR); '—' quando ausente.
 function fmtTime(iso: string | null): string {
     if (!iso) return '—';
@@ -588,7 +604,7 @@ export default function MyJobs() {
                                 <div className="flex items-center gap-2 mb-3">
                                     <CalendarClock size={18} className="text-primary" />
                                     <span className="text-xs font-black uppercase text-primary">
-                                        Confirma seu turno de amanhã?
+                                        Confirma seu turno {rotuloDeQuando(job.raw_date)}?
                                     </span>
                                 </div>
                                 <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
@@ -847,9 +863,15 @@ export default function MyJobs() {
                                             <MapPin size={14} /> {job.location}
                                         </span>
                                     </div>
+                                    {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
+                                        em andamento — promessa de escrow que o produto não cumpre. O piloto é
+                                        100% modo A: o dinheiro nunca passa pelo Worki, não há nada em garantia.
+                                        Este turno, conferido no banco, tem zero linhas em escrow_transactions.
+                                        Prometer custódia de dinheiro que ninguém segura é a pior classe de copy
+                                        errado: o freela decide confiar com base nela. */}
                                     {job.status === 'in_progress' && (
-                                        <p className="text-xs text-yellow-600 font-bold flex items-center gap-1 mt-1">
-                                            Pagamento em garantia até confirmação da empresa
+                                        <p className="text-xs text-gray-500 font-bold flex items-center gap-1 mt-1">
+                                            Pagamento combinado direto com a empresa — o Worki registra o recibo
                                         </p>
                                     )}
                                 </div>
