@@ -375,3 +375,56 @@ produção. Apagar função em produção é destrutivo e fica para você decidi
   ação não existe na UI, listar os botões **sem filtro**, com `aria-label` e `title`.
 - **Comando longo demais chega truncado**: dois heredocs falharam com "unexpected EOF" porque o
   conteúdo era grande. Escrever migration extensa em partes, verificando `wc -l` a cada uma.
+
+---
+
+# Sexta passagem — pronto para o piloto (24/08/2026)
+
+Lente: piloto real com alguns freelas e uma empresa. Testado nos dois papéis, em **viewport de
+celular** (390×844), que é como o piloto vai rodar.
+
+### 34. 🔴 Todo horário do chat aparecia 3 horas no futuro
+Mandei mensagem às 18:41 (BRT) e o app mostrou **21:40**. `Message.createdat` era `timestamp`
+**sem fuso** guardando UTC, e o JS lê string naive como hora local. Pior: o eco otimista usava
+`toISOString()`, então a mensagem aparecia certa ao enviar e **pulava 3 horas depois do reload** —
+dois horários para a mesma mensagem. O chat é onde o turno se combina ("chego 15 min antes").
+
+### 35. 🔴 "Cadastrar como Trabalhador" abria a tela de ENTRAR
+O freela novo digitava e recebia "Email ou senha incorretos" — para uma conta que nem existe. É o
+primeiro passo de todo participante, e o atrito mais caro que existe: acontece antes de a pessoa
+ter qualquer motivo para insistir.
+
+### 36. 🔴 Notificação nunca chegava sem recarregar
+`notifications` não estava na publicação `supabase_realtime` — só `Conversation` e `Message`.
+Lendo o cliente, as duas pareciam tempo real; a diferença só aparecia no catálogo. Sem isso, "o
+primeiro que aceitar preenche" vira corrida entre quem por acaso estava com o app aberto.
+
+### 37. 🔴 Data de pagamento virava o dia anterior no CSV do financeiro
+Relatório mostrava turno em 23/08 e pagamento em **22/08** — pago antes de acontecer. A data pura
+do `<input type="date">` ia crua e virava meia-noite UTC = 21h do dia anterior no Brasil.
+
+### 38. 🟠 Painel dizia "Vaga preenchida" quando a EMPRESA cancelava
+Chamado `cancelled`, alvo `closed`, **zero contratados** — e a tela dizia que a vaga foi
+preenchida. Painel de operação que mente uma vez deixa de ser consultado.
+
+### 39. 🟠 Chamado vencido continuava exibido como ABERTO
+Às 20:23, "CHAMADO ABERTO … expira **16:23**", com botão de cancelar. Nada no sistema transiciona
+chamado vencido: o `expire-invites` existe, está no ar, mas só mexe em `applications` e **nenhum
+cron o chama**. A empresa abre de manhã, vê um chamado "aberto" que morreu à noite e **espera por
+ele** — exatamente a quebra de escala que o produto existe para evitar.
+
+## ✅ Verificado funcionando
+Cadastro completo de freela novo **pelo celular**, com `primary_role` e grade de disponibilidade
+gravando certo; perfil público da empresa com avaliador mascarado; freela iniciando conversa e a
+empresa sendo notificada; **os três `pg_cron` rodando diariamente** — e o da véspera de fato
+*produziu* um pedido automático às 21:00 UTC, não só "succeeded"; revogação de gerente com perda
+de acesso imediata; recusa de indicação **neutra** (sem vínculo criado, e a pessoa segue no elenco
+de quem indicou); export CSV no formato brasileiro; páginas estáticas com Termos e Privacidade
+reais. **Nenhuma tela com rolagem horizontal no celular.**
+
+## Nota de método (sexta passagem)
+- **Testar no viewport errado esconde uma dimensão inteira.** O produto é mobile-first e eu tinha
+  testado tudo em desktop até aqui. Passar para 390×844 foi o que colocou o cadastro do freela no
+  caminho — e foi lá que o CTA quebrado apareceu.
+- **"Succeeded" não é "funcionou".** Os crons apareciam como sucesso todo dia; só olhando se
+  *produziram linha* dá para saber se a promessa é real.
