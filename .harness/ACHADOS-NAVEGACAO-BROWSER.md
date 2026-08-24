@@ -313,3 +313,65 @@ Ele entra pela porta da empresa, com as restrições da empresa.
   seam. Grep por nome disse "já usa"; a verdade estava no corpo.
 - **A asserção pagou o próprio custo.** A migration do pagamento falhou na própria asserção
   (casei o trecho por literal, e a fonte usa CRLF). Sem ela, teria "aplicado" sem corrigir nada.
+
+---
+
+# Quinta passagem — o que faltava (24/08/2026)
+
+Série recorrente (editar/parar), listas do elenco (editar/apagar), WhatsApp, cancelar convite,
+recibo/impressão, QR e link transitivo, notificações, recuperação de senha, painel admin.
+
+### 31. 🔴 Qualquer freela entrava sozinho no elenco de qualquer empresa
+O link de convite era `/convite/<base64url(company_id)>` — **função pura de um identificador
+público**. `companies` tem SELECT `USING (true)`, então qualquer sessão lista todas as empresas e
+seus ids; `generateInviteToken` era só `btoa(companyId)` no cliente; e o aceite decodificava de
+volta e inseria `status='accepted'`.
+
+Reproduzido em produção com rollback forçado: o freela de QA enumerou 9 empresas, derivou o token
+de uma com quem não tem relação nenhuma e entrou no elenco dela como aceito. Aquela empresa nunca
+emitiu convite. O comentário da própria RPC dizia *"Ambos consentiram (empresa gerou+enviou o
+link)"* — a primeira metade era falsa.
+
+Estar no elenco **aceito** é o que torna a pessoa selecionável no Chamado de Turno, incluível em
+`team_lists` e elegível como indicada. "Lista fechada" é a premissa do modelo push inteiro.
+
+Corrigido: token aleatório opaco em `company_invite_links`, com RLS. O segredo não podia morar em
+`companies` — aquele SELECT liberado publicaria a coluna. Segunda migration devolve a leitura a
+quem tem vínculo **aceito**, para não matar o link transitivo (o mecanismo de crescimento do
+produto: fechado, mas transitivo). Conferido: o freela lê exatamente 2 tokens para 2 elencos.
+
+O sentido inverso (empresa adiciona pelo Worki ID do freela) **não** tinha o problema: cria
+`pending`, que ainda depende do "sim" do freela.
+
+### 32. 🟠 Agenda dizia "SÉRIE · TODA SÁBADO"
+Duas telas montavam `toda ${dia}` fixo; domingo e sábado são masculinos. O resumo pós-criação
+ainda juntava gêneros numa lista ("toda sexta e sábado"). Extraído para `lib/weekdayLabels.ts`
+com teste — cada tela tinha sua cópia da lista de dias.
+
+### 33. 🟠 Nota 5.0 num terceiro lugar, e textos de auth sem acento
+Carteira de Clientes mostrava "5.0 (0)" — o selo que o freela lê antes de aceitar convite.
+E as telas de recuperação de senha e do admin ("ENVIAR LINK DE RECUPERACAO", "Este email nao tem
+permissao") — justamente as telas de quem já está com problema para entrar.
+
+## ✅ Verificado funcionando
+Série: edição em massa com dry-run exato ("7 turnos serão atualizados, 1 será mantido porque já
+tem freela confirmado") e cancelamento com **soft delete** — série `stopped`, 7 ocorrências
+`deleted`, e as 8 linhas ainda no banco, sem destruir métrica em cascata. Listas: criar, renomear
+e excluir. WhatsApp: telefone normalizado com DDI 55, horário fatiado para `HH:MM`, valor e link.
+Cancelar convite com aviso diferenciado ao freela. Recibo com impressão. QR e Worki ID.
+Notificações com marcar-todas-como-lidas. Recuperação de senha (rate-limit tratado). Admin com
+gate próprio, negando freela comum.
+
+## ⚠️ Superfície morta em produção (não removi — é decisão sua)
+`jobs-api`, `applications-api` e `profiles-api` estão **ativas**, com `verify_jwt: false`, **sem
+código no repositório** e **sem nenhum chamador no frontend** — resíduo do backend anterior ao
+pivô. Exigem `Authorization` (não estão abertas), mas são código não auditável rodando em
+produção. Apagar função em produção é destrutivo e fica para você decidir.
+
+## Nota de método (quinta passagem)
+- **Meus próprios filtros produziram três falsos "não existe"**: descartar botões por
+  `innerText.length > 3` esconde botões de ícone — que é justamente como editar/excluir lista e
+  abrir o menu da série são expostos (todos com `aria-label` correto). Antes de afirmar que uma
+  ação não existe na UI, listar os botões **sem filtro**, com `aria-label` e `title`.
+- **Comando longo demais chega truncado**: dois heredocs falharam com "unexpected EOF" porque o
+  conteúdo era grande. Escrever migration extensa em partes, verificando `wc -l` a cada uma.
