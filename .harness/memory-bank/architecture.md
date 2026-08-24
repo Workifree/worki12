@@ -757,7 +757,20 @@ lacunas declaradas.
 > - **`20260817001400` (F12 badges)**, **`001500` (F10 indicação)**, **`001600` (F11 SOS)** — confirmado no catálogo: `worker_company_badge_prefs` existe, `worker_referrals` existe, `workers.discoverable_for_sos` existe, `create_sos_call` existe, `workers.badges_hidden` existe, `workers.accepts_referrals` existe, `shift_calls.origin` existe, `shift_call_targets.origin` existe, CHECK `team_connections_source_check` com `'referral'`, três policies reescritas de F11.
 > - **`20260821001000` + `20260822000000` (F13 Fases 0/1/2)** — `organizations`, `organization_members`, `company_members`, `companies.organization_id` NOT NULL, `is_organization_operator`, `is_organization_member`, `company_organization_id`, `session_operates_company_membership`, `autoprovision_company_organization`, `is_company_owner` com corpo BEGIN ATOMIC. Policies `"Company owner can manage jobs"` e `"Company owner can view own company"` foram removidas.
 >
-> **F13 Fase 3** — NÃO APLICADA.
+> **F13 Fase 3** — **APLICADA** (corrigido em 24/08/2026). As quatro RPCs existem no catálogo
+> (`invite_company_manager`, `accept_company_invite_by_token`, `revoke_company_manager`,
+> `get_my_companies`) e o fluxo inteiro foi percorrido no browser: convite por e-mail → cadastro
+> do gerente → aceite → operação da unidade. A nota anterior dizia "NÃO APLICADA" e me levou a
+> concluir, por um dia, que a fiação incompleta do frontend era fase adiada em vez de defeito.
+>
+> ⚠️ **O papel de gerente só passou a funcionar de fato em 24/08.** Quatro camadas decidiam
+> "quem é a empresa?" reescrevendo a pergunta na mão, fora do seam — policy de UPDATE de
+> `applications`, trigger `validate_application_update`, trigger
+> `enforce_shift_payment_immutability` e dez resolvedores locais no frontend (três com o mesmo
+> NOME do seam, `getAuthenticatedCompanyId`, o que faz o grep mentir). Ver migrations
+> `20260824000100`–`000300` e o commit `bc43beb0`. Ao mexer em autorização de empresa, a
+> pergunta certa é sempre `is_company_owner` / `is_job_owner` / `getAuthenticatedCompanyId` —
+> nunca `company_id = auth.uid()` nem `owner_id = auth.uid()` escrito na mão.
 >
 > **`20260821000000` (anonimização)** — NÃO APLICADA: `anonymize_account` não existe no banco. (Bloqueada por decisão do owner.)
 >
