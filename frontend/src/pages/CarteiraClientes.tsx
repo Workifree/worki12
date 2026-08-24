@@ -74,10 +74,16 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
           <p className="text-sm font-bold text-gray-500 uppercase truncate">{company.industry}</p>
         )}
         <div className="flex flex-wrap gap-2 mt-2">
-          {typeof company.rating_average === 'number' && (
+          {/* Empresa sem nenhuma avaliação exibia "5.0 (0)" -- nota cheia onde não há dado.
+              Este selo é prova social: o freela lê antes de aceitar convite daquela empresa. */}
+          {typeof company.rating_average === 'number' && (company.reviews_count ?? 0) > 0 ? (
             <span className="flex items-center gap-1 text-xs font-bold bg-yellow-50 text-yellow-700 px-2 py-1 rounded-xl border border-yellow-200">
               <Star size={12} fill="currentColor" /> {company.rating_average.toFixed(1)}
-              {typeof company.reviews_count === 'number' && ` (${company.reviews_count})`}
+              {` (${company.reviews_count})`}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs font-bold bg-gray-50 text-gray-400 px-2 py-1 rounded-xl border border-gray-200">
+              <Star size={12} /> Sem avaliações
             </span>
           )}
           {company.address && (
