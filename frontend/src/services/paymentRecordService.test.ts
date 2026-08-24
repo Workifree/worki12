@@ -262,6 +262,35 @@ describe('PaymentRecordService.recordExternalPayment', () => {
     expect(result.error).toMatch(/não encontrad/)
   })
 
+  // REGRESSAO (achado no CSV do financeiro, 24/08/2026): o modal manda a data pura do
+  // `<input type="date">` ("2026-08-23") e ela ia crua para o banco, virando meia-noite UTC --
+  // 21h do dia ANTERIOR no Brasil. O relatorio mostrava pagamento em 22/08 para um turno de
+  // 23/08: pago antes de acontecer.
+  it('data escolhida no formulario sobrevive ao fuso — nao vira o dia anterior', async () => {
+    const pagamentos = makeChain({ data: SHIFT_PAYMENT_ROW, error: null })
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      companies: makeChain({ data: COMPANY_ROW, error: null }),
+      shift_payments: pagamentos,
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    await PaymentRecordService.recordExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      amount: 180,
+      source: 'external_pix',
+      paidAt: '2026-08-23',
+    })
+
+    const enviado = pagamentos.insert.mock.calls.at(-1)?.[0] as { paid_at: string }
+    // O que importa nao e o instante exato, e o DIA que a pessoa ve depois -- no fuso dela.
+    expect(new Date(enviado.paid_at).toLocaleDateString('pt-BR')).toBe('23/08/2026')
+    // E prova que nao foi a string crua: essa viraria meia-noite UTC.
+    expect(enviado.paid_at).not.toBe('2026-08-23')
+  })
+
   it('registra com sucesso quando o turno está concluído', async () => {
     routeFrom({
       applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),

@@ -170,7 +170,22 @@ async function getAuthCompanyId(): Promise<string> {
 /** Normaliza paidAt (string | Date | undefined) para ISO string. Default: agora. */
 function normalizePaidAt(paidAt?: string | Date): string {
   if (!paidAt) return new Date().toISOString();
-  return typeof paidAt === 'string' ? paidAt : paidAt.toISOString();
+  if (paidAt instanceof Date) return paidAt.toISOString();
+
+  // Data pura (YYYY-MM-DD), que e o que `<input type="date">` do modal entrega. Enviar a string
+  // crua faz o Postgres gravar meia-noite UTC -- que no Brasil e 21h do dia ANTERIOR. Efeito
+  // real, achado no CSV do financeiro: a empresa escolheu 23/08 e o relatorio mostrou pagamento
+  // em 22/08, antes do turno acontecer.
+  //
+  // Meio-dia LOCAL (nao meia-noite): a data que a pessoa escolheu sobrevive a conversao para UTC
+  // em qualquer fuso, e nao esbarra em madrugada que nao existe por horario de verao.
+  const soData = /^\d{4}-\d{2}-\d{2}$/.test(paidAt);
+  if (soData) {
+    const [ano, mes, dia] = paidAt.split('-').map(Number);
+    return new Date(ano, mes - 1, dia, 12, 0, 0).toISOString();
+  }
+
+  return paidAt;
 }
 
 /** Projeção reutilizada pelas três consultas de `getReceipt` (ADR-20260816). */
