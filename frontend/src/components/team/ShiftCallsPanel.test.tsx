@@ -72,6 +72,43 @@ function makeTeamCall(overrides: Partial<ShiftCall> = {}): ShiftCall {
   } as ShiftCall;
 }
 
+// REGRESSAO (achado cancelando um chamado no celular, 24/08/2026): o rotulo de `response:
+// 'closed'` era fixo em "Vaga preenchida". Quando a EMPRESA cancela o chamado, ninguem foi
+// contratado -- e o painel dizia que a vaga estava preenchida. Conferido no banco na hora:
+// shift_calls.status='cancelled', zero applications no turno.
+describe('ShiftCallsPanel — motivo do encerramento (nao inventa "preenchida")', () => {
+  const alvoFechado = {
+    id: 'tgt-1', call_id: 'call-1', worker_id: 'w-1',
+    notified_at: '2026-08-24T20:00:00Z', responded_at: '2026-08-24T20:05:00Z',
+    response: 'closed' as const,
+    worker: { id: 'w-1', full_name: 'Fulano de Tal', avatar_url: null, primary_role: null, rating_average: null },
+  }
+  const chamado = (status: string) => ([{
+    id: 'call-1', job_id: 'job-1', company_id: 'c-1', created_by: 'c-1',
+    slots: 1, reason: 'falta', message: null, targets_count: 1,
+    status, origin: 'team',
+    expires_at: '2026-08-24T22:00:00Z', created_at: '2026-08-24T20:00:00Z',
+    closed_at: '2026-08-24T20:30:00Z', first_claim_at: null,
+    targets: [alvoFechado],
+  }] as never)
+
+  it('chamado CANCELADO pela empresa nao diz "Vaga preenchida"', () => {
+    render(<ShiftCallsPanel calls={chamado('cancelled')} loading={false} cancellingId={null} onCancel={() => {}} />)
+    expect(screen.getByText(/Chamado cancelado/)).toBeInTheDocument()
+    expect(screen.queryByText(/Vaga preenchida/)).not.toBeInTheDocument()
+  })
+
+  it('chamado EXPIRADO diz que expirou, nao que preencheu', () => {
+    render(<ShiftCallsPanel calls={chamado('expired')} loading={false} cancellingId={null} onCancel={() => {}} />)
+    expect(screen.getByText(/Expirou sem resposta/)).toBeInTheDocument()
+  })
+
+  it('chamado FILLED continua dizendo que a vaga foi preenchida', () => {
+    render(<ShiftCallsPanel calls={chamado('filled')} loading={false} cancellingId={null} onCancel={() => {}} />)
+    expect(screen.getByText(/Vaga preenchida/)).toBeInTheDocument()
+  })
+})
+
 describe('ShiftCallsPanel — membrana do SOS (F11)', () => {
   it('usa targets_count (o pool real) para "avisados", nunca o tamanho do array de alvos carregado', () => {
     render(

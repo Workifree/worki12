@@ -22,16 +22,26 @@ import type { ShiftCall, ShiftCallTarget } from '../../types';
 //     renderiza uma linha "Aguardando"/pendente de um alvo de SOS (não há como saber quem são).
 // ---------------------------------------------------------------------------
 
-function targetVisual(target: ShiftCallTarget) {
+function targetVisual(target: ShiftCallTarget, callStatus?: ShiftCall['status']) {
   switch (target.response) {
     case 'accepted':
       return { icon: CheckCircle2, className: 'text-primary', label: 'Aceitou' };
     case 'declined':
       return { icon: XCircle, className: 'text-gray-400', label: 'Recusou' };
-    case 'closed':
+    case 'closed': {
+      // `closed` só diz "esta tentativa terminou sem resposta desta pessoa" -- e isso acontece
+      // por motivos diferentes. O rótulo fixo "Vaga preenchida" mentia quando a EMPRESA cancelava
+      // o chamado: ela via "vaga preenchida" num turno onde ninguém foi contratado (conferido:
+      // call cancelled, zero applications). Painel que mente uma vez deixa de ser consultado.
+      //
       // Nunca "perdeu"/"ficou de fora": o freela não fez nada de errado, e essa tela também é
       // lida em voz alta na operação.
-      return { icon: MinusCircle, className: 'text-gray-300', label: 'Vaga preenchida' };
+      const label =
+        callStatus === 'cancelled' ? 'Chamado cancelado'
+        : callStatus === 'expired' ? 'Expirou sem resposta'
+        : 'Vaga preenchida';
+      return { icon: MinusCircle, className: 'text-gray-300', label };
+    }
     default:
       return { icon: Clock, className: 'text-yellow-600', label: 'Aguardando' };
   }
@@ -128,7 +138,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
 
             <div className="flex flex-wrap gap-2">
               {targets.map((target) => {
-                const visual = targetVisual(target);
+                const visual = targetVisual(target, call.status);
                 const Icon = visual.icon;
                 return (
                   <span
