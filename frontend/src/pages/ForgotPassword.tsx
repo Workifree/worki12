@@ -36,7 +36,7 @@ export default function ForgotPassword() {
         setError('');
 
         if (!email.trim() || !email.includes('@')) {
-            setError('Informe um email valido.');
+            setError('Informe um e-mail válido.');
             return;
         }
 
@@ -52,7 +52,7 @@ export default function ForgotPassword() {
             if (msg.includes('rate limit') || msg.includes('too many')) {
                 setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
             } else if (msg.includes('invalid') && msg.includes('email')) {
-                setError('Informe um email valido.');
+                setError('Informe um e-mail válido.');
             } else {
                 // For "user not found" or similar, show success anyway (security best practice)
                 setSent(true);
@@ -135,7 +135,7 @@ export default function ForgotPassword() {
                         disabled={loading || !email.trim() || cooldown > 0}
                         className="w-full bg-black text-white py-3 rounded-xl font-bold uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                        {loading ? <Loader2 className="animate-spin" size={20} /> : cooldown > 0 ? `Aguarde ${cooldown}s` : 'Enviar Link de Recuperacao'}
+                        {loading ? <Loader2 className="animate-spin" size={20} /> : cooldown > 0 ? `Aguarde ${cooldown}s` : 'Enviar Link de Recuperação'}
                     </button>
                 </form>
             </div>

@@ -23,7 +23,7 @@ export default function ResetPassword() {
             return;
         }
         if (password !== confirm) {
-            setError('As senhas nao coincidem.');
+            setError('As senhas não coincidem.');
             return;
         }
 
@@ -34,11 +34,11 @@ export default function ResetPassword() {
         if (updateError) {
             const msg = updateError.message || '';
             if (msg.includes('expired') || msg.includes('Token has expired')) {
-                setError('Link expirado. Solicite um novo link de recuperacao.');
+                setError('Link expirado. Solicite um novo link de recuperação.');
             } else if (msg.includes('invalid') || msg.includes('Invalid token') || msg.includes('not found')) {
-                setError('Link invalido. Solicite um novo link de recuperacao.');
+                setError('Link inválido. Solicite um novo link de recuperação.');
             } else if (msg.includes('weak') || msg.includes('too short') || msg.includes('at least')) {
-                setError('Senha muito fraca. Use no minimo 8 caracteres com letras e numeros.');
+                setError('Senha muito fraca. Use no mínimo 8 caracteres, com letras e números.');
             } else {
                 setError('Erro ao redefinir senha. Tente novamente ou solicite um novo link.');
             }
