@@ -70,7 +70,14 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
         const targets = isSos ? rawTargets.filter((t) => t.response === 'accepted') : rawTargets;
         const pending = isSos ? 0 : targets.filter((t) => !t.response).length;
         const accepted = targets.filter((t) => t.response === 'accepted').length;
-        const isOpen = call.status === 'open';
+        // `shift_calls` NAO tem quem marque 'expired': o edge function `expire-invites` so mexe
+        // em `applications`, e nao ha cron para chamados. Sem derivar aqui, um chamado que morreu
+        // as 16h continua exibido como ABERTO -- com botao de cancelar e "expira 16:23" no
+        // passado. A empresa abre o app de manha e espera por um chamado que ja acabou, que e
+        // exatamente a falha que o produto existe para evitar. Mesma tecnica que a tela de
+        // candidatos ja usa para convite: expiracao deriva na LEITURA, sem escrever no banco.
+        const jaVenceu = !!call.expires_at && new Date(call.expires_at).getTime() <= Date.now();
+        const isOpen = call.status === 'open' && !jaVenceu;
         // F11: o número que a empresa PODE ver é `targets_count` (devolvido pela RPC), nunca o
         // tamanho do array de alvos carregados no client.
         const notifiedCount = isSos ? call.targets_count : targets.length;
@@ -92,7 +99,9 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
                       : 'Chamado de urgência encerrado'
                     : isOpen
                       ? 'Chamado aberto'
-                      : 'Chamado encerrado'}
+                      : jaVenceu && call.status === 'open'
+                        ? 'Chamado expirou'
+                        : 'Chamado encerrado'}
                   <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-black text-white">
                     {SHIFT_CALL_REASON_LABELS[call.reason]}
                   </span>
@@ -129,10 +138,12 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
               </p>
             )}
 
-            {isOpen && !call.first_claim_at && (
+            {!call.first_claim_at && (isOpen || (jaVenceu && call.status === 'open')) && (
               <p className="flex items-center gap-1.5 text-xs font-bold text-gray-600 mb-3">
                 <Clock size={14} />
-                Ninguém aceitou ainda · expira {new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {isOpen
+                  ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                  : `Expirou às ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} sem ninguém aceitar — chame de novo`}
               </p>
             )}
 

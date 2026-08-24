@@ -76,6 +76,41 @@ function makeTeamCall(overrides: Partial<ShiftCall> = {}): ShiftCall {
 // 'closed'` era fixo em "Vaga preenchida". Quando a EMPRESA cancela o chamado, ninguem foi
 // contratado -- e o painel dizia que a vaga estava preenchida. Conferido no banco na hora:
 // shift_calls.status='cancelled', zero applications no turno.
+// REGRESSAO (achado testando a manha seguinte, 24/08/2026): `shift_calls` nao tem quem marque
+// 'expired' -- o edge function expire-invites so mexe em `applications`, e nao ha cron para
+// chamados. Um chamado que morreu as 16h continuava exibido como ABERTO, com botao de cancelar e
+// "expira 16:23" no passado, as 20:23.
+describe('ShiftCallsPanel — chamado vencido nao se apresenta como aberto', () => {
+  const base = {
+    id: 'call-x', job_id: 'job-1', company_id: 'c-1', created_by: 'c-1',
+    slots: 1, reason: 'falta', message: null, targets_count: 1,
+    status: 'open', origin: 'team', first_claim_at: null, closed_at: null,
+    created_at: '2026-08-24T10:00:00Z',
+    targets: [{ id: 't1', call_id: 'call-x', worker_id: 'w1', notified_at: '2026-08-24T10:00:00Z',
+      responded_at: null, response: null,
+      worker: { id: 'w1', full_name: 'Fulano', avatar_url: null, primary_role: null, rating_average: null } }],
+  }
+  const comExpiracao = (quando: string) => ([{ ...base, expires_at: quando }] as never)
+
+  it('status=open com expires_at no PASSADO: mostra que expirou e some o botao de cancelar', () => {
+    const passado = new Date(Date.now() - 4 * 3600_000).toISOString()
+    render(<ShiftCallsPanel calls={comExpiracao(passado)} loading={false} cancellingId={null} onCancel={() => {}} />)
+
+    expect(screen.getByText(/Chamado expirou/i)).toBeInTheDocument()
+    expect(screen.getByText(/Expirou às .* sem ninguém aceitar/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cancelar/i })).not.toBeInTheDocument()
+  })
+
+  it('status=open com expires_at no FUTURO segue aberto e cancelavel', () => {
+    const futuro = new Date(Date.now() + 2 * 3600_000).toISOString()
+    render(<ShiftCallsPanel calls={comExpiracao(futuro)} loading={false} cancellingId={null} onCancel={() => {}} />)
+
+    expect(screen.getByText(/Chamado aberto/i)).toBeInTheDocument()
+    expect(screen.getByText(/Ninguém aceitou ainda · expira/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cancelar/i })).toBeInTheDocument()
+  })
+})
+
 describe('ShiftCallsPanel — motivo do encerramento (nao inventa "preenchida")', () => {
   const alvoFechado = {
     id: 'tgt-1', call_id: 'call-1', worker_id: 'w-1',
