@@ -63,7 +63,10 @@ export default function Login() {
     const redirectTo = searchParams.get('redirect');
     const navigate = useNavigate();
 
-    const [isSignUp, setIsSignUp] = useState(false);
+    // Os CTAs "Cadastrar como…" da landing e do onboarding levavam para ca em modo ENTRAR:
+    // quem chegava novo digitava e recebia "Email ou senha incorretos", como se tivesse
+    // errado a senha de uma conta que nem existe. O link agora declara a intencao.
+    const [isSignUp, setIsSignUp] = useState(searchParams.get('cadastro') === '1');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);

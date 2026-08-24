@@ -41,13 +41,13 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => navigate('/login?type=work')}
+              onClick={() => navigate('/login?type=work&cadastro=1')}
               className="px-8 py-4 bg-primary text-white font-black uppercase text-lg rounded-xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             >
               Cadastrar como Profissional
             </button>
             <button
-              onClick={() => navigate('/login?type=hire')}
+              onClick={() => navigate('/login?type=hire&cadastro=1')}
               className="px-8 py-4 bg-blue-600 text-white font-black uppercase text-lg rounded-xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             >
               Cadastrar como Empresa

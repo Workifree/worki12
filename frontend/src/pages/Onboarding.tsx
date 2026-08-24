@@ -194,13 +194,13 @@ export default function Onboarding() {
 
           <div className="flex flex-col md:flex-row justify-center gap-4 mt-8">
             <button
-              onClick={() => navigate('/login?type=work')}
+              onClick={() => navigate('/login?type=work&cadastro=1')}
               className="bg-black text-white px-8 py-4 rounded-xl font-black uppercase text-lg hover:scale-105 transition-transform shadow-[6px_6px_0px_0px_rgba(255,255,255,0.3)]"
             >
               Cadastrar como Trabalhador
             </button>
             <button
-              onClick={() => navigate('/login?type=hire')}
+              onClick={() => navigate('/login?type=hire&cadastro=1')}
               className="bg-white text-black px-8 py-4 rounded-xl font-black uppercase text-lg hover:scale-105 transition-transform"
             >
               Cadastrar como Empresa
