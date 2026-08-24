@@ -91,6 +91,13 @@ function renderPage() {
   );
 }
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('CompanyReferrals — caixa de entrada (empresa destino)', () => {
   it('lista cartões via list_worker_referral_cards, NUNCA from(worker_referrals) pré-aceite', async () => {
     mockListReceivedCards.mockResolvedValue({ outcome: 'ok', items: [PENDING_CARD] });

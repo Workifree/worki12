@@ -46,6 +46,7 @@ import type {
   AttendanceConfirmationsBlock,
   PeriodDelta,
 } from '../types';
+import { getMyCompanies } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Constantes de produto (código, não configuráveis na UI v1 — ver PRD D2c/D4/D5)
@@ -343,13 +344,17 @@ interface CompanyScopeResult {
 
 async function resolveCompanyScope(userId: string): Promise<CompanyScopeResult> {
   const ids = new Set<string>([userId]);
-  const { data, error } = await supabase.from('companies').select('id').eq('owner_id', userId);
-  if (error) {
+  // Era `companies WHERE owner_id = userId`: cobria os dois formatos de DONO e deixava o gerente
+  // de unidade de fora — o escopo dele virava `[userId]`, um id que nao e de empresa nenhuma, e
+  // TODOS os cartoes vinham vazios sem dizer por que. `getMyCompanies()` devolve o que a sessao
+  // de fato opera, incluindo vinculo por `company_members`.
+  try {
+    for (const c of await getMyCompanies()) {
+      if (c?.company_id) ids.add(c.company_id);
+    }
+  } catch (error) {
     logError('operationAnalytics.resolveCompanyScope', error);
     return { ids: Array.from(ids), hasError: true };
-  }
-  for (const row of data ?? []) {
-    if (row?.id) ids.add(row.id as string);
   }
   return { ids: Array.from(ids), hasError: false };
 }

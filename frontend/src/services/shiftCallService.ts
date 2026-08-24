@@ -31,6 +31,7 @@ import type {
   ShiftCallRpcResult,
   ShiftCallTarget,
 } from '../types';
+import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Janela de expiração
@@ -113,21 +114,9 @@ export function calcExpiryAtShiftStart(
 
 /** Obtém o company_id da sessão autenticada (empresa). */
 async function getAuthCompanyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sessão expirada. Faça login novamente.');
-
-  const { data: company, error } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('owner_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  // Ancoragem dupla: em parte da base `jobs.company_id` é o próprio uid do dono (ver
-  // 20260816210000). Sem perfil em `companies`, o uid é o company_id válido.
-  return (company?.id as string | undefined) ?? user.id;
+  // Delega ao seam. A ancoragem dupla escrita aqui (owner_id, com fallback para o uid)
+  // cobria os dois formatos de DONO, mas nao o gerente de unidade (company_members).
+  return resolverEmpresaDaSessao();
 }
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { MAX_SERIES_OCCURRENCES } from '../lib/recurrence';
 import type { JobSeries, RecurrenceType } from '../types';
+import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Tipos auxiliares
@@ -143,21 +144,9 @@ interface SupabaseErrorLike {
  * independentes.)
  */
 async function getAuthCompanyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sessão expirada. Faça login novamente.');
-
-  const { data: company, error } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('owner_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  // Ancoragem dupla (ver 20260816210000): sem perfil em `companies`, o uid do dono já É o
-  // company_id válido nas policies de `jobs`/`job_series`.
-  return (company?.id as string | undefined) ?? user.id;
+  // Delega ao seam. A ancoragem dupla escrita aqui (owner_id, com fallback para o uid)
+  // cobria os dois formatos de DONO, mas nao o gerente de unidade (company_members).
+  return resolverEmpresaDaSessao();
 }
 
 /** Traduz o `outcome` estruturado das RPCs em mensagem de erro para a UI. */

@@ -101,6 +101,13 @@ beforeEach(() => {
   });
 });
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('ReceiptView — bloco de termo de prestação de serviço (A8)', () => {
   it('pagamento scheduled (promessa): NÃO renderiza o bloco de termo', async () => {
     mockGetReceipt.mockResolvedValue(makeReceipt({ status: 'scheduled', paid_at: null, scheduled_for: '2026-07-01' }));

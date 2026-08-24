@@ -67,6 +67,13 @@ beforeEach(() => {
 // createSeries
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('JobSeriesService.createSeries', () => {
   it('bloqueia NO CLIENT (R7) quando não há ocorrência nenhuma, sem chamar o banco', async () => {
     const result = await JobSeriesService.createSeries({

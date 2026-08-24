@@ -45,6 +45,13 @@ beforeEach(() => {
 // checkEligibility
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('SosService.checkEligibility', () => {
   it('repassa o jsonb da RPC sem reinterpretar a regra no client', async () => {
     mockRpc.mockResolvedValue({

@@ -40,6 +40,7 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import type { ShiftPayment, PaymentSource } from '../types';
+import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Tipos de parâmetros e resultado
@@ -161,21 +162,9 @@ export interface ShiftPaymentReceipt {
 
 /** Obtém o company_id da sessão autenticada (empresa). Espelha shiftInviteService. */
 async function getAuthCompanyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sessão expirada. Faça login novamente.');
-
-  const { data: company, error } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('owner_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!company) throw new Error('Perfil de empresa não encontrado.');
-
-  return company.id as string;
+    // Delega ao seam: `owner_id` sozinho e a ancora ANTIGA -- nao cobre empresa cujo id e o do
+  // proprio usuario, nem gerente de unidade (company_members). Ver companyScopeService.
+  return resolverEmpresaDaSessao();
 }
 
 /** Normaliza paidAt (string | Date | undefined) para ISO string. Default: agora. */

@@ -49,6 +49,13 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('TeamListModal — criação', () => {
   it('salvar com nome + membros marcados chama createList(name, workerIds) e fecha', async () => {
     mockCreateList.mockResolvedValue({ list: { id: 'list-1', name: 'Cozinha' } })

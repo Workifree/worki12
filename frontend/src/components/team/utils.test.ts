@@ -5,6 +5,7 @@ import { formatHistoryDate } from './utils'
 // "1 turno com você · último em Invalid Date". A funcao documentava aceitar "date-only"
 // (YYYY-MM-DD), mas os DOIS chamadores reais (MemberCard e InviteToShiftModal) passam
 // `jobs.start_date`, que e timestamptz. Nao havia nenhum teste deste arquivo.
+
 describe('formatHistoryDate', () => {
   it('formata date-only sem shift de fuso (o caso que a assinatura original previa)', () => {
     expect(formatHistoryDate('2026-08-23')).toBe('23/08/2026')

@@ -96,6 +96,13 @@ const SCHEDULED_PAYMENT_ROW: ShiftPayment = {
 // Tipos
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('Tipos ShiftPayment', () => {
   it('ShiftPayment aceita todos os campos da migration', () => {
     expect(SHIFT_PAYMENT_ROW.status).toBe('recorded')
@@ -275,8 +282,10 @@ describe('PaymentRecordService.recordExternalPayment', () => {
     expect(result.success).toBe(true)
     expect(result.payment).toEqual(SHIFT_PAYMENT_ROW)
     expect(mockFrom).toHaveBeenCalledWith('shift_payments')
-    expect(mockFrom).toHaveBeenCalledWith('companies')
     expect(mockFrom).toHaveBeenCalledWith('applications')
+    // `companies` saiu: a empresa da sessao vem do seam (getAuthenticatedCompanyId), unico
+    // ponto que conhece dono direto, dono via owner_id E gerente de unidade.
+    expect(mockFrom).not.toHaveBeenCalledWith('companies')
   })
 
   it('trata violação do UNIQUE parcial (23505) como alreadyRecorded, sem crashar', async () => {

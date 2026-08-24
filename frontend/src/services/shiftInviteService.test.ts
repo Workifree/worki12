@@ -64,6 +64,13 @@ beforeEach(() => {
 // normalizePhoneForWhatsApp
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('normalizePhoneForWhatsApp', () => {
   it('prefixa 55 num celular mascarado sem DDI (11 dígitos)', () => {
     expect(normalizePhoneForWhatsApp('(11) 99999-9999')).toBe('5511999999999');

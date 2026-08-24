@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
+import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
 
 interface ConversationItem {
@@ -58,14 +59,11 @@ export default function CompanyMessages() {
         if (!user) return navigate('/login');
         setCurrentUser(user.id);
 
-        // 1. Get ALL companies owned by this user
-        const { data: companies } = await supabase
-            .from('companies')
-            .select('id')
-            .eq('owner_id', user.id);
-
-        const companyIds = new Set((companies || []).map(c => c.id));
-        companyIds.add(user.id); // Add user's ID to companyIds for direct access check
+        // Todas as unidades que a sessao OPERA — inclui gerente (company_members), que a
+        // consulta por `owner_id` deixava de fora: ele nao via conversa nenhuma.
+        const operadas = await getMyCompanies();
+        const companyIds = new Set(operadas.map(c => c.company_id));
+        companyIds.add(user.id); // dono cujo company_id E o proprio uid
 
         // Fetch conversations using EXPLICIT Foreign Key names to avoid ambiguity
         const { data: convData, error } = await supabase

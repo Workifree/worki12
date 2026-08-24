@@ -118,6 +118,13 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
 })
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('CompanyTeam - Histórico com a empresa', () => {
   it('mostra quantos turnos concluídos e a data do último (batch, 1 query pro elenco todo)', async () => {
     teamMembersFixture = [member('worker-1')]

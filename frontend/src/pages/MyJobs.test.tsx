@@ -158,6 +158,13 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
   // REGRESSAO (achado navegando o produto, 23/08/2026): o titulo era o literal "Confirma seu
   // turno de amanhã?", mas `request_attendance_confirmation` aceita turno de ate 7 dias. Pedi

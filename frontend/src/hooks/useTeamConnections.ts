@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import { useToast } from '../contexts/ToastContext';
 import type { TeamConnection, TeamMember, MyStore, TeamConnectionSource } from '../types';
+import { getAuthenticatedCompanyId } from '../services/companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Hook para EMPRESA — gerenciar "minha equipe"
@@ -53,12 +54,11 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     }
 
     setLoading(true);
-    const { data: company } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('owner_id', user.id)
-      .maybeSingle();
-    if (company?.id) setCompanyId(company.id as string);
+    // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
+    // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
+    // seam) aparecesse — duas metades da mesma tela discordando sobre qual empresa e esta.
+    const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
+    if (empresaOperada) setCompanyId(empresaOperada);
 
     const [members, all] = await Promise.all([
       TeamConnectionService.listTeamMembers(),
@@ -82,12 +82,8 @@ export function useCompanyTeam(): UseCompanyTeamResult {
       }
 
       setLoading(true);
-      const { data: company } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('owner_id', user.id)
-        .maybeSingle();
-      if (active && company?.id) setCompanyId(company.id as string);
+      const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
+      if (active && empresaOperada) setCompanyId(empresaOperada);
 
       const [members, all] = await Promise.all([
         TeamConnectionService.listTeamMembers(),

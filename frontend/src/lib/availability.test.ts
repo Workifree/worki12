@@ -6,6 +6,7 @@ import type { AvailabilityDays } from '../types'
 // F7 — DDL aprovado §3.2 exige cobrir os dois formatos reais de `work_start_time`
 // ('18:00' e '20:00:00') além dos casos de A8 do spec original. LM-5: uma regex só de HH:MM
 // devolveria null para metade dos turnos reais, silenciosamente.
+
 describe('periodForTime — bucketiza HH:MM e HH:MM:SS em manha/tarde/noite', () => {
   it('aceita HH:MM:SS (formato de InviteToShiftModal.test.tsx)', () => {
     expect(periodForTime('20:00:00')).toBe('noite')

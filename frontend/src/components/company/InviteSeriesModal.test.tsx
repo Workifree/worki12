@@ -73,6 +73,13 @@ beforeEach(() => {
   mockGetConfig.mockResolvedValue({ enabled: true, threshold: 2 })
 })
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('InviteSeriesModal — fiação da guarda de vínculo (F5)', () => {
   it('faz o split correto da chave composta workerId|weekStart e soma à carga da série (selo por freela)', async () => {
     const members = [member('w1', 'Karina'), member('w2', 'Leandro')]

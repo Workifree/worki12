@@ -168,6 +168,14 @@ function jobStartDate(dateOnly: string): string {
 // D6 — os 4 estados nunca colapsados. A9/A19.
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+import { getMyCompanies } from './companyScopeService'
+
 describe('D6 — estado sem-fonte quando não há NENHUMA linha na fonte do período (A9)', () => {
   it('empresa nova, zero jobs/calls/payments: todos os blocos ficam sem-fonte', () => {
     const result = aggregate(emptyRaw(), PERIOD_AUGUST, DEPS);
@@ -1141,9 +1149,10 @@ beforeEach(() => {
   resetSupabaseMock();
 });
 
-describe('resolveCompanyScope — ancoragem dupla (A15, dívida #17)', () => {
+describe('resolveCompanyScope — unidades OPERADAS (A15, dívida #17)', () => {
   it('empresa com companies.id = auth.uid() (sem outra empresa por owner_id): escopo é só o próprio id', async () => {
-    setQueue('companies', [{ data: [], error: null }]);
+    // A sessao opera exatamente a empresa cujo id E o proprio uid.
+    vi.mocked(getMyCompanies).mockResolvedValueOnce([{ company_id: 'owner-1' }] as never);
 
     const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
 
@@ -1152,7 +1161,9 @@ describe('resolveCompanyScope — ancoragem dupla (A15, dívida #17)', () => {
   });
 
   it('empresa com owner_id = auth.uid() e id diferente: escopo inclui os dois ids, e jobs é lido com os dois', async () => {
-    setQueue('companies', [{ data: [{ id: 'company-owned-2' }], error: null }]);
+    vi.mocked(getMyCompanies).mockResolvedValueOnce(
+      [{ company_id: 'owner-1' }, { company_id: 'company-owned-2' }] as never,
+    );
     setQueue('jobs', [{ data: [makeJobRow('job-1', '2026-08-10')], error: null }]);
 
     const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
@@ -1174,8 +1185,8 @@ describe('resolveCompanyScope — ancoragem dupla (A15, dívida #17)', () => {
     expect(callLogsFor('companies').length).toBe(0);
   });
 
-  it('erro ao ler companies: hasError sobe, e o escopo cai para [userId] em vez de travar', async () => {
-    setQueue('companies', [{ data: null, error: { message: 'boom' } }]);
+  it('erro ao resolver as unidades: hasError sobe, e o escopo cai para [userId] em vez de travar', async () => {
+    vi.mocked(getMyCompanies).mockRejectedValueOnce(new Error('boom'));
 
     const result = await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
 
@@ -1185,7 +1196,7 @@ describe('resolveCompanyScope — ancoragem dupla (A15, dívida #17)', () => {
 });
 
 describe('collectRawData — strings de select coluna a coluna (dívida #17)', () => {
-  it('as 9 fontes selecionam exatamente as colunas esperadas, nenhuma a mais nem a menos', async () => {
+  it('as 8 fontes selecionam exatamente as colunas esperadas, nenhuma a mais nem a menos', async () => {
     setQueue('companies', [{ data: [], error: null }]);
     setQueue('jobs', [{ data: [makeJobRow('job-1', '2026-08-10')], error: null }]);
     setQueue('applications', [
@@ -1228,7 +1239,10 @@ describe('collectRawData — strings de select coluna a coluna (dívida #17)', (
 
     await OperationAnalyticsService.getOperationAnalytics(PERIOD_COLLECT);
 
-    expect(selectArgOf('companies')).toBe('id');
+    // `companies` saiu da lista: o escopo de unidades passou a vir de getMyCompanies()
+    // (RPC get_my_companies), que e o unico ponto que sabe de gerente. Nao ha mais
+    // SELECT direto nessa tabela aqui.
+    expect(selectArgOf('companies')).toBe('');
     expect(selectArgOf('jobs')).toBe(
       'id, company_id, status, start_date, created_at, work_start_time, work_end_time, estimated_hours, budget',
     );

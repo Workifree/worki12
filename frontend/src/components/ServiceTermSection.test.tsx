@@ -87,6 +87,13 @@ async function openAndAgreeToTerm(): Promise<void> {
   fireEvent.click(screen.getByRole('checkbox', { name: /Li e concordo com os termos acima/i }));
 }
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('ServiceTermSection', () => {
   it('sem termo ({ term: null, failed: false }): confirmação de recebimento continua funcionando normalmente', async () => {
     mockGetByShiftPayment.mockResolvedValue({ term: null, failed: false });

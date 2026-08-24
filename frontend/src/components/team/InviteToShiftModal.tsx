@@ -7,6 +7,7 @@ import { logError } from '../../lib/logger';
 import { todayLocalDate } from '../../lib/dateUtils';
 import type { TeamMember } from '../../types';
 import { formatHistoryDate } from './utils';
+import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
@@ -50,13 +51,14 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { if (active) setLoadingJobs(false); return; }
 
-        const { data: companyRow } = await supabase
-          .from('companies')
-          .select('id')
-          .eq('owner_id', user.id)
-          .maybeSingle();
-        const companyId = companyRow?.id as string | undefined;
-        if (!companyId) { if (active) { setJobs([]); setLoadingJobs(false); } return; }
+        // `owner_id` sozinho e a ancora antiga: nao cobre gerente de unidade.
+        let companyId: string;
+        try {
+          companyId = await getAuthenticatedCompanyId();
+        } catch {
+          if (active) { setJobs([]); setLoadingJobs(false); }
+          return;
+        }
 
         // Turnos abertos/pausados desta empresa — candidatos a convite.
         const { data: jobsData, error: jobsErr } = await supabase

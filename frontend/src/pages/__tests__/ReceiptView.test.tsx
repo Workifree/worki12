@@ -98,6 +98,13 @@ beforeEach(() => {
 // cabeçalho, para que um turno com N recibos nunca seja ambíguo.
 // ---------------------------------------------------------------------------
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () => {
   it('repassa o workerId da querystring para getReceipt(jobId, workerId)', async () => {
     vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())

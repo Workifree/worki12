@@ -82,6 +82,13 @@ beforeEach(() => {
   } as any)
 })
 
+// Escopo de unidade (F13): os servicos passaram a resolver a empresa OPERADA pelo seam, em vez
+// de `.eq('owner_id', user.id)`. O duble evita bater na RPC get_my_companies nos testes.
+vi.mock('../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+}))
+
 describe('MeusRecebimentos', () => {
   it('redireciona para /login quando não há sessão', async () => {
     vi.mocked(supabase.auth.getUser).mockResolvedValue({
