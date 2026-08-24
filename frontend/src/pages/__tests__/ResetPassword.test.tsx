@@ -44,7 +44,7 @@ describe('ResetPassword', () => {
     const submitBtn = screen.getByRole('button', { name: /redefinir senha/i })
     await user.click(submitBtn)
 
-    expect(screen.getByText('As senhas nao coincidem.')).toBeInTheDocument()
+    expect(screen.getByText('As senhas não coincidem.')).toBeInTheDocument()
   })
 
   it('exibe indicador de forca da senha', async () => {

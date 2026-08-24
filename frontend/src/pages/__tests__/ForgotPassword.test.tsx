@@ -40,7 +40,7 @@ describe('ForgotPassword', () => {
     const form = emailInput.closest('form')!
     fireEvent.submit(form)
 
-    expect(screen.getByText('Informe um email valido.')).toBeInTheDocument()
+    expect(screen.getByText('Informe um e-mail válido.')).toBeInTheDocument()
   })
 
   it('desabilita botao quando email esta vazio', () => {

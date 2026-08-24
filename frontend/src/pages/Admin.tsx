@@ -146,7 +146,7 @@ export default function Admin() {
             return;
         }
         if (!ADMIN_EMAILS.includes(user.email || '')) {
-            setLoginError('Acesso negado. Este email nao tem permissao de administrador.');
+            setLoginError('Acesso negado. Este e-mail não tem permissão de administrador.');
             setNeedsLogin(true);
             setLoading(false);
             return;
@@ -189,13 +189,13 @@ export default function Admin() {
         setLoginLoading(true);
 
         if (ADMIN_EMAILS.length === 0) {
-            setLoginError('Nenhum email de administrador configurado.');
+            setLoginError('Nenhum e-mail de administrador configurado.');
             setLoginLoading(false);
             return;
         }
 
         if (!ADMIN_EMAILS.includes(email)) {
-            setLoginError('Este email nao tem permissao de administrador.');
+            setLoginError('Este e-mail não tem permissão de administrador.');
             setLoginLoading(false);
             const newAttempts = loginAttempts + 1;
             setLoginAttempts(newAttempts);
