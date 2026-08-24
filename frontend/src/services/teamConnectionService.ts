@@ -176,11 +176,26 @@ export const TeamConnectionService = {
    * A UI monta a URL: `https://app.worki.com/convite/{token}`.
    * O resolver do link chama `resolveInviteToken(token)` para descobrir a empresa.
    */
-  generateInviteToken(companyId: string): ConnectionInviteToken {
-    // Token estável: derivado apenas do company_id (sem timestamp).
-    const token = btoa(companyId).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    const url = `${window.location.origin}/convite/${token}`;
-    return { token, url };
+  async generateInviteToken(companyId: string): Promise<ConnectionInviteToken | null> {
+    // Era `btoa(companyId)` -- ou seja, o "token" era o id PUBLICO da empresa em base64, e
+    // `companies` tem SELECT USING (true). Qualquer freela listava as empresas, derivava o token
+    // de qualquer uma e entrava sozinho no elenco dela como 'accepted' (reproduzido em produção,
+    // 24/08/2026). O segredo agora vive em `company_invite_links`, com RLS: lê quem OPERA a
+    // empresa e quem tem vínculo ACEITO com ela (o link transitivo desta mesma tela).
+    const { data, error } = await supabase
+      .from('company_invite_links')
+      .select('token')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (error) {
+      logError('teamConnection.generateInviteToken', error);
+      return null;
+    }
+    const token = data?.token as string | undefined;
+    if (!token) return null;
+
+    return { token, url: `${window.location.origin}/convite/${token}` };
   },
 
   /**

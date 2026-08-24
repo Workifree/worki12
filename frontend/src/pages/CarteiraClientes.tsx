@@ -30,7 +30,12 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
     e.stopPropagation();
     // `connection.company_id` é a FK garantida (não-nula); `company.id` no
     // embed é opcional no tipo (CompanyProfile.id?), então preferimos a FK.
-    const { url } = TeamConnectionService.generateInviteToken(connection.company_id);
+    const gerado = await TeamConnectionService.generateInviteToken(connection.company_id);
+    if (!gerado) {
+      addToast('Não foi possível obter o link desta empresa agora.', 'error');
+      return;
+    }
+    const { url } = gerado;
     try {
       await navigator.clipboard.writeText(url);
       setLinkCopied(true);

@@ -291,7 +291,12 @@ export default function CompanyProfile() {
 
     const handleCopyMyLink = useCallback(async () => {
         if (!companyId) return;
-        const { url } = TeamConnectionService.generateInviteToken(companyId);
+        const gerado = await TeamConnectionService.generateInviteToken(companyId);
+        if (!gerado) {
+            addToast('Não foi possível obter o link do seu elenco agora.', 'error');
+            return;
+        }
+        const { url } = gerado;
         try {
             await navigator.clipboard.writeText(url);
             setLinkCopied(true);
