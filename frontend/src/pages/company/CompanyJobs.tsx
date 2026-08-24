@@ -15,11 +15,11 @@ import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { rotuloDeUmDia } from '../../lib/weekdayLabels';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1). Selo discreto na agenda
 // ("Série · toda quinta") deriva o dia da própria `series_occurrence_date` da ocorrência — uma
 // série pode marcar mais de um dia da semana, mas cada linha da agenda é sempre UM dia fixo.
-const WEEKDAY_FULL_LABELS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 // ---------------------------------------------------------------------------
 // Modelo push (pivô "Meu Elenco"): a vaga não recebe candidatos/visitas — a
@@ -117,8 +117,7 @@ function formatTimeRange(job: Job): string | null {
 function seriesBadgeLabel(job: Job): string {
     if (job.seriesRecurrenceType === 'daily') return 'bloco de dias';
     if (job.series_occurrence_date) {
-        const weekday = WEEKDAY_FULL_LABELS[parseDateOnly(job.series_occurrence_date).getDay()];
-        return `toda ${weekday}`;
+        return rotuloDeUmDia(parseDateOnly(job.series_occurrence_date).getDay());
     }
     return 'recorrente';
 }

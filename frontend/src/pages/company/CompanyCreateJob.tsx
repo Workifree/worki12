@@ -13,10 +13,10 @@ import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const WEEKDAY_FULL_LABELS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -185,9 +185,7 @@ export default function CompanyCreateJob() {
         if (recurrenceType === 'daily') {
             return `todos os dias, de ${startLabel} a ${endLabel}`;
         }
-        const days = [...weekdays].sort((a, b) => a - b).map(d => WEEKDAY_FULL_LABELS[d]);
-        const daysLabel = days.length <= 1 ? (days[0] ?? '') : `${days.slice(0, -1).join(', ')} e ${days[days.length - 1]}`;
-        return `toda ${daysLabel}, de ${startLabel} a ${endLabel}`;
+        return `${rotuloDeDias([...weekdays])}, de ${startLabel} a ${endLabel}`;
     };
 
     // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
