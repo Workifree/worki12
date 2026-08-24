@@ -258,3 +258,58 @@ reverter a linha bloqueada, e a indicação passa a ser recusada com `not_in_ros
   reler com espera maior e inspecionar `#root`.
 - **Meu próprio inventário pode ser o defeito**: a assertiva na migration de acentos apontou o
   que meu extrator de literais não via. Ferramenta de varredura também precisa de verificação.
+
+---
+
+# Quarta passagem — o papel de gerente, ponta a ponta (24/08/2026)
+
+Entrar como gerente de unidade expôs uma família inteira de defeitos que nenhuma outra sessão
+podia ver: **quatro camadas independentes decidiam "quem é a empresa?" reescrevendo a pergunta na
+mão**, em vez de perguntar ao seam (`is_company_owner` → `is_job_owner` →
+`getAuthenticatedCompanyId`).
+
+### 26. 🔴 O gerente enxergava tudo e não conseguia operar nada
+Policy de UPDATE em `applications`: `job_id IN (SELECT id FROM jobs WHERE company_id = auth.uid())`.
+Sem erro — a RLS filtra e devolve zero linhas. Confirmar presença é **o** gesto diário do produto
+(a tela se chama "Presença e Pagamento"). Sem esse UPDATE ele também não confirma saída, não
+conclui turno e não dispensa. Um botão que aceita o clique e não faz nada.
+
+### 27. 🔴 Corrigir a policy só trocou silêncio por ruído
+`validate_application_update` tinha a mesma âncora numa linha. Bom que a segunda camada exista —
+é defesa em profundidade real; o problema era as duas repetirem a pergunta.
+
+### 28. 🔴 Dez resolvedores locais no frontend, três com o nome do seam
+`.eq('owner_id', user.id)` em paymentRecordService, shiftInviteService, shiftCallService,
+jobSeriesService, certificationService, teamListService, operationAnalyticsService,
+useTeamConnections, InviteToShiftModal e CompanyMessages. Três se chamavam
+`getAuthenticatedCompanyId`/`getAuthCompanyId` — **o mesmo nome do seam**, que foi o que me fez
+concluir errado, na véspera, que já usavam a costura. `owner_id` é a mais fraca das três âncoras:
+nem cobre a empresa cujo id é o do usuário (duas cópias remendavam com `?? user.id`).
+
+Isso explica a meia-verdade do dia anterior: em `/company/team` a lista aparecia (vem do serviço
+que já usava o seam) mas o `companyId` local ficava nulo, e o histórico sumia do cartão — duas
+metades da mesma tela discordando sobre qual empresa é aquela.
+
+### 29. 🔴 Agendava o pagamento e não conseguia efetivar
+`enforce_shift_payment_immutability` exigia `owner_id = auth.uid()` — a mais estreita de todas.
+Só apareceu interceptando a rede: `PATCH /shift_payments → 400 P0001`.
+
+### 30. 🟠 Convite de gerente levava a criar conta de freela
+(ver terceira passagem, item 20 — mesma família: o convite existia, o caminho não.)
+
+## ✅ Verificado depois das correções
+Gerente: dashboard com a unidade certa ("Bem-vindo de volta, Bar do QA", 11 turnos), agenda real,
+**cria turno** que nasce pertencendo à unidade (o INSERT que a RLS recusaria antes), confirma
+chegada e saída, agenda pagamento, efetiva (`scheduled → recorded` com `scheduled_for`
+preservado), e acessa o chat. E **continua barrado** onde deve: não altera check-in/check-out do
+freela, não confirma recebimento pelo freela, e `/company/organization` segue bloqueado (R16).
+Ele entra pela porta da empresa, com as restrições da empresa.
+
+## Nota de método (quarta passagem)
+- **Achar uma camada por vez é o erro.** Só na terceira eu varri o schema inteiro pelas duas
+  formas da âncora antiga, em funções **e** policies, e classifiquei as 20 restantes uma a uma.
+  Deveria ter sido o primeiro passo, não o terceiro.
+- **Nome igual não é implementação igual.** Três serviços tinham função local com o mesmo nome do
+  seam. Grep por nome disse "já usa"; a verdade estava no corpo.
+- **A asserção pagou o próprio custo.** A migration do pagamento falhou na própria asserção
+  (casei o trecho por literal, e a fonte usa CRLF). Sem ela, teria "aplicado" sem corrigir nada.
