@@ -428,3 +428,62 @@ reais. **Nenhuma tela com rolagem horizontal no celular.**
   caminho — e foi lá que o CTA quebrado apareceu.
 - **"Succeeded" não é "funcionou".** Os crons apareciam como sucesso todo dia; só olhando se
   *produziram linha* dá para saber se a promessa é real.
+
+---
+
+# Sétima passagem — o laço do dinheiro, ponta a ponta (25/08/2026)
+
+Motivo: as mudanças estruturais de 25/08 (drop de 11 tabelas, remoção de uma FK e de uma coluna da
+`Conversation` **viva**, troca da policy de INSERT em `notifications`, remoção de 4 edge functions)
+foram verificadas no catálogo e no PostgREST, mas **não** com alguém logado usando o produto — as
+contas de QA tinham sido apagadas na véspera. Criei um par novo, percorri o laço inteiro e apaguei
+no fim.
+
+## ✅ Verificado funcionando (segunda metade do laço, que a sexta passagem não cobriu)
+
+Check-in do freela → check-out → empresa confirma chegada → confirma saída → **REGISTRAR PAGAMENTO**
+(modal com a chave PIX do freela e a copy declaratória) → notificação "Pagamento registrado —
+confirme" → `/recibo/:jobId` com chegada, saída, horas, valor, forma e nota → **termo F6** renderizado
+com `CNPJ` corretamente rotulado para a empresa → aceite eletrônico → avaliação 5.0 com a contagem.
+
+Conferido no banco ao fim: `shift_payments.status='recorded'`, `worker_confirmed_at` preenchido,
+`service_terms.accepted_at/accepted_ip/accepted_user_agent` preenchidos com o texto congelado,
+`applications.status='completed'`, agregados do freela recomputados (**LVL 1 → LVL 2**, xp 175) e
+**`escrow_transactions` inalterado** — Article 8 intacto, nenhum saldo se moveu.
+
+Também revalidada a primeira metade depois das mudanças: convite de elenco nos dois sentidos, chamado
+de turno com notificação, `first_claim_at` ("Primeira vaga preenchida em 2 min"), e o **chat** —
+criar conversa, enviar e ler dos dois lados, com horário em BRT correto.
+
+## 🐛 Achados (corrigidos no mesmo dia)
+
+### 40. 🔴 Erro em produção não ia para lugar nenhum
+`Sentry.init` roda dentro de `if (SENTRY_DSN)` e `VITE_SENTRY_DSN` não existe no build da Vercel —
+conferido no bundle servido (nenhum DSN) e no navegador (`window.__SENTRY__` só com `version`, sem
+cliente). Como o ramo PROD de `logError` **não** chamava `console.error`, as 330 chamadas do app
+descartavam todo erro em silêncio. Mitigado: o logger volta a usar o console quando detecta que o
+Sentry não subiu. A correção real é o DSN, que depende da conta do dono.
+
+### 41. 🟡 Dois textos sem acento
+Página 404 inteira ("Pagina nao encontrada") e a dica do onboarding da empresa ("volume de
+contratacao") — justamente a frase que diz ao usuário o que falta para habilitar FINALIZAR.
+
+## Nota de método (sétima passagem) — três falsos positivos meus
+
+Nenhum dos três era defeito do produto. Todos vieram do **instrumento**, e dois quase viraram bug
+reportado:
+
+1. **"Página em branco"** no criar-turno: `document.visibilityState === "hidden"`. As duas sessões
+   rodam em janelas separadas e o navegador não calcula layout para a janela em segundo plano —
+   `innerText` volta vazio mesmo com o DOM inteiro montado. Corrigido com `Page.bringToFront` antes
+   de cada leitura.
+2. **"Chat não envia"**: cheguei a confirmar no banco que a mensagem não entrava. O `Input.dispatchMouseEvent`
+   do CDP não chega ao React nessas janelas; com `.click()` via JS enviou na hora. O mesmo vale para
+   o checkbox do termo, que só marcou com o setter nativo + evento `change`.
+3. **"Turno duplicado"**: criei 4 turnos clicando programaticamente um botão que, para um humano,
+   está a 1512px de altura atrás de dois overlays — `elementFromPoint` devolveu `nada` e
+   `ALCANCAVEL=false`.
+
+Regra que passa a valer para qualquer passagem futura: **suspeita de bug em interação sintética só
+vira achado depois de conferir no banco ou no DOM**. E `.click()`, clique real do CDP e setter nativo
+são três caminhos diferentes — quando um falha, testar os outros antes de concluir qualquer coisa.
