@@ -604,3 +604,37 @@ trilho de pagamento vigente, e o frontend invoca seis delas — todas atrás de 
 gatilho do ADR-20260630). Apagar o fonte encareceria a reabertura. Mas fica registrado que
 "pausado" aqui significa **nunca deployado**, não "deployado e ocioso" — a diferença aparece no dia
 em que alguém tentar reabrir o modo C e descobrir que não há o que ligar.
+
+---
+
+## 22. ✅ RESOLVIDO — `send-notification` aceitava POST anônimo da internet
+
+**Origem:** 25/08/2026, ao verificar por que a função respondia `500` a um GET enquanto as outras
+respondiam `401`.
+
+A fonte no repositório checa `Authorization` **antes de tudo** e devolve 401 sem ele. A **versão
+deployada não fazia isso**: um `POST` sem cabeçalho nenhum passava direto pela auth e chegava a
+consultar `auth.admin.getUserById` com `service_role`, respondendo `HTTP 200`. O `functions list`
+explica: versão 8, `updated_at` **idêntico** ao `created_at` — nunca foi redeployada desde março.
+A correção existia no repo há meses e nunca chegou a produção.
+
+**O que isso dava a um anônimo:** oráculo de existência de usuário (`user_not_found` vs. resto) e,
+com um `userId` real e um `type` válido, **notificação in-app forjada** para essa pessoa mais
+**e-mail com remetente `noreply@worki.com.br`**. Primitiva de phishing em nome do Worki, aberta na
+internet. Não exercitei contra pessoa real — o `200` sem auth já prova o alcance.
+
+**Segundo achado, na mesma leitura:** o único chamador (`shiftCallService`) mandava
+`type: 'shift_invite'`, que **não existe no `switch`**. Caía no `default`, respondia
+`{success:false, reason:'unknown_type'}` com HTTP 200 — e como 200 é "fulfilled" para
+`Promise.allSettled`, o contador de falhas ficava zerado. **O e-mail de convite de turno nunca
+funcionou, e nunca avisou que não funcionava.**
+
+**Ação:** função removida de produção (responde 404) e a chamada morta removida do
+`shiftCallService`. Zero regressão: o caminho já era no-op. Produção ficou com **três** funções —
+`admin-data`, `delete-account`, `expire-invites`.
+
+**Consequência a declarar:** **não há e-mail transacional no produto hoje.** O aviso ao freela
+depende inteiramente da notificação in-app + Realtime (que funcionam, e cujo caminho do gerente foi
+corrigido em `20260825000100`). Se e-mail virar requisito do piloto, é trabalho novo: template
+`shift_invite`, checagem de auth na função e `RESEND_API_KEY` configurada. Fonte preservada em
+`supabase/functions/send-notification/` — nada foi perdido.

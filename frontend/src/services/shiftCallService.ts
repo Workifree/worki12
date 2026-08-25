@@ -22,7 +22,6 @@
  */
 
 import { supabase } from '../lib/supabase';
-import { invokeFunction } from './api';
 import { logError } from '../lib/logger';
 import type {
   PendingInvite,
@@ -231,21 +230,19 @@ export const ShiftCallService = {
       );
       if (notifErr) logError('shiftCall.createShiftCall.notif', notifErr);
 
-      // E-mail (best-effort, em paralelo). Não bloqueia e não derruba o disparo.
-      await Promise.allSettled(
-        uniqueWorkerIds.map((workerId) =>
-          invokeFunction('send-notification', {
-            userId: workerId,
-            type: 'shift_invite',
-            data: { jobId, callId: call.id, expiresAt },
-          }),
-        ),
-      ).then((results) => {
-        const failed = results.filter((r) => r.status === 'rejected').length;
-        if (failed > 0) {
-          logError('shiftCall.createShiftCall.email', new Error(`${failed} e-mail(s) não enviados`));
-        }
-      });
+      // NAO ha e-mail de convite hoje. O bloco que existia aqui chamava a edge function
+      // `send-notification` com `type: 'shift_invite'` -- um tipo que o `switch` da funcao nunca
+      // tratou: caia no `default`, respondia `{success:false, reason:'unknown_type'}` com HTTP
+      // 200, e como 200 e "fulfilled" para o Promise.allSettled, o contador de falhas ficava em
+      // zero. Ou seja: nunca enviou e-mail nenhum, e nunca avisou que nao enviava.
+      //
+      // A funcao foi REMOVIDA de producao em 25/08/2026 -- estava deployada sem checagem de auth
+      // (respondia 200 a POST anonimo) e nao tinha nenhum chamador que funcionasse. Manter a
+      // chamada aqui so trocaria um no-op silencioso por um 404 barulhento no Sentry.
+      //
+      // O aviso ao freela continua funcionando pelos dois caminhos que de fato funcionam: a
+      // notificacao in-app inserida logo acima e o Realtime. Se e-mail virar requisito do piloto,
+      // e trabalho novo: template `shift_invite`, checagem de auth na funcao e RESEND_API_KEY.
 
       return { call: call as ShiftCall, invited: targets.length };
     } catch (err) {

@@ -799,7 +799,12 @@ Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 - **Nova tabela:** migration com RLS + (se mexe em saldo) RPC atômica com `GRANT EXECUTE`; atualizar
   `types/index.ts` à mão.
 - **Nova operação privilegiada:** nova Edge Function (CORS preflight + validação de auth + Asaas se aplicável).
-- **Nova notificação:** inserir em `notifications` (dispara Realtime) ou via `send-notification`.
+- **Nova notificação:** inserir em `notifications` (dispara Realtime) — se o autor for a
+  contraparte e não o próprio destinatário, preferir **trigger SECURITY DEFINER**, porque a policy
+  de INSERT exige vínculo aceito e um INSERT do client é negado em silêncio exatamente para quem
+  tem atrito. A edge function `send-notification` **não existe mais** (removida de produção em
+  25/08/2026: estava sem checagem de auth e sem nenhum chamador que funcionasse) — não a cite como
+  caminho. **Não há e-mail transacional hoje.**
 
 ## Pontos sensíveis (exigem ADR antes de mudar)
 
