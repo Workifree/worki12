@@ -560,3 +560,47 @@ qualquer teste emulado adicional.
 nenhum caminho do frontend. Os fontes estão preservados em
 `supabase/functions/_orfaos-pre-pivo/`, com os comandos de remoção e a justificativa no
 `LEIA-ME.md` de lá. Não fazem mal ligadas; são superfície pública sem consumidor.
+
+---
+
+## 21. Tabelas PascalCase do backend pré-pivô — e uma delas guarda PII de gente real
+
+**Origem:** varredura de código morto (25/08/2026), ao verificar se as três edge functions órfãs
+podiam ser removidas.
+
+Sobraram **13 tabelas PascalCase** do backend anterior ao pivô. Elas se dividem em três grupos, e
+a diferença importa muito:
+
+**(a) Vivas — NÃO TOCAR.** `Conversation` (13 linhas) e `Message` (6 linhas) **são o chat do
+produto de hoje**. O frontend as usa em 18 pontos. O nome PascalCase engana: parecem legado e não
+são. Foi o que quase me fez classificá-las como mortas.
+
+**(b) Vazias, sem consumidor.** `Job`, `JobApplication`, `ClientProfile`, `ClientReview`,
+`FreelancerReview`, `Skill`, `WorkExperience`, `_FreelancerProfileToSkill`, `_JobToSkill` — todas
+com 0 linhas e nenhuma referência no frontend. Candidatas a `DROP TABLE` na mesma limpeza de
+esquema das colunas mortas (item 19). Sem urgência agora que as funções que as liam sumiram.
+
+**(c) Com dado pessoal e sem consumidor — este é o item de verdade.** `User` (5 linhas) e
+`FreelancerProfile` (5 linhas). `User` tem `email`, `firstname`, `lastname`, `avatarurl` — e
+**4 dos 5 e-mails correspondem a contas que existem no `auth.users` de hoje**, isto é, pessoas
+reais que usam a plataforma, com dado pessoal duplicado numa tabela que nada lê.
+
+A coluna `password` **não** é credencial: as 5 linhas têm o literal `managed_by_supabase_auth`.
+Conferido — não é hash, é placeholder.
+
+**Gate:** minimização de dado (LGPD). Não é vazamento; é retenção sem finalidade, que é a categoria
+mais fácil de resolver e a mais difícil de justificar se alguém perguntar. `DROP TABLE public."User"`
+e `public."FreelancerProfile"` resolvem — decisão de owner, junto com o grupo (b).
+
+### Achado colateral: as 9 edge functions `asaas-*` do repo NUNCA estiveram em produção
+
+Produção tem 4 funções (`admin-data`, `send-notification`, `delete-account`, `expire-invites`).
+As nove `asaas-*` existem só no repositório. O `architecture.md` as descreve como se fossem o
+trilho de pagamento vigente, e o frontend invoca seis delas — todas atrás de caminho desligado
+(`POSTPAY_AUTHORIZE_ENABLED = false`) ou de rota que não existe mais (`/wallet`,
+`/company/financeiro`).
+
+**Não removi**: não é código morto, é código **dormente por decisão** (modos B/C, reabríveis por
+gatilho do ADR-20260630). Apagar o fonte encareceria a reabertura. Mas fica registrado que
+"pausado" aqui significa **nunca deployado**, não "deployado e ocioso" — a diferença aparece no dia
+em que alguém tentar reabrir o modo C e descobrir que não há o que ligar.

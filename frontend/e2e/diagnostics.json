@@ -1,8 +1,0 @@
-[
-  {
-    "timestamp": "2026-03-17T01:11:48.023Z",
-    "type": "console-error",
-    "url": "http://localhost:5173/login?type=work",
-    "message": "Failed to load resource: the server responded with a status of 400 ()"
-  }
-]

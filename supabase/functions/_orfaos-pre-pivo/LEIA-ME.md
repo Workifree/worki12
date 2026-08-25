@@ -1,6 +1,10 @@
-# Edge functions órfãs do backend anterior ao pivô
+# Edge functions órfãs do backend anterior ao pivô — REMOVIDAS EM 25/08/2026
 
-`jobs-api`, `applications-api` e `profiles-api` estão **ativas em produção** e não tinham código
+> **Status: removidas de produção em 25/08/2026.** As três respondem `404` desde então
+> (conferido por requisição). Este diretório é o que torna a remoção reversível: para trazer
+> qualquer uma de volta, `supabase functions deploy <slug>` a partir daqui.
+
+`jobs-api`, `applications-api` e `profiles-api` estavam **ativas em produção** e não tinham código
 neste repositório. Baixadas em 25/08/2026 (`supabase functions download`) e guardadas aqui para
 que a remoção delas seja reversível.
 
@@ -11,9 +15,17 @@ Sobra do backend pré-pivô. Auditadas linha a linha:
 - **Rodam com `SUPABASE_SERVICE_ROLE_KEY`** — ignoram RLS por completo.
 - **Exigem `Authorization`** e validam o token com `auth.getUser()`. Não estão abertas: uma
   requisição sem cabeçalho recebe `400 Missing Authorization header` (verificado).
-- **Operam somente sobre as tabelas PascalCase mortas** — `Job`, `JobApplication`, `User`,
-  `ClientProfile`. Nenhuma toca `jobs`, `applications`, `workers` ou `companies`, que é onde o
+- **Operam sobre as tabelas PascalCase do backend antigo** — `Job`, `JobApplication`, `User`,
+  `ClientProfile`, `Skill`, `WorkExperience`, `FreelancerProfile`, `ClientReview`,
+  `FreelancerReview`. Nenhuma toca `jobs`, `applications`, `workers` ou `companies`, que é onde o
   produto de hoje vive.
+- ⚠️ **CORREÇÃO (25/08) a uma afirmação anterior deste arquivo.** Escrevi aqui que elas tocavam
+  *somente* tabelas mortas. É falso: **`applications-api` escreve em `Conversation`** — que não é
+  morta, é a tabela do **chat vivo** (o frontend a usa em 10 pontos). Ou seja: era um endpoint com
+  `service_role`, sem consumidor, capaz de escrever na conversa entre empresa e freela. Isso deixa
+  de ser argumento para remover "por higiene" e passa a ser argumento para remover **por
+  segurança**. Conferido: `Job` e `JobApplication` estão com 0 linhas; `Conversation` tem 13 e
+  `Message` tem 6, ambas em uso.
 - **Nenhum arquivo do frontend as chama** (verificado por varredura em `frontend/src`).
 
 ## Por que ainda existem

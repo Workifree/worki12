@@ -15,7 +15,6 @@ worki12/
 │   ├── migrations/      # 52 migrations SQL (RLS, escrow, carteira)
 │   └── config.toml
 ├── docs/                # documentação
-├── e2e/                 # artefatos E2E
 ├── scripts/             # scripts utilitários
 ├── backend_legacy/      # ⛔ DEPRECADO — não tocar
 ├── frontend-angular-backup/ # ⛔ DEPRECADO — não tocar
@@ -105,5 +104,5 @@ frontend/src/
 frontend/vitest.config.ts → setupFiles: ['src/test/setup.ts']
 frontend/src/test/setup.ts → mocks globais
 co-located: <Componente>.test.tsx ou pasta __tests__/
-E2E: frontend/playwright.config.ts + e2e/ (raiz)
+E2E: NAO HA. A suite Playwright foi removida em 25/08/2026 (ver tech.md).
 ```

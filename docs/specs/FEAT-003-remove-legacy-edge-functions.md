@@ -1,5 +1,13 @@
 # FEAT-003: Remover Edge Functions Legadas (Prisma)
 
+> ✅ **CONCLUÍDA em 25/08/2026.** As três funções foram removidas de produção
+> (`supabase functions delete`) e respondem `404` — conferido por requisição. Produção ficou com
+> quatro funções: `admin-data`, `send-notification`, `delete-account`, `expire-invites`.
+> Os fontes estão preservados em `supabase/functions/_orfaos-pre-pivo/` para tornar a remoção
+> reversível. Achado durante a verificação, que o texto abaixo não previa: `applications-api`
+> escrevia em `Conversation`, a tabela do **chat vivo** — não era só resquício inerte.
+
+
 **Issue:** #118 | **Priority:** P1 | **Created:** 2026-03-16 | **Status:** Draft
 
 ---

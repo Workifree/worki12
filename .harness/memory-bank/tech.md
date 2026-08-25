@@ -173,7 +173,13 @@
 - **ESLint** 9 flat config (`frontend/eslint.config.js`): `@eslint/js`, `typescript-eslint`,
   `react-hooks`, `react-refresh`
 - **Unit:** Vitest 4.0.18 + Testing Library (jsdom) — setup em `frontend/src/test/setup.ts`, co-located em `__tests__/`. **⚠️ `TZ: 'America/Sao_Paulo'` em `vitest.config.ts` (obrigatório para testes de data — CI roda UTC)**
-- **E2E:** Playwright 1.58.2 — `frontend/playwright.config.ts`
+- **E2E:** **não existe mais.** A suíte Playwright (33 specs, 422 screenshots, 457 arquivos
+  rastreados) foi removida em 25/08/2026 junto com `playwright.config.ts`, os scripts
+  `test:e2e`/`test:e2e:ui` e a dependência `@playwright/test`. Não foi decisão de gosto: as specs
+  eram de 30/06, exercitavam `/wallet` e escrow (rotas e fluxo que o produto não tem mais), não
+  rodavam em CI nenhum, e 7 das 10 contas que usavam foram apagadas na limpeza de dados de QA de
+  24/08 — não passavam nem em teoria. Teste que não pode passar não é cobertura, é ruído que
+  ninguém lê. Recuperável por `git`; para retomar E2E, `npm i -D @playwright/test`.
 - **Logger:** `frontend/src/lib/logger.ts` (`logError`/`logWarn` + Sentry); validadores em `lib/validation.ts`
   (CPF/CNPJ/email/senha)
 
@@ -186,7 +192,6 @@
 | `lint` | `eslint .` |
 | `test` | `vitest run` |
 | `test:watch` | `vitest` |
-| `test:e2e` | `playwright test` |
 | `preview` | `vite preview` |
 
 ## Deploy
