@@ -563,7 +563,23 @@ nenhum caminho do frontend. Os fontes estão preservados em
 
 ---
 
-## 21. Tabelas PascalCase do backend pré-pivô — e uma delas guarda PII de gente real
+## 21. ✅ RESOLVIDO — schema Prisma pré-pivô removido (11 tabelas, incluindo PII sem finalidade)
+
+> **Fechado em 25/08/2026** pela migration `20260825000300`. As onze tabelas do backend anterior ao
+> pivô foram dropadas; sobraram apenas `Conversation` e `Message`, que são o **chat vivo**. O
+> registro abaixo é o diagnóstico que levou à remoção — vale manter porque a distinção entre os
+> três grupos é o que impediu de apagar o chat junto.
+>
+> **Como foi feito, para servir de precedente:** guarda inicial que ABORTA se a realidade mudou
+> desde a verificação (conversa usando o vínculo legado, ou tabela declarada vazia com linha),
+> ensaio com `ROLLBACK` forçado antes de valer, `DROP` em ordem de dependência explícita
+> **sem `CASCADE`** — para falhar alto em vez de destruir em silêncio um objeto não previsto — e
+> verificação final que exige exatamente `Conversation, Message` sobrando e o chat com a mesma
+> contagem. Confirmado depois no PostgREST: `User` devolve `PGRST205` (some do cache),
+> `Conversation.applicationid` devolve `42703` com hint apontando `application_uuid`, e a FK
+> `fk_conversation_application_uuid` — a que o frontend nomeia no embed — segue de pé.
+
+### Diagnóstico original
 
 **Origem:** varredura de código morto (25/08/2026), ao verificar se as três edge functions órfãs
 podiam ser removidas.
