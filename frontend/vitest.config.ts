@@ -9,6 +9,16 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     css: false,
+    // 5s (o padrao) e curto demais para esta suite: sao ~80 arquivos com jsdom + React Testing
+    // Library rodando em paralelo, e sob contencao de CPU os testes estouram o limite ANTES de
+    // qualquer assercao. Medido em 24/08/2026: tres execucoes seguidas deram 3, 0 e 12 falhas --
+    // TODAS "Test timed out in 5000ms", com duracoes de 5 a 8 segundos. Com
+    // `--no-file-parallelism`, as mesmas 936 passam.
+    //
+    // Suite que falha por sorteio deixa de ser lida: o time passa a re-rodar ate ficar verde, e
+    // uma falha de verdade se esconde no meio do ruido. 20s da folga sem mascarar teste travado.
+    testTimeout: 20000,
+    hookTimeout: 20000,
     // Unit tests mockam o Supabase — não acessam DB real. Credenciais dummy evitam que
     // lib/supabase.ts lance "Missing VITE_SUPABASE_URL" na coleção (o repo/CI não expõe secrets
     // p/ o step de testes). Fonte única p/ CI e local, sem depender de env externo.
