@@ -554,7 +554,24 @@ toque com o dedo em alvo pequeno. O público do piloto é majoritariamente celul
 de 15 minutos num aparelho de verdade, no fluxo `convite → aceite → check-in`, vale mais que
 qualquer teste emulado adicional.
 
+### 20.5 — ⚠️ Definir `VITE_SENTRY_DSN` na Vercel (observabilidade)
+
+O Sentry **não está ligado em produção**. `Sentry.init` roda dentro de `if (SENTRY_DSN)` e a
+variável não existe no build: conferido no bundle servido (nenhum DSN, nenhum host do Sentry) e no
+navegador (`window.__SENTRY__` só tem `version`, sem cliente registrado).
+
+Como o ramo PROD de `logError` mandava **apenas** para o Sentry, as 330 chamadas do app
+descartavam todo erro em silêncio — nada no console, nada no Sentry. Num piloto: o check-in de um
+freela falha, e não existe rastro em lugar nenhum.
+
+**Mitigado em 25/08** (`logger.ts` volta a usar `console` quando o Sentry não está inicializado,
+detectado por `Sentry.getClient()`), mas mitigação não é correção: console só ajuda se alguém
+estiver com o devtools aberto na hora. Com o DSN definido, o console cala sozinho e o Sentry volta
+a ser o canal — sem precisar mexer no código de novo.
+
 ### 20.4 — Decidir sobre as três edge functions órfãs
+
+> ✅ **RESOLVIDO em 25/08/2026** — as três foram removidas de produção e respondem 404.
 
 `jobs-api`, `applications-api` e `profiles-api` são anteriores ao pivô e não são chamadas por
 nenhum caminho do frontend. Os fontes estão preservados em
