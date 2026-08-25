@@ -772,7 +772,14 @@ lacunas declaradas.
 > pergunta certa é sempre `is_company_owner` / `is_job_owner` / `getAuthenticatedCompanyId` —
 > nunca `company_id = auth.uid()` nem `owner_id = auth.uid()` escrito na mão.
 >
-> **`20260821000000` (anonimização)** — NÃO APLICADA: `anonymize_account` não existe no banco. (Bloqueada por decisão do owner.)
+> **`20260821000000` (anonimização)** — ⚠️ **CORRIGIDO em 25/08/2026: está APLICADA.** Esta linha
+> dizia "NÃO APLICADA: `anonymize_account` não existe no banco", e o catálogo desmente:
+> `public.anonymize_account` existe, assim como o trigger `lgpd_guard_auth_user_delete`, que
+> **barra `DELETE FROM auth.users` enquanto houver perfil vivo** e manda anonimizar antes. Descobri
+> tentando apagar contas de teste: o DELETE falhou com a mensagem da própria guarda. Mais um caso
+> do aviso no topo deste arquivo — estado de produção muda fora do repositório, e nada no
+> build/lint/teste cruza isso. Consequência prática de acreditar na linha errada: eu teria
+> concluído que `delete-account` estava quebrado.
 >
 > **`service_terms.anonymized_at`** — Coluna **existe**, mas **NÃO VERIFICADO** de qual migration veio; não aparece em histórico visível.
 >

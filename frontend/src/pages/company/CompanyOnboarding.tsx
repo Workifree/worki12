@@ -369,7 +369,7 @@ export default function CompanyOnboarding() {
                                     )}
                                 </button>
                                 {step === 2 && !canProceed() && (
-                                    <p className="text-xs text-red-500 font-medium">Selecione o objetivo e o volume de contratacao</p>
+                                    <p className="text-xs text-red-500 font-medium">Selecione o objetivo e o volume de contratação</p>
                                 )}
                             </div>
                         </div>

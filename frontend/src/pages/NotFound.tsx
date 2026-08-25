@@ -8,9 +8,9 @@ export default function NotFound() {
         <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-6 font-sans">
             <div className="bg-white border-2 border-black rounded-2xl p-8 max-w-md w-full text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                 <div className="text-8xl font-black mb-4">404</div>
-                <h2 className="text-2xl font-black uppercase mb-2">Pagina nao encontrada</h2>
+                <h2 className="text-2xl font-black uppercase mb-2">Página não encontrada</h2>
                 <p className="text-gray-500 font-medium mb-6">
-                    A pagina que voce procura nao existe ou foi movida.
+                    A página que você procura não existe ou foi movida.
                 </p>
                 <button
                     onClick={() => navigate(-1)}
