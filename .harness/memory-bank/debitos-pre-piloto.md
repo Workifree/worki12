@@ -517,3 +517,46 @@ valida."* Aqui ela produziu uma afirmação constitucional falsa que sobreviveu 
 Ou o Lote A é aplicado (e o Article volta a ser literal), ou o Article ganha redação honesta —
 decisão de owner, com data e justificativa, como manda o próprio documento.
 Registrado em `ADR-20260822-coluna-vazia-nao-e-coluna-morta.md`.
+
+---
+
+## 20. ⚠️ AÇÕES DO DONO antes de abrir o piloto — nenhuma é código
+
+**Origem:** navegação ponta a ponta no browser (23–25/08) + varredura de colunas mortas.
+
+Os quatro itens abaixo estão fora do alcance de qualquer commit: dependem de painel externo,
+aparelho físico ou decisão de produto. Nenhum bloqueia o build; todos bloqueiam "abrir para
+gente real".
+
+### 20.1 — REVOGAR as chaves do Asaas (segurança, urgente)
+
+`wallets.asaas_api_key` guardava **duas chaves reais** do Asaas (166 chars, prefixo `$aact_`),
+legíveis pelo dono da carteira direto do cliente — a policy de SELECT de `wallets` é
+`auth.uid() = user_id`. A migration `20260825000200` **apagou os valores do banco**.
+
+**Apagar do banco não invalida a chave.** Quem já tiver copiado continua com credencial válida.
+A revogação acontece no painel do Asaas e é ação do dono. Como o Asaas está pausado desde 22/08
+e nenhum código usa a coluna, revogar não derruba nada.
+
+### 20.2 — Confirmar SMTP (recuperação de senha)
+
+Cadastro **não** depende de e-mail: a confirmação está desligada e isso foi verificado no browser
+(conta nova entra direto). Mas "esqueci a senha" depende, e o teste bateu em rate limit do SMTP
+padrão do Supabase — que serve para desenvolvimento e **não** para uso real (cota baixa,
+entregabilidade ruim). Sem SMTP próprio, o freela que esquecer a senha no dia do turno não
+recupera. Configurar em Auth → SMTP Settings.
+
+### 20.3 — Uma passada em aparelho real
+
+O produto foi navegado inteiro em viewport mobile emulado (390×844, UA de iPhone). Emulação não
+cobre teclado virtual empurrando layout, `100vh` no Safari iOS, permissão de notificação nem
+toque com o dedo em alvo pequeno. O público do piloto é majoritariamente celular. Uma passada
+de 15 minutos num aparelho de verdade, no fluxo `convite → aceite → check-in`, vale mais que
+qualquer teste emulado adicional.
+
+### 20.4 — Decidir sobre as três edge functions órfãs
+
+`jobs-api`, `applications-api` e `profiles-api` são anteriores ao pivô e não são chamadas por
+nenhum caminho do frontend. Os fontes estão preservados em
+`supabase/functions/_orfaos-pre-pivo/`, com os comandos de remoção e a justificativa no
+`LEIA-ME.md` de lá. Não fazem mal ligadas; são superfície pública sem consumidor.

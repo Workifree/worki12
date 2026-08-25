@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Megaphone, Siren, Loader2, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
 import { formatDurationShort } from '../../lib/dateUtils';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
@@ -55,6 +56,18 @@ export interface ShiftCallsPanelProps {
 }
 
 export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: ShiftCallsPanelProps) {
+  // `Date.now()` no corpo do render e chamada impura: o mesmo componente, com as mesmas props,
+  // renderiza diferente conforme a hora -- e o React Compiler recusa (lint error, Article 3).
+  // Trocar por relogio em estado corrige junto um resquicio da propria derivacao de expiracao:
+  // sem tick, o chamado que vence as 16:23 segue pintado de ABERTO ate alguem recarregar a
+  // pagina, que e exatamente a mentira que essa derivacao existe para evitar. 30s e resolucao de
+  // sobra para um campo que mostra minuto.
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setAgora(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   if (loading) {
     return <div className="h-24 bg-gray-100 rounded-2xl animate-pulse mb-6" />;
   }
@@ -76,7 +89,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
         // passado. A empresa abre o app de manha e espera por um chamado que ja acabou, que e
         // exatamente a falha que o produto existe para evitar. Mesma tecnica que a tela de
         // candidatos ja usa para convite: expiracao deriva na LEITURA, sem escrever no banco.
-        const jaVenceu = !!call.expires_at && new Date(call.expires_at).getTime() <= Date.now();
+        const jaVenceu = !!call.expires_at && new Date(call.expires_at).getTime() <= agora;
         const isOpen = call.status === 'open' && !jaVenceu;
         // F11: o número que a empresa PODE ver é `targets_count` (devolvido pela RPC), nunca o
         // tamanho do array de alvos carregados no client.
