@@ -343,7 +343,7 @@ export default function CompanyDashboard() {
                         ) : jobs.length === 0 ? (
                             <div className="text-center py-10 border-2 border-dashed border-gray-300 rounded-xl">
                                 <p className="font-bold text-gray-500">Nenhum turno encontrado.</p>
-                                <button onClick={() => navigate('/company/create')} className="text-blue-600 font-black text-sm uppercase mt-2 hover:underline">Criar primeiro turno</button>
+                                <button onClick={() => navigate('/company/create')} className="min-h-11 px-2 -mx-2 inline-flex items-center text-blue-600 font-black text-sm uppercase mt-2 hover:underline">Criar primeiro turno</button>
                             </div>
                         ) : (
                             jobs.slice(0, 5).map((job) => (
@@ -417,7 +417,7 @@ export default function CompanyDashboard() {
                     <div className="bg-blue-600 text-white border-2 border-black rounded-xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         <h3 className="font-black uppercase text-lg mb-2">Dica Pro</h3>
                         <p className="text-sm opacity-90 mb-4">Freelas veem seu perfil antes de aceitar o convite. Endereço e briefing padrão preenchidos aceleram a resposta.</p>
-                        <button onClick={() => navigate('/company/profile')} className="bg-white text-black w-full py-2 rounded-lg font-bold uppercase text-xs hover:bg-gray-100 transition-colors">
+                        <button onClick={() => navigate('/company/profile')} className="bg-white text-black w-full min-h-11 py-2 rounded-lg font-bold uppercase text-xs hover:bg-gray-100 transition-colors">
                             Completar Perfil
                         </button>
                     </div>

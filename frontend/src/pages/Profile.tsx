@@ -614,7 +614,7 @@ export default function Profile() {
 
                     {/* Cover Upload Button */}
                     <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => coverInputRef.current?.click()} className="bg-black/50 text-white p-2 rounded-lg backdrop-blur-sm hover:bg-black transition-colors">
+                        <button onClick={() => coverInputRef.current?.click()} aria-label="Trocar foto de capa" className="bg-black/50 text-white min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg backdrop-blur-sm hover:bg-black transition-colors">
                             <Camera size={20} />
                         </button>
                     </div>
@@ -706,11 +706,11 @@ export default function Profile() {
                                 <button
                                     onClick={() => setQrModalOpen(true)}
                                     aria-label="Ver meu QR de identidade"
-                                    className="bg-white text-black p-2 rounded-xl border-2 border-black hover:bg-gray-100 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                    className="bg-white text-black min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-gray-100 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                 >
                                     <QrCode size={18} />
                                 </button>
-                                <button onClick={() => setIsEditing(true)} className="bg-white text-black px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-primary hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <button onClick={() => setIsEditing(true)} className="bg-white text-black min-h-11 px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-primary hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                     <Edit2 size={16} className="inline mr-2" /> Editar Perfil
                                 </button>
                             </>

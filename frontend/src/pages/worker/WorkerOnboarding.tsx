@@ -588,9 +588,9 @@ export default function WorkerOnboarding() {
                                         />
                                         <label htmlFor="tos" className="text-sm text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Política de Privacidade</a>
                                         </label>
                                     </div>
                                 </div>
