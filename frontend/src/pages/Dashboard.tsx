@@ -397,7 +397,7 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-400 text-center py-4">Sem histórico recente.</p>
                     )}
                 </div>
-                <button onClick={() => navigate('/my-jobs')} className="w-full mt-4 text-xs font-black uppercase text-gray-500 hover:text-black flex items-center justify-center gap-1">
+                <button onClick={() => navigate('/my-jobs')} className="min-h-11 px-2 -mx-2 inline-flex items-center w-full mt-4 text-xs font-black uppercase text-gray-500 hover:text-black flex items-center justify-center gap-1">
                     Ver tudo <ChevronRight size={12} />
                 </button>
             </section>
