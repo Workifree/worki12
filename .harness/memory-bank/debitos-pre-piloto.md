@@ -274,7 +274,12 @@ status in app logic", diz o comentário da própria migração).
 **Correção:** `WITH CHECK` com `EXISTS` sobre `applications`/`jobs` em status concluído, ou trigger
 `BEFORE INSERT`. Não entra no #9 (que é leitura); é escrita e merece verificação própria.
 
-## 12. F9 × F11 — o painel conta SOS diferente do que conta chamado de elenco
+## 12. ✅ RESOLVIDO — o painel contava SOS diferente do chamado de elenco (25/08/2026)
+
+> Fechados juntos: `origin` entrou na consulta de `shift_calls` e o bloco de aceitação passou a
+> filtrar `origin !== 'sos'`. Medir só o que dá para medir inteiro é mais honesto que exibir um
+> número que favorece uma origem sem dizer. Alcance de SOS, se um dia for exibido, tem de vir de RPC
+> DEFINER devolvendo só o número. Teste novo cobre a exclusão (seria 0.67 se o SOS entrasse; é 0.5).
 
 **Origem:** security-reviewer do F11 (classificado como NOTA, não falha).
 
@@ -333,7 +338,12 @@ nenhum vínculo prévio.
 > Corrigido aqui porque uma dívida que descreve como aberto um problema já resolvido faz o jurídico
 > analisar a pergunta errada.
 
-## 14. O painel de analytics mente a favor do SOS
+## 14. ✅ RESOLVIDO — o painel de analytics mentia a favor do SOS (25/08/2026)
+
+> Fechados juntos: `origin` entrou na consulta de `shift_calls` e o bloco de aceitação passou a
+> filtrar `origin !== 'sos'`. Medir só o que dá para medir inteiro é mais honesto que exibir um
+> número que favorece uma origem sem dizer. Alcance de SOS, se um dia for exibido, tem de vir de RPC
+> DEFINER devolvendo só o número. Teste novo cobre a exclusão (seria 0.67 se o SOS entrasse; é 0.5).
 
 **Origem:** evaluator do F11 (MÉDIO). Complementa a dívida 12.
 

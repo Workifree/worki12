@@ -886,7 +886,7 @@ describe('A4/A5 — fillTime exclui chamados sem first_claim_at; expired nunca o
       reason: 'falta',
       status: 'expired',
       created_at: '2026-08-05T10:00:00.000Z',
-      first_claim_at: null,
+      first_claim_at: null, origin: 'team',
     };
     const raw = emptyRaw({ shiftCalls: [call] });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
@@ -906,7 +906,7 @@ describe('A4/A5 — fillTime exclui chamados sem first_claim_at; expired nunca o
       reason: 'reforco',
       status: 'filled',
       created_at: '2026-08-05T10:00:00.000Z',
-      first_claim_at: '2026-08-05T10:06:00.000Z',
+      first_claim_at: '2026-08-05T10:06:00.000Z', origin: 'team',
     };
     const raw = emptyRaw({ shiftCalls: [call] });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
@@ -919,8 +919,8 @@ describe('A4/A5 — fillTime exclui chamados sem first_claim_at; expired nunca o
 
   it('mistura de chamados expired/filled/cancelled/open — nenhum status omitido, mesmo com 0', () => {
     const calls = [
-      { id: 'c1', job_id: 'j1', company_id: 'company-1', reason: 'falta', status: 'expired', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: null },
-      { id: 'c2', job_id: 'j2', company_id: 'company-1', reason: 'evento', status: 'filled', created_at: '2026-08-06T10:00:00.000Z', first_claim_at: '2026-08-06T10:05:00.000Z' },
+      { id: 'c1', job_id: 'j1', company_id: 'company-1', reason: 'falta', status: 'expired', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: null, origin: 'team' },
+      { id: 'c2', job_id: 'j2', company_id: 'company-1', reason: 'evento', status: 'filled', created_at: '2026-08-06T10:00:00.000Z', first_claim_at: '2026-08-06T10:05:00.000Z', origin: 'team' },
     ];
     const raw = emptyRaw({ shiftCalls: calls });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
@@ -937,7 +937,7 @@ describe('A4/A5 — fillTime exclui chamados sem first_claim_at; expired nunca o
 
 describe('A6/R12 — aceite por freela: amostra mínima e ordenação alfabética (nunca por métrica)', () => {
   it('1 alvo recebido → acceptanceRate null (amostra insuficiente)', () => {
-    const call = { id: 'call-1', job_id: 'job-1', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z' };
+    const call = { id: 'call-1', job_id: 'job-1', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z', origin: 'team' };
     const target = { call_id: 'call-1', worker_id: 'worker-1', responded_at: '2026-08-05T10:05:00.000Z', response: 'accepted' };
     const raw = emptyRaw({ shiftCalls: [call], shiftCallTargets: [target], workers: new Map([['worker-1', { id: 'worker-1', full_name: 'Helo', rating_average: null }]]) });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
@@ -950,8 +950,8 @@ describe('A6/R12 — aceite por freela: amostra mínima e ordenação alfabétic
 
   it('ordena por nome (Zeca antes contaria mais aceites, mas Ana vem primeiro alfabeticamente)', () => {
     const calls = [
-      { id: 'call-a', job_id: 'job-a', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z' },
-      { id: 'call-b', job_id: 'job-b', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-06T10:00:00.000Z', first_claim_at: '2026-08-06T10:05:00.000Z' },
+      { id: 'call-a', job_id: 'job-a', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z', origin: 'team' },
+      { id: 'call-b', job_id: 'job-b', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-06T10:00:00.000Z', first_claim_at: '2026-08-06T10:05:00.000Z', origin: 'team' },
     ];
     const targets = [
       { call_id: 'call-a', worker_id: 'worker-zeca', responded_at: '2026-08-05T10:05:00.000Z', response: 'accepted' },
@@ -967,6 +967,33 @@ describe('A6/R12 — aceite por freela: amostra mínima e ordenação alfabétic
     expect(result.acceptanceByWorker.state).toBe('ok');
     if (result.acceptanceByWorker.state === 'ok') {
       expect(result.acceptanceByWorker.rows.map((r) => r.workerName)).toEqual(['Ana', 'Zeca']);
+    }
+  });
+
+  // Débitos #12 e #14 — a policy do SOS só deixa a empresa ver o alvo que ACEITOU. Se o chamado de
+  // urgência entrasse nesta conta, ele apareceria sempre com 100% de aceitação e os alcançados que
+  // recusaram sumiriam do denominador, favorecendo o SOS sistematicamente sem sinal na tela.
+  it('chamado SOS fica FORA da taxa de aceitação (só entra o que dá para medir inteiro)', () => {
+    const calls = [
+      { id: 'call-team', job_id: 'job-1', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z', origin: 'team' },
+      { id: 'call-sos', job_id: 'job-2', company_id: 'company-1', reason: 'falta', status: 'filled', created_at: '2026-08-06T10:00:00.000Z', first_claim_at: '2026-08-06T10:05:00.000Z', origin: 'sos' },
+    ];
+    const targets = [
+      // elenco: dois recebidos, um aceite -> 50%
+      { call_id: 'call-team', worker_id: 'worker-1', responded_at: '2026-08-05T10:05:00.000Z', response: 'accepted' },
+      { call_id: 'call-team', worker_id: 'worker-1', responded_at: '2026-08-05T10:06:00.000Z', response: 'declined' },
+      // SOS: só o aceite é visível pela RLS. Se contasse, viraria 3/2 e distorceria a taxa.
+      { call_id: 'call-sos', worker_id: 'worker-1', responded_at: '2026-08-06T10:05:00.000Z', response: 'accepted' },
+    ];
+    const workers = new Map([['worker-1', { id: 'worker-1', full_name: 'Ana', rating_average: null }]]);
+    const raw = emptyRaw({ shiftCalls: calls, shiftCallTargets: targets, workers });
+    const result = aggregate(raw, PERIOD_AUGUST, DEPS);
+    expect(result.acceptanceByWorker.state).toBe('ok');
+    if (result.acceptanceByWorker.state === 'ok') {
+      const ana = result.acceptanceByWorker.rows.find((r) => r.workerName === 'Ana');
+      expect(ana?.received).toBe(2);        // só os do chamado de elenco
+      expect(ana?.accepted).toBe(1);
+      expect(ana?.acceptanceRate).toBe(0.5); // seria 2/3 = 0.67 se o SOS entrasse
     }
   });
 });
@@ -1111,7 +1138,7 @@ describe('R5/A1 — delta vs. período anterior de mesma duração', () => {
 
 describe('D5.3 — linhas por freela carregam companyId de origem', () => {
   it('WorkerAcceptanceRow carrega companyId do chamado', () => {
-    const call = { id: 'call-scope', job_id: 'job-1', company_id: 'company-xyz', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z' };
+    const call = { id: 'call-scope', job_id: 'job-1', company_id: 'company-xyz', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z', origin: 'team' };
     const target = { call_id: 'call-scope', worker_id: 'worker-1', responded_at: '2026-08-05T10:05:00.000Z', response: 'accepted' };
     const raw = emptyRaw({ shiftCalls: [call], shiftCallTargets: [target], workers: new Map([['worker-1', { id: 'worker-1', full_name: 'Kaio', rating_average: null }]]) });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
@@ -1251,7 +1278,9 @@ describe('collectRawData — strings de select coluna a coluna (dívida #17)', (
     );
     expect(selectArgOf('shift_payments')).toBe('job_id, worker_id, amount, status, paid_at');
     expect(selectArgOf('escrow_transactions')).toBe('job_id, application_id, amount, status, released_at, captured_at');
-    expect(selectArgOf('shift_calls')).toBe('id, job_id, company_id, reason, status, created_at, first_claim_at');
+    // `origin` entrou em 25/08 (débitos #12/#14): sem ele não dá para excluir o SOS da taxa de
+    // aceitação, e o painel favoreceria o chamado de urgência em silêncio.
+    expect(selectArgOf('shift_calls')).toBe('id, job_id, company_id, reason, status, created_at, first_claim_at, origin');
     expect(selectArgOf('shift_call_targets')).toBe('call_id, worker_id, responded_at, response');
     expect(selectArgOf('shift_attendance_confirmations')).toBe('job_id, requested_at, responded_at, response');
     expect(selectArgOf('workers')).toBe('id, full_name, rating_average');

@@ -121,6 +121,8 @@ interface ShiftCallRow {
   status: string;
   created_at: string;
   first_claim_at: string | null;
+  /** 'team' | 'sos'. Necessário porque a taxa de aceitação NÃO pode misturar as duas origens. */
+  origin: string | null;
 }
 
 interface ShiftCallTargetRow {
@@ -451,7 +453,7 @@ async function collectRawData(period: OperationAnalyticsPeriod): Promise<RawAnal
     (from, to) =>
       supabase
         .from('shift_calls')
-        .select('id, job_id, company_id, reason, status, created_at, first_claim_at')
+        .select('id, job_id, company_id, reason, status, created_at, first_claim_at, origin')
         .in('company_id', scopeCompanyIds)
         .gte('created_at', windowStart.toISOString())
         .lte('created_at', windowEnd.toISOString())
@@ -895,7 +897,22 @@ function buildCallsByReasonBlock(raw: RawAnalyticsData, start: Date, end: Date):
 }
 
 function buildAcceptanceBlock(raw: RawAnalyticsData, start: Date, end: Date): WorkerAcceptanceBlock {
-  const callsHere = raw.shiftCalls.filter((c) => isInRange(c.created_at, start, end));
+  // Débitos #12 e #14 — SOS fica FORA desta métrica, de propósito.
+  //
+  // A policy do SOS mostra à empresa apenas os alvos com `response='accepted'` (é a membrana que a
+  // feature existe para criar: a empresa nunca vê quem foi alcançado). Como esta conta sai das
+  // linhas VISÍVEIS, um chamado SOS entraria sempre com received=1, accepted=1 — 100% de aceitação
+  // — enquanto todos os alcançados que recusaram somem do denominador.
+  //
+  // Não é vazamento nem bug de RLS: é a membrana funcionando. Mas o número exibido passaria a
+  // favorecer o SOS sobre o chamado de elenco sistematicamente, e ninguém saberia disso olhando o
+  // painel. Entre mostrar tudo (quebra a promessa do SOS) e mostrar um número que engana, a saída
+  // honesta é medir só o que dá para medir inteiro: `origin='team'`.
+  //
+  // Alcance de SOS, se um dia for exibido, precisa vir de RPC DEFINER que devolva só o NÚMERO.
+  const callsHere = raw.shiftCalls.filter(
+    (c) => isInRange(c.created_at, start, end) && c.origin !== 'sos',
+  );
   if (callsHere.length === 0) return { state: 'sem-fonte' };
   const callIdsHere = new Set(callsHere.map((c) => c.id));
   const callById = new Map(callsHere.map((c) => [c.id, c] as const));
