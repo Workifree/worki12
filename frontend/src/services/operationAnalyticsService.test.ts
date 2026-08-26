@@ -760,6 +760,37 @@ describe('C-ANALYTICS-ANCORA-MEIA-NOITE — start_date em 00:00Z resolve para o 
     }
   });
 
+  // Débito #18 — o limiar era de UM LADO SÓ (`diff <= 10`), sem piso. Um check-in registrado com a
+  // âncora de data errada dá um adiantamento absurdo (aqui, ~23h) e satisfazia a condição: entrava
+  // como PONTUAL. É como um bug de fuso se esconderia -- o painel MELHORARIA sozinho no dia em que
+  // o cálculo quebrasse. Agora esse caso sai dos dois lados da fração.
+  it('check-in absurdamente adiantado não vira "pontual" nem infla o denominador', () => {
+    const job = {
+      id: 'job-piso', company_id: 'company-1', status: 'completed',
+      start_date: '2026-08-11T00:00:00.000Z',   // 21:00 BRT de 10/08
+      created_at: '2026-08-05T10:00:00.000Z',
+      work_start_time: '21:00', work_end_time: '23:00', estimated_hours: 2, budget: 60,
+    };
+    const app = {
+      id: 'app-piso', job_id: job.id, worker_id: 'worker-3', status: 'completed',
+      // ~23h ANTES do esperado: não é chegada adiantada, é âncora errada.
+      worker_checkin_at: '2026-08-10T01:00:00.000Z',
+      worker_checkout_at: '2026-08-11T02:40:00.000Z',
+      company_checkin_confirmed_at: null, company_checkout_confirmed_at: null,
+    };
+    const raw = emptyRaw({
+      jobs: [job], applications: [app],
+      workers: new Map([['worker-3', { id: 'worker-3', full_name: 'Nina', rating_average: null }]]),
+    });
+    const result = aggregate(raw, { from: '2026-08-01', to: '2026-08-10' }, DEPS);
+    expect(result.attendanceByWorker.state).toBe('ok');
+    if (result.attendanceByWorker.state === 'ok') {
+      const row = result.attendanceByWorker.rows.find((r) => r.workerId === 'worker-3');
+      expect(row?.punctualCount).toBe(0);              // antes contava 1
+      expect(row?.checkinsWithScheduleCount).toBe(0);  // e fora do denominador também
+    }
+  });
+
   // Achado do evaluator (mutante SOBREVIVEU): `expectedShiftEndInstant` nunca era exercitada pela
   // âncora (application 'completed' não entra no ramo de no-show, que exige 'hired'/'in_progress').
   // Segundo job na MESMA âncora 00:00Z, status 'hired', sem checkin — força o cálculo do término

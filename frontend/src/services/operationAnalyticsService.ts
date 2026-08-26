@@ -60,6 +60,22 @@ export const MAX_PAGES = 10;
 export const MAX_PLAUSIBLE_SHIFT_HOURS = 18;
 /** R15 (D7) — tolerância de atraso, constante de código, não configurável na v1. */
 export const LATE_TOLERANCE_MINUTES = 10;
+
+/**
+ * Piso do limiar de pontualidade (débito #18).
+ *
+ * `diffMinutes <= LATE_TOLERANCE_MINUTES` é um limiar de UM LADO SÓ: um check-in registrado 23h
+ * antes do início dá `-1380`, que satisfaz a condição e entra como PONTUAL. Chegar cedo é pontual,
+ * de fato — mas uma diferença dessa ordem não é chegada adiantada, é âncora de data errada.
+ *
+ * E é exatamente assim que um bug de fuso se esconderia: um atraso real de 40 min, se o dia civil
+ * pular, vira `-1400` e passa a contar como pontual. O painel melhoraria sozinho no dia em que o
+ * cálculo quebrasse.
+ *
+ * Check-in mais de 3h antes do início sai da conta -- do numerador E do denominador. Não é "não
+ * pontual" (seria mentira na outra direção); é medida que não dá para fazer.
+ */
+export const EARLY_ANOMALY_MINUTES = 180;
 /** R12/R15 — amostra mínima antes de calcular %, para não precipitar 0%/100% de 1 caso. */
 export const MIN_SAMPLE_SIZE = 2;
 
@@ -1001,9 +1017,13 @@ function buildAttendanceBlock(raw: RawAnalyticsData, start: Date, end: Date, now
     const checkin = a.worker_checkin_at ?? a.company_checkin_confirmed_at ?? null;
     if (expectedStart !== null && checkin) {
       const diffMinutes = (new Date(checkin).getTime() - expectedStart.getTime()) / 60_000;
-      entry.checkinsWithScheduleCount += 1;
-      if (diffMinutes <= LATE_TOLERANCE_MINUTES) entry.punctualCount += 1;
-      else entry.lateCount += 1;
+      // Débito #18 — adiantamento absurdo não é pontualidade, é âncora errada. Fica fora dos dois
+      // lados da fração, para não inflar a taxa nem inventar um atraso que ninguém cometeu.
+      if (diffMinutes >= -EARLY_ANOMALY_MINUTES) {
+        entry.checkinsWithScheduleCount += 1;
+        if (diffMinutes <= LATE_TOLERANCE_MINUTES) entry.punctualCount += 1;
+        else entry.lateCount += 1;
+      }
     }
   }
 

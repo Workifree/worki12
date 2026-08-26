@@ -485,7 +485,21 @@ do `select` de `listTeamMembers`, e foi verificado por mutante.
 **Gate:** rodar o smoke (a)/(b)/(c)/(d) do Step 8 do PRD antes do piloto, e escrever o teste da
 cadeia quando a frente abrir.
 
-## 18. F9 — os dois testes da âncora de meia-noite são um par INDIVISÍVEL
+## 18. ✅ RESOLVIDO — limiar de pontualidade ganhou piso (25/08/2026)
+
+> O item registrava como LATENTE que o limiar era de um lado só (`diff <= 10`, sem piso): um
+> check-in com âncora de data errada dá adiantamento absurdo e **entrava como pontual**. Era o jeito
+> de um bug de fuso se esconder — o painel melhoraria sozinho no dia em que o cálculo quebrasse.
+>
+> Agora `EARLY_ANOMALY_MINUTES = 180` tira o caso dos **dois** lados da fração: não é pontual (seria
+> mentira) e não é atraso (seria inventar falta). Teste novo cobre ~23h de adiantamento.
+>
+> O par de testes descrito abaixo continua indivisível e agora tem um terceiro que fecha o lado que
+> nenhum dos dois pegava. **Durante a correção o `else` do atraso ficou pendurado no `if` novo** —
+> atraso deixava de contar e adiantamento virava atraso. Os dois testes existentes pegaram na hora;
+> é exatamente para isso que o par existe.
+
+### Registro original
 
 **Origem:** evaluator do F9, que testou a direção oposta por conta própria.
 
