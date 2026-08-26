@@ -558,7 +558,26 @@ Asaas ou declarar a retenção na Política de Privacidade — decisão de owner
 
 ---
 
-## 19. Doze colunas mortas em `workers` e `companies` — recomendação de `DROP COLUMN` (decisão de owner)
+## 19. ✅ RESOLVIDO — as doze colunas mortas foram derrubadas (25/08/2026)
+
+> **Lote A** aplicado a partir da migration que já existia no repositório
+> (`20260310000000_drop_stripe_columns.sql`) e nunca havia chegado à produção — não era "escrever
+> uma migration", era aplicar uma que o repositório já acreditava aplicada. **Lote B** em
+> `20260825000600`.
+>
+> **Correção a este próprio registro:** a tabela abaixo dizia "0 linhas" para
+> `stripe_onboarding_completed`, e o catálogo mostrava **15 valores não-nulos**. Não era dado: a
+> coluna é boolean com `DEFAULT false`, e os 15 eram o default. "0 linhas" ali significava "0
+> valores significativos" — vale conferir a distinção antes de tratar contagem como prova.
+>
+> Verificado depois: **zero** colunas com `stripe` em todo o schema, zero colunas mortas de Asaas em
+> `workers`/`companies`, 15 workers e 7 companies intactos, `companies.address` preservada (é do
+> perfil público, não do lote), e 938 testes verdes.
+>
+> **Isso fecha também o achado colateral abaixo:** o Article 6 da constitution afirmava que "o Stripe
+> foi 100% removido" e não era literalmente verdade havia cinco meses. Agora é.
+
+### Registro original
 
 **Não bloqueia nada.** As doze já estão classificadas como APAGADAS em
 `.harness/spec/lgpd-producao/ddl-aprovado.md` §2.1 e a rotina de LGPD as apaga. Isto aqui é a
