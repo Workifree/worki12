@@ -34,7 +34,23 @@ e o CTA "Declarar disponibilidade" (R14) some silenciosamente para esse freela: 
 
 **Correção:** adicionar `AND p <> '{}'::jsonb` (ou exigir cardinalidade >= 1) ao CHECK.
 
-## 3. `/profile` não tem campo de CPF — beco sem saída do `missing_cpf`
+## 3. ✅ RESOLVIDO — `/profile` ganhou campo de CPF (25/08/2026)
+
+> Não era hipótese: **4 dos 15 freelas em produção estão sem CPF**, e todos travariam no primeiro
+> turno pago do piloto — já trabalharam, a empresa registra o pagamento, e `acceptServiceTerm`
+> devolve `missing_cpf` sem tela onde resolver.
+>
+> O campo entrou em `pages/Profile.tsx` com a mesma validação do onboarding (11 dígitos +
+> `validateCPFOrCNPJ`) e máscara de exibição. **Editável só enquanto vazio:** depois de gravado, o
+> CPF identifica a pessoa nos termos já assinados, e campo livre ali seria vetor de fraude. A
+> guarda está no payload (`cpf` só entra no update quando não havia CPF antes), então nem uma
+> regressão futura na UI sobrescreve.
+>
+> Verificado no browser contra o cenário real (conta com CPF zerado): mostra "Não informado" →
+> edita → grava `11144477735` no banco → reexibe formatado → e ao reeditar **o campo não aparece
+> mais**. Fecha também a dependência do item #8.
+
+### Diagnóstico original
 
 **Origem:** F6, outcome `missing_cpf` de `acceptServiceTerm`.
 
