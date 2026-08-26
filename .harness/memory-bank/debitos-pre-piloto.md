@@ -213,6 +213,42 @@ tabela carrega `cnpj`, `email` e `address`. Qualquer conta autenticada varre a b
 dependem dessa policy, e o fecho correto **não é** escopo por linha — é column-scoped (RPC
 `get_company_public_profile` devolvendo só as colunas públicas + policy restrita ao dono). Spec própria.
 
+**⚠️ RAIO REAL, MEDIDO EM 25/08/2026 — MAIOR DO QUE ESTE DÉBITO REGISTRAVA:**
+
+O texto abaixo trata a busca do `CreateReferralModal` como *o* consumidor acoplado. São **doze**, e o
+pior deles não é uma leitura direta — é **embed**:
+
+- **7 leituras diretas cruzadas:** `CompanyPublicProfile` (perfil público), `QuemTeIndicou`,
+  `WorkerPublicProfile`, `MyCertificationsSection`, `WorkerCertificationsPanel`, `CompanyReferrals`,
+  `CreateReferralModal`.
+- **5 embeds dentro de outras queries** — e estes são o problema, porque PostgREST resolve embed
+  **pela RLS da tabela embutida** e devolve `null` quando ela nega, sem erro nenhum:
+  `pages/Dashboard.tsx` (dashboard do freela), `pages/Messages.tsx`, `pages/MyJobs.tsx`,
+  `pages/company/WorkerPublicProfile.tsx` e **`services/paymentRecordService.ts`** — este último é o
+  **recibo**, o artefato central do modo A.
+
+Ou seja: escapar a policy sem reescrever os cinco embeds faz o **nome da empresa sumir do recibo**,
+em silêncio, para todo freela. Um `select` embutido não vira RPC sem reestruturar a query inteira.
+
+**O atalho por privilégio de coluna não existe:** `GRANT`/`REVOKE` de coluna é por PAPEL, não por
+linha, e a própria empresa lê `select('*')` da sua linha em `CompanyProfile.tsx:113` para editar o
+perfil — revogar `cnpj`/`email` de `authenticated` quebraria o dono junto com o intruso.
+
+**Dois caminhos, ambos reais, nenhum trivial:**
+1. **Policy escopada + RPCs** (o que o texto abaixo descreve): exige reescrever os 5 embeds. Maior
+   risco, e o risco cai justamente sobre o recibo.
+2. **Mover `cnpj` e `email` para `company_private`** (tabela nova, RLS só para operador da empresa).
+   `companies` continua legível e os embeds seguem funcionando intactos; muda só quem lê os dois
+   campos sensíveis (`CompanyProfile`, `CompanyOnboarding` e o render do termo, que já é DEFINER).
+   Menor raio, mesmo resultado de privacidade.
+
+**Recomendação:** caminho 2. Mas é mudança de esquema em tabela central, e o débito é
+**pré-existente** — não é regressão desta leva. Decisão de quando, do dono.
+
+**Já aplicado e verificado (D3 do ADR, independe da escolha acima):** termo sanitizado (remove
+`% _ * \`), mínimo de 3 caracteres e debounce de ~300 ms — conferido em
+`CreateReferralModal.tsx` (linhas 29-31, 87-88, 96).
+
 **🔗 CONSUMIDOR ACOPLADO — ler antes de fechar este débito (gate de 21/08/2026, F10):**
 `frontend/src/components/company/CreateReferralModal.tsx` busca a empresa destino com
 `from('companies').ilike('name', …)`. O gate aprovou a leitura direta **exatamente porque** esta
