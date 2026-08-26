@@ -667,7 +667,7 @@ export default function MyJobs() {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-                            px-6 py-2 rounded-t-xl font-bold uppercase transition-all whitespace-nowrap flex items-center gap-2
+                            min-h-11 px-6 py-2 rounded-t-xl font-bold uppercase transition-all whitespace-nowrap flex items-center gap-2
                             ${activeTab === tab.id
                                 ? 'bg-black text-white translate-y-[2px]'
                                 : 'text-gray-400 hover:text-black hover:bg-gray-100'}

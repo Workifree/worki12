@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, Briefcase, Loader2, Clock, CheckCheck } from 'lucide-react';
+import { MessageSquare, Send, ArrowLeft, Briefcase, Loader2, Check, CheckCheck } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -27,6 +27,8 @@ interface Message {
     senderid: string;
     createdat: string;
     is_mine: boolean;
+    /** Preenchido quando a contraparte abriu a conversa. Vira o duplo-check. */
+    read_at: string | null;
 }
 
 export default function Messages() {
@@ -239,7 +241,7 @@ export default function Messages() {
                 table: 'Message',
                 filter: `conversationid=eq.${selectedConversation.id}`
             }, (payload) => {
-                const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string };
+                const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
 
                 setMessages(prev => [...prev, {
@@ -468,9 +470,24 @@ export default function Messages() {
                                             <div className={`max-w-[75%] p-4 rounded-2xl shadow-sm ${msg.is_mine ? 'bg-primary text-white rounded-tr-none' : 'bg-white border border-gray-100 rounded-tl-none'}`}>
                                                 <p className="text-sm font-medium whitespace-pre-wrap break-words">{msg.content}</p>
                                                 <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] uppercase font-bold tracking-wider ${msg.is_mine ? 'text-white/80' : 'text-gray-400'}`}>
-                                                    <Clock size={10} />
+                                                    {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
+                                                        relógio ao lado de uma mensagem significa "pendente" em qualquer app de
+                                                        conversa — aqui não significava nada, e nunca sumia.
+                                                        O duplo-check também era incondicional: aparecia igual em mensagem lida e não
+                                                        lida, então não comunicava leitura nenhuma. Agora segue a convenção que todo
+                                                        mundo já conhece: um check = enviada, dois checks = lida. */}
                                                     {format(new Date(msg.createdat), 'HH:mm', { locale: ptBR })}
-                                                    {msg.is_mine && <CheckCheck size={12} className="ml-1" />}
+                                                    {msg.is_mine && (
+                                                        msg.read_at ? (
+                                                            <CheckCheck
+                                                                size={12}
+                                                                className="ml-1 text-sky-300"
+                                                                aria-label="Lida"
+                                                            />
+                                                        ) : (
+                                                            <Check size={12} className="ml-1 opacity-70" aria-label="Enviada" />
+                                                        )
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

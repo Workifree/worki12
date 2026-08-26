@@ -85,7 +85,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
             <button
                 ref={buttonRef}
                 onClick={toggleOpen}
-                className={`relative p-2 rounded-full hover:bg-white/10 transition-colors ${className}`}
+                className={`relative min-h-11 min-w-11 inline-flex items-center justify-center rounded-full hover:bg-white/10 transition-colors ${className}`}
                 aria-label="Notifications"
             >
                 <Bell size={24} className={unreadCount > 0 ? "text-primary" : "currentColor"} />

@@ -17,13 +17,13 @@ export default function Onboarding() {
         <div className="flex items-center gap-6">
           <button
             onClick={() => navigate('/sobre')}
-            className="font-bold text-gray-500 hover:text-black transition-colors"
+            className="min-h-11 px-2 -mx-2 inline-flex items-center justify-center font-bold text-gray-500 hover:text-black transition-colors"
           >
             Sobre
           </button>
           <button
             onClick={() => navigate('/login')}
-            className="font-bold underline decoration-2 underline-offset-4 hover:decoration-primary transition-all"
+            className="min-h-11 px-2 -mx-2 inline-flex items-center justify-center font-bold underline decoration-2 underline-offset-4 hover:decoration-primary transition-all"
           >
             Login
           </button>

@@ -90,7 +90,7 @@ export default function Notifications() {
                     <button
                         key={f.id}
                         onClick={() => handleFilterChange(f.id)}
-                        className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                        className={`min-h-11 whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all ${
                             filterType === f.id
                                 ? 'bg-black text-white'
                                 : 'text-gray-500 hover:text-black hover:bg-gray-100'

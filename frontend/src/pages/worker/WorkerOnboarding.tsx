@@ -326,7 +326,7 @@ export default function WorkerOnboarding() {
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
-                        className="text-sm font-bold text-gray-400 hover:text-black transition-colors flex items-center gap-1"
+                        className="min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold text-gray-400 hover:text-black transition-colors gap-1"
                     >
                         <ArrowLeft size={14} /> Sair e voltar
                     </button>
@@ -566,7 +566,7 @@ export default function WorkerOnboarding() {
                                                     type="button"
                                                     onClick={() => handleAvailabilityToggle(opt)}
                                                     className={`
-                                                        px-4 py-2 rounded-full border-2 font-bold text-sm transition-all
+                                                        min-h-11 px-4 py-2 rounded-full border-2 font-bold text-sm transition-all
                                                         ${formData.availability.includes(opt)
                                                             ? 'bg-black text-white border-black'
                                                             : 'bg-white border-gray-200 hover:border-black text-gray-500'}
