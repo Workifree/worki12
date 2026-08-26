@@ -21,7 +21,7 @@
 
 **Gate:** LGPD. Não é cortesia — é base legal para o dado que já estamos gravando.
 
-## 2. `{}` passa no CHECK de `availability_days`
+## 2. ✅ RESOLVIDO — `{}` passava no CHECK de `availability_days` (25/08/2026)
 
 **Origem:** security-reviewer F7 (registrado como NOTA consciente).
 
@@ -60,7 +60,7 @@ a empresa ou o suporte"), mas o caminho continua sendo humano.
 
 **Correção:** campo de CPF em `pages/Profile.tsx` com a mesma validação do onboarding.
 
-## 4. `GRANT UPDATE (term_text, anonymized_at)` amplo demais
+## 4. ✅ RESOLVIDO — GRANT amplo demais em `service_terms` (25/08/2026)
 
 **Origem:** F6. Roteado ao architect, ainda sem parecer.
 
@@ -113,7 +113,7 @@ credencial some, a linha de identidade sobrevive anonimizada) + RPC transacional
 **Dois itens aguardam o humano:** prazo de retenção e texto da política (H1) e o aval para remover as
 FKs de identidade (H2). Este débito só fecha depois do #1 (política declarar a retenção).
 
-## 6. Aceite do termo não é garantido pelo banco — só pela UI
+## 6. ✅ RESOLVIDO — aceite do termo agora é garantido pelo banco (25/08/2026)
 
 **Origem:** evaluator F6, finding `C-TERM-FETCH-FAIL` (tipo c — decisão de arquitetura).
 
@@ -262,7 +262,7 @@ novo gate**, é só implementar:
 `.harness/memory-bank/decisions/ADR-20260821-busca-de-empresas-acoplada-ao-debito-10.md` §D2 e
 `.harness/spec/troca-freelas/ddl-aprovado.md` §6 (DS-BUSCA).
 
-## 11. `reviews` aceita avaliação sem turno concluído
+## 11. ✅ RESOLVIDO — `reviews` aceitava avaliação sem turno concluído (25/08/2026)
 
 **Origem:** gate do architect sobre o débito #9 (21/08/2026). **Pré-existente.**
 
