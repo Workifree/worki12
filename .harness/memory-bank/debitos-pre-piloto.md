@@ -3,7 +3,21 @@
 > Itens levantados pelas revisões durante as features F1–F7 que NÃO bloqueiam merge técnico
 > mas precisam ser resolvidos antes do piloto com cliente real. Atualizar ao fechar cada um.
 
-## 1. Política de Privacidade desatualizada — 2 campos novos de dado pessoal
+## 1. ✅ RESOLVIDO — a Política de Privacidade já declara tudo (conferido 25/08/2026)
+
+> Este item envelheceu: a política foi atualizada em algum momento e o débito não. Conferido no
+> `Privacy.tsx` **e no chunk servido em produção** (`Privacy-BfHdeiqY.js`), ela já declara
+> nominalmente as quatro categorias que faltavam — disponibilidade declarada, certificações e
+> treinamentos (com a delimitação explícita de que **não** se coleta documento de saúde nem o
+> arquivo do certificado), o termo de prestação congelado com CPF e CNPJ, e a **retenção do dado
+> anonimizado** após a exclusão, com a base legal citada (LGPD art. 16, I e II; prescrição civil e
+> trabalhista para os 6 anos).
+>
+> A última peça — declarar que a exclusão **anonimiza e retém** em vez de apagar tudo — é a que
+> importa depois de eu ter confirmado no #5 que é isso que o `delete-account` faz de fato. Está lá,
+> na Seção 5, sob "O que permanece após a exclusão, e por quê".
+
+### Registro original
 
 **Origem:** security-reviewer F6 e F7.
 
@@ -307,7 +321,14 @@ diferente.
 **Gate:** decidir antes de o SOS ser ligado em produção. Depois, o número já terá sido lido como se
 fosse comparável.
 
-## 13. O consentimento do SOS subdeclara o que a empresa passa a ver
+## 13. ✅ RESOLVIDO no código — consentimento do SOS cobre o que acontece
+
+> A saída 1 foi adotada e está em produção desde 22/08: o texto cita nominalmente telefone, CPF,
+> data de nascimento e chave PIX, explica a finalidade, declara a gratuidade da recusa e diz como
+> desligar. **O que resta não é código** — é o parecer jurídico/LGPD que o ADR do SOS já exigia, e
+> que só faz sentido pedir se o SOS for ligado no piloto.
+
+### Registro original
 
 **Origem:** evaluator do F11 (ALTO, tipo b — vício do contrato, não da implementação).
 
