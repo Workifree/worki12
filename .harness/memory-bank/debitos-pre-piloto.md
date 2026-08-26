@@ -52,7 +52,30 @@ O grant permite ao papel escrever `term_text` livremente; a imutabilidade é gar
 trigger `enforce_service_term_immutability`. Defesa em profundidade pede o grant estreitado ao
 mínimo que a RPC de aceite precisa.
 
-## 5. 🔴 PRÉ-EXISTENTE — `delete-account` já está quebrado para freela com pagamento
+## 5. ✅ RESOLVIDO — `delete-account` NÃO está mais quebrado (verificado 25/08/2026)
+
+> **A correção descrita no parecer do architect foi aplicada, e este item envelheceu errado.**
+> Verificado no catálogo e por execução real, com `ROLLBACK` forçado, sobre um freela **de verdade
+> com 3 pagamentos**:
+>
+> - `workers` **não tem FK nenhuma** — as CASCADEs para `auth.users` foram removidas (a "lápide
+>   pseudônima" do parecer), e a proteção que elas davam por acidente foi reposta pelo trigger
+>   `lgpd_guard_auth_user_delete`, que barra o `DELETE` enquanto houver perfil vivo.
+> - `public.anonymize_account` **existe** e devolveu `outcome='anonymized'`.
+> - Em seguida, `DELETE FROM auth.users` apagou **1 linha** — funcionou. A linha em `workers`
+>   sobreviveu anonimizada, preservando a trilha de `shift_payments`.
+>
+> Ou seja: o `RESTRICT` de `shift_payments → workers` **nunca dispara**, porque o perfil não é
+> apagado. E o `delete-account` já chama `anonymize_account` antes do `deleteUser`, fail-closed
+> (só prossegue com `outcome='anonymized'`).
+>
+> **O que continua aberto é o item #1** (a política de privacidade precisa declarar a retenção do
+> dado anonimizado). O direito de exclusão está tecnicamente cumprido; falta a declaração.
+>
+> Diagnóstico original preservado abaixo — inclusive porque descreve o segundo caminho de bloqueio
+> (via `wallets`), que a mesma remoção de CASCADE resolveu.
+
+### Diagnóstico original (obsoleto)
 
 **Origem:** descoberto durante F6. **Não foi introduzido por nenhuma feature desta leva.**
 
