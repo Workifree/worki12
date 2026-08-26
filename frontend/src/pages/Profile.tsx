@@ -72,6 +72,7 @@ interface WorkerProfile {
     city: string;
     phone: string;
     bio: string;
+    cpf: string | null;
     pix_key: string;
     primary_role: string;
     roles: string[];
@@ -94,6 +95,7 @@ interface FormData {
     city: string;
     phone: string;
     bio: string;
+    cpf: string;
     pix_key: string;
     primary_role: string;
     roles: string;
@@ -158,6 +160,7 @@ export default function Profile() {
         city: '',
         phone: '',
         bio: '',
+        cpf: '',
         pix_key: '',
         primary_role: '',
         roles: '' // comma separated string for editing
@@ -165,6 +168,19 @@ export default function Profile() {
 
     // Tipo de chave PIX selecionado na edição — não persistido, só orienta máscara/validação.
     const [pixKeyType, setPixKeyType] = useState<PixKeyType>('cpf');
+
+    // --- CPF -------------------------------------------------------------------------------
+    // O termo de prestação (F6) exige CPF. Sem ele, `acceptServiceTerm` devolve `missing_cpf` e o
+    // freela fica sem saída: já trabalhou, a empresa já registrou o pagamento, e não havia tela
+    // onde ele pudesse resolver isso sozinho — só "fale com a empresa ou o suporte". Conferido em
+    // produção: 4 dos 15 freelas estavam nessa situação.
+    //
+    // Editável SÓ enquanto está vazio. Depois de preenchido, o CPF é o que identifica a pessoa nos
+    // termos já assinados; deixá-lo como campo livre seria vetor de fraude, não conveniência.
+    // Correção de um CPF já gravado continua sendo caminho humano, de propósito.
+    const cpfJaCadastrado = !!(profile?.cpf && String(profile.cpf).trim());
+    const cpfDigitado = formData.cpf.replace(/\D/g, '');
+    const cpfValido = cpfDigitado.length === 11 && validateCPFOrCNPJ(formData.cpf);
 
     // F7 — grade de disponibilidade em edição. `{}` é só o estado transitório do formulário;
     // NUNCA é o que se grava (ver `handleSave` — `normalizeAvailabilityGrade` poda para `null`
@@ -178,6 +194,7 @@ export default function Profile() {
         city: '',
         phone: '',
         bio: '',
+        cpf: '',
         pix_key: '',
         primary_role: '',
         roles: ''
@@ -188,6 +205,7 @@ export default function Profile() {
         formData.city !== initialFormDataRef.current.city ||
         formData.phone !== initialFormDataRef.current.phone ||
         formData.bio !== initialFormDataRef.current.bio ||
+        formData.cpf !== initialFormDataRef.current.cpf ||
         formData.pix_key !== initialFormDataRef.current.pix_key ||
         formData.primary_role !== initialFormDataRef.current.primary_role ||
         formData.roles !== initialFormDataRef.current.roles ||
@@ -278,6 +296,7 @@ export default function Profile() {
                     city: data.city || '',
                     phone: data.phone || '',
                     bio: data.bio || '',
+                    cpf: formatCpfCnpj(data.cpf || ''),
                     pix_key: data.pix_key || '',
                     primary_role: data.primary_role || '',
                     roles: data.roles ? data.roles.join(', ') : ''
@@ -463,6 +482,8 @@ export default function Profile() {
                 phone: formData.phone,
                 bio: formData.bio,
                 pix_key: normalizePixKeyForStorage(pixKeyType, formData.pix_key),
+                // Só entra no payload quando ainda não havia CPF — nunca sobrescreve um já gravado.
+                ...(!cpfJaCadastrado && cpfValido ? { cpf: cpfDigitado } : {}),
                 primary_role: formData.primary_role,
                 roles: rolesArray,
                 availability_days: normalizeAvailabilityGrade(availabilityGrade),
@@ -777,6 +798,47 @@ export default function Profile() {
                                 )}
                             </div>
                         </div>
+                    </div>
+
+                    {/* CPF — exigido pelo termo de prestação (F6). Editável só enquanto vazio. */}
+                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
+                        <h3 className="text-lg font-black uppercase mb-4">CPF</h3>
+                        {cpfJaCadastrado ? (
+                            <>
+                                <p className="text-sm font-bold text-gray-600">{formatCpfCnpj(String(profile.cpf))}</p>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
+                                    termos que já assinou.
+                                </p>
+                            </>
+                        ) : isEditing ? (
+                            <div className="space-y-2">
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formData.cpf}
+                                    onChange={(e) => setFormData({ ...formData, cpf: formatCpfCnpj(e.target.value) })}
+                                    aria-label="CPF"
+                                    className={`w-full bg-gray-50 border-2 focus:border-black rounded-xl p-3 font-bold outline-none transition-all ${formData.cpf.trim() && !cpfValido ? 'border-red-400' : 'border-transparent'}`}
+                                    placeholder="000.000.000-00"
+                                />
+                                {formData.cpf.trim() && !cpfValido && (
+                                    <p className="text-xs text-red-500 font-bold">CPF inválido.</p>
+                                )}
+                                <p className="text-xs text-gray-400">
+                                    Necessário para assinar o termo de prestação e receber o recibo do turno.
+                                    Depois de salvo, só o suporte consegue alterar.
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="text-sm font-bold text-gray-600">Não informado</p>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
+                                    Toque em editar para cadastrar.
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
