@@ -179,7 +179,7 @@ export default function CompanyTeam() {
           </h2>
           <button
             onClick={() => setShowListModal(true)}
-            className="bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-2 transition-colors"
+            className="bg-black hover:bg-primary text-white min-h-11 px-4 py-2 rounded-xl font-black uppercase text-xs inline-flex items-center gap-2 transition-colors"
           >
             <Plus size={16} /> Nova Lista
           </button>

@@ -631,7 +631,7 @@ export default function CompanyProfile() {
                                         </div>
                                     ) : (
                                         company.email ? (
-                                            <a href={`mailto:${company.email}`} className="inline-flex items-center gap-2 text-gray-900 font-bold hover:text-blue-600 transition-colors">
+                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex items-center gap-2 text-gray-900 font-bold hover:text-blue-600 transition-colors">
                                                 <Mail size={16} className="text-gray-400" /> {company.email}
                                             </a>
                                         ) : <p className="text-gray-400 font-medium">—</p>

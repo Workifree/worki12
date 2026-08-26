@@ -186,7 +186,7 @@ export default function CompanyOrdersReport() {
             <button
               key={key}
               onClick={() => applyPreset(key)}
-              className={`px-5 py-2.5 rounded-xl border-2 font-black uppercase text-sm transition-all
+              className={`min-h-11 px-5 py-2.5 rounded-xl border-2 font-black uppercase text-sm transition-all
                 ${preset === key
                   ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]'
                   : 'bg-white text-gray-500 border-black hover:bg-gray-100'
