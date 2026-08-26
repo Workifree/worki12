@@ -211,7 +211,7 @@ export default function CompanyOrdersReport() {
                 value={from}
                 max={to}
                 onChange={(e) => handleCustomDateChange('from', e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="min-h-11 w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -227,7 +227,7 @@ export default function CompanyOrdersReport() {
                 value={to}
                 min={from}
                 onChange={(e) => handleCustomDateChange('to', e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="min-h-11 w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -239,7 +239,7 @@ export default function CompanyOrdersReport() {
               id="statusSelect"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as OrderStatus | 'todas')}
-              className="w-full px-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+              className="min-h-11 w-full px-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.key} value={opt.key}>
@@ -255,14 +255,14 @@ export default function CompanyOrdersReport() {
           <button
             onClick={handleExportCSV}
             disabled={loading || rows.length === 0}
-            className="flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-h-11 flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={16} /> Exportar CSV
           </button>
           <button
             onClick={() => window.print()}
             disabled={loading || rows.length === 0}
-            className="flex items-center gap-2 px-5 py-2.5 border-2 border-black rounded-xl font-black uppercase text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-h-11 flex items-center gap-2 px-5 py-2.5 border-2 border-black rounded-xl font-black uppercase text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer size={16} /> Imprimir / PDF
           </button>
@@ -298,7 +298,7 @@ export default function CompanyOrdersReport() {
           <p className="font-black text-red-600 uppercase text-sm">{error}</p>
           <button
             onClick={fetchReport}
-            className="mt-3 px-6 py-2 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-black hover:text-white transition-colors"
+            className="min-h-11 mt-3 px-6 py-2 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-black hover:text-white transition-colors"
           >
             Tentar novamente
           </button>

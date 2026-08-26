@@ -676,7 +676,7 @@ export default function CompanyProfile() {
                     {!isEditing && (
                         <button
                             onClick={() => setIsEditing(true)}
-                            className="text-xs font-black uppercase text-gray-400 hover:text-black flex items-center gap-1 transition-colors flex-shrink-0"
+                            className="min-h-11 px-2 -mx-2 text-xs font-black uppercase text-gray-400 hover:text-black inline-flex items-center gap-1 transition-colors flex-shrink-0"
                         >
                             <Pencil size={14} /> Editar
                         </button>
@@ -716,7 +716,7 @@ export default function CompanyProfile() {
                     {!isEditing && (
                         <button
                             onClick={() => setIsEditing(true)}
-                            className="text-xs font-black uppercase text-gray-400 hover:text-black flex items-center gap-1 transition-colors flex-shrink-0"
+                            className="min-h-11 px-2 -mx-2 text-xs font-black uppercase text-gray-400 hover:text-black inline-flex items-center gap-1 transition-colors flex-shrink-0"
                         >
                             <Pencil size={14} /> Editar
                         </button>

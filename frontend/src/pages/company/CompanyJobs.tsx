@@ -578,30 +578,30 @@ export default function CompanyJobs() {
                         placeholder="Buscar turnos..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="w-full bg-white border-2 border-transparent focus:border-black rounded-xl py-2.5 pl-10 pr-4 font-medium outline-none transition-all placeholder:font-medium text-sm"
+                        className="w-full min-h-11 bg-white border-2 border-transparent focus:border-black rounded-xl py-2.5 pl-10 pr-4 font-medium outline-none transition-all placeholder:font-medium text-sm"
                     />
                 </div>
                 <button
                     onClick={() => changeFilter('all')}
-                    className={`px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'all' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
+                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'all' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
                 >
                     Todos
                 </button>
                 <button
                     onClick={() => changeFilter('open')}
-                    className={`px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'open' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
+                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'open' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
                 >
                     Abertos
                 </button>
                 <button
                     onClick={() => changeFilter('andamento')}
-                    className={`px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'andamento' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
+                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'andamento' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
                 >
                     Em Andamento
                 </button>
                 <button
                     onClick={() => changeFilter('closed')}
-                    className={`px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'closed' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
+                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'closed' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
                 >
                     Finalizados
                 </button>

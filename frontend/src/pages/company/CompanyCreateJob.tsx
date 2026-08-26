@@ -359,7 +359,7 @@ export default function CompanyCreateJob() {
             {/* Header */}
             <div className="mb-8 flex items-center justify-between">
                 <div>
-                    <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
+                    <button onClick={() => navigate(-1)} className="min-h-11 px-2 -mx-2 inline-flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
                         <ArrowLeft size={16} strokeWidth={3} /> Voltar
                     </button>
                     <h1 className="text-3xl font-black uppercase tracking-tighter">{isEditing ? 'Editar Turno' : 'Criar Novo Turno'}</h1>
