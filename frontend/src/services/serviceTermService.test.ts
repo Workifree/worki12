@@ -148,7 +148,10 @@ describe('ServiceTermService.acceptServiceTerm', () => {
 
   // Caso central do ADR-20260818: CPF ausente bloqueia o aceite com mensagem específica
   // (não genérica) — é o outcome que motivou o congelamento no aceite, não na geração.
-  it('outcome=missing_cpf traduz para a mensagem honesta (fala com empresa/suporte, sem apontar para /profile)', async () => {
+  // A3 voltou à forma original em 25/08/2026 (débito #8, que dependia do #3): enquanto `/profile`
+  // não tinha campo de CPF, apontar para lá mandava a pessoa a um beco sem saída. O campo existe
+  // agora, então a mensagem volta a indicar o caminho que o próprio freela percorre.
+  it('outcome=missing_cpf aponta o freela para o Perfil, onde ele resolve sozinho', async () => {
     mockRpc.mockResolvedValue({ data: { outcome: 'missing_cpf' }, error: null });
 
     const result = await ServiceTermService.acceptServiceTerm('term-1');
@@ -156,6 +159,9 @@ describe('ServiceTermService.acceptServiceTerm', () => {
     expect(result.outcome).toBe('missing_cpf');
     expect(result.error).toBe(OUTCOME_ERRORS.missing_cpf);
     expect(result.error).toMatch(/CPF/);
+    expect(result.error).toMatch(/Perfil/);
+    // e nao manda mais para o suporte, que era o caminho humano do beco sem saida
+    expect(result.error).not.toMatch(/suporte/i);
   });
 
   it('erro de rede/RPC vira outcome not_found com mensagem fixa (nunca erro cru)', async () => {
@@ -240,7 +246,7 @@ describe('ServiceTermService.acceptServiceTerm', () => {
       'Este pagamento foi estornado — o termo não pode mais ser aceito.',
     );
     expect(OUTCOME_ERRORS.missing_cpf).toBe(
-      'Seu cadastro está sem um CPF válido. Fale com a empresa ou com o suporte do Worki para regularizar seu cadastro.',
+      'Seu cadastro está sem um CPF válido. Cadastre o seu em Perfil para poder assinar o termo.',
     );
 
     const messages = [

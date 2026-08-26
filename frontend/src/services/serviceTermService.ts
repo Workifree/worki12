@@ -100,8 +100,11 @@ export const OUTCOME_ERRORS: Partial<Record<ServiceTermAcceptOutcome, string>> =
   // com o banner já honesto de `ServiceTermSection` (fala com a empresa/suporte), em vez
   // de apontar para `/profile`. Não referenciar link para `/profile` aqui (a spec A3 pede
   // isso, mas o autor da spec confirmou que vai corrigir A3 — não seguir o texto antigo).
+  // A3 voltou à forma original em 25/08/2026: enquanto `/profile` não tinha campo de CPF, apontar
+  // para lá seria mandar a pessoa para um beco sem saída, e a mensagem honesta era "fale com o
+  // suporte". O campo existe agora (débito #3), então o caminho volta a ser o do próprio freela.
   missing_cpf:
-    'Seu cadastro está sem um CPF válido. Fale com a empresa ou com o suporte do Worki para regularizar seu cadastro.',
+    'Seu cadastro está sem um CPF válido. Cadastre o seu em Perfil para poder assinar o termo.',
 };
 
 function translateOutcome(outcome: string | undefined): string {

@@ -148,7 +148,15 @@ nunca "não existe termo aceito".
 3. **O banner de falha de leitura aparece para a empresa**, dizendo que "a confirmação de
    recebimento fica bloqueada" — mensagem escrita para o freela, exibida a quem não tem esse botão.
 
-## 8. Reversão da A3 do F6 depende do item 3
+## 8. ✅ RESOLVIDO — A3 do F6 revertida à forma original (25/08/2026)
+
+> Dependia do #3, fechado no mesmo dia. Com o campo de CPF em `/profile`, a mensagem de
+> `missing_cpf` volta a apontar o caminho que o próprio freela percorre ("Cadastre o seu em Perfil")
+> em vez de mandá-lo ao suporte — que era a redação honesta enquanto o beco não tinha saída.
+> O bloco visual ganhou link para `/profile`; o teste passou a exigir que a mensagem cite "Perfil" e
+> **não** cite "suporte", para que a reversão não se desfaça em silêncio.
+
+### Registro original
 
 Quando `/profile` ganhar campo de CPF, o critério A3 da spec `termo-prestacao` volta à forma
 original (toast "Complete seu CPF no perfil" + link). Enquanto não ganhar, a mensagem honesta é a

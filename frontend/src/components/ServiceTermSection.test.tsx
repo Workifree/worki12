@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render as renderRTL, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+// O bloco de `missing_cpf` aponta para /profile com <Link> (débito #8), e <Link> exige contexto de
+// rota. Em produção o componente sempre vive dentro do router — o wrapper aqui reproduz isso.
+const render = (ui: React.ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>);
 import ServiceTermSection from './ServiceTermSection';
 import type { ServiceTerm } from '../types';
 

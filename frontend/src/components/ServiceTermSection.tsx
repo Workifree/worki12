@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { FileText, CheckCircle2, CheckCircle, Loader2, ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react';
@@ -289,8 +290,11 @@ export default function ServiceTermSection({
                                             este termo agora.
                                         </p>
                                         <p className="text-yellow-800 text-xs font-medium mt-1">
-                                            Fale com a empresa ou com o suporte do Worki para regularizar seu
-                                            cadastro.
+                                            Cadastre o seu em{' '}
+                                            <Link to="/profile" className="underline font-black">
+                                                Perfil
+                                            </Link>{' '}
+                                            e volte aqui para assinar.
                                         </p>
                                     </div>
                                 </div>
