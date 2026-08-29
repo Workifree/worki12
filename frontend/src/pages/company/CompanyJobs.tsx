@@ -249,7 +249,7 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                                 e.stopPropagation();
                                 setOpenMenu(openMenu === job.id ? null : job.id);
                             }}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors"
                             aria-label="Mais opções do turno"
                         >
                             <MoreHorizontal size={20} className="text-gray-400" />
