@@ -183,7 +183,20 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
     expect(screen.queryByText('Confirma seu turno de amanhã?')).not.toBeInTheDocument()
   })
 
+  // ⚠️ O RELOGIO PRECISA SER CONGELADO AQUI, e o motivo e o proprio assunto do teste.
+  //
+  // A versao anterior fazia `new Date()` e somava DUAS HORAS. Entre 22h e a meia-noite isso
+  // atravessa o dia civil: o turno passa a ser de AMANHA, o componente diz "amanha" -- corretamente
+  // -- e o teste, que procura "hoje", quebra. Ele passava 22 horas por dia e falhava nas outras 2.
+  // Descoberto as 23h42 de 28/08/2026, com a suite inteira verde no resto do dia.
+  //
+  // Mesma familia dos achados de ancora de meia-noite ja documentados no analytics (debito #18):
+  // teste que depende do relogio da maquina nao esta testando o codigo, esta testando a hora.
   it('turno de HOJE diz "de hoje", nao a data seca', async () => {
+    // `shouldAdvanceTime` mantem o relogio congelado para o COMPONENTE e ainda deixa o `waitFor`
+    // e as promises do render andarem -- congelar sem isso trava a espera assincrona.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 12, 9, 0, 0))   // 12/08/2026, 09h local: +2h nao vira o dia
     const hoje = new Date()
     hoje.setHours(hoje.getHours() + 2)
     setupMocks(hoje.toISOString())
@@ -192,6 +205,7 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
     await waitFor(() => {
       expect(screen.getByText('Confirma seu turno de hoje?')).toBeInTheDocument()
     })
+    vi.useRealTimers()
   })
 
   it('mostra o card de confirmação pendente com os dados do turno de amanhã', async () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat } from 'lucide-react';
@@ -22,6 +22,22 @@ export default function CompanyCreateJob() {
     const navigate = useNavigate();
     const { id } = useParams(); // Add useParams
     const isEditing = !!id;
+
+    // --- Repetir turno -------------------------------------------------------------------------
+    // `?repetir=<jobId>` cria um turno NOVO com os dados de um anterior. Nao e edicao: `isEditing`
+    // continua falso, entao o fluxo grava um registro novo.
+    //
+    // Por que existe: criar um turno exige hoje SETE entradas obrigatorias (titulo, categoria entre
+    // 14 opcoes, descricao, valor, data, entrada e saida), espalhadas em tres etapas -- e a empresa
+    // repete o MESMO tipo de turno o tempo todo. Recriar tudo a cada vez e trabalho que o sistema ja
+    // tem guardado; a heuristica classica e "reconhecer em vez de lembrar" (Nielsen #6), e o que
+    // pesa nao e a contagem de cliques, e o custo de interacao -- ler, decidir, digitar
+    // (Nielsen Norman Group, "interaction cost").
+    //
+    // A DATA nao vem junto de proposito: e a unica coisa que necessariamente muda entre uma
+    // repeticao e outra, e herda-la silenciosamente criaria turno na data errada.
+    const [searchParams] = useSearchParams();
+    const repetirId = searchParams.get('repetir');
     const { addToast } = useToast();
     const queryClient = useQueryClient();
 
@@ -66,10 +82,17 @@ export default function CompanyCreateJob() {
     // Fetch Job Data if Editing
     useEffect(() => {
         if (isEditing) {
-            fetchJobData();
+            fetchJobData(id!, 'editar');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchJobData usa state setters estaveis, so precisa re-executar quando id muda
     }, [id]);
+
+    // Repetir: carrega o turno-modelo, limpa a data e ja abre na etapa em que ela e escolhida.
+    useEffect(() => {
+        if (isEditing || !repetirId) return;
+        void fetchJobData(repetirId, 'repetir');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mesmos setters estaveis
+    }, [repetirId]);
 
     // Pré-preenche o Briefing com o briefing padrão do negócio (só ao criar, e só se
     // ainda estiver vazio — a empresa pode ajustar/incrementar por turno).
@@ -90,7 +113,7 @@ export default function CompanyCreateJob() {
         return () => { active = false; };
     }, [isEditing]);
 
-    const fetchJobData = async () => {
+    const fetchJobData = async (jobId: string, modo: 'editar' | 'repetir' = 'editar') => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { navigate('/login'); return; }
@@ -98,7 +121,7 @@ export default function CompanyCreateJob() {
             const { data, error } = await supabase
                 .from('jobs')
                 .select('*')
-                .eq('id', id)
+                .eq('id', jobId)
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
@@ -115,13 +138,18 @@ export default function CompanyCreateJob() {
                     location: data.location || '',
                     budget: data.budget?.toString() || '',
                     budget_type: data.budget_type,
-                    start_date: data.start_date ? data.start_date.split('T')[0] : '',
+                    // Ao repetir, a data fica em branco: e a unica coisa que muda de verdade entre
+                    // uma repeticao e outra, e herda-la criaria turno na data errada em silencio.
+                    start_date: modo === 'repetir' ? '' : (data.start_date ? data.start_date.split('T')[0] : ''),
                     scope: data.scope,
                     work_start_time: data.work_start_time || '',
                     work_end_time: data.work_end_time || '',
                     has_lunch: data.has_lunch || false,
                     slots: String(data.slots ?? 1)
                 });
+                // O que falta preencher e a data -- abre direto nela em vez de fazer a pessoa
+                // atravessar duas etapas ja resolvidas.
+                if (modo === 'repetir') setStep(3);
             }
         } catch (error) {
             logError('Error fetching job:', error);
@@ -186,6 +214,35 @@ export default function CompanyCreateJob() {
             return `todos os dias, de ${startLabel} a ${endLabel}`;
         }
         return `${rotuloDeDias([...weekdays])}, de ${startLabel} a ${endLabel}`;
+    };
+
+    // O QUE FALTA na etapa atual, em palavras.
+    //
+    // O botao ficava desabilitado sem dizer por que -- e a etapa 2 mostra QUATRO campos de texto
+    // dos quais so a descricao e obrigatoria, entao a pessoa nao tinha como adivinhar qual travava.
+    // O onboarding deste mesmo produto ja diz o que falta; nao dizer aqui e inconsistencia interna
+    // (Nielsen #1, visibilidade do estado, e #4, consistencia) num passo que a empresa percorre
+    // toda semana.
+    const oQueFalta = (): string[] => {
+        const falta: string[] = [];
+        if (step === 1) {
+            if (!formData.title.trim()) falta.push('o titulo do turno');
+            if (!formData.category) falta.push('a funcao');
+        } else if (step === 2) {
+            if (!formData.description.trim()) falta.push('a descricao');
+        } else if (step === 3) {
+            if (!(parseFloat(formData.budget) > 0)) falta.push('o valor');
+            if (!formData.start_date) falta.push('a data');
+            else if (formData.start_date < todayLocalDate()) falta.push('uma data que ainda nao passou');
+            if (!formData.work_start_time) falta.push('o horario de entrada');
+            if (!formData.work_end_time) falta.push('o horario de saida');
+            if (!isEditing && isRecurring) {
+                if (recurrenceType === 'weekly' && weekdays.length === 0) falta.push('os dias da semana');
+                if (!rangeEndDate || rangeEndDate < formData.start_date) falta.push('a data final da serie');
+                else if (occurrenceDates.length === 0) falta.push('ao menos uma data na serie');
+            }
+        }
+        return falta;
     };
 
     // Validação por etapa — mesmo padrão de `canProceed()` do WorkerOnboarding.
@@ -754,6 +811,13 @@ export default function CompanyCreateJob() {
                     )}
 
                     {/* Navigation Buttons */}
+                    {/* Diz o que falta, em vez de so desabilitar o botao. */}
+                    {!canProceed() && oQueFalta().length > 0 && (
+                        <p className="mt-6 text-xs font-bold text-red-500">
+                            Falta preencher: {oQueFalta().join(', ')}.
+                        </p>
+                    )}
+
                     <div className="mt-8 flex justify-between pt-6 border-t border-gray-100">
                         {step > 1 ? (
                             <button
@@ -767,6 +831,7 @@ export default function CompanyCreateJob() {
                         <button
                             onClick={step === 3 ? handleSubmit : handleNext}
                             disabled={loading || !canProceed()}
+                            title={canProceed() ? undefined : 'Falta preencher: ' + oQueFalta().join(', ')}
                             className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-[1.02] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? 'Salvando...' : step === 3 ? (isEditing ? 'Salvar Alterações' : (isRecurring ? 'Criar Série de Turnos' : 'Criar Turno')) : 'Próximo'}

@@ -1,4 +1,4 @@
-import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle } from 'lucide-react';
+import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -268,6 +268,15 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                                     className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2"
                                 >
                                     <Eye size={16} /> Ver Detalhes
+                                </button>
+                                {/* Repetir: a empresa refaz o MESMO tipo de turno o tempo todo, e criar
+                                    do zero custa sete entradas obrigatorias em tres etapas. Aqui ela
+                                    reaproveita o turno inteiro e so escolhe a data nova. */}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/create?repetir=${job.id}`); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                >
+                                    <Copy size={16} /> Repetir turno
                                 </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/edit`); }}
