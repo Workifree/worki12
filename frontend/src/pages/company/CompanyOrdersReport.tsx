@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText,
   Printer,
@@ -137,7 +138,7 @@ export default function CompanyOrdersReport() {
 
   function handleExportCSV() {
     if (!report || report.rows.length === 0) {
-      addToast('Nenhuma ordem para exportar.', 'info');
+      addToast('Nenhum pagamento para exportar.', 'info');
       return;
     }
     const csv = toCSV(report);
@@ -159,13 +160,20 @@ export default function CompanyOrdersReport() {
 
   return (
     <div className="flex flex-col gap-8 pb-20 md:pb-12 font-sans text-accent max-w-5xl mx-auto print:pb-0">
-      <PageMeta title="Relatório de Ordens" />
+      <PageMeta title="Relatório de Pagamentos" />
 
       {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
       <header className="print:hidden">
         <h1 className="text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
-          <FileText size={32} strokeWidth={3} /> Relatório de Ordens
+          <FileText size={32} strokeWidth={3} /> Relatório de Pagamentos
         </h1>
+        {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
+            (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
+        <p className="text-sm font-bold text-gray-500 mt-1">
+          Quanto foi pago, a quem, quando — com exportação para o financeiro. Procurando tempo de
+          resposta dos chamados e presença? Veja{' '}
+          <Link to="/company/operacao" className="underline font-black">Operação</Link>.
+        </p>
         <p className="text-gray-500 text-sm">
           Visão consolidada dos turnos e seus pagamentos — um turno com mais de um freela
           vira uma ordem por freela — export pro financeiro/estoquista.
@@ -306,7 +314,7 @@ export default function CompanyOrdersReport() {
       ) : rows.length === 0 ? (
         <div className="bg-white border-2 border-black rounded-2xl p-10 text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none">
           <FileText size={40} className="mx-auto mb-4 text-gray-300" />
-          <p className="font-black text-gray-500 uppercase text-sm">Nenhuma ordem no período.</p>
+          <p className="font-black text-gray-500 uppercase text-sm">Nenhum pagamento no período.</p>
         </div>
       ) : (
         <>

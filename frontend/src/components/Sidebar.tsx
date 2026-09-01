@@ -114,7 +114,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: Share2, label: 'Indicações', path: '/company/indicacoes' },
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
-        { icon: FileText, label: 'Relatório', path: '/company/relatorio' },
+        { icon: FileText, label: 'Pagamentos', path: '/company/relatorio' },
         { icon: BarChart3, label: 'Operação', path: '/company/operacao' },
         ...(canSeeOrganization ? [{ icon: Network, label: 'Organização', path: '/company/organization' }] : []),
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },

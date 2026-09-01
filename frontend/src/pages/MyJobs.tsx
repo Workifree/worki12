@@ -119,6 +119,32 @@ function fmtTime(iso: string | null): string {
     }
 }
 
+/**
+ * Endereço do turno como LINK para o mapa (tarefa real do freela: "como eu chego lá?").
+ * A informação já estava na tela; o que faltava era ela levar à ação — um toque abre o app de
+ * mapas em vez de obrigar a pessoa a copiar o endereço e colar em outro lugar (reconhecimento
+ * em vez de esforço; custo de interação). Placeholder ("Local a definir") continua texto puro.
+ */
+function LocalDoTurno({ location, size = 14 }: { location: string | null | undefined; size?: number }) {
+    const texto = location || 'Local a definir';
+    const real = !!location && !/local a (definir|combinar)/i.test(location);
+    if (!real) {
+        return <><MapPin size={size} /> {texto}</>;
+    }
+    return (
+        <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(texto)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1.5 underline decoration-dotted underline-offset-2 hover:decoration-solid min-h-11 -my-2 py-2"
+            aria-label={`Abrir ${texto} no mapa`}
+        >
+            <MapPin size={size} /> {texto}
+        </a>
+    );
+}
+
 export default function MyJobs() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
@@ -614,7 +640,7 @@ export default function MyJobs() {
                                         <Clock size={14} /> {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
                                     </span>
                                     <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
-                                        <MapPin size={14} /> {job.location}
+                                        <LocalDoTurno location={job.location} />
                                     </span>
                                 </div>
                                 {localResponse === 'confirmed' ? (
@@ -777,7 +803,7 @@ export default function MyJobs() {
                                         </span>
                                         {location && (
                                             <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
-                                                <MapPin size={14} /> {location}
+                                                <LocalDoTurno location={location} />
                                             </span>
                                         )}
                                     </div>
@@ -860,7 +886,7 @@ export default function MyJobs() {
                                             <DollarSign size={14} /> R$ {job.pay}
                                         </span>
                                         <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-gray-600 px-3 py-1.5 rounded-lg border">
-                                            <MapPin size={14} /> {job.location}
+                                            <LocalDoTurno location={job.location} />
                                         </span>
                                     </div>
                                     {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
@@ -986,7 +1012,7 @@ export default function MyJobs() {
                                     <DollarSign size={14} /> R$ {job.pay}
                                 </span>
                                 <p className="text-sm font-bold text-gray-500 flex items-center gap-1 mt-1">
-                                    <MapPin size={14} /> {job.location}
+                                    <LocalDoTurno location={job.location} />
                                 </p>
                             </div>
                         </div>
@@ -1135,7 +1161,7 @@ export default function MyJobs() {
                         </div>
 
                         <div className="flex items-center gap-2 text-sm font-bold text-gray-500 mb-5">
-                            <MapPin size={16} /> {detailJob.location}
+                            <LocalDoTurno location={detailJob.location} size={16} />
                             <span className="text-gray-300">•</span>
                             <Clock size={16} /> {detailJob.time}{detailJob.end_time ? ` - ${detailJob.end_time}` : ''}
                         </div>

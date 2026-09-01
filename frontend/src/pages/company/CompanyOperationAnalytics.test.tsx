@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render as renderRTL, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CompanyOperationAnalytics from './CompanyOperationAnalytics';
 import type { OperationAnalytics } from '../../types';
+import { MemoryRouter } from 'react-router-dom'
+
+// O cabecalho ganhou <Link> para /company/relatorio (link cruzado de encontrabilidade);
+// <Link> exige contexto de rota — em producao a pagina sempre vive dentro do router.
+const render = (ui: React.ReactElement) => renderRTL(<MemoryRouter>{ui}</MemoryRouter>)
+
 
 // ---------------------------------------------------------------------------
 // F9 (Analytics de operação) — a página é uma camada fina sobre
