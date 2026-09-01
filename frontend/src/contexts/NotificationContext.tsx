@@ -108,7 +108,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             if (dbChannel) supabase.removeChannel(dbChannel);
             supabase.removeChannel(broadcastChannel);
         };
-    }, [user, dbAvailable]);
+    // Depender do OBJETO `user` refazia tudo 3x por sessao: o supabase-js emite
+    // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED e cada evento produz um objeto novo com o
+    // MESMO id — o effect derrubava e recriava o canal realtime e rebuscava a lista a cada troca
+    // de identidade. Medido na auditoria de rede de 01/09: TODA tela pagava 3x GET notifications
+    // (+3 preflights). O que importa e QUEM esta logado, nao qual instancia do objeto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- user.id e a unica parte usada
+    }, [user?.id, dbAvailable]);
 
     const markAsRead = async (id: string) => {
         // Optimistic update
