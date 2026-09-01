@@ -118,6 +118,8 @@ export default function CompanyDashboard() {
         status: string;
         worker_checkin_at: string | null;
         company_checkin_confirmed_at: string | null;
+        worker_checkout_at: string | null;
+        company_checkout_confirmed_at: string | null;
         created_at: string;
         worker: ActiveShiftWorker | ActiveShiftWorker[] | null;
         jobs: ActiveShiftJob | ActiveShiftJob[] | null;
@@ -136,6 +138,8 @@ export default function CompanyDashboard() {
                     status,
                     worker_checkin_at,
                     company_checkin_confirmed_at,
+                    worker_checkout_at,
+                    company_checkout_confirmed_at,
                     created_at,
                     worker:workers(id, full_name, avatar_url, primary_role),
                     jobs!inner(id, title, location, work_start_time, work_end_time, company_id)
@@ -144,6 +148,76 @@ export default function CompanyDashboard() {
                 .in('status', ['hired', 'in_progress'])
                 .order('created_at', { ascending: false });
             return (data ?? []) as unknown as ActiveShiftRow[];
+        },
+        enabled: !!company
+    });
+
+    // ── PRECISA DE VOCÊ: o rabo do laço do dinheiro ─────────────────────────────────────────
+    // O freela tem casa persistente para "pagamento registrado — confirme"; o lado da EMPRESA
+    // não tinha nenhuma: turno concluído sem pagamento registrado e agendamento vencido só
+    // apareciam se ela abrisse exatamente o turno certo em /company/jobs. Notificação é
+    // transitória e fácil de perder; ação pendente pede indicador PERSISTENTE onde a pessoa já
+    // está (NN/g, "Indicators, Validations, and Notifications"). Best-effort: em erro, loga e
+    // some — o dashboard nunca quebra por causa da triagem.
+    interface PendingPayRow {
+        job_id: string;
+        worker_id: string;
+        titulo: string;
+        freela: string;
+        tipo: 'registrar' | 'efetivar';
+        venceuEm?: string;
+    }
+    const { data: pendingPayments = [] } = useQuery<PendingPayRow[]>({
+        queryKey: ['companyPendingPayments'],
+        queryFn: async () => {
+            try {
+                const companyId = await getAuthenticatedCompanyId();
+                const [{ data: concluidos }, { data: marcadores }] = await Promise.all([
+                    supabase
+                        .from('applications')
+                        .select('job_id, worker_id, worker:workers(full_name), jobs!inner(title, company_id)')
+                        .eq('jobs.company_id', companyId)
+                        .eq('status', 'completed'),
+                    supabase
+                        .from('shift_payments')
+                        .select('job_id, worker_id, status, scheduled_for, jobs!inner(title)')
+                        .eq('company_id', companyId)
+                        .in('status', ['scheduled', 'recorded']),
+                ]);
+                const um = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
+                // 1 marcador ativo por (turno, freela) — o UNIQUE parcial do banco garante.
+                const comMarcador = new Set((marcadores ?? []).map((m) => `${m.job_id}:${m.worker_id}`));
+                const rows: PendingPayRow[] = [];
+                for (const a of (concluidos ?? []) as unknown as Array<{ job_id: string; worker_id: string; worker: { full_name: string | null } | { full_name: string | null }[] | null; jobs: { title: string | null } | { title: string | null }[] | null }>) {
+                    if (comMarcador.has(`${a.job_id}:${a.worker_id}`)) continue;
+                    rows.push({
+                        job_id: a.job_id,
+                        worker_id: a.worker_id,
+                        titulo: um(a.jobs)?.title ?? 'Turno',
+                        freela: um(a.worker)?.full_name ?? 'Freela',
+                        tipo: 'registrar',
+                    });
+                }
+                // Agendamento cuja data prevista chegou: falta EFETIVAR (scheduled → recorded).
+                const d = new Date();
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const hoje = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                for (const m of (marcadores ?? []) as unknown as Array<{ job_id: string; worker_id: string; status: string; scheduled_for: string | null; jobs: { title: string | null } | { title: string | null }[] | null }>) {
+                    if (m.status !== 'scheduled' || !m.scheduled_for || m.scheduled_for > hoje) continue;
+                    rows.push({
+                        job_id: m.job_id,
+                        worker_id: m.worker_id,
+                        titulo: um(m.jobs)?.title ?? 'Turno',
+                        freela: '',
+                        tipo: 'efetivar',
+                        venceuEm: m.scheduled_for,
+                    });
+                }
+                return rows;
+            } catch (e) {
+                logError('companyDashboard.pendingPayments', e);
+                return [];
+            }
         },
         enabled: !!company
     });
@@ -255,6 +329,40 @@ export default function CompanyDashboard() {
             </button>
 
             {/* Turnos em Andamento / Acompanhamento Direto */}
+            {/* PRECISA DE VOCÊ — o rabo do laço do dinheiro, persistente no painel.
+                Laranja e no topo: é a triagem do dia. Início = o que precisa de você agora;
+                Turnos = a gestão completa. */}
+            {pendingPayments.length > 0 && (
+                <div className="mb-10">
+                    <h2 className="text-xl font-black uppercase flex items-center gap-2 mb-4">
+                        <AlertTriangle size={22} className="text-orange-500" /> Precisa de você ({pendingPayments.length})
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pendingPayments.slice(0, 4).map((row) => (
+                            <button
+                                key={`${row.job_id}:${row.worker_id}:${row.tipo}`}
+                                onClick={() => navigate(`/company/jobs/${row.job_id}/candidates`)}
+                                className="min-h-11 bg-orange-50 border-2 border-black rounded-2xl p-5 shadow-[6px_6px_0px_0px_rgba(234,88,12,1)] hover:-translate-y-0.5 transition-all text-left"
+                            >
+                                <p className="font-black uppercase text-sm">
+                                    {row.tipo === 'registrar' ? 'Registrar pagamento' : 'Efetivar pagamento agendado'}
+                                </p>
+                                <p className="text-xs font-bold text-gray-600 mt-1 truncate">
+                                    {row.tipo === 'registrar'
+                                        ? `${row.freela} · ${row.titulo}`
+                                        : `${row.titulo}${row.venceuEm ? ` · previsto para ${row.venceuEm.split('-').reverse().join('/')}` : ''}`}
+                                </p>
+                            </button>
+                        ))}
+                    </div>
+                    {pendingPayments.length > 4 && (
+                        <p className="text-xs font-bold text-gray-500 mt-3">
+                            +{pendingPayments.length - 4} outros — abra cada turno em Turnos para resolver.
+                        </p>
+                    )}
+                </div>
+            )}
+
             {activeShifts.length > 0 && (
                 <div className="mb-10">
                     <div className="flex items-center justify-between mb-4">
@@ -272,7 +380,19 @@ export default function CompanyDashboard() {
                         {activeShifts.slice(0, 4).map((app) => {
                             const worker = Array.isArray(app.worker) ? app.worker[0] : app.worker;
                             const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
-                            const checkinDone = !!app.company_checkin_confirmed_at;
+                            // Quatro estados, nao dois: "Aguardando Chegada" pintava IGUAL o freela
+                            // que ainda nao veio e o que JA registrou chegada e so espera a empresa
+                            // confirmar — escondendo justamente o passo que e da empresa (NN/g #1,
+                            // visibilidade do estado do sistema). Laranja = a acao e SUA.
+                            const chegouConfirme = !!app.worker_checkin_at && !app.company_checkin_confirmed_at;
+                            const saiuConfirme = !!app.company_checkin_confirmed_at && !!app.worker_checkout_at && !app.company_checkout_confirmed_at;
+                            const estadoPresenca = saiuConfirme
+                                ? { rotulo: 'Saiu — confirme', cls: 'bg-orange-100 text-orange-800' }
+                                : chegouConfirme
+                                    ? { rotulo: 'Chegou — confirme', cls: 'bg-orange-100 text-orange-800' }
+                                    : app.company_checkin_confirmed_at
+                                        ? { rotulo: 'Presença OK', cls: 'bg-green-100 text-green-700' }
+                                        : { rotulo: 'Aguardando chegada', cls: 'bg-yellow-100 text-yellow-800' };
 
                             return (
                                 <div
@@ -294,8 +414,8 @@ export default function CompanyDashboard() {
                                                 <p className="text-xs font-bold text-gray-500 uppercase truncate">{job?.title || 'Turno'}</p>
                                             </div>
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border border-black flex-shrink-0 ${checkinDone ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-800'}`}>
-                                            {checkinDone ? 'Presença OK' : 'Aguardando Chegada'}
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border border-black flex-shrink-0 ${estadoPresenca.cls}`}>
+                                            {estadoPresenca.rotulo}
                                         </span>
                                     </div>
 

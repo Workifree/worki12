@@ -183,6 +183,11 @@ describe('CompanyCreateJob — F8 (certification_requirement é ADVISORY, opcion
     fireEvent.click(getNextButton())
     fireEvent.change(screen.getByLabelText('Descrição Completa'), { target: { value: 'Atendimento no salão durante o evento.' } })
 
+    // Divulgação progressiva (NN/g): os campos opcionais ficam atrás do toggle e o campo vazio
+    // NÃO está no DOM até abrir — o clique aqui é o gesto real do usuário, e também o asserto
+    // de que o toggle existe.
+    fireEvent.click(screen.getByRole('button', { name: /requisitos, briefing e certificação \(opcional\)/i }))
+
     // Campo optativo: preencher SÓ a descrição (nunca a certificação) já libera o "Próximo".
     expect(screen.getByLabelText('Certificação Exigida (opcional)')).toHaveValue('')
     expect(getNextButton()).not.toBeDisabled()
@@ -225,6 +230,8 @@ describe('CompanyCreateJob — F8 (certification_requirement é ADVISORY, opcion
     fireEvent.change(screen.getByLabelText('Função'), { target: { value: 'garcom' } })
     fireEvent.click(getNextButton())
     fireEvent.change(screen.getByLabelText('Descrição Completa'), { target: { value: 'Atendimento no salão durante o evento.' } })
+    // Abre a divulgação progressiva — o campo opcional só entra no DOM depois do toggle.
+    fireEvent.click(screen.getByRole('button', { name: /requisitos, briefing e certificação \(opcional\)/i }))
     fireEvent.change(screen.getByLabelText('Certificação Exigida (opcional)'), {
       target: { value: '  CREF válido  ' },
     })

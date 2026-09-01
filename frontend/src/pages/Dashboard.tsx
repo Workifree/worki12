@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { normalizeAvailabilityGrade } from '../lib/availability';
+import { logError } from '../lib/logger';
 
 interface NextJobData {
     status: string;
@@ -114,6 +115,38 @@ export default function Dashboard() {
     // Convites de turno pendentes (push, Slice 1) — mesmo hook do InviteTakeover/MyJobs.
     const { pendingInvites, loading: invitesLoading } = useWorkerInvites();
 
+    // ── Pagamento registrado aguardando MINHA confirmação ───────────────────────────────────
+    // "Pagamento registrado — confirme" só existia como notificação — e notificação é
+    // transitória: quando a informação é chave, "uma notificação passiva fácil de ignorar é
+    // problemática" (NN/g, Indicators/Validations/Notifications). Ação pendente pede indicador
+    // PERSISTENTE onde a pessoa já está. /recebimentos já lista tudo; este card é o elo entre o
+    // Início e lá. Best-effort: em erro, loga e some — o dashboard nunca quebra por causa disto.
+    interface PendingReceiptRow {
+        job_id: string;
+        amount: number;
+        job: { title: string | null; company: { name: string | null } | { name: string | null }[] | null } |
+             { title: string | null; company: { name: string | null } | { name: string | null }[] | null }[] | null;
+    }
+    const { data: pendingReceipts = [] } = useQuery<PendingReceiptRow[]>({
+        queryKey: ['pendingReceipts'],
+        queryFn: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return [];
+            const { data, error } = await supabase
+                .from('shift_payments')
+                .select('job_id, amount, job:jobs(title, company:companies(name))')
+                .eq('worker_id', user.id)
+                .eq('status', 'recorded')
+                .is('worker_confirmed_at', null);
+            if (error) {
+                logError('dashboard.pendingReceipts', error);
+                return [];
+            }
+            return (data ?? []) as unknown as PendingReceiptRow[];
+        },
+        enabled: !!worker
+    });
+
     // "Meus clientes" — empresas conectadas (equipe aceita), atalho para a Carteira.
     const { myStores, loading: storesLoading } = useWorkerStores();
 
@@ -172,6 +205,11 @@ export default function Dashboard() {
     const hasNoDeclaredAvailability = normalizeAvailabilityGrade(worker.availability_days) === null;
 
     const primaryInvite = pendingInvites[0];
+    const umOuArray = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+    const primaryReceipt = pendingReceipts[0];
+    const primaryReceiptJob = umOuArray(primaryReceipt?.job);
+    const primaryReceiptCompany = umOuArray(primaryReceiptJob?.company)?.name ?? 'Uma empresa';
+    const totalReceipts = pendingReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
     const primaryInviteCompany = (primaryInvite?.job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
     const primaryInviteTitle = primaryInvite?.job?.title ?? 'Novo turno';
 
@@ -192,6 +230,33 @@ export default function Dashboard() {
                     <span className="text-xs font-black uppercase text-gray-300">Lvl {worker.level || 1}</span>
                 </div>
             </div>
+
+            {/* --- INDICADOR PERSISTENTE: PAGAMENTO AGUARDANDO CONFIRMAÇÃO ---
+                Vem ANTES do convite: é o fecho de um trabalho JÁ FEITO (a empresa declarou que
+                pagou; falta o freela confirmar), enquanto o convite é trabalho futuro. --- */}
+            {pendingReceipts.length > 0 && (
+                <section className="bg-black text-white p-6 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <span className="inline-flex items-center gap-1.5 bg-primary text-white text-[10px] font-black uppercase px-3 py-1 rounded-pill mb-2">
+                            <AlertCircle size={12} /> Pagamento para confirmar
+                        </span>
+                        <h2 className="text-xl font-black uppercase truncate">
+                            {totalReceipts.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </h2>
+                        <p className="text-sm font-bold text-white/80 truncate">
+                            {pendingReceipts.length === 1
+                                ? `${primaryReceiptCompany} registrou este pagamento. Confirme que recebeu.`
+                                : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
+                        className="bg-primary hover:bg-white hover:text-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors whitespace-nowrap flex-shrink-0"
+                    >
+                        Confirmar recebimento
+                    </button>
+                </section>
+            )}
 
             {/* --- HERO: CONVITE PENDENTE (push-first) --- */}
             {!invitesLoading && primaryInvite && (

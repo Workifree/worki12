@@ -100,7 +100,20 @@ function applicationsFromChain() {
   return chain
 }
 
-function setupMocks(availabilityDays: unknown) {
+/** `.from('shift_payments').select(...).eq(...).eq(...).is(...)` — pagamentos aguardando confirmação. */
+function shiftPaymentsFromChain(rows: unknown[]) {
+  return {
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          is: vi.fn().mockResolvedValue({ data: rows, error: null }),
+        }),
+      }),
+    }),
+  }
+}
+
+function setupMocks(availabilityDays: unknown, pendingReceipts: unknown[] = []) {
   vi.mocked(supabase.auth.getUser).mockResolvedValue({
     data: { user: { id: 'worker-1', email_confirmed_at: '2026-01-01T00:00:00Z' } },
     error: null,
@@ -109,6 +122,7 @@ function setupMocks(availabilityDays: unknown) {
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'workers') return workersFromChain(workerRow(availabilityDays)) as never
     if (table === 'applications') return applicationsFromChain() as never
+    if (table === 'shift_payments') return shiftPaymentsFromChain(pendingReceipts) as never
     throw new Error(`tabela não mockada: ${table}`)
   })
 }
@@ -164,5 +178,41 @@ describe('Dashboard — CTA de disponibilidade (F7 R14/A10)', () => {
     })
 
     expect(screen.queryByText(/declare sua disponibilidade/i)).not.toBeInTheDocument()
+  })
+})
+
+// ── Indicador persistente do pagamento a confirmar ─────────────────────────────────────────
+// "Pagamento registrado — confirme" só existia como NOTIFICAÇÃO — transitória por definição
+// (NN/g, Indicators/Validations/Notifications). O card no Início é a casa persistente da ação:
+// quem perdeu a notificação continua encontrando o caminho. Estes testes fixam (a) que o card
+// aparece com o valor e o nome da empresa quando há pagamento 'recorded' sem confirmação, e
+// (b) que ele NÃO aparece quando não há — o Início não pode gritar à toa.
+describe('Dashboard — pagamento aguardando confirmação (indicador persistente)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('mostra o card com valor e empresa quando há pagamento registrado sem confirmação', async () => {
+    setupMocks({ '1': ['tarde'] }, [
+      { job_id: 'job-9', amount: 180, job: { title: 'Garçom sábado', company: { name: 'Cantina da Ana' } } },
+    ])
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText('Pagamento para confirmar')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/R\$\s*180,00/)).toBeInTheDocument()
+    expect(screen.getByText(/Cantina da Ana registrou este pagamento/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /confirmar recebimento/i })).toBeInTheDocument()
+  })
+
+  it('não mostra nada quando não há pagamento pendente', async () => {
+    setupMocks({ '1': ['tarde'] }, [])
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/carregando/i)).not.toBeInTheDocument()
+    })
+    expect(screen.queryByText('Pagamento para confirmar')).not.toBeInTheDocument()
   })
 })

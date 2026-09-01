@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Check, ChevronRight, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, ChevronDown, ChevronUp, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp } from '../../lib/dateUtils';
@@ -38,6 +38,7 @@ export default function CompanyCreateJob() {
     // repeticao e outra, e herda-la silenciosamente criaria turno na data errada.
     const [searchParams] = useSearchParams();
     const repetirId = searchParams.get('repetir');
+
     const { addToast } = useToast();
     const queryClient = useQueryClient();
 
@@ -78,6 +79,18 @@ export default function CompanyCreateJob() {
     // Hooks de equipe e convites — carregados após criação do job
     const { teamMembers, loading: teamLoading } = useCompanyTeam();
     const { invite, invitingWorkerId, invites: sentInvites } = useCompanyInvites(createdJobId ?? '');
+
+    // Etapa 2 — divulgacao progressiva (NN/g): dos quatro campos da tela, so a DESCRICAO e
+    // obrigatoria, mas os quatro apareciam com o mesmo peso visual — e o botao desabilitado nao
+    // dizia qual travava. Requisitos, briefing e certificacao ficam atras de um toggle e ABREM
+    // SOZINHOS quando ja tem conteudo (edicao, repeticao, briefing padrao pre-preenchido): o
+    // recolhimento nunca esconde dado, so adiamento de campo vazio. Recolher nao apaga nada.
+    const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
+    useEffect(() => {
+        if (formData.requirements || formData.briefing || formData.certification_requirement) {
+            setMostrarOpcionais(true);
+        }
+    }, [formData.requirements, formData.briefing, formData.certification_requirement]);
 
     // Fetch Job Data if Editing
     useEffect(() => {
@@ -481,7 +494,7 @@ export default function CompanyCreateJob() {
                             </h2>
 
                             <div className="space-y-2">
-                                <label className="text-xs font-bold uppercase tracking-wide">Descrição Completa</label>
+                                <label className="text-xs font-bold uppercase tracking-wide">Descrição Completa <span className="text-red-500">*</span></label>
                                 <textarea
                                     aria-label="Descrição Completa"
                                     className="w-full h-32 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
@@ -491,10 +504,22 @@ export default function CompanyCreateJob() {
                                 />
                             </div>
 
+                            {/* Baymard: marcar obrigatorio E opcional explicitamente (so 14% dos
+                                sites fazem; 32% dos usuarios erram campo quando nao se marca). */}
+                            <button
+                                type="button"
+                                onClick={() => setMostrarOpcionais(v => !v)}
+                                className="min-h-11 w-full flex items-center justify-between gap-2 bg-gray-50 hover:bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl px-4 py-3 font-black uppercase text-xs text-gray-600 transition-colors"
+                            >
+                                <span>Requisitos, briefing e certificação (opcional)</span>
+                                {mostrarOpcionais ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+
+                            {mostrarOpcionais && (<>
                             <div className="space-y-2">
-                                <label className="text-xs font-bold uppercase tracking-wide">Requisitos</label>
+                                <label className="text-xs font-bold uppercase tracking-wide">Requisitos (opcional)</label>
                                 <textarea
-                                    aria-label="Requisitos"
+                                    aria-label="Requisitos (opcional)"
                                     className="w-full h-24 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
                                     placeholder="- Experiência em atendimento ou preparo&#10;- Agilidade e pontualidade&#10;- Boa comunicação e trabalho em equipe"
                                     value={formData.requirements}
@@ -503,11 +528,11 @@ export default function CompanyCreateJob() {
                             </div>
 
                             <div className="space-y-2">
-                                <label htmlFor="briefing" className="text-xs font-bold uppercase tracking-wide">Briefing do Turno</label>
+                                <label htmlFor="briefing" className="text-xs font-bold uppercase tracking-wide">Briefing do Turno (opcional)</label>
                                 <p className="text-xs text-gray-400 font-bold">Regras da casa, cardápio, procedimentos, dress code — o freela vê isso no convite.</p>
                                 <textarea
                                     id="briefing"
-                                    aria-label="Briefing do Turno"
+                                    aria-label="Briefing do Turno (opcional)"
                                     className="w-full h-28 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm placeholder:text-gray-300 transition-all resize-none"
                                     placeholder="Ex: Uniforme preto obrigatório. Cardápio fixo do bar. Início pontual às 18h..."
                                     value={formData.briefing}
@@ -535,6 +560,7 @@ export default function CompanyCreateJob() {
                                     onChange={(e) => setFormData({ ...formData, certification_requirement: e.target.value })}
                                 />
                             </div>
+                            </>)}
                         </div>
                     )}
 
