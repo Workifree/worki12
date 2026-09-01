@@ -1,4 +1,5 @@
 import { Loader2, AlertTriangle, Trash2 } from 'lucide-react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import type { TeamMember } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -13,6 +14,9 @@ export interface RemoveMemberDialogProps {
 }
 
 export function RemoveMemberDialog({ member, isDeleting, onCancel, onConfirm }: RemoveMemberDialogProps) {
+  // ESC com a mesma guarda do clique no fundo: nao fechar durante a remocao.
+  useModalDismiss(() => { if (!isDeleting) onCancel(); });
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"

@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import { Star, XCircle, Loader2 } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logError } from '../lib/logger'
@@ -15,6 +16,8 @@ interface RateModalProps {
 }
 
 export default function RateModal({ isOpen, onClose, onSubmit, targetName, targetPhotoUrl, title, subtitle }: RateModalProps) {
+    // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
+    const fecharPeloFundo = useModalDismiss(onClose);
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -43,10 +46,11 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
         }
     };
 
+
     return (
         <div
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
-            onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+            onClick={fecharPeloFundo}
         >
             <div
                 ref={trapRef}

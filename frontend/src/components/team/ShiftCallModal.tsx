@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { X, Loader2, Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { TeamListService } from '../../services/teamListService';
@@ -87,6 +88,8 @@ export function ShiftCallModal({
   // `null` = "até o início do turno"; número = horas.
   const [expiryHours, setExpiryHours] = useState<number | null>(DEFAULT_CALL_EXPIRY_HOURS);
   const [dispatching, setDispatching] = useState(false);
+    // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
+    useModalDismiss(() => { if (!dispatching) onClose(); });
   // F5: config da guarda de vínculo (busca em paralelo, nunca em série — LM-9) e contagem por
   // freela (estado próprio, nunca segura a lista do elenco — LM-10).
   const [riskConfig, setRiskConfig] = useState<LinkRiskConfig | null>(null);
@@ -112,6 +115,7 @@ export function ShiftCallModal({
       setRiskConfig(configResult.status === 'fulfilled' ? configResult.value : null);
       setLoadingTeam(false);
     })();
+
     return () => {
       active = false;
     };

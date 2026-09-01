@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { X, Search, Loader2, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
@@ -64,6 +65,8 @@ export default function CreateReferralModal({
   teamMembers,
   onCreated,
 }: CreateReferralModalProps) {
+    // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
+    const fecharPeloFundo = useModalDismiss(onClose);
   const { addToast } = useToast();
   const [workerId, setWorkerId] = useState('');
   const [message, setMessage] = useState('');
@@ -121,6 +124,7 @@ export default function CreateReferralModal({
       })();
     }, COMPANY_SEARCH_DEBOUNCE_MS);
 
+
     return () => {
       active = false;
       clearTimeout(timer);
@@ -170,7 +174,8 @@ export default function CreateReferralModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={fecharPeloFundo}>
       <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-black uppercase">Indicar Freela</h2>

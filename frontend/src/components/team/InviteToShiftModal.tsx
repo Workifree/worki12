@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { X, Loader2, Send, CalendarX2, PlusCircle } from 'lucide-react';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
@@ -104,6 +105,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         if (active) setLoadingJobs(false);
       }
     })();
+
     return () => { active = false; };
   }, [member.worker.id]);
 
@@ -117,6 +119,8 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
   };
 
   const isInviting = invitingWorkerId === member.worker.id;
+  // ESC com a mesma guarda do clique no fundo: nao fechar no meio do convite.
+  useModalDismiss(() => { if (!isInviting) onClose(); });
 
   return (
     <div

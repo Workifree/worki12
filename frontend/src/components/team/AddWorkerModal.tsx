@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { Link2, Phone, QrCode, X, Loader2, UserPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
@@ -100,6 +101,9 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
     },
     [addWorker, addToast, onAdded, onClose],
   );
+
+  useModalDismiss(onClose); // so o ESC — o backdrop deles ja fechava
+
 
   return (
     <div

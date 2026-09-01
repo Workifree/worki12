@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { X, Loader2, ListChecks, Search, Check } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
@@ -34,6 +35,8 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
   const [selected, setSelected] = useState<Set<string>>(new Set(list?.memberIds ?? []));
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+    // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
+    useModalDismiss(() => { if (!saving) onClose(); });
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -98,6 +101,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
     onSaved();
     onClose();
   };
+
 
   return (
     <div
