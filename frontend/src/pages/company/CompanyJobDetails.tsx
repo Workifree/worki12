@@ -190,7 +190,8 @@ export default function CompanyJobDetails() {
                 <div className="relative">
                     <button
                         onClick={() => setOpenMenu(!openMenu)}
-                        className="p-2 border-2 border-transparent hover:border-black rounded-xl transition-all"
+                        aria-label="Mais opções do turno"
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center border-2 border-transparent hover:border-black rounded-xl transition-all"
                     >
                         <MoreHorizontal size={20} />
                     </button>
