@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { invalidateCompanyScope } from '../services/companyScopeService'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -75,6 +76,7 @@ function myCompaniesRow(overrides: Partial<{
 
 describe('ProtectedRoute - Onboarding Gate', () => {
     beforeEach(() => {
+        invalidateCompanyScope()  // o cache de rajada do seam nao pode vazar entre testes
         vi.clearAllMocks()
         mockOnAuthStateChange.mockReturnValue({
             data: { subscription: { unsubscribe: vi.fn() } },

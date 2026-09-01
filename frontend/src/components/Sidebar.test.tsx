@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { invalidateCompanyScope } from '../services/companyScopeService';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -44,6 +45,7 @@ function renderSidebar() {
 
 describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)', () => {
   beforeEach(() => {
+        invalidateCompanyScope()  // o cache de rajada do seam nao pode vazar entre testes
     vi.clearAllMocks();
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email_confirmed_at: '2026-01-01' } } });
   });

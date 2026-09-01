@@ -19,6 +19,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { invalidateCompanyScope } from './companyScopeService';
 import { logError } from '../lib/logger';
 import type { CompanyMember } from '../types';
 
@@ -107,6 +108,9 @@ export async function acceptManagerInvite(token: string): Promise<AcceptManagerI
 
     const row = data as RpcOutcomeRow | null;
     const outcome = (row?.outcome ?? 'error') as AcceptManagerInviteOutcome;
+    // A sessão passou a operar uma empresa NOVA: o cache de rajada do seam precisa cair já,
+    // senão o gerente recém-aceito esbarra num "Perfil de empresa não encontrado" por até 30s.
+    if (outcome === 'accepted' || outcome === 'already_accepted') invalidateCompanyScope();
     return { outcome, companyId: row?.company_id, memberId: row?.member_id };
   } catch (error) {
     logError('organizationService.acceptManagerInvite', error);

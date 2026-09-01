@@ -63,10 +63,48 @@ export function getSelectedCompanyId(): string | null {
  * falhar (chamador decide como degradar: onboarding, "sem perfil", etc. — nunca tratamos zero
  * linhas como erro aqui, é um resultado válido para "sessão sem empresa ainda").
  */
+// ── Cache de rajada ─────────────────────────────────────────────────────────────────────────
+// Auditoria de rede (01/09/2026): o dashboard da empresa disparava `get_my_companies` OITO vezes
+// na mesma carga — cada serviço resolve o seam por conta própria, e cada resolução ia à rede.
+// O seam continua sendo o ÚNICO resolvedor (contrato do §7 intacto); ele só passa a responder
+// de memória por uma janela curta. TTL de 30s: longo o bastante para colapsar a rajada de uma
+// tela, curto o bastante para um convite de gerente aceito em outra aba aparecer sozinho.
+const COMPANIES_CACHE_TTL_MS = 30_000;
+let companiesCache: { promise: Promise<MyCompany[]>; at: number } | null = null;
+
+/** Derruba o cache — chamar após aceite/revogação de gerente e em troca de sessão. */
+export function invalidateCompanyScope(): void {
+  companiesCache = null;
+}
+
+// Troca de sessão invalida sozinha (login/logout/refresh de usuário). O try/catch existe porque
+// os testes mockam `lib/supabase` só com o que usam, e este módulo não pode explodir no import.
+try {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+      invalidateCompanyScope();
+    }
+  });
+} catch {
+  /* ambiente de teste sem auth completo */
+}
+
 export async function getMyCompanies(): Promise<MyCompany[]> {
-  const { data, error } = await supabase.rpc('get_my_companies');
-  if (error) throw error;
-  return (data ?? []) as MyCompany[];
+  const agora = Date.now();
+  if (companiesCache && agora - companiesCache.at < COMPANIES_CACHE_TTL_MS) {
+    return companiesCache.promise;
+  }
+  const promessa = (async () => {
+    const { data, error } = await supabase.rpc('get_my_companies');
+    if (error) throw error;
+    return (data ?? []) as MyCompany[];
+  })();
+  companiesCache = { promise: promessa, at: agora };
+  // Erro NUNCA fica cacheado: a próxima chamada tenta de novo.
+  promessa.catch(() => {
+    if (companiesCache?.promise === promessa) companiesCache = null;
+  });
+  return promessa;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   getAuthenticatedCompanyId,
   setSelectedCompanyId,
   getSelectedCompanyId,
+  invalidateCompanyScope,
 } from './companyScopeService';
 import type { MyCompany } from '../types';
 
@@ -36,6 +37,7 @@ function row(overrides: Partial<MyCompany> = {}): MyCompany {
 
 describe('companyScopeService', () => {
   beforeEach(() => {
+    invalidateCompanyScope();  // o cache de rajada nao pode vazar entre testes
     vi.clearAllMocks();
     setSelectedCompanyId(null);
   });
