@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
@@ -92,7 +94,7 @@ export default function CompanyCreateJob() {
     // Tesler), o modelo E o historico real: os ultimos turnos distintos viram cartoes de um
     // toque. Reconhecimento em vez de memoria (Nielsen #6) — a pessoa VE o turno que ja fez,
     // toca, e so escolhe a nova data (o mesmo motor do ?repetir=). Historico vazio = secao some.
-    interface ModeloDeTurno { id: string; title: string; budget: number | null; work_start_time: string | null; work_end_time: string | null }
+    interface ModeloDeTurno { id: string; title: string; budget: number | null; work_start_time: string | null; work_end_time: string | null; created_at: string | null }
     const [modelos, setModelos] = useState<ModeloDeTurno[]>([]);
     useEffect(() => {
         if (isEditing || repetirId) return;
@@ -102,7 +104,7 @@ export default function CompanyCreateJob() {
                 const companyId = await getAuthenticatedCompanyId();
                 const { data } = await supabase
                     .from('jobs')
-                    .select('id, title, budget, work_start_time, work_end_time')
+                    .select('id, title, budget, work_start_time, work_end_time, created_at')
                     .eq('company_id', companyId)
                     .neq('status', 'deleted')
                     .order('created_at', { ascending: false })
@@ -508,6 +510,8 @@ export default function CompanyCreateJob() {
                                                 <span className="block font-black uppercase text-sm truncate">{mo.title}</span>
                                                 <span className="block text-xs font-bold text-gray-500">
                                                     {mo.budget ? `R$ ${mo.budget}` : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
+                                                    {/* recencia = confianca de que e o turno certo ("e o do sabado passado mesmo") */}
+                                                    {mo.created_at ? ` · ${formatDistanceToNow(new Date(mo.created_at), { addSuffix: true, locale: ptBR })}` : ''}
                                                 </span>
                                             </button>
                                         ))}

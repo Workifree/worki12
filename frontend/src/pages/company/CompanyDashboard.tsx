@@ -477,8 +477,17 @@ export default function CompanyDashboard() {
                                             {job.status === 'open' ? 'Ativo' : 'Fechado'}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm font-bold border-t-2 border-gray-50 pt-3 mt-3 text-gray-400">
+                                    <div className="flex items-center justify-between gap-4 text-sm font-bold border-t-2 border-gray-50 pt-3 mt-3 text-gray-400">
                                         <span>Criado {formatDistanceToNow(new Date(job.created_at as string), { addSuffix: true, locale: ptBR })}</span>
+                                        {/* Repetir no ponto de contexto: a pessoa esta OLHANDO o turno
+                                            que quer refazer — nao precisa ir ao Criar e reencontra-lo
+                                            na vitrine. Mesmo motor do ?repetir= (data em branco). */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); navigate(`/company/create?repetir=${job.id}`); }}
+                                            className="min-h-11 px-3 -my-2 inline-flex items-center gap-1.5 text-blue-600 font-black text-xs uppercase hover:underline flex-shrink-0"
+                                        >
+                                            <RefreshCw size={13} /> Repetir
+                                        </button>
                                     </div>
                                 </div>
                             ))
