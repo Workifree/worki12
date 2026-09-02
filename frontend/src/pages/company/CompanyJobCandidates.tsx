@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
 import { PaymentRecordService } from '../../services/paymentRecordService';
@@ -214,6 +214,19 @@ export default function CompanyJobCandidates() {
     // Chamado de turno (F1): quantas vagas o turno tem e o modal de disparo múltiplo.
     const [jobSlots, setJobSlots] = useState(1);
     const [callModalOpen, setCallModalOpen] = useState(false);
+
+    // `?chamar=1` — a ponte que faltava entre CRIAR e CHAMAR: o modal pos-criacao do turno agora
+    // oferece "chamar varios de uma vez" e cai aqui com o chamado 1->N JA ABERTO, em vez de
+    // largar a pessoa numa pagina onde ela precisa reencontrar o botao. Abre UMA vez (ref), para
+    // um F5 nao reabrir o modal em cima de quem ja o fechou.
+    const [chamarParams] = useSearchParams();
+    const chamarAoChegar = useRef(chamarParams.get('chamar') === '1');
+    useEffect(() => {
+        if (chamarAoChegar.current) {
+            chamarAoChegar.current = false;
+            setCallModalOpen(true);
+        }
+    }, []);
 
     // "Cancelar Convite" — invited sem resposta, libera o slot (onda 3).
     const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);

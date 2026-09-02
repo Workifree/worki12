@@ -201,7 +201,7 @@ describe('CompanyCreateJob — F8 (certification_requirement é ADVISORY, opcion
   // O id operado aqui e DIFERENTE do id da sessao de proposito: se o codigo voltar a usar
   // `user.id`, o payload sai com 'company-1' e este teste morre.
   it('company_id do turno vem da unidade OPERADA, nunca do id da sessao', async () => {
-    vi.mocked(getAuthenticatedCompanyId).mockResolvedValueOnce('unidade-operada-9')
+    vi.mocked(getAuthenticatedCompanyId).mockResolvedValue('unidade-operada-9')
 
     renderPage()
     fireEvent.change(screen.getByLabelText('Título do Turno'), { target: { value: 'Garçom para evento' } })

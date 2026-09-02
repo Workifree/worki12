@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Check, ChevronRight, ChevronDown, ChevronUp, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, ChevronDown, ChevronUp, Wand2, MapPin, DollarSign, Briefcase, Calendar, Clock, Send, Users, Loader2, X, Repeat, Megaphone } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp } from '../../lib/dateUtils';
@@ -85,6 +85,48 @@ export default function CompanyCreateJob() {
     // dizia qual travava. Requisitos, briefing e certificacao ficam atras de um toggle e ABREM
     // SOZINHOS quando ja tem conteudo (edicao, repeticao, briefing padrao pre-preenchido): o
     // recolhimento nunca esconde dado, so adiamento de campo vazio. Recolher nao apaga nada.
+    // ── Modelos: comece de um turno anterior ────────────────────────────────────────────────
+    // A empresa repete o MESMO turno o tempo todo, e criar do zero custa sete entradas em tres
+    // etapas. Em vez de um sistema de "modelos salvos" (que criaria trabalho de gestao — criar,
+    // nomear, atualizar, apagar modelo: complexidade empurrada pro usuario, contra a lei de
+    // Tesler), o modelo E o historico real: os ultimos turnos distintos viram cartoes de um
+    // toque. Reconhecimento em vez de memoria (Nielsen #6) — a pessoa VE o turno que ja fez,
+    // toca, e so escolhe a nova data (o mesmo motor do ?repetir=). Historico vazio = secao some.
+    interface ModeloDeTurno { id: string; title: string; budget: number | null; work_start_time: string | null; work_end_time: string | null }
+    const [modelos, setModelos] = useState<ModeloDeTurno[]>([]);
+    useEffect(() => {
+        if (isEditing || repetirId) return;
+        let ativo = true;
+        void (async () => {
+            try {
+                const companyId = await getAuthenticatedCompanyId();
+                const { data } = await supabase
+                    .from('jobs')
+                    .select('id, title, budget, work_start_time, work_end_time')
+                    .eq('company_id', companyId)
+                    .neq('status', 'deleted')
+                    .order('created_at', { ascending: false })
+                    .limit(30);
+                if (!ativo || !data) return;
+                // dedupe por titulo normalizado: a serie de 10 "Garcom sabado" vira UM cartao (o mais recente)
+                const vistos = new Set<string>();
+                const unicos: ModeloDeTurno[] = [];
+                for (const j of data as ModeloDeTurno[]) {
+                    const chave = (j.title || '').trim().toLowerCase();
+                    if (!chave || vistos.has(chave)) continue;
+                    vistos.add(chave);
+                    unicos.push(j);
+                    if (unicos.length >= 6) break;   // Hick: poucos, os mais recentes
+                }
+                setModelos(unicos);
+            } catch {
+                /* vitrine e conveniencia: sem historico legivel, o wizard normal segue intacto */
+            }
+        })();
+        return () => { ativo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- roda uma vez por modo de entrada
+    }, [isEditing, repetirId]);
+
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
         if (formData.requirements || formData.briefing || formData.certification_requirement) {
@@ -447,6 +489,32 @@ export default function CompanyCreateJob() {
                     {/* Step 1: Basic Info */}
                     {step === 1 && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                            {modelos.length > 0 && (
+                                <div className="mb-2">
+                                    <p className="text-xs font-black uppercase tracking-wide text-gray-500 mb-1">
+                                        Comece de um turno anterior
+                                    </p>
+                                    <p className="text-xs font-bold text-gray-400 mb-3">
+                                        Preenche tudo de novo pra você — só escolha a nova data.
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {modelos.map((mo) => (
+                                            <button
+                                                key={mo.id}
+                                                type="button"
+                                                onClick={() => { void fetchJobData(mo.id, 'repetir'); }}
+                                                className="min-h-11 text-left bg-gray-50 hover:bg-primary-light border-2 border-gray-200 hover:border-black rounded-xl px-4 py-3 transition-all"
+                                            >
+                                                <span className="block font-black uppercase text-sm truncate">{mo.title}</span>
+                                                <span className="block text-xs font-bold text-gray-500">
+                                                    {mo.budget ? `R$ ${mo.budget}` : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[11px] font-black uppercase text-gray-400 mt-4 text-center">ou crie do zero:</p>
+                                </div>
+                            )}
                             <h2 className="text-xl font-black uppercase flex items-center gap-2">
                                 <Briefcase size={20} /> Informações Básicas
                             </h2>
@@ -933,6 +1001,20 @@ export default function CompanyCreateJob() {
                             </div>
                         )}
 
+                        {!teamLoading && teamMembers.length > 0 && (
+                            <>
+                            {/* A acao PRIMARIA e o chamado 1->N (primeiro-aceite) — e o coracao do
+                                produto ("de 2 horas para 6 minutos") e ficava enterrado uma pagina
+                                adiante. Convite um-a-um continua logo abaixo, como caminho fino. */}
+                            <button
+                                onClick={() => navigate(`/company/jobs/${createdJobId}/candidates?chamar=1`)}
+                                className="w-full min-h-11 mb-4 bg-primary hover:bg-black text-white px-4 py-3 rounded-xl font-black uppercase text-sm transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Megaphone size={18} /> Chamar vários de uma vez — 1º que aceitar fica
+                            </button>
+                            <p className="text-[11px] font-black uppercase text-gray-400 mb-3 text-center">ou convide um a um:</p>
+                            </>
+                        )}
                         {!teamLoading && teamMembers.length > 0 && (
                             <div className="space-y-3 max-h-72 overflow-y-auto">
                                 {teamMembers.map((member: TeamMember) => {
