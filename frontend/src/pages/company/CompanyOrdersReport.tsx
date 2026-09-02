@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
 import {
   FileText,
   Printer,
@@ -164,15 +164,14 @@ export default function CompanyOrdersReport() {
 
       {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
       <header className="print:hidden">
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
+        <PainelNumerosTabs />
+<h1 className="text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
           <FileText size={32} strokeWidth={3} /> Relatório de Pagamentos
         </h1>
         {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
             (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
         <p className="text-sm font-bold text-gray-500 mt-1">
-          Quanto foi pago, a quem, quando — com exportação para o financeiro. Procurando tempo de
-          resposta dos chamados e presença? Veja{' '}
-          <Link to="/company/operacao" className="underline font-black">Operação</Link>.
+          Quanto foi pago, a quem, quando — com exportação para o financeiro.
         </p>
         <p className="text-gray-500 text-sm">
           Visão consolidada dos turnos e seus pagamentos — um turno com mais de um freela

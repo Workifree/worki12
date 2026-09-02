@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
@@ -272,6 +273,27 @@ export default function CompanyJobCandidates() {
     const [reopenLoading, setReopenLoading] = useState(false);
     // "Convidar Freela" — vaga criada sem nenhum freela atrelado (mesmo picker, sem convite anterior).
     const [invitePickerOpen, setInvitePickerOpen] = useState(false);
+
+    // ── Saida de emergencia dos 7 modais inline desta pagina (heuristica #3) ────────────────
+    // Mesmo contrato dos modais componentizados (useModalDismiss): ESC e toque no fundo fecham
+    // o modal ABERTO — e NUNCA no meio de uma gravacao (guarda pelas flags de em-andamento).
+    // O ShiftCallModal fica fora da cadeia: ele ja tem o proprio ESC/fundo no componente.
+    // So um modal abre por vez; a cadeia fecha o primeiro que encontrar aberto.
+    const fecharModalAberto = () => {
+        if (submittingReview || confirmingManualAttendance || dismissing || scheduling || releasing) return;
+        if (ratingModalOpen) setRatingModalOpen(false);
+        else if (scheduleModalApp) setScheduleModalApp(null);
+        else if (paymentModalApp) setPaymentModalApp(null);
+        else if (dismissApp) { setDismissApp(null); setDismissThenCall(false); }
+        else if (manualAttendance) setManualAttendance(null);
+        else if (confirmDeliveryApp) setConfirmDeliveryApp(null);
+        else if (invitePickerOpen) setInvitePickerOpen(false);
+        else if (reopenApp) setReopenApp(null);
+    };
+    useModalDismiss(fecharModalAberto);
+    const aoTocarFundo = (e: React.MouseEvent<HTMLElement>) => {
+        if (e.target === e.currentTarget) fecharModalAberto();
+    };
 
     const { addToast } = useToast();
     // Reaproveita o hook do fluxo de convite (mesmo usado em CompanyCreateJob) para disparar
@@ -1637,7 +1659,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Convidar Freela" — vaga sem freela (invitePickerOpen) ou convite expirado (reopenApp, R8) */}
             {(reopenApp || invitePickerOpen) && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-black uppercase tracking-tight">{reopenApp ? 'Convidar Outro Freela' : 'Convidar Freela'}</h2>
@@ -1717,7 +1739,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal de Confirmação de Entrega */}
             {confirmDeliveryApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <h2 className="text-xl font-black uppercase tracking-tight mb-4">Confirmar Entrega</h2>
                         <p className="text-gray-600 font-medium mb-6">
@@ -1749,7 +1771,7 @@ export default function CompanyJobCandidates() {
                 às 02h) como se fosse o horário real. Pré-preenchido com o horário PLANEJADO do
                 turno; o gerente confirma ou ajusta. */}
             {manualAttendance && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <h2 className="text-xl font-black uppercase tracking-tight mb-1">
                             {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
@@ -1801,7 +1823,7 @@ export default function CompanyJobCandidates() {
                 UMA confirmação só — dispensar e chamar substituto é uma decisão manual explícita
                 da empresa, só dividida em dois passos técnicos (blocker 3 do ddl-aprovado.md). */}
             {dismissApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <h2 className="text-xl font-black uppercase tracking-tight mb-4">
                             {dismissThenCall ? 'Dispensar e Chamar Substituto' : 'Dispensar Freela'}
@@ -1846,7 +1868,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
             {paymentModalApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         {!paymentRecorded ? (
                             <>
@@ -1990,7 +2012,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Agendar Pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
             {scheduleModalApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         {!paymentScheduled ? (
                             <>
@@ -2135,7 +2157,7 @@ export default function CompanyJobCandidates() {
 
             {/* Rating Modal */}
             {ratingModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-2xl font-black uppercase tracking-tight">Avaliar Freela</h3>

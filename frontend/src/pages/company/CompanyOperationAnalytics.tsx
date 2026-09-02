@@ -13,7 +13,7 @@
  * o quarto estado ('loading') é tratado aqui com um skeleton neo-brutalista.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
 import { BarChart3, Calendar } from 'lucide-react';
 import { OperationAnalyticsService, emptyAnalytics } from '../../services/operationAnalyticsService';
 import type { OperationAnalyticsPeriod } from '../../services/operationAnalyticsService';
@@ -137,14 +137,13 @@ export default function CompanyOperationAnalytics() {
       <PageMeta title="Analytics de Operação" />
 
       <header>
-        <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
+        <PainelNumerosTabs />
+<h1 className="text-3xl md:text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
           <BarChart3 size={32} strokeWidth={3} /> Analytics de Operação
         </h1>
         {/* Espelho do subtitulo do Relatorio de Pagamentos: cada pagina diz o que responde. */}
         <p className="text-sm font-bold text-gray-500 mt-1">
           Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite.
-          Procurando valores pagos e exportação? Veja{' '}
-          <Link to="/company/relatorio" className="underline font-black">Pagamentos</Link>.
         </p>
         <p className="text-gray-500 text-sm max-w-2xl">
           Gasto, custo por hora, tempo de preenchimento e presença por freela — o que hoje você monta na mão,
