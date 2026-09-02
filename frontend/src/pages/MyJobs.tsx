@@ -1,7 +1,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock } from 'lucide-react';
+import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -10,6 +11,7 @@ import RateModal from '../components/RateModal';
 import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
+import ErroDeCarga from '../components/ErroDeCarga';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
 import type {
@@ -148,6 +150,8 @@ function LocalDoTurno({ location, size = 14 }: { location: string | null | undef
 export default function MyJobs() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
+    // Erro de carga ≠ lista vazia: fetch falho caia no "Nenhum turno" (empty state que mente).
+    const [erroCarga, setErroCarga] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
     const [jobs, setJobs] = useState<{
         in_progress: JobApplication[],
@@ -157,6 +161,10 @@ export default function MyJobs() {
 
     // Rating State
     const [rateModalOpen, setRateModalOpen] = useState(false);
+    // ESC do modal de detalhe do historico (heuristica #3). O RateModal ja tem o proprio ESC via
+    // useModalDismiss interno; a guarda !rateModalOpen garante que, com os dois abertos, um ESC
+    // fecha UM por vez (avaliacao primeiro, detalhe no proximo) — nunca os dois de uma tacada.
+    useModalDismiss(() => { if (!rateModalOpen) setDetailJob(null); });
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -241,7 +249,9 @@ export default function MyJobs() {
 
         if (error) {
             logError('Error fetching applications:', error);
+            setErroCarga(true);
         } else {
+            setErroCarga(false);
             const in_progress: JobApplication[] = [];
             const scheduled: JobApplication[] = [];
             const history: JobApplication[] = [];
@@ -583,6 +593,12 @@ export default function MyJobs() {
             throw error;
         }
     };
+
+    if (erroCarga && !loading) return (
+        <div className="pb-24 max-w-4xl mx-auto pt-6">
+            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); }} />
+        </div>
+    );
 
     if (loading) return (
         <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse">
@@ -1066,8 +1082,14 @@ export default function MyJobs() {
                             {job.status === 'completed' ? (
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-green-600 flex items-center gap-1 uppercase bg-green-100 px-2 py-1 rounded-xl">
-                                        <CheckCircle2 size={12} /> Pago
+                                        <CheckCircle2 size={12} /> Concluído
                                     </span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
+                                        className="text-xs font-black text-gray-600 hover:text-black flex items-center gap-1 uppercase px-2 py-1 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
+                                    >
+                                        <Receipt size={12} /> Recibo
+                                    </button>
                                     {!reviewedJobIds.has(job.job_id) ? (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
@@ -1131,7 +1153,7 @@ export default function MyJobs() {
                         <div className="mb-5">
                             {detailJob.status === 'completed' ? (
                                 <span className="inline-flex items-center gap-1 text-xs font-black text-green-700 bg-green-100 border-2 border-green-200 px-3 py-1.5 rounded-xl uppercase">
-                                    <CheckCircle2 size={14} /> Concluído e pago
+                                    <CheckCircle2 size={14} /> Concluído
                                 </span>
                             ) : (
                                 <span className="inline-flex items-center gap-1 text-xs font-black text-red-600 bg-red-100 border-2 border-red-200 px-3 py-1.5 rounded-xl uppercase">

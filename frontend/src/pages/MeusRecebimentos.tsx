@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import type { WorkerShiftPaymentListItem } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
+import ErroDeCarga from '../components/ErroDeCarga';
 import PageMeta from '../components/PageMeta';
 import type { PaymentSource } from '../types';
 import { formatDateOnly } from '../lib/dateUtils';
@@ -140,6 +141,8 @@ export default function MeusRecebimentos() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [items, setItems] = useState<WorkerShiftPaymentListItem[]>([]);
+    const [erroCarga, setErroCarga] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let active = true;
@@ -151,9 +154,10 @@ export default function MeusRecebimentos() {
                 if (!user) { navigate('/login'); return; }
 
                 const data = await PaymentRecordService.listForWorker(user.id);
-                if (active) setItems(data);
+                if (active) { setItems(data); setErroCarga(false); }
             } catch (error) {
                 logError('MeusRecebimentos: fetchPayments', error);
+                if (active) setErroCarga(true);
             } finally {
                 if (active) setLoading(false);
             }
@@ -161,7 +165,7 @@ export default function MeusRecebimentos() {
 
         fetchPayments();
         return () => { active = false; };
-    }, [navigate]);
+    }, [navigate, reloadKey]);
 
     const handleOpen = (jobId: string) => navigate(`/recibo/${jobId}`);
 
@@ -284,8 +288,12 @@ export default function MeusRecebimentos() {
                 </section>
             )}
 
+            {erroCarga && !loading && (
+                <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
+            )}
+
             {/* Empty state */}
-            {isEmpty && (
+            {isEmpty && !erroCarga && (
                 <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
                     <Receipt size={48} className="mx-auto mb-4 text-gray-300" />
                     <h3 className="text-xl font-black uppercase mb-2">Nenhum recebimento ainda</h3>

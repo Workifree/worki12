@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
+import ErroDeCarga from '../components/ErroDeCarga'
 
 interface ConversationItem {
     id: string;
@@ -37,6 +38,8 @@ export default function Messages() {
     const selectedConversationId = searchParams.get('conversation');
 
     const [loading, setLoading] = useState(true);
+    const [erroCarga, setErroCarga] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -124,9 +127,11 @@ export default function Messages() {
 
             if (error) {
                 logError('Error fetching conversations:', error);
+                setErroCarga(true);
                 setLoading(false);
                 return;
             }
+            setErroCarga(false);
 
             // Define the shape of conversation data from Supabase query
             interface ConversationRow {
@@ -203,7 +208,7 @@ export default function Messages() {
         };
 
         loadData();
-    }, [navigate, selectedConversationId]);
+    }, [navigate, selectedConversationId, reloadKey]);
 
     // Load messages when conversation is selected
     useEffect(() => {
@@ -374,7 +379,11 @@ export default function Messages() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
-                        {conversations.length === 0 ? (
+                        {erroCarga ? (
+                            <div className="p-4">
+                                <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
+                            </div>
+                        ) : conversations.length === 0 ? (
                             <div className="p-6 text-center text-gray-400">
                                 <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>

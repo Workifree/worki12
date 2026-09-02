@@ -182,7 +182,7 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
 // ---------------------------------------------------------------------------
 
 export default function CarteiraClientes() {
-  const { myStores, pendingConnections, loading, acceptConnection, blockConnection } = useWorkerStores();
+  const { myStores, pendingConnections, loading, acceptConnection, blockConnection, declineConnection } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
 
@@ -193,8 +193,12 @@ export default function CarteiraClientes() {
   };
 
   const handleDecline = async (connectionId: string) => {
+    // Recusa NEUTRA (P1 da heuristica): apagava... nao — BLOQUEAVA. "Recusar" gravava o veto
+    // permanente porque era a unica acao que a RLS permitia ao worker. Agora e delete da linha
+    // pendente (policy 20260902000100): o convite some e a empresa pode reconvidar — mesmo
+    // principio do "Recusar nao afeta sua reputacao" do convite de turno.
     setRespondingId(connectionId);
-    await blockConnection(connectionId);
+    await declineConnection(connectionId);
     setRespondingId(null);
   };
 

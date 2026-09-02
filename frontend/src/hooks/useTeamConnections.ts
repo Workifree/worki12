@@ -159,6 +159,7 @@ export interface UseWorkerStoresResult {
   acceptConnection: (connectionId: string) => Promise<boolean>;
   /** Bloquear/sair de uma empresa. */
   blockConnection: (connectionId: string) => Promise<boolean>;
+  declineConnection: (connectionId: string) => Promise<boolean>;
   /** Recarregar dados. */
   refresh: () => void;
 }
@@ -244,6 +245,19 @@ export function useWorkerStores(): UseWorkerStoresResult {
     },
     [addToast, load],
   );
+  const declineConnection = useCallback(
+    async (connectionId: string): Promise<boolean> => {
+      const result = await TeamConnectionService.declineConnection(connectionId);
+      if (result.error) {
+        addToast(result.error, 'error');
+        return false;
+      }
+      addToast('Conexão removida.', 'success');
+      load();
+      return true;
+    },
+    [addToast, load],
+  );
 
   return {
     myStores,
@@ -251,6 +265,7 @@ export function useWorkerStores(): UseWorkerStoresResult {
     loading,
     acceptConnection,
     blockConnection,
+    declineConnection,
     refresh: load,
   };
 }

@@ -1,5 +1,6 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock } from 'lucide-react';
 import ProfileReviews from '../components/ProfileReviews';
@@ -240,6 +241,11 @@ export default function Profile() {
 
     // QR de identidade + "meu link" (link transitivo)
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    // Saida de emergencia do modal do QR (heuristica #3) — mesmo contrato dos demais modais.
+    useModalDismiss(() => { if (qrModalOpen) setQrModalOpen(false); });
+    const fecharQrPeloFundo = (e: React.MouseEvent<HTMLElement>) => {
+        if (e.target === e.currentTarget) setQrModalOpen(false);
+    };
     const [workerId, setWorkerId] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
@@ -1215,7 +1221,7 @@ export default function Profile() {
 
         {/* Modal QR de identidade */}
         {qrModalOpen && workerId && (
-            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharQrPeloFundo}>
                 <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,166,81,1)]">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-black uppercase tracking-tight">Meu QR de Identidade</h2>

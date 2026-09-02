@@ -407,6 +407,42 @@ export const TeamConnectionService = {
   },
 
   /**
+   * Recusa NEUTRA de convite pendente: apaga a linha 'pending' (policy
+   * tc_delete_worker_pending, 20260902000100). A empresa pode reconvidar depois — ao contrario
+   * do bloqueio, que e veto permanente. Mesmo principio de recusa neutra de decline_shift_call
+   * e decline_worker_referral. `.select('id')` obrigatorio (patterns.md): DELETE negado por RLS
+   * afeta 0 linhas SEM erro, e o toast nao pode mentir.
+   */
+  async declineConnection(connectionId: string): Promise<UpdateConnectionResult> {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: 'Sessão expirada.' };
+
+      const { data, error } = await supabase
+        .from('team_connections')
+        .delete()
+        .eq('id', connectionId)
+        .eq('worker_id', user.id)
+        .eq('status', 'pending')
+        .select('id');
+
+      if (error) {
+        logError('teamConnection.declineConnection', error);
+        return { success: false, error: 'Erro ao recusar o convite.' };
+      }
+      if (!data || data.length === 0) {
+        return { success: false, error: 'Este convite já não está mais pendente.' };
+      }
+      return { success: true };
+    } catch (err) {
+      logError('teamConnection.declineConnection', err);
+      return { success: false, error: 'Erro inesperado ao recusar o convite.' };
+    }
+  },
+
+  /**
    * Worker sai/bloqueia uma empresa (→ 'blocked').
    * Funciona para status 'pending' (recusar convite de equipe) ou 'accepted' (sair).
    */
