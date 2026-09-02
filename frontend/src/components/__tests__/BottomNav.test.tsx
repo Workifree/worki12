@@ -16,7 +16,7 @@ describe('BottomNav', () => {
     renderBottomNav('worker')
 
     expect(screen.getByLabelText('Início')).toBeInTheDocument()
-    expect(screen.getByLabelText('Convites')).toBeInTheDocument()
+    expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
     expect(screen.getByLabelText('Clientes')).toBeInTheDocument()
     expect(screen.getByLabelText('Receb.')).toBeInTheDocument()
     expect(screen.getByLabelText('Msgs')).toBeInTheDocument()
@@ -54,7 +54,7 @@ describe('BottomNav', () => {
     renderBottomNav('worker')
 
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/dashboard')
-    expect(screen.getByLabelText('Convites')).toHaveAttribute('href', '/my-jobs')
+    expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/my-jobs')
     expect(screen.getByLabelText('Clientes')).toHaveAttribute('href', '/carteira')
     expect(screen.getByLabelText('Receb.')).toHaveAttribute('href', '/recebimentos')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/profile')
@@ -80,7 +80,7 @@ describe('BottomNav', () => {
   it('destaca rota ativa para worker', () => {
     renderBottomNav('worker', '/my-jobs')
 
-    const activeLink = screen.getByLabelText('Convites')
+    const activeLink = screen.getByLabelText('Turnos')
     expect(activeLink.className).toContain('text-primary')
 
     const inactiveLink = screen.getByLabelText('Início')

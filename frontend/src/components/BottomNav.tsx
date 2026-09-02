@@ -10,7 +10,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     // sai do bottom nav — Fase 2, ver ADR-20260630-pagamento-opcional-piloto.
     const workerNavItems = [
         { icon: Home, label: 'Início', path: '/dashboard' },
-        { icon: Inbox, label: 'Convites', path: '/my-jobs' },
+        { icon: Inbox, label: 'Turnos', path: '/my-jobs' },
         { icon: Contact, label: 'Clientes', path: '/carteira' },
         { icon: Receipt, label: 'Receb.', path: '/recebimentos' }, // Shortened label ("Meus Recebimentos")
         { icon: MessageSquare, label: 'Msgs', path: '/messages' }, // Shortened label

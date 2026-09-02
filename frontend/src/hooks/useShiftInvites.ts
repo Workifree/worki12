@@ -131,7 +131,7 @@ export interface UseWorkerInvitesResult {
  * Sem store global (Article 5: useState/useEffect direto), as instancias se avisam por evento de
  * janela. `origem` evita que quem disparou recarregue duas vezes.
  */
-const EVENTO_CONVITES = 'worki:convites-mudaram';
+export const EVENTO_CONVITES = 'worki:convites-mudaram';
 let proximaInstancia = 0;
 
 export function useWorkerInvites(): UseWorkerInvitesResult {

@@ -35,6 +35,7 @@ vi.mock('../components/PageMeta', () => ({
 }))
 
 vi.mock('../hooks/useShiftInvites', () => ({
+  EVENTO_CONVITES: 'worki:convites-mudaram',
   useWorkerInvites: () => ({
     pendingInvites: [],
     loading: false,

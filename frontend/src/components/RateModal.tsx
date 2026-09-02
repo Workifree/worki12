@@ -18,7 +18,11 @@ interface RateModalProps {
 export default function RateModal({ isOpen, onClose, onSubmit, targetName, targetPhotoUrl, title, subtitle }: RateModalProps) {
     // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
     const fecharPeloFundo = useModalDismiss(onClose);
-    const [rating, setRating] = useState(5);
+    // Nota nasce VAZIA, nao 5: com default pre-marcado dava para "avaliar" sem tocar em
+    // estrela — 5 gravado por inercia. Avaliacao e input de julgamento: default opinativo
+    // infla a nota e corroi a prova social que o produto vende (reputation inflation;
+    // NN/g sobre o poder dos defaults). Enviar so habilita depois de uma escolha explicita.
+    const [rating, setRating] = useState(0);
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const trapRef = useFocusTrap(isOpen);
@@ -111,11 +115,11 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
 
                 <button
                     onClick={handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || rating === 0}
                     className="w-full bg-black text-white py-4 rounded-xl font-black uppercase tracking-wide hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
                     {submitting ? <Loader2 className="animate-spin" /> : null}
-                    {submitting ? 'Enviando...' : 'Enviar Avaliação'}
+                    {submitting ? 'Enviando...' : rating === 0 ? 'Toque nas estrelas para avaliar' : 'Enviar Avaliação'}
                 </button>
             </div>
         </div>

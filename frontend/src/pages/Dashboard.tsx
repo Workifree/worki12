@@ -1,8 +1,9 @@
 
 import { useEffect } from 'react';
+import { EVENTO_CONVITES } from '../hooks/useShiftInvites';
 import { formatBRL } from '../lib/currency';
 import { levelProgress } from '../lib/gamification';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
 import {
@@ -42,6 +43,19 @@ interface HistoryItem {
 
 export default function Dashboard() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
+
+    // Aceitar/recusar convite pelo takeover dispara EVENTO_CONVITES (useShiftInvites), mas as
+    // queries do dashboard nao sabiam: o hero fechava e "PROXIMO TURNO" continuava dizendo
+    // "Sem proximos turnos" ate remontar — a tela negava o resultado da acao (Nielsen #1).
+    useEffect(() => {
+        const aoMudarConvites = () => {
+            queryClient.invalidateQueries({ queryKey: ['nextJob'] });
+            queryClient.invalidateQueries({ queryKey: ['workerHistory'] });
+        };
+        window.addEventListener(EVENTO_CONVITES, aoMudarConvites);
+        return () => window.removeEventListener(EVENTO_CONVITES, aoMudarConvites);
+    }, [queryClient]);
 
     const { data: authUser } = useQuery({
         queryKey: ['authUser'],

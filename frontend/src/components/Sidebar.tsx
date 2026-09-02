@@ -95,7 +95,11 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // saem do menu (Fase 2, ver ADR-20260630-pagamento-opcional-piloto), sem remover a rota.
     const workerNavItems = [
         { icon: Home, label: 'Início', path: '/dashboard' },
-        { icon: Inbox, label: 'Convites', path: '/my-jobs' },
+        // "Meus Turnos", nao "Convites": o rotulo descreve o DESTINO (a pagina se chama Meus
+        // Turnos e guarda agendados/andamento/historico), nao o evento mais quente. Information
+        // scent (Pirolli & Card): quem procura "meu turno de amanha" nao clicaria em "Convites".
+        // A saliencia do convite continua no badge, no takeover e no hero do dashboard.
+        { icon: Inbox, label: 'Meus Turnos', path: '/my-jobs' },
         { icon: Contact, label: 'Carteira de Clientes', path: '/carteira' },
         { icon: Receipt, label: 'Meus Recebimentos', path: '/recebimentos' },
         { icon: Share2, label: 'Quem Te Indicou', path: '/indicacoes' },

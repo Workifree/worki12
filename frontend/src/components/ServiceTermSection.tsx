@@ -284,7 +284,12 @@ export default function ServiceTermSection({
                                 </>
                             )}
 
-                            {lastOutcome === 'missing_cpf' && (
+                            {/* Aviso PROATIVO (Nielsen #5): o rascunho do termo ja diz "CPF: nao
+                                informado" — avisar so no toast, depois do clique, era deixar a pessoa
+                                ler tudo, marcar o checkbox e falhar. O botao NAO e desabilitado no
+                                client: a autoridade sobre "pode assinar?" segue sendo a RPC (o CPF
+                                pode ter acabado de ser cadastrado em outra aba). */}
+                            {(lastOutcome === 'missing_cpf' || (!term.accepted_at && lastOutcome === null && term.term_text.includes('CPF: não informado'))) && (
                                 <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-start gap-3">
                                     <AlertTriangle size={18} className="text-yellow-700 flex-shrink-0 mt-0.5" />
                                     <div>
