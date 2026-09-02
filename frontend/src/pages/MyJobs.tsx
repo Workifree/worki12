@@ -11,6 +11,7 @@ import RateModal from '../components/RateModal';
 import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
+import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
@@ -815,7 +816,7 @@ export default function MyJobs() {
                                             <Clock size={14} /> {startDate}{startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
                                         </span>
                                         <span className="flex items-center gap-1.5 text-xs font-bold bg-primary-light text-primary px-3 py-1.5 rounded-xl">
-                                            <DollarSign size={14} /> R$ {budget.toFixed(2).replace('.', ',')}
+                                            <DollarSign size={14} /> {formatBRL(budget)}
                                         </span>
                                         {location && (
                                             <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
@@ -899,7 +900,7 @@ export default function MyJobs() {
                                             <Clock size={14} /> {job.time} - {job.end_time}
                                         </span>
                                         <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-green-700 px-3 py-1.5 rounded-lg border">
-                                            <DollarSign size={14} /> R$ {job.pay}
+                                            <DollarSign size={14} /> {formatBRL(job.pay)}
                                         </span>
                                         <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-gray-600 px-3 py-1.5 rounded-lg border">
                                             <LocalDoTurno location={job.location} />
@@ -1025,7 +1026,7 @@ export default function MyJobs() {
                                     <Clock size={14} /> {job.date} • {job.time}
                                 </span>
                                 <span className="flex items-center gap-1.5 text-xs font-bold bg-green-100 text-green-700 px-3 py-1.5 rounded-lg uppercase ml-2">
-                                    <DollarSign size={14} /> R$ {job.pay}
+                                    <DollarSign size={14} /> {formatBRL(job.pay)}
                                 </span>
                                 <p className="text-sm font-bold text-gray-500 flex items-center gap-1 mt-1">
                                     <LocalDoTurno location={job.location} />
@@ -1035,7 +1036,7 @@ export default function MyJobs() {
                         <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 w-full md:w-auto">
                             <div>
                                 <span className="block text-sm font-bold text-gray-400 uppercase">Receber</span>
-                                <span className="block text-2xl font-black text-primary">R$ {job.pay}</span>
+                                <span className="block text-2xl font-black text-primary">{formatBRL(job.pay)}</span>
                             </div>
                             <div className="flex flex-col items-end gap-2">
                                 <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
@@ -1078,7 +1079,7 @@ export default function MyJobs() {
                             <p className="text-sm font-bold text-gray-400">{job.date} • {job.company_name}</p>
                         </div>
                         <div className="flex items-center justify-between w-full md:w-auto gap-4">
-                            <span className="block font-black text-gray-600">R$ {job.pay}</span>
+                            <span className="block font-black text-gray-600">{formatBRL(job.pay)}</span>
                             {job.status === 'completed' ? (
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-green-600 flex items-center gap-1 uppercase bg-green-100 px-2 py-1 rounded-xl">
@@ -1170,7 +1171,7 @@ export default function MyJobs() {
                             </div>
                             <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
                                 <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Valor</p>
-                                <p className="font-black text-sm text-primary">R$ {detailJob.pay}</p>
+                                <p className="font-black text-sm text-primary">{formatBRL(detailJob.pay)}</p>
                             </div>
                             <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
                                 <p className="text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>

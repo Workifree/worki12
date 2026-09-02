@@ -324,7 +324,7 @@ export default function Dashboard() {
                                         const parsedDate = nextJob.job?.start_date ? new Date(nextJob.job.start_date) : null;
                                         const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
                                         return hasValidDate ? (
-                                            <span className="text-2xl font-black">{parsedDate!.getDate()} {parsedDate!.toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+                                            <span className="text-2xl font-black">{parsedDate!.getDate()} {parsedDate!.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}</span>
                                         ) : (
                                             <span className="text-sm font-black text-gray-400 uppercase">Data indefinida</span>
                                         );
@@ -471,7 +471,7 @@ export default function Dashboard() {
                         <div key={i} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer border-b border-gray-100 last:border-0">
                             <div>
                                 <p className="font-bold text-sm truncate max-w-[200px]" title={h.job.title}>{h.job.title}</p>
-                                <p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleDateString()}</p>
+                                <p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
                             <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${h.status === 'completed' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
                                 {h.status === 'completed' ? 'Sucesso' : 'Cancelado'}

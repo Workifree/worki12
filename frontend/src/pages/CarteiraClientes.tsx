@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
@@ -185,6 +186,7 @@ export default function CarteiraClientes() {
   const { myStores, pendingConnections, loading, acceptConnection, blockConnection, declineConnection } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
+  const fecharPeloFundo = useModalDismiss(() => { if (confirmLeaveId) setConfirmLeaveId(null); });
 
   const handleAccept = async (connectionId: string) => {
     setRespondingId(connectionId);
@@ -296,7 +298,7 @@ export default function CarteiraClientes() {
 
       {/* Modal de confirmação: sair/bloquear */}
       {confirmLeaveId && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharPeloFundo}>
           <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
             <h3 className="text-xl font-black uppercase mb-2">Sair deste cliente?</h3>
             <p className="text-sm font-bold text-gray-500 mb-6">

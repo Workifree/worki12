@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, MapPin, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
@@ -59,6 +60,10 @@ export default function InviteTakeover() {
   const { pendingInvites, loading, respondingId, respond, refresh } = useWorkerInvites();
   const { notifications } = useNotifications();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  // ESC/toque no fundo = mesmo gesto do X: dispensa o overlay SEM responder o convite
+  // (ele reaparece enquanto seguir 'invited') — consistente com os demais modais do app.
+  const dismissRef = useRef<(() => void) | null>(null);
+  const fecharPeloFundo = useModalDismiss(() => { dismissRef.current?.(); });
   const seenNotifIdsRef = useRef<Set<string> | null>(null);
 
   // Detecta notificações NOVAS (chegadas via Realtime após o mount) de convite de turno.
@@ -112,6 +117,7 @@ export default function InviteTakeover() {
       return next;
     });
   };
+  dismissRef.current = dismiss;
 
   const handleRespond = async (response: 'accepted' | 'declined') => {
     await respond(visibleInvite.id, response);
@@ -128,6 +134,7 @@ export default function InviteTakeover() {
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+      onClick={fecharPeloFundo}
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-takeover-title"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ErroDeCarga from '../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList, MessageCircle, Loader2 } from 'lucide-react';
@@ -34,6 +35,7 @@ export default function CompanyPublicProfile() {
     const [company, setCompany] = useState<CompanyPublicData | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+  const [erroCarga, setErroCarga] = useState(false);
     // "Falar com a empresa": só existe canal se houver uma application do freela
     // autenticado com um turno desta empresa (Conversation é amarrada a application_uuid).
     const [applicationId, setApplicationId] = useState<string | null>(null);
@@ -77,7 +79,13 @@ export default function CompanyPublicProfile() {
                 }
             } catch (error) {
                 logError('CompanyPublicProfile.fetch', error);
-                if (active) setNotFound(true);
+                // "Nao encontrada" e afirmacao sobre o MUNDO; erro de rede e sobre a CARGA.
+                // Colapsar os dois faria o freela desistir de um convite por causa de um timeout.
+                const code = (error as { code?: string } | null)?.code;
+                if (active) {
+                    if (code === 'PGRST116') setNotFound(true);
+                    else setErroCarga(true);
+                }
             } finally {
                 if (active) setLoading(false);
             }
@@ -92,11 +100,13 @@ export default function CompanyPublicProfile() {
         if (!applicationId) return;
         setChatLoading(true);
         try {
-            const { data: existingConvs } = await supabase
+            const { data: existingConvs, error: convError } = await supabase
                 .from('Conversation')
                 .select('id')
                 .eq('application_uuid', applicationId)
                 .limit(1);
+            // Erro aqui NAO significa "nao existe" — cair no ramo de criar duplicaria a conversa.
+            if (convError) throw convError;
 
             if (existingConvs && existingConvs.length > 0) {
                 navigate(`/messages?conversation=${existingConvs[0].id}`);
@@ -125,6 +135,15 @@ export default function CompanyPublicProfile() {
                 <div className="space-y-4">
                     {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl" />)}
                 </div>
+            </div>
+        );
+    }
+
+    if (erroCarga && !company) {
+        return (
+            <div className="max-w-4xl mx-auto pb-24 pt-6">
+                <PageMeta title="Erro ao carregar" />
+                <ErroDeCarga onRetry={() => window.location.reload()} />
             </div>
         );
     }
@@ -195,9 +214,14 @@ export default function CompanyPublicProfile() {
 
                     <div className="flex flex-wrap items-center gap-2 mt-4 text-sm font-bold text-gray-600">
                         {company.address && (
-                            <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+                            <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 underline decoration-blue-300 underline-offset-2"
+                            >
                                 <MapPin size={16} /> {company.address}
-                            </span>
+                            </a>
                         )}
                         <span className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-xl">
                             <Star size={16} className={hasRating ? 'fill-yellow-500' : ''} />

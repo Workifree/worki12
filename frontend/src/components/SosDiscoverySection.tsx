@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ErroDeCarga from './ErroDeCarga';
 import { Siren, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
@@ -29,6 +30,7 @@ export default function SosDiscoverySection() {
   const [discoverable, setDiscoverableState] = useState(false);
   const [hasAvailability, setHasAvailability] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -48,10 +50,14 @@ export default function SosDiscoverySection() {
       if (!active) return;
       if (error) {
         logError('SosDiscoverySection.fetch', error);
+        // Sem isto, o default do useState vira "verdade" na tela: gate/preferencia
+        // renderizados INVERTIDOS numa falha de rede (achado P2 da heuristica).
+        setErroCarga(true);
       } else if (data) {
         setDiscoverableState(Boolean(data.discoverable_for_sos));
         setHasAvailability(Boolean(data.availability_days && Object.keys(data.availability_days).length > 0));
       }
+      if (!error) setErroCarga(false);
       setLoading(false);
     })();
     return () => {
@@ -82,6 +88,14 @@ export default function SosDiscoverySection() {
 
   if (loading) {
     return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" />;
+  }
+
+  if (erroCarga) {
+    return (
+      <section className="mt-6">
+        <ErroDeCarga onRetry={() => window.location.reload()} mensagem="Não foi possível carregar sua configuração. Recarregue para ver o estado real." />
+      </section>
+    );
   }
 
   if (!hasAvailability) {

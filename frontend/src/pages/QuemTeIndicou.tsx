@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Share2, Loader2, Building2, Check, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
@@ -27,6 +27,7 @@ interface PendingReferralRow extends WorkerReferral {
   referringCompanyName?: string;
   referringCompanyLogo?: string | null;
   /** A empresa que quer se conectar. Sem o nome dela, o "sim" nao e consentimento informado. */
+  requestingCompanyId: string;
   requestingCompanyName?: string;
   requestingCompanyLogo?: string | null;
 }
@@ -87,6 +88,7 @@ export default function QuemTeIndicou() {
         ...r,
         referringCompanyName: companies[r.referring_company_id]?.name,
         referringCompanyLogo: companies[r.referring_company_id]?.logo_url,
+        requestingCompanyId: r.requesting_company_id,
         requestingCompanyName: companies[r.requesting_company_id]?.name,
         requestingCompanyLogo: companies[r.requesting_company_id]?.logo_url,
       })),
@@ -172,9 +174,12 @@ export default function QuemTeIndicou() {
                 <p className="font-black uppercase">{item.referringCompanyName ?? 'Uma empresa do seu elenco'}</p>
                 <p className="text-xs text-gray-500 font-bold uppercase">
                   indicou você para{' '}
-                  <span className="text-black">
+                  <Link
+                    to={`/empresa/${item.requestingCompanyId}`}
+                    className="text-black underline decoration-primary decoration-2 underline-offset-2 hover:text-primary"
+                  >
                     {item.requestingCompanyName ?? 'outra empresa'}
-                  </span>
+                  </Link>
                 </p>
               </div>
             </div>

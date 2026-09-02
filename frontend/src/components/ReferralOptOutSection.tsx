@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ErroDeCarga from './ErroDeCarga';
 import { Share2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
@@ -21,6 +22,7 @@ export default function ReferralOptOutSection() {
   const { addToast } = useToast();
   const [accepts, setAccepts] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -40,9 +42,13 @@ export default function ReferralOptOutSection() {
       if (!active) return;
       if (error) {
         logError('ReferralOptOutSection.fetch', error);
+        // Sem isto, o default do useState vira "verdade" na tela: gate/preferencia
+        // renderizados INVERTIDOS numa falha de rede (achado P2 da heuristica).
+        setErroCarga(true);
       } else if (data && typeof data.accepts_referrals === 'boolean') {
         setAccepts(data.accepts_referrals);
       }
+      if (!error) setErroCarga(false);
       setLoading(false);
     })();
     return () => {
@@ -70,6 +76,14 @@ export default function ReferralOptOutSection() {
       'success',
     );
   };
+
+  if (erroCarga) {
+    return (
+      <section className="mt-6">
+        <ErroDeCarga onRetry={() => window.location.reload()} mensagem="Não foi possível carregar sua configuração. Recarregue para ver o estado real." />
+      </section>
+    );
+  }
 
   if (loading) {
     return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" />;

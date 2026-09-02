@@ -242,7 +242,10 @@ export default function Profile() {
     // QR de identidade + "meu link" (link transitivo)
     const [qrModalOpen, setQrModalOpen] = useState(false);
     // Saida de emergencia do modal do QR (heuristica #3) — mesmo contrato dos demais modais.
-    useModalDismiss(() => { if (qrModalOpen) setQrModalOpen(false); });
+    const fecharExclusaoPeloFundo = useModalDismiss(() => {
+        if (deleteModalOpen) { setDeleteModalOpen(false); setDeleteConfirmText(''); }
+        else if (qrModalOpen) setQrModalOpen(false);
+    });
     const fecharQrPeloFundo = (e: React.MouseEvent<HTMLElement>) => {
         if (e.target === e.currentTarget) setQrModalOpen(false);
     };
@@ -1270,7 +1273,7 @@ export default function Profile() {
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={fecharExclusaoPeloFundo}>
                 <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                     <h2 className="text-xl font-black uppercase tracking-tight mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="space-y-2 mb-6 text-sm text-gray-700">

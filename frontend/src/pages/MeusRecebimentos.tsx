@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import type { WorkerShiftPaymentListItem } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
+import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
 import PageMeta from '../components/PageMeta';
 import type { PaymentSource } from '../types';
@@ -25,7 +26,7 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
 };
 
 function formatCurrency(amount: number): string {
-    return `R$ ${amount.toFixed(2).replace('.', ',')}`;
+    return formatBRL(amount);
 }
 
 // ---------------------------------------------------------------------------
