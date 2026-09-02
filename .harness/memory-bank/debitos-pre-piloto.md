@@ -818,3 +818,36 @@ depende inteiramente da notificação in-app + Realtime (que funcionam, e cujo c
 corrigido em `20260825000100`). Se e-mail virar requisito do piloto, é trabalho novo: template
 `shift_invite`, checagem de auth na função e `RESEND_API_KEY` configurada. Fonte preservada em
 `supabase/functions/send-notification/` — nada foi perdido.
+
+---
+
+## 24. Avaliação heurística do fluxo do FREELA — 84 achados, saldo (02/09/2026)
+
+**Origem:** workflow de 11 avaliadores paralelos (Nielsen/NN-g/Baymard), um por tela do freela,
+mesmo método aplicado antes ao lado da empresa. Resultado bruto: 12 P1, 36 P2, 36 P3.
+
+**Resolvido e em produção** (commits `18fe5b16`, `17358521` e os três seguintes):
+- **12/12 P1** — destaque: "Recusar" convite de elenco gravava **bloqueio permanente** (única ação
+  que a RLS permitia; migração `20260902000100` cria `tc_delete_worker_pending` e a recusa vira
+  delete neutro); badge "Pago" derivado só de `status='completed'` sem olhar `shift_payments`;
+  Dashboard **expulsava freela logado para /login** em erro transitório de rede; e o padrão
+  sistêmico "fetch falho → empty state que mente" (novo `components/ErroDeCarga.tsx` com retry,
+  ligado em 10+ telas; services devolvem `null` em falha, nunca `[]`).
+- **~30/36 P2 e ~28/36 P3** — dinheiro em formato único (`lib/currency.ts`), datas pt-BR, barra de
+  XP com degraus reais de `LEVELS` (era `xp % 100`), horas reais no perfil (era `count*6`), ESC em
+  todos os modais restantes, recusas irreversíveis com braço de 2 toques, checkbox na confirmação
+  bilateral sem termo, alvos de toque ≥44px, endereços viram link de mapa (LocalDoTurno
+  compartilhado), spinner por ação, eco imediato no chat com dedupe por id, notificação de mensagem
+  marcada como lida **por conversa** (era todas).
+
+**Deixado de fora, consciente (baixo risco, alto custo/valor):**
+- P3 #3: erro no fetch de reviews reexibe "Avaliar" em turno já avaliado (o INSERT duplicado
+  esbarra no banco; só custo cosmético).
+- P3 #7: falha de clipboard descarta a URL gerada (toast avisa; retry manual funciona).
+- P3 #14: erro na query de presença do recibo esconde o bloco de chegada/saída sem avisar.
+- P2 #14 parcial: a limpeza de notificações por conversa depende do formato do `link` gravado pelo
+  trigger (`/messages?conversation=<id>`) — se o trigger mudar o formato, volta o comportamento
+  antigo silenciosamente. Padrão frágil declarado.
+
+**Método a manter:** achado → verificar no código → citar a heurística → menor correção honesta →
+build+lint+testes (940) → commit PT → deploy com retry → verificar por conteúdo no bundle servido.
