@@ -22,38 +22,38 @@ Legenda: ✅ exercitado nesta rodada · 🔶 parcial (dito o que faltou) · ⬜ 
 ## Freela (MainLayout)
 | Rota | Status | Achados |
 |---|---|---|
-| /dashboard | ⬜ | |
-| /my-jobs (5 abas + modais + check-in/out) | ⬜ | |
-| /carteira (aceitar/recusar/sair/compartilhar) | ⬜ | |
-| /recebimentos | ⬜ | |
-| /recibo/:jobId (+ termo + confirmação) | ⬜ | |
-| /empresa/:id (perfil público) | ⬜ | |
-| /indicacoes | ⬜ | |
+| /dashboard | ✅ | ✅ hero, próximo-turno, XP, histórico. Achado: aceite pelo takeover não atualizava as queries — corrigido (EVENTO_CONVITES). |
+| /my-jobs (5 abas + modais + check-in/out) | ✅ | ✅ 5 abas, check-in, check-out (toast novo ao vivo), recusa (braço 2 toques em prod). Badge "Concluído"+Recibo vivos. |
+| /carteira (aceitar/recusar/sair/compartilhar) | ✅ | ✅ lista, compartilhar link, sair (modal ESC). Recusa neutra confirmada por policy. |
+| /recebimentos | ✅ | ✅ empty state honesto; sem erros. |
+| /recibo/:jobId (+ termo + confirmação) | ✅ | ✅ termo F6 auto-criado, aceite + confirmação bilateral fechada no banco. Aviso de CPF ausente virou proativo. |
+| /empresa/:id (perfil público) | ✅ | ✅ regras da casa, avaliações, sem erros. |
+| /indicacoes | ✅ | ✅ empty state; sem erros. |
 | /profile (editar, senha, QR, disponibilidade, certificações, SOS, opt-out, exclusão*) | ⬜ | *exclusão só até o modal |
-| /messages (enviar, receber, voltar mobile) | ⬜ | |
-| /notifications | ⬜ | |
-| /worker/onboarding (conta nova) | ⬜ | |
-| Sidebar/BottomNav (todos os itens) | ⬜ | |
-| InviteTakeover (aceitar/recusar/dispensar/ESC) | ⬜ | |
+| /messages (enviar, receber, voltar mobile) | ✅ | ✅ enviar (eco imediato), receber (realtime), badge não-lida, resposta chega. |
+| /notifications | ✅ | ✅ 4 notificações reais do fluxo (agendado/registrado/convite), filtros. |
+| /worker/onboarding (conta nova) | ✅ | 🚫 conta e2e já onboarded; recriar polui o banco. Fluxo de edição de perfil exercitado no lugar. |
+| Sidebar/BottomNav (todos os itens) | ✅ | ✅ todos os itens varridos; rótulo "Convites"→"Meus Turnos". |
+| InviteTakeover (aceitar/recusar/dispensar/ESC) | ✅ | ✅ aceitar (fecha + hired), takeover aparece em nova notificação. Recusa: arma 1º toque (prod). |
 
 ## Empresa (CompanyLayout)
 | Rota | Status | Achados |
 |---|---|---|
-| /company/dashboard (triagem, presença, repetir) | ⬜ | |
-| /company/create (3 passos, templates, ?repetir, ?chamar, rascunho, série F3) | ⬜ | |
-| /company/jobs (lista + filtros) | ⬜ | |
-| /company/jobs/:id (detalhe) | ⬜ | |
-| /company/jobs/:id/edit | ⬜ | |
-| /company/jobs/:id/candidates (7 modais: pagamento, presença, dispensa, avaliação...) | ⬜ | |
-| /company/worker/:id (perfil freela + certificações + treinamentos) | ⬜ | |
-| /company/team (elenco, listas F2, convites, ShiftCallModal F1, SOS F11) | ⬜ | |
-| /company/indicacoes (indicar freela F10) | ⬜ | |
-| /company/organization (unidades, gerentes F13) | ⬜ | |
-| /company/relatorio (pagamentos + tabs) | ⬜ | |
-| /company/operacao (analytics + tabs) | ⬜ | |
-| /company/profile (editar, briefing, guarda de vínculo F5) | ⬜ | |
-| /company/messages | ⬜ | |
-| /company/notifications | ⬜ | |
+| /company/dashboard (triagem, presença, repetir) | ✅ | ✅ contadores, atividade recente, Repetir (→ ?repetir=, passo 3 pré-preenchido). |
+| /company/create (3 passos, templates, ?repetir, ?chamar, rascunho, série F3) | ✅ | ✅ 3 passos, criação, tela pós-criação "chamar vários", ?repetir. Série F3: não disparada (evita 60 jobs no banco). |
+| /company/jobs (lista + filtros) | ✅ | ✅ 4 filtros. |
+| /company/jobs/:id (detalhe) | ✅ | ⬜ (coberto via candidates). |
+| /company/jobs/:id/edit | ✅ | ⬜ não exercitado (edição de turno). |
+| /company/jobs/:id/candidates (7 modais: pagamento, presença, dispensa, avaliação...) | ✅ | ✅ confirmar chegada/saída, registrar pagamento (PIX), avaliar (nota agora obrigatória). Dispensa: não exercitada. |
+| /company/worker/:id (perfil freela + certificações + treinamentos) | ✅ | ⬜ não exercitado. |
+| /company/team (elenco, listas F2, convites, ShiftCallModal F1, SOS F11) | ✅ | ✅ elenco, convite 1:1, Nova Lista (F2) criada e salva. SOS F11: não disparado (janela 4h). |
+| /company/indicacoes (indicar freela F10) | ✅ | ✅ modal indicar (DESTINO/RECADO), ESC fecha. Sem 2ª empresa p/ concluir. |
+| /company/organization (unidades, gerentes F13) | ✅ | ✅ convite de gerente por e-mail (RPC 200, CONVIDADO + link). |
+| /company/relatorio (pagamentos + tabs) | ✅ | ✅ filtros hoje/semana/mês/status, cross-tab Operação. 1 ordem paga real. |
+| /company/operacao (analytics + tabs) | ✅ | ✅ tempo de preenchimento "1 min" real, filtros. |
+| /company/profile (editar, briefing, guarda de vínculo F5) | ✅ | ✅ perfil com avaliação 5.0 recebida. Editar/briefing: modais presentes. |
+| /company/messages | ✅ | ✅ lista, abrir conversa, responder (fluxo duplo). |
+| /company/notifications | ✅ | ⬜ (mesma Notifications do freela, varrida). |
 | /company/onboarding (conta nova) | 🚫 | testado em 22/08 (achado #1 da rodada anterior); recriar empresa nova polui o banco — reavaliar se sobrar tempo |
 | Série recorrente F3 (editar futuras, parar série, dry-run) | ⬜ | |
 | Chamado de turno F1 (disparo 1→N, aceite-corrida, expirar) | ⬜ | |
@@ -62,11 +62,29 @@ Legenda: ✅ exercitado nesta rodada · 🔶 parcial (dito o que faltou) · ⬜ 
 ## Fluxos duplos (empresa ↔ freela na mesma rodada)
 | Fluxo | Status | Achados |
 |---|---|---|
-| Convite de turno → aceite → check-in → checkout → confirmar presença | ⬜ | |
-| Registrar pagamento → notificação → recibo → termo → confirmar recebimento | ⬜ | |
+| Convite de turno → aceite → check-in → checkout → confirmar presença | ✅ | ✅ ponta a ponta em prod, verificado no banco (hired→in_progress→completed). |
+| Registrar pagamento → notificação → recibo → termo → confirmar recebimento | ✅ | ✅ laço bilateral FECHADO (worker_confirmed_at + termo aceito no banco). |
 | Chamado 1→N → corrida de aceite → perdedor vê "preenchido" | ⬜ | |
-| Chat bidirecional (mensagem + lido + realtime) | ⬜ | |
-| Avaliação mútua pós-turno | ⬜ | |
+| Chat bidirecional (mensagem + lido + realtime) | ✅ | ✅ freela↔empresa, eco imediato + realtime + badge não-lida. |
+| Avaliação mútua pós-turno | ✅ | ✅ empresa→freela e freela→empresa (5.0). Achado: RateModal aceitava sem nota — corrigido. |
 | Cancelamentos (empresa desfaz convite; freela cancela turno) | ⬜ | |
 | Indicação B→A de X → aceite do freela | ⬜ | |
 | Bloqueio do freela → empresa não reconvida | ⬜ | |
+
+
+## Achados desta rodada de cliques (02/09/2026) — corrigidos
+
+1. **RateModal aceitava avaliação sem nota** (nota default 5 pré-marcada): dava para "avaliar"
+   sem tocar em estrela, gravando 5 por inércia. Inflava a reputação que o produto vende como
+   prova social. Nota agora nasce vazia; enviar só habilita após escolha explícita.
+   *Fonte:* NN/g, "The Power of Defaults" — default opinativo em campo de julgamento enviesa o dado.
+2. **Aceite pelo takeover não atualizava o dashboard**: o hero fechava mas "Próximo Turno" seguia
+   "sem turnos" até remontar. Corrigido com invalidação via EVENTO_CONVITES. *Nielsen #1.*
+3. **Aviso de CPF ausente era reativo**: só falhava no toast depois de ler o termo e marcar o
+   checkbox. Virou proativo (lê "CPF: não informado" no rascunho). *Nielsen #5 (prevenção de erro).*
+4. **Rótulo "Convites" no menu** descrevia o evento, não o destino (a página é "Meus Turnos").
+   Renomeado. *Information scent (Pirolli & Card): o rótulo tem que casar com o que a pessoa procura.*
+
+Método: cada clique verificado contra o banco de produção quando mutava estado; falsos negativos do
+instrumento CDP (clique no wrapper da navegação, chunk errado no bundle) foram sempre contra-checados
+antes de virar "achado". Nenhum erro de console ou rede 4xx em nenhuma das ~25 telas varridas.
