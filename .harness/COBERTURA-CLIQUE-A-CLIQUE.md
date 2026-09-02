@@ -88,3 +88,35 @@ Legenda: ✅ exercitado nesta rodada · 🔶 parcial (dito o que faltou) · ⬜ 
 Método: cada clique verificado contra o banco de produção quando mutava estado; falsos negativos do
 instrumento CDP (clique no wrapper da navegação, chunk errado no bundle) foram sempre contra-checados
 antes de virar "achado". Nenhum erro de console ou rede 4xx em nenhuma das ~25 telas varridas.
+
+
+## Rodada 2 (02/09/2026) — telas antes NÃO exercitadas, agora cobertas
+
+Método: workflow de 7 avaliadores heurísticos leu o código-fonte das telas não exercitadas
+(41 achados: 16 P2, 25 P3), depois **verificação clique-a-clique em produção** de cada uma.
+
+**Freela — Perfil (todas as sub-features):**
+- ✅ Declarar disponibilidade: grade 7×3 inline, marcada e salva; DB gravou `{"1":["manha",...]}`
+  (convenção correta, resolve o achado histórico "registre disponibilidade não some").
+- ✅ Cadastrar certificação (F8): título + salvar, apareceu na lista.
+- ✅ QR de identidade: abre, ESC fecha.
+- ✅ Opt-out de indicação: toggle → DB `accepts_referrals=false` → restaurado.
+
+**Empresa — telas restantes:**
+- ✅ Série recorrente F3: criada via UI (2 ocorrências, range curto), DB confirmou 1 série + 2 jobs.
+  ⚠️ O 400 inicial foi **artefato do instrumento** (rascunho antigo avançou o form → meu setInput
+  escreveu no campo errado), NÃO bug de produto — série funciona. Documentado, não "corrigido".
+- ✅ Relatório: filtros hoje/semana/mês/status, cross-tab. Analytics: filtros.
+- ✅ Organização: convite de gerente F13 (RPC 200).
+- ✅ Indicação F10: modal indicar, ESC fecha.
+- ✅ Perfil da empresa: avaliação 5.0 recebida visível.
+
+**Achados corrigidos** (16 P2 + P3 de valor): ver commit da rodada. Cobrem WorkerPublicProfile,
+CompanyJobDetails, SosDiscoverySection, MyCertificationsSection, CompanyOnboarding, CompanyCreateJob
+e Profile — todos padrões de facilidade de uso (estado honesto, CTA em vez de texto morto, alvo de
+toque, ação vs estado no rótulo, obrigatório/opcional marcado, ação destrutiva com fricção).
+
+**Limitação declarada (não corrigível minimamente):** o guard de alterações não-salvas do Perfil só
+cobre fechar/atualizar a aba (`beforeunload`); navegação interna via BottomNav não dispara. A correção
+(useBlocker) exige migrar de `<BrowserRouter>` para data router (createBrowserRouter) — mudança
+arquitetural que precisa de ADR. Registrado, não meia-implementado.
