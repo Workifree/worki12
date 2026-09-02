@@ -11,6 +11,7 @@ export default function ResetPassword() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
+    const [mostrarSenha, setMostrarSenha] = useState(false);
 
     const strength = getPasswordStrength(password);
 
@@ -84,21 +85,30 @@ export default function ResetPassword() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="text-xs font-bold uppercase block mb-1">Nova Senha</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            aria-label="Nova senha"
-                            className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none"
-                            placeholder="Minimo 8 caracteres"
-                            autoFocus
-                        />
+                        <div className="relative">
+                            <input
+                                type={mostrarSenha ? 'text' : 'password'}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                aria-label="Nova senha"
+                                className="w-full border-2 border-gray-200 rounded-xl p-3 pr-24 focus:border-black outline-none"
+                                placeholder="Mínimo 8 caracteres"
+                                autoFocus
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setMostrarSenha(v => !v)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-black uppercase text-gray-500 hover:text-black min-h-11 px-2"
+                            >
+                                {mostrarSenha ? 'Ocultar' : 'Mostrar'}
+                            </button>
+                        </div>
                         {password.length > 0 && (
                             <div className="mt-2">
                                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                     <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300 rounded-full`} />
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">Forca: {strength.label}</p>
+                                <p className="text-xs text-gray-500 mt-1">Força: {strength.label}</p>
                             </div>
                         )}
                     </div>
@@ -106,7 +116,7 @@ export default function ResetPassword() {
                     <div>
                         <label className="text-xs font-bold uppercase block mb-1">Confirmar Senha</label>
                         <input
-                            type="password"
+                            type={mostrarSenha ? 'text' : 'password'}
                             value={confirm}
                             onChange={e => setConfirm(e.target.value)}
                             aria-label="Confirmar senha"

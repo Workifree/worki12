@@ -364,8 +364,18 @@ function formatDate(d: string) {
 }
 
 function formatMoney(v: number) {
-    return `R$ ${Math.abs(v).toFixed(2)}`;
+    // Preserva o sinal: um prejuizo em 'Lucro Liquido' aparecia POSITIVO por causa do Math.abs
+    // (a cor vermelha era a unica pista). PT-BR com virgula, consistente com o resto da UI.
+    const abs = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${v < 0 ? '-' : ''}R$ ${abs}`;
 }
+
+const USER_TYPE_LABELS: Record<string, string> = {
+    worker: 'Trabalhador',
+    company: 'Empresa',
+    hire: 'Empresa',
+    admin: 'Admin',
+};
 
 const TYPE_LABELS: Record<string, string> = {
     credit: 'Credito',
@@ -395,7 +405,7 @@ function UserBadge({ info }: { info: UserInfo | null }) {
                 info.user_type === 'worker' ? 'bg-green-100 text-green-700' :
                 info.user_type === 'company' ? 'bg-blue-100 text-blue-700' :
                 'bg-gray-100 text-gray-600'
-            }`}>{info.user_type}</span>
+            }`}>{USER_TYPE_LABELS[info.user_type] ?? info.user_type}</span>
         </div>
     );
 }
@@ -559,7 +569,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                                         tx.type === 'credit' || tx.type === 'escrow_release' || tx.type === 'initial_balance' ? 'text-green-600' : tx.type === 'platform_fee' ? 'text-purple-600' : 'text-red-600'
                                     }`}>
                                         {tx.type === 'debit' || tx.type === 'escrow_reserve' || tx.type === 'platform_fee' ? '- ' : '+ '}
-                                        {formatMoney(tx.amount)}
+                                        {formatMoney(Math.abs(tx.amount))}
                                     </td>
                                     <td className="py-2 text-xs text-gray-600 max-w-[200px] truncate">
                                         {tx.description || '-'}
@@ -600,7 +610,7 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                         <option value="all">Todos</option>
                         <option value="worker">Workers</option>
                         <option value="company">Empresas</option>
-                        <option value="hire">Hire</option>
+                        <option value="hire">Empresa (hire)</option>
                     </select>
                 </div>
             </div>
@@ -612,7 +622,7 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                             <th className="text-left py-2 font-black uppercase text-xs">Tipo</th>
                             <th className="text-left py-2 font-black uppercase text-xs">Nome</th>
                             <th className="text-right py-2 font-black uppercase text-xs">Saldo</th>
-                            <th className="text-left py-2 font-black uppercase text-xs">Email OK</th>
+                            <th className="text-left py-2 font-black uppercase text-xs">Email confirmado</th>
                             <th className="text-left py-2 font-black uppercase text-xs">Ultimo Login</th>
                             <th className="text-left py-2 font-black uppercase text-xs">Cadastro</th>
                         </tr>
@@ -630,7 +640,7 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                                         u.user_type === 'company' || u.user_type === 'hire' ? 'bg-blue-100 text-blue-700' :
                                         'bg-gray-100 text-gray-700'
                                     }`}>
-                                        {u.user_type}
+                                        {USER_TYPE_LABELS[u.user_type] ?? u.user_type}
                                     </span>
                                 </td>
                                 <td className="py-2 text-xs">{u.full_name || '-'}</td>

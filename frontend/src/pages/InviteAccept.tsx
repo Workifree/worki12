@@ -116,7 +116,7 @@ export default function InviteAccept() {
     return () => { active = false; };
   }, [token, navigate]);
 
-  const successTitle = direction === 'worker' ? 'Freela Adicionado!' : 'Convite Aceito!';
+  const successTitle = direction === 'worker' ? 'Freela Convidado!' : 'Convite Aceito!';
   const successBody = direction === 'worker'
     ? 'O freela do link entrou (pendente de aceite dele) no seu elenco. Assim que ele confirmar, você poderá convidá-lo para turnos.'
     : 'Você entrou para o elenco da empresa. Agora pode receber convites de turno diretamente.';
@@ -230,7 +230,7 @@ export default function InviteAccept() {
               <XCircle size={32} className="text-red-500" />
             </div>
             <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Link Inválido
+              Não foi possível abrir o convite
             </h1>
             <p className="text-gray-600 font-bold mb-2">
               {page.errorMsg ?? 'Não foi possível processar este convite.'}
@@ -241,10 +241,10 @@ export default function InviteAccept() {
                 : 'Peça à empresa um novo link de convite.'}
             </p>
             <button
-              onClick={() => navigate(redirectTo)}
+              onClick={() => navigate('/')}
               className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
             >
-              {redirectLabel}
+              Voltar ao início
               <ArrowRight size={18} />
             </button>
           </div>

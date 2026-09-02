@@ -318,7 +318,7 @@ export default function Dashboard() {
                     </div>
                     <button
                         onClick={() => navigate('/profile')}
-                        className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase text-xs transition-colors whitespace-nowrap flex-shrink-0"
+                        className="bg-primary hover:bg-black text-white px-6 min-h-11 rounded-xl font-black uppercase text-xs transition-colors whitespace-nowrap flex-shrink-0"
                     >
                         Declarar agora
                     </button>

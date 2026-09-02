@@ -175,13 +175,29 @@ export default function AcceptManagerInvite() {
           ) : (
             <>
               <p className="text-gray-600 font-bold mb-8">{current.body}</p>
-              <button
-                onClick={() => navigate(isSuccess ? '/company/dashboard' : '/login')}
-                className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
-              >
-                {isSuccess ? 'Ir para o Dashboard' : 'Voltar ao Login'}
-                <ArrowRight size={18} />
-              </button>
+              {(() => {
+                // P1: no caso mais provavel (convidado ja e freela logado), o corpo diz "crie uma
+                // conta de empresa" mas o botao mandava pro login. Alinha destino e rotulo a acao.
+                const alvo = isSuccess
+                  ? '/company/dashboard'
+                  : page === 'worker_cannot_be_manager'
+                    ? '/login?type=hire&cadastro=1'
+                    : '/login';
+                const rotulo = isSuccess
+                  ? 'Ir para o Dashboard'
+                  : page === 'worker_cannot_be_manager'
+                    ? 'Criar conta de empresa'
+                    : 'Voltar ao Login';
+                return (
+                  <button
+                    onClick={() => navigate(alvo)}
+                    className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+                  >
+                    {rotulo}
+                    <ArrowRight size={18} />
+                  </button>
+                );
+              })()}
             </>
           )}
         </div>

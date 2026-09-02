@@ -110,6 +110,7 @@ export default function CompanyReferrals() {
   const [loadingReceived, setLoadingReceived] = useState(true);
   const [sent, setSent] = useState<SentReferralRow[]>([]);
   const [loadingSent, setLoadingSent] = useState(true);
+  const [erroSent, setErroSent] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
@@ -127,6 +128,7 @@ export default function CompanyReferrals() {
   const loadSent = useCallback(async () => {
     if (!companyId) return;
     setLoadingSent(true);
+    setErroSent(false);
     const rows = await ReferralService.listMyReferrals(companyId);
 
     const companyIds = Array.from(new Set(rows.map((r) => r.requesting_company_id)));
@@ -135,6 +137,7 @@ export default function CompanyReferrals() {
       const { data, error } = await supabase.from('companies').select('id, name').in('id', companyIds);
       if (error) {
         logError('CompanyReferrals.loadSent', error);
+        setErroSent(true);
       } else {
         names = Object.fromEntries((data ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
       }
@@ -245,7 +248,13 @@ export default function CompanyReferrals() {
               ))}
             </div>
           )}
-          {!loadingSent && sent.length === 0 && (
+          {!loadingSent && erroSent && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
+              <p className="text-sm font-bold text-red-600 mb-3">Não foi possível carregar suas indicações.</p>
+              <button onClick={() => void loadSent()} className="bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors">Tentar de novo</button>
+            </div>
+          )}
+          {!loadingSent && !erroSent && sent.length === 0 && (
             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
               <p className="text-sm font-bold text-gray-500">Você ainda não indicou nenhum freela.</p>
             </div>

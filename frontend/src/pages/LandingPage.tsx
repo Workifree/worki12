@@ -72,7 +72,7 @@ export default function LandingPage() {
               {
                 icon: <Zap className="w-10 h-10 text-blue-600" />,
                 title: 'Do Seu Jeito de Pagar',
-                description: 'PIX direto ao freela ou pelo Worki pra registrar tudo — você escolhe como pagar.'
+                description: 'Você paga o freela por fora (PIX ou dinheiro) e registra no Worki — recibo automático pros dois lados.'
               },
               {
                 icon: <Users className="w-10 h-10 text-primary" />,
@@ -124,7 +124,7 @@ export default function LandingPage() {
               {[
                 { step: '1', title: 'Monte seu Elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
                 { step: '2', title: 'Convide pra um Turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
-                { step: '3', title: 'Pague e Registre', desc: 'Confirme o turno, pague como preferir (direto ou pelo Worki) e receba o recibo automático pra seu controle.' },
+                { step: '3', title: 'Pague e Registre', desc: 'Confirme o turno, pague o freela direto (PIX ou dinheiro) e registre no Worki — recibo automático pra seu controle.' },
               ].map((item) => (
                 <div key={item.step} className="flex flex-col items-center text-center">
                   <div className="w-16 h-16 bg-blue-600 text-white rounded-full border-2 border-black flex items-center justify-center text-2xl font-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

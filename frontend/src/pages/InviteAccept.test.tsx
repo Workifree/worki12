@@ -54,7 +54,7 @@ describe('InviteAccept — veto do freela (R-05)', () => {
 
     // Não pode sugerir sucesso nem revelar que houve bloqueio.
     expect(screen.queryByText('Já está no seu elenco')).not.toBeInTheDocument()
-    expect(screen.queryByText('Freela Adicionado!')).not.toBeInTheDocument()
+    expect(screen.queryByText('Freela Convidado!')).not.toBeInTheDocument()
     expect(screen.queryByText(/bloque/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/vet/i)).not.toBeInTheDocument()
   })
@@ -81,7 +81,7 @@ describe('InviteAccept — veto do freela (R-05)', () => {
     renderWithToken('w_workertoken123')
 
     await waitFor(() => {
-      expect(screen.getByText('Freela Adicionado!')).toBeInTheDocument()
+      expect(screen.getByText('Freela Convidado!')).toBeInTheDocument()
     })
   })
 })

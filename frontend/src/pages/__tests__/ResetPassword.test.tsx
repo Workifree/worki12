@@ -55,7 +55,7 @@ describe('ResetPassword', () => {
 
     // Type a weak password
     await user.type(senhaInput, 'abc')
-    expect(screen.getByText(/Forca:/)).toBeInTheDocument()
+    expect(screen.getByText(/For[cç]a:/)).toBeInTheDocument()
     expect(screen.getByText(/Fraca/)).toBeInTheDocument()
 
     // Clear and type a strong password

@@ -55,7 +55,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
                         <button
                             onClick={() => removeToast(toast.id)}
-                            className="ml-2 p-1 hover:bg-black/5 rounded-full transition-colors"
+                            aria-label="Fechar aviso"
+                            className="ml-2 min-h-11 min-w-11 inline-flex items-center justify-center flex-shrink-0 hover:bg-black/5 rounded-full transition-colors"
                         >
                             <X size={16} />
                         </button>

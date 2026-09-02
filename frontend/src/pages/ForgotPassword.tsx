@@ -31,39 +31,39 @@ export default function ForgotPassword() {
         };
     }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-
-        if (!email.trim() || !email.includes('@')) {
-            setError('Informe um e-mail válido.');
-            return;
-        }
-
+    // Envio real do link — reutilizado pelo submit E pelo botao "Reenviar Email".
+    const enviarLink = useCallback(async (emailStr: string) => {
         setLoading(true);
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(emailStr, {
             redirectTo: `${window.location.origin}/redefinir-senha`,
         });
         setLoading(false);
 
         if (resetError) {
             const msg = resetError.message || '';
-            // Security: don't reveal if email exists. Only show error for real server failures.
             if (msg.includes('rate limit') || msg.includes('too many')) {
                 setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
-            } else if (msg.includes('invalid') && msg.includes('email')) {
-                setError('Informe um e-mail válido.');
-            } else {
-                // For "user not found" or similar, show success anyway (security best practice)
-                setSent(true);
-                startCooldown();
-                return;
+                return false;
             }
-            return;
+            if (msg.includes('invalid') && msg.includes('email')) {
+                setError('Informe um e-mail válido.');
+                return false;
+            }
+            // "user not found" e afins: mostra sucesso mesmo assim (nao revela se o email existe).
         }
-
         setSent(true);
         startCooldown();
+        return true;
+    }, [startCooldown]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        if (!email.trim() || !email.includes('@')) {
+            setError('Informe um e-mail válido.');
+            return;
+        }
+        await enviarLink(email.trim());
     };
 
     if (sent) {
@@ -78,12 +78,13 @@ export default function ForgotPassword() {
                         Se o email <strong>{email}</strong> estiver cadastrado, voce recebera um link para redefinir sua senha.
                     </p>
                     <button
-                        onClick={() => { setSent(false); startCooldown(); }}
-                        disabled={cooldown > 0}
+                        onClick={() => { setError(''); void enviarLink(email.trim()); }}
+                        disabled={cooldown > 0 || loading}
                         className="w-full bg-black text-white py-3 rounded-xl font-bold uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 mb-3"
                     >
-                        {cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar Email'}
+                        {loading ? 'Enviando...' : cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar Email'}
                     </button>
+                    {error && <p className="text-sm font-bold text-red-500 mb-3">{error}</p>}
                     <button
                         onClick={() => navigate('/login')}
                         className="w-full border-2 border-black text-black py-3 rounded-xl font-bold uppercase hover:bg-gray-100 transition-colors"

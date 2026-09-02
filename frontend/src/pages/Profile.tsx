@@ -693,7 +693,7 @@ export default function Profile() {
                                     type="button"
                                     aria-label="Trocar foto de perfil"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="sm:hidden absolute bottom-1 right-1 bg-black text-white rounded-full p-2 border-2 border-white shadow-md"
+                                    className="sm:hidden absolute bottom-1 right-1 bg-black text-white rounded-full min-h-11 min-w-11 inline-flex items-center justify-center border-2 border-white shadow-md"
                                 >
                                     <Camera size={16} />
                                 </button>

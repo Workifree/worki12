@@ -213,14 +213,14 @@ export default function CompanyTeam() {
                   <button
                     onClick={() => setEditingList(list)}
                     aria-label={`Editar lista ${list.name}`}
-                    className="p-2 rounded-xl border-2 border-black hover:bg-gray-100 transition-colors"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-gray-100 transition-colors"
                   >
                     <Pencil size={16} />
                   </button>
                   <button
                     onClick={() => setDeletingList(list)}
                     aria-label={`Excluir lista ${list.name}`}
-                    className="p-2 rounded-xl border-2 border-black hover:bg-red-50 text-red-600 transition-colors"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-red-50 text-red-600 transition-colors"
                   >
                     <Trash2 size={16} />
                   </button>

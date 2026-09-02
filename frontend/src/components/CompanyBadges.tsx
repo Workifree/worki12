@@ -220,9 +220,12 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
           ))}
         </div>
       ) : failed ? (
-        <p className="text-sm font-bold text-gray-400 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
-          Não foi possível carregar os selos agora. Tente novamente mais tarde.
-        </p>
+        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-sm font-bold text-gray-400 mb-3">Não foi possível carregar os selos agora.</p>
+          <button onClick={() => void load()} className="bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors">
+            Tentar de novo
+          </button>
+        </div>
       ) : badges.length === 0 ? (
         <p className="text-sm font-bold text-gray-400 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
           Ainda sem selos. Eles aparecem aqui depois do primeiro turno concluído em uma empresa.
