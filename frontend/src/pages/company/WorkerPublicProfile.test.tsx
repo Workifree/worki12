@@ -358,7 +358,7 @@ describe('WorkerPublicProfile — visibilidade de contato/pagamento (R1, defesa 
 
     await waitFor(() => {
       expect(
-        screen.getByText('Perfil indisponível — este freela não faz parte do seu elenco.'),
+        screen.getByText(/Não foi possível abrir este perfil agora/),
       ).toBeInTheDocument()
     })
   })
@@ -404,7 +404,7 @@ describe('WorkerPublicProfile — F8 (fiação do painel de certificações/trei
 
     await waitFor(() => {
       expect(
-        screen.getByText('Perfil indisponível — este freela não faz parte do seu elenco.'),
+        screen.getByText(/Não foi possível abrir este perfil agora/),
       ).toBeInTheDocument()
     })
     expect(screen.queryByTestId('worker-certifications-panel')).not.toBeInTheDocument()

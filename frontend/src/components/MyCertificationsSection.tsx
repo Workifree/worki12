@@ -72,10 +72,6 @@ export default function MyCertificationsSection() {
   const [verifierNames, setVerifierNames] = useState<Record<string, string>>({});
 
   const [formOpen, setFormOpen] = useState(false);
-  useModalDismiss(() => {
-    if (deletingId && !deleting) setDeletingId(null);
-    else if (formOpen && !saving) closeForm();
-  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CertificationFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -148,6 +144,13 @@ export default function MyCertificationsSection() {
     setEditingId(null);
     setPendingLossConfirm(false);
   };
+
+  // ESC/toque no fundo fecha os modais (prioridade: exclusao > formulario). Depois de closeForm
+  // e dos estados que le, para nao acessar variavel antes da declaracao (React Compiler).
+  useModalDismiss(() => {
+    if (deletingId && !deleting) setDeletingId(null);
+    else if (formOpen && !saving) closeForm();
+  });
 
   const editingCert = editingId ? (certifications.find((c) => c.id === editingId) ?? null) : null;
   const editingWouldDropVerification = !!editingCert?.verified_by_company_id;
@@ -227,7 +230,7 @@ export default function MyCertificationsSection() {
           onClick={openCreate}
           className="min-h-11 px-4 py-2 bg-primary hover:bg-black text-white rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors"
         >
-          <Plus size={16} /> Adicionar
+          <Plus size={16} /> Cadastrar
         </button>
       </div>
       <p className="text-sm text-gray-500 font-medium mb-4">
@@ -427,7 +430,7 @@ export default function MyCertificationsSection() {
                   </div>
                   <div>
                     <label htmlFor="cert-expires" className="block text-xs font-bold uppercase mb-1">
-                      Válida até
+                      Válida até <span className="normal-case font-bold text-gray-400">(opcional)</span>
                     </label>
                     <input
                       id="cert-expires"
@@ -454,7 +457,7 @@ export default function MyCertificationsSection() {
                   <AlertTriangle size={20} className="text-yellow-700 flex-shrink-0 mt-0.5" />
                   <p className="text-sm font-bold text-yellow-800">
                     Editar esta certificação vai remover a conferência de {editingVerifierName}.
-                    Você poderá pedir uma nova conferência depois. Deseja continuar?
+                    Uma empresa poderá conferir de novo em um próximo turno. Deseja continuar?
                   </p>
                 </div>
                 <div className="flex gap-3">

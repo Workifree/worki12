@@ -249,8 +249,14 @@ export default function WorkerPublicProfile() {
         </div>
     );
     if (!profile) return (
-        <div className="p-8 text-center text-gray-400 font-bold">
-            Perfil indisponível — este freela não faz parte do seu elenco.
+        <div className="max-w-4xl mx-auto p-8">
+            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6">
+                <ArrowLeft size={16} strokeWidth={3} /> Voltar
+            </button>
+            <div className="text-center text-gray-500 font-bold border-2 border-dashed border-gray-200 rounded-2xl py-16">
+                Não foi possível abrir este perfil agora.<br />
+                <span className="font-medium text-sm">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
+            </div>
         </div>
     );
 
@@ -285,14 +291,18 @@ export default function WorkerPublicProfile() {
 
                     {/* Actions */}
                     <div className="flex justify-end pt-4 gap-4">
-                        <button
-                            onClick={() => void handleChat()}
-                            disabled={!applicationId || chatLoading}
-                            title={applicationId ? undefined : 'Ainda não há um turno/candidatura entre sua empresa e este freela.'}
-                            className="px-6 py-2 border-2 border-black rounded-xl font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
-                        >
-                            {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageSquare size={18} />} Mensagem
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                            <button
+                                onClick={() => void handleChat()}
+                                disabled={!applicationId || chatLoading}
+                                className="px-6 py-2 border-2 border-black rounded-xl font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white min-h-11"
+                            >
+                                {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageSquare size={18} />} Mensagem
+                            </button>
+                            {!applicationId && (
+                                <span className="text-xs font-bold text-gray-400 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
+                            )}
+                        </div>
 
                     </div>
 
@@ -314,7 +324,7 @@ export default function WorkerPublicProfile() {
                             <div className="text-2xl font-black">{profile.level}</div>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Briefcase size={14} /> Jobs</div>
+                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Briefcase size={14} /> Turnos</div>
                             <div className="text-2xl font-black">{profile.completed_jobs} <span className="text-xs text-gray-400">concluídos</span></div>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
@@ -361,7 +371,7 @@ export default function WorkerPublicProfile() {
                                         <button
                                             onClick={() => handleCopy(profile.phone as string, 'phone')}
                                             aria-label="Copiar telefone"
-                                            className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                            className="p-3 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
                                         >
                                             {phoneCopied ? <Check size={16} /> : <Copy size={16} />}
                                         </button>
@@ -376,7 +386,7 @@ export default function WorkerPublicProfile() {
                                         <button
                                             onClick={() => handleCopy(profile.pix_key as string, 'pix')}
                                             aria-label="Copiar chave PIX"
-                                            className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                            className="p-3 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
                                         >
                                             {pixCopied ? <Check size={16} /> : <Copy size={16} />}
                                         </button>
@@ -388,6 +398,11 @@ export default function WorkerPublicProfile() {
                                 {connectionStatus === 'pending'
                                     ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
                                     : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                                {connectionStatus !== 'pending' && (
+                                    <button onClick={() => navigate('/company/team')} className="block mt-2 text-primary underline font-black uppercase text-xs">
+                                        Ir para Meu Elenco
+                                    </button>
+                                )}
                             </p>
                         )}
                     </div>
@@ -403,9 +418,9 @@ export default function WorkerPublicProfile() {
                             <div key={h.id} className="bg-white p-4 rounded-xl border-2 border-gray-100 flex justify-between items-center bg-gray-50/50">
                                 <div>
                                     <h4 className="font-bold">{h.job?.title}</h4>
-                                    <p className="text-xs text-gray-500 font-bold uppercase">{h.job?.company?.name || 'Empresa Confidencial'}</p>
+                                    <p className="text-xs text-gray-500 font-bold uppercase">{h.job?.company?.name || 'Empresa'}</p>
                                 </div>
-                                <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded uppercase">Concluído</span>
+                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${h.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{h.status === 'completed' ? 'Concluído' : 'Contratado'}</span>
                             </div>
                         )) : (
                             <p className="text-gray-400 italic font-medium">Nenhum histórico visível.</p>
@@ -420,7 +435,7 @@ export default function WorkerPublicProfile() {
                         {reviews.length > 0 ? reviews.map((r) => (
                             <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-100">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className="font-bold text-sm">{r.company?.name || 'Empresa Confidencial'}</span>
+                                    <span className="font-bold text-sm">{r.company?.name || 'Empresa'}</span>
                                     <div className="flex text-yellow-400">
                                         {[...Array(5)].map((_, i) => (
                                             <Star key={i} size={12} fill={i < r.rating ? "currentColor" : "none"} strokeWidth={3} className={i < r.rating ? "" : "text-gray-300"} />
@@ -433,7 +448,7 @@ export default function WorkerPublicProfile() {
                                 </p>
                             </div>
                         )) : (
-                            <p className="text-sm text-gray-400 italic text-center py-4">Nenhuma avaliação ainda. Seja o primeiro a avaliar!</p>
+                            <p className="text-sm text-gray-400 italic text-center py-4">Este freela ainda não recebeu avaliações. Elas aparecem aqui após turnos concluídos.</p>
                         )}
                     </div>
                 </div>

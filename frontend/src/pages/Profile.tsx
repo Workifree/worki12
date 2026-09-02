@@ -470,6 +470,14 @@ export default function Profile() {
         });
     };
 
+    const handleCancelEdit = () => {
+        // Cancelar = descartar (N3): restaura o baseline salvo.
+        setFormData({ ...initialFormDataRef.current });
+        setAvailabilityGrade({ ...initialAvailabilityGradeRef.current });
+        setPixKeyType(guessPixKeyType(initialFormDataRef.current.pix_key));
+        setIsEditing(false);
+    };
+
     const handleSave = async () => {
         if (!profile) return;
         // Só valida a chave PIX se o freela de fato mexeu nela nesta edição. Um valor legado
@@ -623,6 +631,20 @@ export default function Profile() {
     return (
         <>
         <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-4xl mx-auto">
+            {isEditing && (
+                /* Barra de acao fixa no mobile: os campos editaveis longos (especialidades, bio,
+                   grade de disponibilidade) ficam muito abaixo do par Salvar/Cancelar do topo —
+                   no celular a pessoa terminava a edicao e nao tinha como salvar dali (KLM/Fitts).
+                   So mobile: no desktop o par do topo ja fica visivel. */
+                <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-black p-3 flex gap-3">
+                    <button onClick={handleCancelEdit} className="flex-1 bg-white text-black min-h-11 rounded-xl font-black uppercase text-sm border-2 border-black">
+                        Cancelar
+                    </button>
+                    <button onClick={handleSave} disabled={salvando} className="flex-1 bg-primary text-white min-h-11 rounded-xl font-black uppercase text-sm border-2 border-black disabled:opacity-50">
+                        {salvando ? 'Salvando...' : 'Salvar'}
+                    </button>
+                </div>
+            )}
 
             {/* Header / Cover */}
             <div className="relative mb-32 sm:mb-12 group">
@@ -724,14 +746,7 @@ export default function Profile() {
                     <div className="flex gap-2 mb-2">
                         {isEditing ? (
                             <>
-                                <button onClick={() => {
-                                    // Cancelar = descartar: sem isto os valores abandonados reapareciam
-                                    // na proxima edicao (N3 — o gesto dizia "desfazer" e nao desfazia).
-                                    setFormData({ ...initialFormDataRef.current });
-                                    setAvailabilityGrade({ ...initialAvailabilityGradeRef.current });
-                                    setPixKeyType(guessPixKeyType(initialFormDataRef.current.pix_key));
-                                    setIsEditing(false);
-                                }} className="bg-white text-black px-4 py-2 rounded-xl font-bold uppercase text-sm border-2 border-black hover:bg-gray-100 transition-all">
+                                <button onClick={handleCancelEdit} className="bg-white text-black px-4 py-2 rounded-xl font-bold uppercase text-sm border-2 border-black hover:bg-gray-100 transition-all">
                                     <X size={16} className="inline mr-1" /> Cancelar
                                 </button>
                                 <button onClick={handleSave} disabled={salvando} className="bg-primary text-white px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-green-600 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
@@ -871,8 +886,15 @@ export default function Profile() {
                                 <p className="text-sm font-bold text-gray-600">Não informado</p>
                                 <p className="text-xs text-gray-400 mt-2">
                                     Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
-                                    Toque em editar para cadastrar.
                                 </p>
+                                {!isEditing && (
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="mt-3 bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors"
+                                    >
+                                        Cadastrar CPF
+                                    </button>
+                                )}
                             </>
                         )}
                     </div>
@@ -1015,7 +1037,7 @@ export default function Profile() {
                                 <span className="block text-lg font-black">{profile.experience_years || "Iniciante"}</span>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <span className="block text-xs font-bold uppercase text-gray-400 mb-1">Disponibilidade</span>
+                                <span className="block text-xs font-bold uppercase text-gray-400 mb-1">Regime</span>
                                 <span className="block text-lg font-black truncate" title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
                                     {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || "N/A")}
                                 </span>
@@ -1260,7 +1282,7 @@ export default function Profile() {
                         </button>
                     </div>
                     <p className="text-sm font-bold text-gray-600 mb-5 text-center">
-                        Mostre este QR para uma empresa te adicionar ao elenco dela. Cada scan é único para você.
+                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu Worki ID.
                     </p>
                     <div className="flex justify-center mb-5">
                         <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">

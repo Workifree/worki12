@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import ErroDeCarga from './ErroDeCarga';
 import { Siren, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -33,37 +33,36 @@ export default function SosDiscoverySection() {
   const [erroCarga, setErroCarga] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErroCarga(false);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
 
-      const { data, error } = await supabase
-        .from('workers')
-        .select('discoverable_for_sos, availability_days')
-        .eq('id', user.id)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from('workers')
+      .select('discoverable_for_sos, availability_days')
+      .eq('id', user.id)
+      .maybeSingle();
 
-      if (!active) return;
-      if (error) {
-        logError('SosDiscoverySection.fetch', error);
-        // Sem isto, o default do useState vira "verdade" na tela: gate/preferencia
-        // renderizados INVERTIDOS numa falha de rede (achado P2 da heuristica).
-        setErroCarga(true);
-      } else if (data) {
-        setDiscoverableState(Boolean(data.discoverable_for_sos));
-        setHasAvailability(Boolean(data.availability_days && Object.keys(data.availability_days).length > 0));
-      }
-      if (!error) setErroCarga(false);
-      setLoading(false);
-    })();
-    return () => {
-      active = false;
-    };
+    if (error) {
+      logError('SosDiscoverySection.fetch', error);
+      // Sem isto, o default do useState vira "verdade" na tela: gate/preferencia
+      // renderizados INVERTIDOS numa falha de rede (achado P2 da heuristica).
+      setErroCarga(true);
+    } else if (data) {
+      setDiscoverableState(Boolean(data.discoverable_for_sos));
+      setHasAvailability(Boolean(data.availability_days && Object.keys(data.availability_days).length > 0));
+      setErroCarga(false);
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
 
   const handleToggle = async () => {
     if (saving) return;
@@ -93,7 +92,7 @@ export default function SosDiscoverySection() {
   if (erroCarga) {
     return (
       <section className="mt-6">
-        <ErroDeCarga onRetry={() => window.location.reload()} mensagem="Não foi possível carregar sua configuração. Recarregue para ver o estado real." />
+        <ErroDeCarga onRetry={() => void carregar()} mensagem="Não foi possível carregar sua configuração. Tente de novo." />
       </section>
     );
   }
@@ -148,7 +147,7 @@ export default function SosDiscoverySection() {
             discoverable ? 'bg-primary hover:bg-black text-white' : 'bg-white hover:bg-gray-100 text-black'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : discoverable ? 'Ativado' : 'Desativado'}
+          {saving ? <Loader2 size={16} className="animate-spin" /> : discoverable ? 'Desativar' : 'Ativar'}
         </button>
       </div>
     </div>

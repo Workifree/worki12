@@ -301,7 +301,7 @@ describe('Profile — disponibilidade declarada (F7)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /declarar disponibilidade/i }))
 
-    expect(screen.getByRole('button', { name: /^salvar$/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^salvar$/i })[0]).toBeInTheDocument()
   })
 
   it('marca um dia+período e salva: grava a chave como array, nunca `{}` vazio', async () => {
@@ -313,7 +313,7 @@ describe('Profile — disponibilidade declarada (F7)', () => {
 
     // Sexta (weekday '5') período Noite — mesmo par usado no ShiftCallModal.test.tsx.
     fireEvent.click(screen.getByRole('button', { name: /sex — noite/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^salvar$/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /^salvar$/i })[0])
 
     await waitFor(() => {
       const chain = vi.mocked(supabase.from).mock.results[0]?.value as { update: ReturnType<typeof vi.fn> }
@@ -333,7 +333,7 @@ describe('Profile — disponibilidade declarada (F7)', () => {
     const slot = screen.getByRole('button', { name: /sex — noite/i })
     fireEvent.click(slot) // marca
     fireEvent.click(slot) // desmarca — dia some da grade local
-    fireEvent.click(screen.getByRole('button', { name: /^salvar$/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /^salvar$/i })[0])
 
     await waitFor(() => {
       const chain = vi.mocked(supabase.from).mock.results[0]?.value as { update: ReturnType<typeof vi.fn> }

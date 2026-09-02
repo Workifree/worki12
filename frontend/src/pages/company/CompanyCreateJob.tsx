@@ -323,20 +323,21 @@ export default function CompanyCreateJob() {
     const oQueFalta = (): string[] => {
         const falta: string[] = [];
         if (step === 1) {
-            if (!formData.title.trim()) falta.push('o titulo do turno');
-            if (!formData.category) falta.push('a funcao');
+            if (!formData.title.trim()) falta.push('o título do turno');
+            if (!formData.category) falta.push('a função');
         } else if (step === 2) {
-            if (!formData.description.trim()) falta.push('a descricao');
+            if (!formData.description.trim()) falta.push('a descrição');
         } else if (step === 3) {
             if (!(parseFloat(formData.budget) > 0)) falta.push('o valor');
             if (!formData.start_date) falta.push('a data');
-            else if (formData.start_date < todayLocalDate()) falta.push('uma data que ainda nao passou');
-            if (!formData.work_start_time) falta.push('o horario de entrada');
-            if (!formData.work_end_time) falta.push('o horario de saida');
+            else if (formData.start_date < todayLocalDate()) falta.push('uma data que ainda não passou');
+            if (!formData.work_start_time) falta.push('o horário de entrada');
+            if (!formData.work_end_time) falta.push('o horário de saída');
             if (!isEditing && isRecurring) {
                 if (recurrenceType === 'weekly' && weekdays.length === 0) falta.push('os dias da semana');
-                if (!rangeEndDate || rangeEndDate < formData.start_date) falta.push('a data final da serie');
-                else if (occurrenceDates.length === 0) falta.push('ao menos uma data na serie');
+                if (!rangeEndDate || rangeEndDate < formData.start_date) falta.push('a data final da série');
+                else if (occurrenceDates.length === 0) falta.push('ao menos uma data na série');
+                else if (overCap) falta.push(`um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`);
             }
         }
         return falta;
@@ -1010,15 +1011,13 @@ export default function CompanyCreateJob() {
                     <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-2xl font-black uppercase tracking-tight">Convidar Freela</h2>
-                            {!teamLoading && teamMembers.length === 0 && (
-                                <button
-                                    onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
-                                    aria-label="Fechar e ir para dashboard"
-                                    className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                                >
-                                    <X size={20} />
-                                </button>
-                            )}
+                            <button
+                                onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                                aria-label="Fechar e ir para o dashboard"
+                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
 
                         <p className="text-sm font-bold text-gray-600 mb-5">
@@ -1082,14 +1081,20 @@ export default function CompanyCreateJob() {
                                                     <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
                                                 )}
                                             </div>
-                                            <button
-                                                onClick={() => invite(member.worker.id)}
-                                                disabled={isInviting}
-                                                className="bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                                            >
-                                                {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                                                {isInviting ? '...' : 'Convidar'}
-                                            </button>
+                                            {sentInvites.some((inv) => inv.worker_id === member.worker.id) ? (
+                                                <span className="bg-green-100 text-green-700 px-4 min-h-11 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 flex-shrink-0">
+                                                    <Check size={14} /> Convidado
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    onClick={() => invite(member.worker.id)}
+                                                    disabled={isInviting}
+                                                    className="bg-black hover:bg-primary text-white px-4 min-h-11 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                                >
+                                                    {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                                                    {isInviting ? '...' : 'Convidar'}
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 })}

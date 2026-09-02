@@ -16,6 +16,7 @@ export default function CompanyOnboarding() {
     const [cnpjError, setCnpjError] = useState('');
     const [userId, setUserId] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState(false);
+    const [saidaArmada, setSaidaArmada] = useState(false);
 
     const TOTAL_STEPS = 2;
 
@@ -164,12 +165,13 @@ export default function CompanyOnboarding() {
                 <div className="flex justify-end mb-4">
                     <button
                         onClick={async () => {
+                            if (!saidaArmada) { setSaidaArmada(true); setTimeout(() => setSaidaArmada(false), 4000); return; }
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
-                        className="min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold text-gray-400 hover:text-black transition-colors gap-1"
+                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold transition-colors gap-1 ${saidaArmada ? 'text-red-600' : 'text-gray-400 hover:text-black'}`}
                     >
-                        <ArrowLeft size={14} /> Sair e voltar
+                        <ArrowLeft size={14} /> {saidaArmada ? 'Sair descarta o cadastro — toque de novo' : 'Sair e voltar'}
                     </button>
                 </div>
 
@@ -226,7 +228,7 @@ export default function CompanyOnboarding() {
                                                     setFormData({ ...formData, cnpj: formatCpfCnpj(e.target.value) });
                                                     if (cnpjError) setCnpjError('');
                                                 }}
-                                                aria-label="CNPJ"
+                                                aria-label="CNPJ ou CPF"
                                                 className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="00.000.000/0001-00 ou 000.000.000-00"
                                             />
@@ -369,7 +371,15 @@ export default function CompanyOnboarding() {
                                     )}
                                 </button>
                                 {step === 2 && !canProceed() && (
-                                    <p className="text-xs text-red-500 font-medium">Selecione o objetivo e o volume de contratação</p>
+                                    <p className="text-xs text-red-500 font-medium">
+                                        {[
+                                            !formData.hiringGoal && 'o objetivo',
+                                            !formData.hiringVolume && 'o volume de contratação',
+                                            !tosAccepted && 'o aceite dos Termos',
+                                        ].filter(Boolean).length > 0
+                                            ? `Falta: ${[!formData.hiringGoal && 'o objetivo', !formData.hiringVolume && 'o volume de contratação', !tosAccepted && 'o aceite dos Termos'].filter(Boolean).join(', ')}.`
+                                            : ''}
+                                    </p>
                                 )}
                             </div>
                         </div>

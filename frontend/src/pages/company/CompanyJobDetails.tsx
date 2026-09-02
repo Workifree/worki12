@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ErroDeCarga from '../../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, MapPin, Clock, Calendar, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
@@ -40,6 +41,7 @@ export default function CompanyJobDetails() {
     const [openMenu, setOpenMenu] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [activeWorkersCount, setActiveWorkersCount] = useState(0);
+    const [erroCarga, setErroCarga] = useState(false);
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -89,8 +91,10 @@ export default function CompanyJobDetails() {
 
             setJob({ ...data, candidates_count: count || 0 });
         } catch (error) {
+            // Falha de rede/RLS nao pode se disfarcar de "turno nao existe" mandando pra lista
+            // em silencio — a pessoa perde o contexto sem saber por que (Nielsen #1).
             logError('Error fetching job:', error);
-            navigate('/company/jobs');
+            setErroCarga(true);
         } finally {
             setLoading(false);
         }
@@ -160,6 +164,15 @@ export default function CompanyJobDetails() {
             <div className="h-40 bg-gray-200 rounded-xl" />
         </div>
     );
+    if (erroCarga && !job) return (
+        <div className="max-w-4xl mx-auto p-8">
+            <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6">
+                <ArrowLeft size={16} strokeWidth={3} /> Voltar aos turnos
+            </button>
+            <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
+        </div>
+    );
+
     if (!job) return null;
 
     return (
@@ -196,6 +209,8 @@ export default function CompanyJobDetails() {
                         <MoreHorizontal size={20} />
                     </button>
                     {openMenu && (
+                        <>
+                        <div className="fixed inset-0 z-0" onClick={() => setOpenMenu(false)} aria-hidden="true" />
                         <div className="absolute right-0 top-full mt-2 w-48 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden">
                             <button
                                 onClick={() => navigate(`/company/jobs/${id}/edit`)}
@@ -217,6 +232,7 @@ export default function CompanyJobDetails() {
                                 <Trash2 size={16} /> Excluir
                             </button>
                         </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -249,15 +265,19 @@ export default function CompanyJobDetails() {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-t-2 border-gray-100">
                         <div className="md:col-span-2 space-y-8">
-                            <section>
-                                <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Briefcase size={20} /> Descrição</h3>
-                                <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.description}</p>
-                            </section>
+                            {job.description && (
+                                <section>
+                                    <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Briefcase size={20} /> Descrição</h3>
+                                    <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.description}</p>
+                                </section>
+                            )}
 
-                            <section>
-                                <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Check size={20} /> Requisitos</h3>
-                                <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.requirements}</p>
-                            </section>
+                            {job.requirements && (
+                                <section>
+                                    <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Check size={20} /> Requisitos</h3>
+                                    <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.requirements}</p>
+                                </section>
+                            )}
 
                             {(job.work_start_time || job.work_end_time) && (
                                 <section>
@@ -282,16 +302,25 @@ export default function CompanyJobDetails() {
                                             onClick={() => navigate(`/company/jobs/${id}/candidates`)}
                                             className="w-full flex items-center justify-between hover:bg-white p-2 rounded-lg transition-all cursor-pointer group"
                                         >
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Users size={16} /> Freelas</span>
+                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Users size={16} /> Candidatos</span>
                                             <span className="text-2xl font-black text-blue-900 group-hover:scale-110 transition-transform">{job.candidates_count}</span>
                                         </button>
                                     ) : (
                                         <div className="p-2">
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2 mb-2"><Users size={16} /> Freelas</span>
-                                            <p className="text-sm text-gray-500 font-medium">Nenhum freela convidado para este turno ainda.</p>
+                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2 mb-2"><Users size={16} /> Candidatos</span>
+                                            <p className="text-sm text-gray-500 font-medium mb-3">Ninguém convidado para este turno ainda.</p>
+                                            <button
+                                                onClick={() => navigate('/company/team')}
+                                                className="w-full bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors"
+                                            >
+                                                Convidar freelas do elenco
+                                            </button>
                                         </div>
                                     )}
                                     <div
+                                        role={activeWorkersCount > 0 ? 'button' : undefined}
+                                        tabIndex={activeWorkersCount > 0 ? 0 : undefined}
+                                        onKeyDown={(e) => { if (activeWorkersCount > 0 && e.key === 'Enter') navigate(`/company/jobs/${id}/candidates`); }}
                                         className={`flex justify-between items-center rounded-lg p-2 -mx-2 transition-colors ${activeWorkersCount > 0 ? 'cursor-pointer hover:bg-white' : ''}`}
                                         onClick={() => activeWorkersCount > 0 && navigate(`/company/jobs/${id}/candidates`)}
                                     >
