@@ -231,7 +231,7 @@ export function useWorkerStores(): UseWorkerStoresResult {
         addToast(result.error, 'error');
         return false;
       }
-      addToast('Você agora faz parte do elenco!', 'success');
+      addToast('Empresa adicionada à sua carteira de clientes!', 'success');
       load();
       return true;
     },

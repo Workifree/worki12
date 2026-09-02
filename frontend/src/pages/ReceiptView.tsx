@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import LocalDoTurno from '../components/LocalDoTurno';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -9,7 +10,7 @@ import { logError } from '../lib/logger';
 import { formatDateOnly, calculateWorkedHours } from '../lib/dateUtils';
 import PageMeta from '../components/PageMeta';
 import ServiceTermSection from '../components/ServiceTermSection';
-import { ArrowLeft, Printer, Clock, MapPin, AlertTriangle, LogIn, LogOut } from 'lucide-react';
+import { ArrowLeft, Printer, Clock, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 
@@ -140,8 +141,8 @@ export default function ReceiptView() {
             <div className="max-w-2xl mx-auto p-4 md:p-8">
                 <PageMeta title="Recibo não encontrado" />
                 <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6"
+                    onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); }}
+                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6 min-h-11"
                 >
                     <ArrowLeft size={16} strokeWidth={3} /> Voltar
                 </button>
@@ -169,15 +170,15 @@ export default function ReceiptView() {
             {/* Barra de ações — não imprime */}
             <div className="flex items-center justify-between mb-6 print:hidden">
                 <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors"
+                    onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); }}
+                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors min-h-11"
                 >
                     <ArrowLeft size={16} strokeWidth={3} /> Voltar
                 </button>
                 <button
                     onClick={() => window.print()}
                     aria-label="Imprimir recibo"
-                    className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors min-h-11"
                 >
                     <Printer size={16} /> Imprimir
                 </button>
@@ -230,7 +231,7 @@ export default function ReceiptView() {
                         )}
                         {job?.location && (
                             <span className="flex items-center gap-1">
-                                <MapPin size={12} /> {job.location}
+                                <LocalDoTurno location={job.location} size={12} />
                             </span>
                         )}
                     </div>

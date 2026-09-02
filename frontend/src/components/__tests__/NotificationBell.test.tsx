@@ -48,7 +48,7 @@ describe('NotificationBell', () => {
   it('renderiza icone de sino', () => {
     render(<NotificationBell />)
 
-    const button = screen.getByLabelText('Notifications')
+    const button = screen.getByLabelText('Notificações')
     expect(button).toBeInTheDocument()
   })
 
@@ -107,7 +107,7 @@ describe('NotificationBell', () => {
     mockUserType = 'freelancer'
 
     render(<NotificationBell />)
-    fireEvent.click(screen.getByLabelText('Notifications'))
+    fireEvent.click(screen.getByLabelText('Notificações'))
     fireEvent.click(screen.getByText('Ver todas as notificações'))
 
     expect(mockNavigate).toHaveBeenCalledWith('/notifications')
@@ -117,7 +117,7 @@ describe('NotificationBell', () => {
     mockUserType = 'hire'
 
     render(<NotificationBell />)
-    fireEvent.click(screen.getByLabelText('Notifications'))
+    fireEvent.click(screen.getByLabelText('Notificações'))
     fireEvent.click(screen.getByText('Ver todas as notificações'))
 
     expect(mockNavigate).toHaveBeenCalledWith('/company/notifications')

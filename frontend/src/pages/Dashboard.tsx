@@ -1,5 +1,6 @@
 
 import { useEffect } from 'react';
+import { formatBRL } from '../lib/currency';
 import { levelProgress } from '../lib/gamification';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -454,7 +455,7 @@ export default function Dashboard() {
                             <TrendingUp size={16} className="text-green-600" />
                             <span className="text-xs font-black uppercase text-gray-400">Ganhos Totais</span>
                         </div>
-                        <p className="text-2xl font-black truncate" title={`R$ ${worker.earnings_total}`}>R$ {worker.earnings_total || 0}</p>
+                        <p className="text-2xl font-black truncate" title={formatBRL(worker.earnings_total || 0)}>{formatBRL(worker.earnings_total || 0)}</p>
                     </div>
 
                     {/* Rating */}
@@ -476,13 +477,13 @@ export default function Dashboard() {
                 </h3>
                 <div className="space-y-3">
                     {history.length > 0 ? history.map((h, i) => (
-                        <div key={i} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer border-b border-gray-100 last:border-0">
+                        <div key={i} onClick={() => navigate('/my-jobs')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/my-jobs'); }} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer border-b border-gray-100 last:border-0">
                             <div>
                                 <p className="font-bold text-sm truncate max-w-[200px]" title={h.job.title}>{h.job.title}</p>
                                 <p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
                             <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${h.status === 'completed' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
-                                {h.status === 'completed' ? 'Sucesso' : h.status === 'rejected' ? 'Não selecionado' : 'Cancelado'}
+                                {h.status === 'completed' ? 'Concluído' : h.status === 'rejected' ? 'Não selecionado' : 'Cancelado'}
                             </span>
                         </div>
                     )) : carregandoHistory ? (

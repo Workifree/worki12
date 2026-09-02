@@ -102,7 +102,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
           onClick={handleShareLink}
           aria-label={`Repassar link da empresa ${name}`}
           title="Repassar link desta empresa para outro freela"
-          className="p-2 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-light transition-colors"
+          className="p-3 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-light transition-colors"
         >
           {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
         </button>
@@ -111,7 +111,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
           disabled={leaving}
           aria-label={`Sair do cliente ${name}`}
           title="Sair / bloquear cliente"
-          className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-3 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
         </button>
@@ -184,6 +184,7 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
 // ---------------------------------------------------------------------------
 
 export default function CarteiraClientes() {
+  const navigate = useNavigate();
   const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
@@ -302,6 +303,12 @@ export default function CarteiraClientes() {
           <p className="text-gray-500 font-bold max-w-sm mx-auto">
             Aceite um convite de uma empresa ou compartilhe seu link de perfil para começar a construir sua carteira de clientes.
           </p>
+          <button
+            onClick={() => navigate('/profile')}
+            className="mt-6 inline-flex items-center gap-2 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors min-h-11"
+          >
+            Ver meu link de perfil
+          </button>
         </div>
       )}
 

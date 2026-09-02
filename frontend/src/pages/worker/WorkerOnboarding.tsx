@@ -301,8 +301,14 @@ export default function WorkerOnboarding() {
 
             if (error) throw error;
 
-            // Create wallet for the worker
-            await WalletService.getOrCreateWallet(userId, 'worker');
+            // Wallet e legado do modelo de pagamento pausado (ADR-20260822): se falhar DEPOIS
+            // do perfil salvo, abortar aqui mostraria 'Erro ao salvar perfil' — mentira que
+            // levaria a pessoa a re-submeter um onboarding ja concluido.
+            try {
+                await WalletService.getOrCreateWallet(userId, 'worker');
+            } catch (walletErr) {
+                logError('WorkerOnboarding: getOrCreateWallet (nao-bloqueante)', walletErr);
+            }
 
             // Full page reload to reset ProtectedRoute state after onboarding completion
             window.location.href = '/dashboard';
@@ -566,7 +572,7 @@ export default function WorkerOnboarding() {
 
                                     <div>
                                         <label className="block text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                                            <Clock size={16} /> Disponibilidade
+                                            <Clock size={16} /> Disponibilidade *
                                         </label>
                                         <div className="flex flex-wrap gap-2">
                                             {availabilityOptions.map(opt => (
@@ -623,7 +629,7 @@ export default function WorkerOnboarding() {
                                 <button
                                     type="button"
                                     onClick={() => setStep(step - 1)}
-                                    className="font-bold flex items-center gap-1 text-gray-600 hover:text-black transition-colors"
+                                    className="font-bold flex items-center gap-1 text-gray-600 hover:text-black transition-colors min-h-11 px-2"
                                 >
                                     <ArrowLeft size={18} /> Voltar
                                 </button>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useModalDismiss } from '../hooks/useModalDismiss';
 import ErroDeCarga from './ErroDeCarga';
 import { Award, Plus, Pencil, Trash2, X, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -71,6 +72,10 @@ export default function MyCertificationsSection() {
   const [verifierNames, setVerifierNames] = useState<Record<string, string>>({});
 
   const [formOpen, setFormOpen] = useState(false);
+  useModalDismiss(() => {
+    if (deletingId && !deleting) setDeletingId(null);
+    else if (formOpen && !saving) closeForm();
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CertificationFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -369,7 +374,7 @@ export default function MyCertificationsSection() {
                 </div>
                 <div>
                   <label htmlFor="cert-issuer" className="block text-xs font-bold uppercase mb-1">
-                    Emissor
+                    Emissor <span className="normal-case font-bold text-gray-400">(opcional)</span>
                   </label>
                   <input
                     id="cert-issuer"
@@ -383,7 +388,7 @@ export default function MyCertificationsSection() {
                 </div>
                 <div>
                   <label htmlFor="cert-regnum" className="block text-xs font-bold uppercase mb-1">
-                    Número de registro
+                    Número de registro <span className="normal-case font-bold text-gray-400">(opcional)</span>
                   </label>
                   <input
                     id="cert-regnum"
@@ -410,7 +415,7 @@ export default function MyCertificationsSection() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="cert-issued" className="block text-xs font-bold uppercase mb-1">
-                      Emitida em
+                      Emitida em <span className="normal-case font-bold text-gray-400">(opcional)</span>
                     </label>
                     <input
                       id="cert-issued"

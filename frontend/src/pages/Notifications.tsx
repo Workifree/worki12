@@ -77,7 +77,7 @@ export default function Notifications() {
                 {unreadCount > 0 && (
                     <button
                         onClick={() => markAllAsRead()}
-                        className="text-sm font-bold text-primary hover:underline uppercase"
+                        className="text-sm font-bold text-primary hover:underline uppercase min-h-11 px-2"
                     >
                         Marcar todas como lidas
                     </button>
@@ -185,7 +185,7 @@ export default function Notifications() {
                             <button
                                 onClick={() => setPage(p => p - 1)}
                                 disabled={page === 1}
-                                className="border-2 border-black px-4 py-2 font-bold uppercase text-sm flex items-center gap-1 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="border-2 border-black px-4 min-h-11 font-bold uppercase text-sm flex items-center gap-1 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <ChevronLeft size={16} /> Página anterior
                             </button>
@@ -195,7 +195,7 @@ export default function Notifications() {
                             <button
                                 onClick={() => setPage(p => p + 1)}
                                 disabled={page >= totalPages}
-                                className="border-2 border-black px-4 py-2 font-bold uppercase text-sm flex items-center gap-1 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="border-2 border-black px-4 min-h-11 font-bold uppercase text-sm flex items-center gap-1 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Próxima <ChevronRight size={16} />
                             </button>

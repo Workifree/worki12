@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import LocalDoTurno from '../components/LocalDoTurno';
 import { useNavigate } from 'react-router-dom';
 import {
     Receipt,
@@ -7,7 +8,6 @@ import {
     AlertTriangle,
     XCircle,
     Building2,
-    MapPin,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
@@ -125,7 +125,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                     </span>
                     {job?.location && (
                         <span className="flex items-center gap-1 text-xs font-bold text-gray-400">
-                            <MapPin size={11} /> {job.location}
+                            <LocalDoTurno location={job.location} size={11} />
                         </span>
                     )}
                 </div>

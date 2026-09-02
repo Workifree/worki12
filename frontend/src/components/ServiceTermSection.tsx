@@ -217,7 +217,7 @@ export default function ServiceTermSection({
                             <button
                                 type="button"
                                 onClick={() => setShowFullText((v) => !v)}
-                                className="print:hidden flex items-center gap-1 text-xs font-black uppercase text-primary mt-3"
+                                className="print:hidden flex items-center gap-1 text-xs font-black uppercase text-primary mt-3 min-h-11"
                             >
                                 {showFullText ? (
                                     <>Recolher <ChevronUp size={14} /></>

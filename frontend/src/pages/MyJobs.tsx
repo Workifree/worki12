@@ -1,8 +1,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import LocalDoTurno from '../components/LocalDoTurno';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { MapPin, CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -122,31 +123,6 @@ function fmtTime(iso: string | null): string {
     }
 }
 
-/**
- * Endereço do turno como LINK para o mapa (tarefa real do freela: "como eu chego lá?").
- * A informação já estava na tela; o que faltava era ela levar à ação — um toque abre o app de
- * mapas em vez de obrigar a pessoa a copiar o endereço e colar em outro lugar (reconhecimento
- * em vez de esforço; custo de interação). Placeholder ("Local a definir") continua texto puro.
- */
-function LocalDoTurno({ location, size = 14 }: { location: string | null | undefined; size?: number }) {
-    const texto = location || 'Local a definir';
-    const real = !!location && !/local a (definir|combinar)/i.test(location);
-    if (!real) {
-        return <><MapPin size={size} /> {texto}</>;
-    }
-    return (
-        <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(texto)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 underline decoration-dotted underline-offset-2 hover:decoration-solid min-h-11 -my-2 py-2"
-            aria-label={`Abrir ${texto} no mapa`}
-        >
-            <MapPin size={size} /> {texto}
-        </a>
-    );
-}
 
 export default function MyJobs() {
     const navigate = useNavigate();
@@ -307,7 +283,7 @@ export default function MyJobs() {
                     status: app.status,
                     title: app.job.title,
                     company_id: app.job.company?.id || '',
-                    company_name: app.job.company?.name || 'Empresa Confidencial',
+                    company_name: app.job.company?.name || 'Empresa',
                     company_logo: app.job.company?.logo_url ?? null,
                     pay: app.job.budget || 0,
                     date: app.job.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
@@ -493,6 +469,7 @@ export default function MyJobs() {
                 addToast('Não foi possível fazer check-out. Atualize a página e tente novamente.', 'error');
                 return;
             }
+            addToast('Check-out registrado! A empresa confirma a saída.', 'success');
             await fetchJobs();
         } catch (err) {
             logError('Error checking out:', err);
@@ -1106,14 +1083,14 @@ export default function MyJobs() {
                                     </span>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
-                                        className="text-xs font-black text-gray-600 hover:text-black flex items-center gap-1 uppercase px-2 py-1 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
+                                        className="text-xs font-black text-gray-600 hover:text-black flex items-center gap-1 uppercase px-2 min-h-11 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
                                     >
                                         <Receipt size={12} /> Recibo
                                     </button>
                                     {!reviewedJobIds.has(job.job_id) ? (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                            className="text-xs font-black text-white bg-black hover:bg-yellow-500 hover:text-black flex items-center gap-1 uppercase px-3 py-1.5 rounded-xl transition-colors"
+                                            className="text-xs font-black text-white bg-black hover:bg-yellow-500 hover:text-black flex items-center gap-1 uppercase px-3 min-h-11 rounded-xl transition-colors"
                                         >
                                             <Star size={12} /> Avaliar
                                         </button>

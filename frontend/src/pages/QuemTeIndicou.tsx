@@ -39,6 +39,7 @@ export default function QuemTeIndicou() {
   const [loading, setLoading] = useState(true);
   const [erroCarga, setErroCarga] = useState(false);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [respondingAction, setRespondingAction] = useState<'accept' | 'decline' | null>(null);
 
   const load = useCallback(async () => {
     const {
@@ -73,6 +74,11 @@ export default function QuemTeIndicou() {
         .in('id', companyIds);
       if (error) {
         logError('QuemTeIndicou.load', error);
+        // Sem nomes, o freela decidiria "aceitar outra empresa" no escuro — melhor
+        // declarar a falha e oferecer retry do que renderizar cards anonimos acionaveis.
+        setErroCarga(true);
+        setLoading(false);
+        return;
       } else {
         companies = Object.fromEntries(
           (data ?? []).map((c: { id: string; name: string; logo_url?: string | null }) => [
@@ -101,6 +107,7 @@ export default function QuemTeIndicou() {
   }, [load]);
 
   const handleAccept = async (referralId: string) => {
+    setRespondingAction('accept');
     setRespondingId(referralId);
     const result = await ReferralService.acceptReferral(referralId);
     setRespondingId(null);
@@ -114,6 +121,7 @@ export default function QuemTeIndicou() {
   };
 
   const handleDecline = async (referralId: string) => {
+    setRespondingAction('decline');
     setRespondingId(referralId);
     const result = await ReferralService.declineReferral(referralId);
     setRespondingId(null);
@@ -199,7 +207,7 @@ export default function QuemTeIndicou() {
                 disabled={respondingId === item.id}
                 className="flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-gray-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
               >
-                {respondingId === item.id ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
+                {respondingId === item.id && respondingAction === 'decline' ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
                 Recusar
               </button>
               <button
@@ -208,7 +216,7 @@ export default function QuemTeIndicou() {
                 disabled={respondingId === item.id}
                 className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
               >
-                {respondingId === item.id ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                {respondingId === item.id && respondingAction === 'accept' ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
                 Aceitar
               </button>
             </div>

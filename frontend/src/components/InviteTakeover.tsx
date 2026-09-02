@@ -16,9 +16,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import LocalDoTurno from './LocalDoTurno';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
-import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, MapPin, ChevronRight } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useNotifications } from '../contexts/NotificationContext';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
@@ -62,6 +63,7 @@ export default function InviteTakeover() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   // Recusa irreversivel colada no Aceitar: primeiro toque arma, segundo confirma (4s).
   const [recusaArmada, setRecusaArmada] = useState(false);
+  const [acaoEmCurso, setAcaoEmCurso] = useState<'accepted' | 'declined' | null>(null);
   const recusaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenNotifIdsRef = useRef<Set<string> | null>(null);
 
@@ -130,7 +132,12 @@ export default function InviteTakeover() {
   };
 
   const handleRespond = async (response: 'accepted' | 'declined') => {
-    await respond(visibleInvite.id, response);
+    setAcaoEmCurso(response);
+    try {
+      await respond(visibleInvite.id, response);
+    } finally {
+      setAcaoEmCurso(null);
+    }
   };
 
   // Convite continua pendente após a navegação — só dispensamos o overlay (não respondemos).
@@ -219,7 +226,7 @@ export default function InviteTakeover() {
           </span>
           {location && (
             <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
-              <MapPin size={14} /> {location}
+              <LocalDoTurno location={location} size={14} />
             </span>
           )}
         </div>
@@ -238,7 +245,7 @@ export default function InviteTakeover() {
             disabled={isResponding}
             className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+            {isResponding && acaoEmCurso === 'accepted' ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
             Aceitar
           </button>
           <button
@@ -259,7 +266,7 @@ export default function InviteTakeover() {
               recusaArmada ? 'bg-red-600 text-white border-red-600' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
             }`}
           >
-            <XCircle size={18} />
+            {isResponding && acaoEmCurso === 'declined' ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
             {recusaArmada ? 'Confirmar recusa' : 'Recusar'}
           </button>
         </div>

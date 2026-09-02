@@ -56,9 +56,14 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 setIsOpen(false);
             }
         }
+        function handleEsc(event: KeyboardEvent) {
+            if (event.key === 'Escape') setIsOpen(false);
+        }
         document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener("keydown", handleEsc);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleEsc);
         };
     }, []);
 
@@ -86,7 +91,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 ref={buttonRef}
                 onClick={toggleOpen}
                 className={`relative min-h-11 min-w-11 inline-flex items-center justify-center rounded-full hover:bg-white/10 transition-colors ${className}`}
-                aria-label="Notifications"
+                aria-label="Notificações"
             >
                 <Bell size={24} className={unreadCount > 0 ? "text-primary" : "currentColor"} />
                 {unreadCount > 0 && (

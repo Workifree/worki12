@@ -339,7 +339,12 @@ export default function Messages() {
         switch (status) {
             case 'approved':
             case 'scheduled':
+            case 'hired':
+            case 'in_progress':
                 return 'bg-green-100 text-green-700';
+            case 'declined':
+            case 'cancelled':
+                return 'bg-red-100 text-red-700';
             case 'rejected':
                 return 'bg-red-100 text-red-700';
             case 'completed':
@@ -451,9 +456,9 @@ export default function Messages() {
                         <>
                             {/* Chat Header */}
                             <div className="p-4 border-b-2 border-gray-100 flex items-center gap-4">
-                                <button
+                                <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
-                                    className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+                                    className="md:hidden p-3 hover:bg-gray-100 rounded-lg"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
@@ -508,7 +513,7 @@ export default function Messages() {
                                                         O duplo-check também era incondicional: aparecia igual em mensagem lida e não
                                                         lida, então não comunicava leitura nenhuma. Agora segue a convenção que todo
                                                         mundo já conhece: um check = enviada, dois checks = lida. */}
-                                                    {format(new Date(msg.createdat), 'HH:mm', { locale: ptBR })}
+                                                    {format(new Date(msg.createdat), new Date(msg.createdat).toDateString() === new Date().toDateString() ? 'HH:mm' : "dd/MM 'às' HH:mm", { locale: ptBR })}
                                                     {msg.is_mine && (
                                                         msg.read_at ? (
                                                             <CheckCheck

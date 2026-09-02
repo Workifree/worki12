@@ -955,7 +955,7 @@ export default function Profile() {
                                     <select
                                         value={formData.primary_role}
                                         onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
-                                        aria-label="Funcao principal"
+                                        aria-label="Função principal"
                                         className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none font-bold"
                                     >
                                         <option value="">Selecione sua função principal...</option>
@@ -1167,7 +1167,7 @@ export default function Profile() {
                     {/* Secao Seguranca */}
                     <div className="border-t-2 border-gray-200 pt-8 mt-8">
                         <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                            <Lock size={20} /> Seguranca
+                            <Lock size={20} /> Segurança
                         </h3>
 
                         <div className="mb-4">
@@ -1186,7 +1186,7 @@ export default function Profile() {
                                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                             <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-1">Forca: {strength.label}</p>
+                                        <p className="text-xs text-gray-500 mt-1">Força: {strength.label}</p>
                                     </div>
                                 );
                             })()}
