@@ -16,6 +16,10 @@ export interface Notification {
 interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
+    /** true enquanto a primeira carga não terminou — o sino/lista não deve afirmar "vazio". */
+    carregando: boolean;
+    /** true quando a carga falhou (rede/RLS) — a lista deve mostrar erro, não "nenhuma notificação". */
+    erroCarga: boolean;
     markAsRead: (id: string) => Promise<void>;
     markAllAsRead: () => Promise<void>;
 }
@@ -26,6 +30,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [dbAvailable, setDbAvailable] = useState(true);
+    const [carregando, setCarregando] = useState(true);
+    const [erroCarga, setErroCarga] = useState(false);
 
     const unreadCount = notifications.filter(n => !n.read_at).length;
 
@@ -53,13 +59,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             if (!isActive) return;
 
+            setCarregando(false);
             if (error) {
                 if (error.code === '42P01' || error.message?.toLowerCase().includes('does not exist')) {
                     setDbAvailable(false);
                 }
+                setErroCarga(true);
                 return;
             }
 
+            setErroCarga(false);
             if (data) setNotifications(data);
         };
 
@@ -154,7 +163,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
 
     return (
-        <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead }}>
+        <NotificationContext.Provider value={{ notifications, unreadCount, carregando, erroCarga, markAsRead, markAllAsRead }}>
             {children}
         </NotificationContext.Provider>
     );

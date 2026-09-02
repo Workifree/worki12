@@ -112,7 +112,7 @@ export const CertificationService = {
   // ---------------------------------------------------------------------
 
   /** Lista as próprias certificações (freela autenticado). */
-  async listMyCertifications(): Promise<WorkerCertification[]> {
+  async listMyCertifications(): Promise<WorkerCertification[] | null> {
     try {
       const workerId = await getAuthenticatedWorkerId();
       const { data, error } = await supabase
@@ -123,12 +123,12 @@ export const CertificationService = {
 
       if (error) {
         logError('certification.listMyCertifications', error);
-        return [];
+        return null;
       }
       return (data ?? []) as WorkerCertification[];
     } catch (err) {
       logError('certification.listMyCertifications', err);
-      return [];
+      return null;
     }
   },
 

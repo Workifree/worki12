@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import ErroDeCarga from './ErroDeCarga';
 import { Award, Plus, Pencil, Trash2, X, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
@@ -63,6 +64,7 @@ export default function MyCertificationsSection() {
   const { addToast } = useToast();
   const [certifications, setCertifications] = useState<WorkerCertification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   // Nome de quem conferiu — resolvido em lote (mesmo padrão de `WorkerPublicProfile`/`reviews`):
   // `verified_by_company_id` é um uuid, a UI precisa nomear a empresa (D3 — conferência atribuída,
   // proibido selo genérico).
@@ -82,6 +84,14 @@ export default function MyCertificationsSection() {
   const load = async () => {
     setLoading(true);
     const list = await CertificationService.listMyCertifications();
+    // null = fetch falhou. Cair no "Você ainda não cadastrou nenhuma certificação" aqui
+    // mentiria e induziria recadastro duplicado (Nielsen #1/#9).
+    if (list === null) {
+      setErroCarga(true);
+      setLoading(false);
+      return;
+    }
+    setErroCarga(false);
     setCertifications(list);
 
     const companyIds = [
@@ -228,7 +238,11 @@ export default function MyCertificationsSection() {
         </div>
       )}
 
-      {!loading && certifications.length === 0 && (
+      {!loading && erroCarga && (
+        <ErroDeCarga onRetry={load} mensagem="Suas certificações não sumiram — a carga falhou. Tente de novo antes de recadastrar." />
+      )}
+
+      {!loading && !erroCarga && certifications.length === 0 && (
         <div className="flex flex-col items-start gap-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4">
           <p className="text-sm font-bold text-gray-500">
             Você ainda não cadastrou nenhuma certificação.

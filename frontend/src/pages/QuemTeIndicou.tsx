@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import ErroDeCarga from '../components/ErroDeCarga';
 import { useNavigate } from 'react-router-dom';
 import { Share2, Loader2, Building2, Check, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -35,6 +36,7 @@ export default function QuemTeIndicou() {
   const { addToast } = useToast();
   const [items, setItems] = useState<PendingReferralRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -48,6 +50,14 @@ export default function QuemTeIndicou() {
 
     setLoading(true);
     const referrals = await ReferralService.listMyPendingReferrals();
+    // null = fetch falhou. "Nenhuma indicação pendente" seria afirmação não verificada —
+    // com prazo de 14 dias, o freela offline deixaria uma indicação expirar acreditando nisso.
+    if (referrals === null) {
+      setErroCarga(true);
+      setLoading(false);
+      return;
+    }
+    setErroCarga(false);
 
     // As DUAS pontas: quem indicou (prova social) e quem quer se conectar (o objeto do aceite).
     // Antes so o indicador era resolvido, e o freela decidia se aceitar uma empresa sem nome.
@@ -135,7 +145,9 @@ export default function QuemTeIndicou() {
         Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita.
       </p>
 
-      {items.length === 0 && (
+      {erroCarga && !loading && <ErroDeCarga onRetry={load} />}
+
+      {items.length === 0 && !erroCarga && (
         <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
           <p className="text-sm font-bold text-gray-500">Nenhuma indicação pendente no momento.</p>
         </div>

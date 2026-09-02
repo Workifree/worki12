@@ -50,7 +50,7 @@ describe('Notifications page', () => {
   it('renderiza empty state quando notifications está vazio', () => {
     vi.mocked(useNotifications).mockReturnValue({
       notifications: [],
-      unreadCount: 0,
+      unreadCount: 0, carregando: false, erroCarga: false,
       markAsRead: vi.fn(),
       markAllAsRead: vi.fn(),
     })
@@ -68,7 +68,7 @@ describe('Notifications page', () => {
         makeNotification({ id: '2', type: 'message', title: 'Nova mensagem' }),
         makeNotification({ id: '3', type: 'system', title: 'Atualização do sistema' }),
       ],
-      unreadCount: 3,
+      unreadCount: 3, carregando: false, erroCarga: false,
       markAsRead: vi.fn(),
       markAllAsRead: vi.fn(),
     })
@@ -96,7 +96,7 @@ describe('Notifications page', () => {
       notifications: [
         makeNotification({ id: 'notif-abc', title: 'Notificação clicável' }),
       ],
-      unreadCount: 1,
+      unreadCount: 1, carregando: false, erroCarga: false,
       markAsRead: mockMarkAsRead,
       markAllAsRead: vi.fn(),
     })
@@ -115,7 +115,7 @@ describe('Notifications page', () => {
       notifications: [
         makeNotification({ id: '1', read_at: null }),
       ],
-      unreadCount: 1,
+      unreadCount: 1, carregando: false, erroCarga: false,
       markAsRead: vi.fn(),
       markAllAsRead: mockMarkAllAsRead,
     })
@@ -134,7 +134,7 @@ describe('Notifications page', () => {
 
     vi.mocked(useNotifications).mockReturnValue({
       notifications: twentyFiveNotifications,
-      unreadCount: 25,
+      unreadCount: 25, carregando: false, erroCarga: false,
       markAsRead: vi.fn(),
       markAllAsRead: vi.fn(),
     })

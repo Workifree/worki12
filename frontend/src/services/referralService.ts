@@ -396,7 +396,7 @@ export const ReferralService = {
    * status). A tela "Quem te indicou" filtra `status='awaiting_worker'` na consulta, não no
    * client, para não trazer histórico inteiro desnecessariamente.
    */
-  async listMyPendingReferrals(): Promise<WorkerReferral[]> {
+  async listMyPendingReferrals(): Promise<WorkerReferral[] | null> {
     try {
       const { data, error } = await supabase
         .from('worker_referrals')
@@ -406,13 +406,13 @@ export const ReferralService = {
 
       if (error) {
         logError('referralService.listMyPendingReferrals', error);
-        return [];
+        return null;
       }
 
       return (data ?? []) as WorkerReferral[];
     } catch (err) {
       logError('referralService.listMyPendingReferrals', err);
-      return [];
+      return null;
     }
   },
 

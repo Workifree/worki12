@@ -124,12 +124,13 @@ describe('CertificationService.listMyCertifications', () => {
     expect(mockCertSelectEq).toHaveBeenCalledWith('worker_id', 'worker-1');
   });
 
-  it('devolve [] em erro do banco — nunca lança para a UI', async () => {
+  it('devolve null em erro do banco (erro ≠ lista vazia) — nunca lança para a UI', async () => {
     mockCertSelectOrder.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
 
     const result = await CertificationService.listMyCertifications();
 
-    expect(result).toEqual([]);
+    // null sinaliza falha de carga: a UI mostra erro+retry em vez do empty state que mente
+    expect(result).toBeNull();
   });
 });
 

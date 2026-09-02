@@ -12,6 +12,7 @@ import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import { logError } from '../lib/logger';
+import ErroDeCarga from '../components/ErroDeCarga';
 
 interface NextJobData {
     status: string;
@@ -49,26 +50,30 @@ export default function Dashboard() {
     });
 
     // React Query Hooks
-    const { data: worker, isLoading: isLoadingWorker } = useQuery({
+    const { data: worker, isLoading: isLoadingWorker, isError: erroWorker, refetch: refetchWorker } = useQuery({
         queryKey: ['workerProfile'],
         queryFn: async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('No user');
-            const { data } = await supabase.from('workers').select('*').eq('id', user.id).single();
+            // Sem sessão → null (redireciona pro login). Erro de query → throw: isError segura
+            // o redirect — falha transitória de rede/RLS não pode expulsar quem está logado.
+            if (!user) return null;
+            const { data, error } = await supabase.from('workers').select('*').eq('id', user.id).single();
+            if (error) throw error;
             return data;
         }
     });
 
-    const { data: nextJob } = useQuery({
+    const { data: nextJob, isLoading: carregandoNextJob, isError: erroNextJob } = useQuery({
         queryKey: ['nextJob'],
         queryFn: async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return null;
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .select('status, job:jobs(*, company:companies(name))')
                 .eq('worker_id', user.id)
                 .in('status', ['hired', 'in_progress']);
+            if (error) throw error;
 
             const rows = (data as unknown as NextJobData[] | null) ?? [];
             if (rows.length === 0) return null;
@@ -95,18 +100,19 @@ export default function Dashboard() {
         enabled: !!worker
     });
 
-    const { data: history = [] } = useQuery({
+    const { data: history = [], isLoading: carregandoHistory, isError: erroHistory } = useQuery({
         queryKey: ['workerHistory'],
         queryFn: async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return [];
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('applications')
                 .select('status, created_at, job:jobs(title)')
                 .eq('worker_id', user.id)
                 .in('status', ['completed', 'rejected', 'cancelled'])
                 .order('created_at', { ascending: false })
                 .limit(3);
+            if (error) throw error;
             return (data as unknown as HistoryItem[]) || [];
         },
         enabled: !!worker
@@ -165,11 +171,18 @@ export default function Dashboard() {
 
     // Prefetching logic could go here, or just rely on the queries running
     useEffect(() => {
-        if (!worker && !loading) {
-            // User not logged in handled by ProtectedRoute mostly, but good check
+        // So expulsa quando de fato NAO ha sessao (worker null sem erro). Query que falhou
+        // (rede/RLS) segura o freela na tela com estado de erro — nunca /login.
+        if (!worker && !loading && !erroWorker) {
             navigate('/login');
         }
-    }, [worker, loading, navigate]);
+    }, [worker, loading, erroWorker, navigate]);
+
+    if (erroWorker) return (
+        <div className="pb-24 max-w-4xl mx-auto pt-6">
+            <ErroDeCarga onRetry={() => refetchWorker()} />
+        </div>
+    );
 
     if (loading) return (
         <div className="flex flex-col gap-6 pb-12 font-sans text-accent animate-pulse">
@@ -331,6 +344,12 @@ export default function Dashboard() {
                                 Ver Detalhes
                             </button>
                         </>
+                    ) : carregandoNextJob ? (
+                        <div className="h-16 bg-white/5 rounded-xl animate-pulse" />
+                    ) : erroNextJob ? (
+                        <div className="text-center py-6 text-red-300 font-bold bg-white/5 rounded-xl border border-red-400/30">
+                            Não foi possível carregar. Recarregue a página.
+                        </div>
                     ) : (
                         <div className="text-center py-6 text-gray-500 font-bold bg-white/5 rounded-xl border border-white/5">
                             Sem próximos turnos marcados.
@@ -458,7 +477,11 @@ export default function Dashboard() {
                                 {h.status === 'completed' ? 'Sucesso' : 'Cancelado'}
                             </span>
                         </div>
-                    )) : (
+                    )) : carregandoHistory ? (
+                        <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+                    ) : erroHistory ? (
+                        <p className="text-sm text-red-500 font-bold text-center py-4">Não foi possível carregar o histórico.</p>
+                    ) : (
                         <p className="text-sm text-gray-400 text-center py-4">Sem histórico recente.</p>
                     )}
                 </div>

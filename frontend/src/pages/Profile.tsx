@@ -343,11 +343,12 @@ export default function Profile() {
 
             if (data) {
                 setProfile(prev => prev ? { ...prev, ...data } : prev);
+                const horasReais = await somarHorasRegistradas(profileId);
                 setStats(prev => ({
                     ...prev,
                     completedJobs: data.completed_jobs_count ?? prev.completedJobs,
                     totalEarnings: data.earnings_total ?? prev.totalEarnings,
-                    hoursWorked: Math.floor((data.completed_jobs_count ?? prev.completedJobs) * 6)
+                    hoursWorked: horasReais
                 }));
             }
         } catch (error) {

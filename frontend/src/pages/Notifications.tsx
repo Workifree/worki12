@@ -30,7 +30,7 @@ function getIcon(type: string) {
 
 export default function Notifications() {
     const navigate = useNavigate();
-    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+    const { notifications, unreadCount, carregando, erroCarga, markAsRead, markAllAsRead } = useNotifications();
     const { user } = useAuth();
     const [filterType, setFilterType] = useState<FilterType>('all');
     const [page, setPage] = useState(1);
@@ -102,7 +102,17 @@ export default function Notifications() {
             </div>
 
             {/* Content */}
-            {filteredNotifications.length === 0 ? (
+            {carregando && notifications.length === 0 ? (
+                <div className="space-y-3 py-4">
+                    {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
+                </div>
+            ) : erroCarga && notifications.length === 0 ? (
+                <div className="text-center py-16">
+                    <Bell size={48} className="mx-auto mb-4 text-red-300" />
+                    <p className="text-red-600 text-lg font-black uppercase">Não foi possível carregar</p>
+                    <p className="text-gray-500 text-sm mt-2">Verifique sua conexão e recarregue a página.</p>
+                </div>
+            ) : filteredNotifications.length === 0 ? (
                 <div className="text-center py-16">
                     <Bell size={48} className="mx-auto mb-4 text-gray-300" />
                     <p className="text-gray-500 text-lg font-bold">Nenhuma notificação por aqui ainda.</p>
