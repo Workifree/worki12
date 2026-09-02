@@ -155,6 +155,7 @@ export interface UseWorkerStoresResult {
   /** Convites de equipe pendentes (empresa convidou, aguarda aceite do worker). */
   pendingConnections: TeamConnection[];
   loading: boolean;
+  erroCarga: boolean;
   /** Aceitar convite de equipe. */
   acceptConnection: (connectionId: string) => Promise<boolean>;
   /** Bloquear/sair de uma empresa. */
@@ -168,6 +169,7 @@ export function useWorkerStores(): UseWorkerStoresResult {
   const [myStores, setMyStores] = useState<MyStore[]>([]);
   const [pendingConnections, setPendingConnections] = useState<TeamConnection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
 
@@ -186,8 +188,11 @@ export function useWorkerStores(): UseWorkerStoresResult {
       TeamConnectionService.listPendingConnections(),
     ]);
 
-    setMyStores(stores);
-    setPendingConnections(pending);
+    // null = fetch falhou; manter o que ja esta na tela e sinalizar erro em vez de
+    // esvaziar a carteira ("Voce ainda nao tem clientes" mentiria — N1).
+    setErroCarga(stores === null || pending === null);
+    if (stores !== null) setMyStores(stores);
+    if (pending !== null) setPendingConnections(pending);
     setLoading(false);
   }, [navigate]);
 
@@ -209,8 +214,9 @@ export function useWorkerStores(): UseWorkerStoresResult {
       ]);
 
       if (!active) return;
-      setMyStores(stores);
-      setPendingConnections(pending);
+      setErroCarga(stores === null || pending === null);
+      if (stores !== null) setMyStores(stores);
+      if (pending !== null) setPendingConnections(pending);
       setLoading(false);
     })();
     return () => {
@@ -263,6 +269,7 @@ export function useWorkerStores(): UseWorkerStoresResult {
     myStores,
     pendingConnections,
     loading,
+    erroCarga,
     acceptConnection,
     blockConnection,
     declineConnection,

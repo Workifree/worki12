@@ -60,10 +60,9 @@ export default function InviteTakeover() {
   const { pendingInvites, loading, respondingId, respond, refresh } = useWorkerInvites();
   const { notifications } = useNotifications();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  // ESC/toque no fundo = mesmo gesto do X: dispensa o overlay SEM responder o convite
-  // (ele reaparece enquanto seguir 'invited') — consistente com os demais modais do app.
-  const dismissRef = useRef<(() => void) | null>(null);
-  const fecharPeloFundo = useModalDismiss(() => { dismissRef.current?.(); });
+  // Recusa irreversivel colada no Aceitar: primeiro toque arma, segundo confirma (4s).
+  const [recusaArmada, setRecusaArmada] = useState(false);
+  const recusaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenNotifIdsRef = useRef<Set<string> | null>(null);
 
   // Detecta notificações NOVAS (chegadas via Realtime após o mount) de convite de turno.
@@ -92,6 +91,18 @@ export default function InviteTakeover() {
 
   const visibleInvite = pendingInvites.find((invite) => !dismissedIds.has(invite.id));
 
+  // ESC/toque no fundo = mesmo gesto do X: dispensa o overlay SEM responder o convite
+  // (ele reaparece enquanto seguir 'invited') — consistente com os demais modais do app.
+  const fecharPeloFundo = useModalDismiss(() => {
+    const alvo = visibleInvite;
+    if (!alvo) return;
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(alvo.id);
+      return next;
+    });
+  });
+
   if (loading || !visibleInvite) return null;
 
   const job = visibleInvite.job;
@@ -117,7 +128,6 @@ export default function InviteTakeover() {
       return next;
     });
   };
-  dismissRef.current = dismiss;
 
   const handleRespond = async (response: 'accepted' | 'declined') => {
     await respond(visibleInvite.id, response);
@@ -233,12 +243,24 @@ export default function InviteTakeover() {
           </button>
           <button
             type="button"
-            onClick={() => void handleRespond('declined')}
+            onClick={() => {
+              if (recusaArmada) {
+                if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
+                setRecusaArmada(false);
+                void handleRespond('declined');
+                return;
+              }
+              setRecusaArmada(true);
+              if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
+              recusaTimerRef.current = setTimeout(() => setRecusaArmada(false), 4000);
+            }}
             disabled={isResponding}
-            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-xl font-black uppercase border-2 border-gray-300 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              recusaArmada ? 'bg-red-600 text-white border-red-600' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
+            }`}
           >
             <XCircle size={18} />
-            Recusar
+            {recusaArmada ? 'Confirmar recusa' : 'Recusar'}
           </button>
         </div>
       </div>

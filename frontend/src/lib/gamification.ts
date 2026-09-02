@@ -19,3 +19,26 @@ export const calculateLevel = (xp: number) => {
     }
     return 1;
 };
+
+/**
+ * Progresso REAL dentro do nível atual, pelos degraus de LEVELS.
+ *
+ * As barras de XP usavam `xp % 100` ("assumindo 100 XP por nível") — mas os degraus
+ * crescem (lvl 3=300, lvl 4=600...): um freela com 350 XP via "50/100" quando faltavam
+ * 250. Número inventado sobre progresso é anti-motivação (Nielsen #1).
+ * No nível máximo devolve barra cheia e restante 0.
+ */
+export const levelProgress = (xp: number) => {
+    const nivel = calculateLevel(xp);
+    const atual = LEVELS.find(l => l.level === nivel) ?? LEVELS[0];
+    const proximo = LEVELS.find(l => l.level === nivel + 1);
+    if (!proximo) return { percent: 100, dentroDoNivel: 0, tamanhoDoNivel: 0, faltam: 0 };
+    const tamanho = proximo.minXp - atual.minXp;
+    const dentro = Math.max(0, xp - atual.minXp);
+    return {
+        percent: Math.min(100, Math.round((dentro / tamanho) * 100)),
+        dentroDoNivel: dentro,
+        tamanhoDoNivel: tamanho,
+        faltam: Math.max(0, proximo.minXp - xp),
+    };
+};

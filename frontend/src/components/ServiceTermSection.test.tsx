@@ -117,8 +117,11 @@ describe('ServiceTermSection', () => {
     // Nenhum card de termo, nenhum aviso de fronteira jurídica — feature é aditiva.
     expect(screen.queryByText(/Termo de Prestação de Serviço/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/não é parte deste termo/i)).not.toBeInTheDocument();
-    // O botão de confirmar não é gateado por termo inexistente.
+    // O botão de confirmar não é gateado por termo inexistente — mas a confirmação
+    // bilateral é irreversível, então exige o checkbox explícito (N5).
     const confirmButton = screen.getByRole('button', { name: /Confirmar Recebimento/i });
+    expect(confirmButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo que recebi/i }));
     expect(confirmButton).toBeEnabled();
   });
 
@@ -151,8 +154,10 @@ describe('ServiceTermSection', () => {
     fireEvent.click(screen.getByRole('button', { name: /Tentar de novo/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Confirmar Recebimento/i })).toBeEnabled(),
+      expect(screen.getByRole('checkbox', { name: /Confirmo que recebi/i })).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo que recebi/i }));
+    expect(screen.getByRole('button', { name: /Confirmar Recebimento/i })).toBeEnabled();
     expect(screen.queryByText(/Não foi possível verificar o termo/i)).not.toBeInTheDocument();
   });
 
@@ -363,8 +368,11 @@ describe('ServiceTermSection', () => {
       />,
     );
 
-    // Termo aceito: já não há gate de leitura/concordância — o botão nasce habilitado.
+    // Termo aceito: não há mais gate de leitura/concordância do TERMO, mas a confirmação
+    // bilateral segue irreversível — o checkbox explícito continua exigido (N5).
     const confirmButton = await screen.findByRole('button', { name: /Confirmar Recebimento/i });
+    expect(confirmButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo que recebi/i }));
     expect(confirmButton).toBeEnabled();
     fireEvent.click(confirmButton);
 

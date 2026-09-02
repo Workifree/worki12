@@ -610,7 +610,7 @@ export const TeamConnectionService = {
    * Lista as conexões aceitas do worker autenticado ("minhas lojas").
    * Retorna conexões 'accepted' com perfil da empresa embutido.
    */
-  async listMyStores(): Promise<MyStore[]> {
+  async listMyStores(): Promise<MyStore[] | null> {
     try {
       const {
         data: { user },
@@ -639,7 +639,7 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listMyStores', error);
-        return [];
+        return null;
       }
 
       return ((data ?? []) as Array<TeamConnection & { company: CompanyProfile }>).map(
@@ -660,7 +660,7 @@ export const TeamConnectionService = {
       );
     } catch (err) {
       logError('teamConnection.listMyStores', err);
-      return [];
+      return null;
     }
   },
 
@@ -668,7 +668,7 @@ export const TeamConnectionService = {
    * Lista conexões pendentes (convites de equipe) do worker autenticado.
    * Para a UI do worker aceitar/recusar convites de equipe.
    */
-  async listPendingConnections(): Promise<TeamConnection[]> {
+  async listPendingConnections(): Promise<TeamConnection[] | null> {
     try {
       const {
         data: { user },
@@ -696,13 +696,13 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listPendingConnections', error);
-        return [];
+        return null;
       }
 
       return (data ?? []) as TeamConnection[];
     } catch (err) {
       logError('teamConnection.listPendingConnections', err);
-      return [];
+      return null;
     }
   },
 

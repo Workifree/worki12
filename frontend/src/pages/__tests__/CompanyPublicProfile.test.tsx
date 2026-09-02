@@ -96,9 +96,25 @@ describe('CompanyPublicProfile', () => {
     expect(screen.getByText('(12)')).toBeInTheDocument();
   })
 
-  it('mostra estado "Empresa não encontrada" quando a busca falha', async () => {
+  it('mostra estado "Empresa não encontrada" só para PGRST116 (zero linhas); erro genérico vira ErroDeCarga', async () => {
+    // Erro genérico (rede/timeout): NÃO pode afirmar que a empresa não existe.
+    const companiesChainErroRede = buildChain({
+      single: vi.fn().mockResolvedValue({ data: null, error: { message: 'timeout' } }),
+    })
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'companies') return companiesChainErroRede as unknown as ReturnType<typeof supabase.from>
+      return buildChain() as unknown as ReturnType<typeof supabase.from>
+    })
+    const { unmount } = renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText(/Não conseguimos carregar/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Empresa não encontrada')).not.toBeInTheDocument()
+    unmount()
+
+    // PGRST116 (zero linhas do .single()): aí sim, não encontrada.
     const companiesChain = buildChain({
-      single: vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } }),
+      single: vi.fn().mockResolvedValue({ data: null, error: { message: 'no rows', code: 'PGRST116' } }),
     })
 
     vi.mocked(supabase.from).mockImplementation((table: string) => {

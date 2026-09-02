@@ -42,6 +42,8 @@ export default function Messages() {
     const [reloadKey, setReloadKey] = useState(0);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [erroMensagens, setErroMensagens] = useState(false);
+    const [reloadMensagens, setReloadMensagens] = useState(0);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
     const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
     const [newMessage, setNewMessage] = useState('');
@@ -79,6 +81,9 @@ export default function Messages() {
                 .update({ read_at: new Date().toISOString() })
                 .eq('user_id', userId)
                 .eq('type', 'message')
+                // o trigger grava link='/messages?conversation=<id>' — escopar por ele
+                // impede que abrir UMA conversa apague do sino avisos das OUTRAS.
+                .eq('link', `/messages?conversation=${conversationId}`)
                 .is('read_at', null)
                 .select('id');
             if (notifError) {
@@ -223,8 +228,10 @@ export default function Messages() {
 
             if (error) {
                 logError('Error fetching messages:', error);
+                setErroMensagens(true);
                 return;
             }
+            setErroMensagens(false);
 
             setMessages((data || []).map(m => ({
                 ...m,
@@ -249,10 +256,9 @@ export default function Messages() {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
 
-                setMessages(prev => [...prev, {
-                    ...newMsg,
-                    is_mine: isMine
-                }]);
+                setMessages(prev => prev.some(m => m.id === newMsg.id)
+                    ? prev
+                    : [...prev, { ...newMsg, is_mine: isMine }]);
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine) {
@@ -282,7 +288,7 @@ export default function Messages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser]);
+    }, [selectedConversation, currentUser, reloadMensagens]);
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || !selectedConversation || !currentUser) return;
@@ -295,15 +301,25 @@ export default function Messages() {
         presenceChannel.current?.track({ typing: false, userId: currentUser });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+        const novaMensagem = {
+            id: crypto.randomUUID(),
+            conversationid: selectedConversation.id,
+            senderid: currentUser,
+            content: messageContent,
+            createdat: new Date().toISOString()
+        };
         const { error } = await supabase
             .from('Message')
-            .insert({
-                id: crypto.randomUUID(),
-                conversationid: selectedConversation.id,
-                senderid: currentUser,
-                content: messageContent,
-                createdat: new Date().toISOString()
-            });
+            .insert(novaMensagem);
+
+        if (!error) {
+            // Eco imediato: sem isto a mensagem so aparecia quando o INSERT voltava pelo
+            // realtime — com conexao lenta o input limpava e a mensagem "sumia" por segundos
+            // (Nielsen #1). O handler de realtime dedupa pelo id (gerado aqui no client).
+            setMessages(prev => prev.some(m => m.id === novaMensagem.id)
+                ? prev
+                : [...prev, { ...novaMensagem, read_at: null, is_mine: true }]);
+        }
 
         if (error) {
             logError('Error sending message:', error);
@@ -341,7 +357,10 @@ export default function Messages() {
             case 'declined':
             case 'rejected': return 'Recusado';
             case 'completed': return 'Concluído';
-            default: return status;
+            case 'pending': return 'Pendente';
+            case 'cancelled': return 'Cancelado';
+            // status interno desconhecido nunca vira badge cru em ingles (N2)
+            default: return 'Turno';
         }
     };
 
@@ -467,7 +486,11 @@ export default function Messages() {
 
                             {/* Messages */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                                {messages.length === 0 ? (
+                                {erroMensagens ? (
+                            <div className="p-4">
+                                <ErroDeCarga onRetry={() => setReloadMensagens(k => k + 1)} mensagem="O histórico não sumiu — a carga falhou. Tente de novo." />
+                            </div>
+                        ) : messages.length === 0 ? (
                                     <div className="text-center py-12 text-gray-400">
                                         <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>

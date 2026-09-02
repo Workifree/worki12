@@ -153,6 +153,21 @@ export default function MyJobs() {
     const [loading, setLoading] = useState(true);
     // Erro de carga ≠ lista vazia: fetch falho caia no "Nenhum turno" (empty state que mente).
     const [erroCarga, setErroCarga] = useState(false);
+    // Recusa e irreversivel ('declined') e o botao fica colado no Aceitar num layout touch —
+    // primeiro toque ARMA, segundo confirma; desarma em 4s (N5, prevencao sem modal).
+    const [recusaArmada, setRecusaArmada] = useState<string | null>(null);
+    const recusaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const armarOuRecusar = (inviteId: string, executar: () => void) => {
+        if (recusaArmada === inviteId) {
+            if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
+            setRecusaArmada(null);
+            executar();
+            return;
+        }
+        setRecusaArmada(inviteId);
+        if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
+        recusaTimerRef.current = setTimeout(() => setRecusaArmada(null), 4000);
+    };
     const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
     const [jobs, setJobs] = useState<{
         in_progress: JobApplication[],
@@ -859,12 +874,16 @@ export default function MyJobs() {
                                             Aceitar
                                         </button>
                                         <button
-                                            onClick={() => respond(invite.id, 'declined')}
+                                            onClick={() => armarOuRecusar(invite.id, () => respond(invite.id, 'declined'))}
                                             disabled={isResponding}
-                                            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-xl font-black uppercase border-2 border-gray-300 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className={`flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                recusaArmada === invite.id
+                                                    ? 'bg-red-600 text-white border-red-600'
+                                                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
+                                            }`}
                                         >
                                             {isResponding ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
-                                            Recusar
+                                            {recusaArmada === invite.id ? 'Confirmar recusa' : 'Recusar'}
                                         </button>
                                     </div>
                                     <p className="text-xs text-gray-400 text-center mt-2 font-bold">

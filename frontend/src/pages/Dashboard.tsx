@@ -1,5 +1,6 @@
 
 import { useEffect } from 'react';
+import { levelProgress } from '../lib/gamification';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
@@ -25,6 +26,7 @@ interface NextJobData {
         // freela, sempre -- inclusive para turnos com horario preenchido.
         work_start_time: string | null;
         work_end_time: string | null;
+        location: string | null;
         company: { name: string };
     };
 }
@@ -334,6 +336,12 @@ export default function Dashboard() {
                                     </span>
                                 </div>
                                 <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
+                                {nextJob.job.company?.name && (
+                                    <p className="text-sm font-bold text-gray-300">{nextJob.job.company.name}</p>
+                                )}
+                                {nextJob.job.location && (
+                                    <p className="text-xs text-gray-400 truncate">{nextJob.job.location}</p>
+                                )}
                                 <p className="text-sm text-gray-400">
                                     {nextJob.job.work_start_time
                                         ? `${nextJob.job.work_start_time}${nextJob.job.work_end_time ? ` – ${nextJob.job.work_end_time}` : ''}`
@@ -435,9 +443,9 @@ export default function Dashboard() {
                         </div>
                         <p className="text-2xl font-black italic mb-2">LVL {worker.level || 1}</p>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-primary" style={{ width: `${(worker.xp || 0) % 100}%` }} />
+                            <div className="h-full bg-primary" style={{ width: `${levelProgress(worker.xp || 0).percent}%` }} />
                         </div>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1">{(worker.xp || 0) % 100}/100 XP para o próximo nível</p>
+                        <p className="text-[10px] text-gray-400 font-bold mt-1">{levelProgress(worker.xp || 0).faltam > 0 ? `Faltam ${levelProgress(worker.xp || 0).faltam} XP para o próximo nível` : 'Nível máximo!'}</p>
                     </div>
 
                     {/* Earnings */}
@@ -474,7 +482,7 @@ export default function Dashboard() {
                                 <p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
                             <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${h.status === 'completed' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
-                                {h.status === 'completed' ? 'Sucesso' : 'Cancelado'}
+                                {h.status === 'completed' ? 'Sucesso' : h.status === 'rejected' ? 'Não selecionado' : 'Cancelado'}
                             </span>
                         </div>
                     )) : carregandoHistory ? (

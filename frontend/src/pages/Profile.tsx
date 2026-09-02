@@ -1,5 +1,6 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { levelProgress } from '../lib/gamification';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock } from 'lucide-react';
@@ -141,6 +142,7 @@ export default function Profile() {
     const navigate = useNavigate();
     const { signOut } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [salvando, setSalvando] = useState(false);
     const [profile, setProfile] = useState<WorkerProfile | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -480,7 +482,9 @@ export default function Profile() {
             return;
         }
         try {
-            setLoading(true);
+            // Estado proprio: reusar o `loading` da pagina trocava o formulario inteiro pelo
+            // skeleton durante o request — parecia recarga/perda do que foi digitado (N1).
+            setSalvando(true);
             const rolesArray = formData.roles.split(',').map(r => r.trim()).filter(r => r.length > 0);
 
             // F7 — `normalizeAvailabilityGrade` poda dias sem período e devolve `null` (SQL NULL)
@@ -527,7 +531,7 @@ export default function Profile() {
             addToast('Erro ao atualizar perfil!', 'error');
             logError('Erro inesperado', error);
         } finally {
-            setLoading(false);
+            setSalvando(false);
         }
     };
 
@@ -546,7 +550,14 @@ export default function Profile() {
         setPasswordLoading(false);
         if (pwError) {
             logError('Erro ao alterar senha', pwError);
-            addToast('Senha muito fraca. Use pelo menos 8 caracteres com letras e números.', 'error');
+            // O minimo de 8 ja foi validado acima — culpar a senha em falha de rede/sessao
+            // manda o freela "consertar" o que nao esta quebrado (N9).
+            addToast(
+                pwError.message?.toLowerCase().includes('weak') || pwError.message?.toLowerCase().includes('password')
+                    ? 'Senha muito fraca. Use letras e números.'
+                    : 'Não foi possível alterar a senha agora. Verifique sua conexão e tente de novo.',
+                'error'
+            );
             return;
         }
         addToast('Senha alterada com sucesso.', 'success');
@@ -623,7 +634,7 @@ export default function Profile() {
                     )}
 
                     {/* Cover Upload Button */}
-                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-4 right-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button onClick={() => coverInputRef.current?.click()} aria-label="Trocar foto de capa" className="bg-black/50 text-white min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg backdrop-blur-sm hover:bg-black transition-colors">
                             <Camera size={20} />
                         </button>
@@ -652,9 +663,18 @@ export default function Profile() {
                                 )}
 
                                 {/* Camera Overlay for Upload */}
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                <div className="absolute inset-0 bg-black/50 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                                     <Camera className="text-white" size={24} />
                                 </div>
+                                {/* No touch nao existe hover: badge de camera sempre visivel no mobile */}
+                                <button
+                                    type="button"
+                                    aria-label="Trocar foto de perfil"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="sm:hidden absolute bottom-1 right-1 bg-black text-white rounded-full p-2 border-2 border-white shadow-md"
+                                >
+                                    <Camera size={16} />
+                                </button>
                                 <input
                                     type="file"
                                     ref={fileInputRef}
@@ -704,10 +724,17 @@ export default function Profile() {
                     <div className="flex gap-2 mb-2">
                         {isEditing ? (
                             <>
-                                <button onClick={() => setIsEditing(false)} className="bg-white text-black px-4 py-2 rounded-xl font-bold uppercase text-sm border-2 border-black hover:bg-gray-100 transition-all">
+                                <button onClick={() => {
+                                    // Cancelar = descartar: sem isto os valores abandonados reapareciam
+                                    // na proxima edicao (N3 — o gesto dizia "desfazer" e nao desfazia).
+                                    setFormData({ ...initialFormDataRef.current });
+                                    setAvailabilityGrade({ ...initialAvailabilityGradeRef.current });
+                                    setPixKeyType(guessPixKeyType(initialFormDataRef.current.pix_key));
+                                    setIsEditing(false);
+                                }} className="bg-white text-black px-4 py-2 rounded-xl font-bold uppercase text-sm border-2 border-black hover:bg-gray-100 transition-all">
                                     <X size={16} className="inline mr-1" /> Cancelar
                                 </button>
-                                <button onClick={handleSave} className="bg-primary text-white px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-green-600 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <button onClick={handleSave} disabled={salvando} className="bg-primary text-white px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-green-600 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                     <Save size={16} className="inline mr-1" /> Salvar
                                 </button>
                             </>
@@ -745,8 +772,7 @@ export default function Profile() {
                             <Award className="text-primary" size={32} />
                         </div>
                         <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                            {/* Mock progress based on XP - assuming 100XP per level */}
-                            <div className="bg-primary h-full" style={{ width: `${(profile.xp || 0) % 100}%` }}></div>
+                            <div className="bg-primary h-full" style={{ width: `${levelProgress(profile.xp || 0).percent}%` }}></div>
                         </div>
                         <p className="text-xs font-bold text-gray-400 mt-2">{profile.xp || 0} XP Total</p>
                     </div>

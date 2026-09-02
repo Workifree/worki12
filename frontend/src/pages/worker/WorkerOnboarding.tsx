@@ -65,6 +65,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export default function WorkerOnboarding() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+    // Sair descarta o formulario inteiro — primeiro toque arma o aviso, segundo executa (4s).
+    const [saidaArmada, setSaidaArmada] = useState(false);
     const { addToast } = useToast();
     const [step, setStep] = useState(1);
     const [userId, setUserId] = useState<string | null>(null);
@@ -323,12 +325,19 @@ export default function WorkerOnboarding() {
                 <div className="flex justify-end mb-4">
                     <button
                         onClick={async () => {
+                            if (!saidaArmada) {
+                                setSaidaArmada(true);
+                                setTimeout(() => setSaidaArmada(false), 4000);
+                                return;
+                            }
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
-                        className="min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold text-gray-400 hover:text-black transition-colors gap-1"
+                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold transition-colors gap-1 ${
+                            saidaArmada ? 'text-red-600' : 'text-gray-400 hover:text-black'
+                        }`}
                     >
-                        <ArrowLeft size={14} /> Sair e voltar
+                        <ArrowLeft size={14} /> {saidaArmada ? 'O que você digitou será perdido — toque de novo' : 'Sair e voltar'}
                     </button>
                 </div>
 

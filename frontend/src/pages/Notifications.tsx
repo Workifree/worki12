@@ -139,7 +139,15 @@ export default function Notifications() {
                             <div
                                 key={n.id}
                                 onClick={() => handleNotificationClick(n.id, n.link)}
-                                className={`border-2 border-gray-100 hover:border-black rounded-xl p-4 transition-all cursor-pointer flex gap-3 ${
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        handleNotificationClick(n.id, n.link);
+                                    }
+                                }}
+                                className={`border-2 border-gray-100 hover:border-black focus-visible:border-black focus-visible:outline-none rounded-xl p-4 transition-all cursor-pointer flex gap-3 ${
                                     !n.read_at ? 'bg-blue-50' : 'bg-white'
                                 }`}
                             >
@@ -160,7 +168,7 @@ export default function Notifications() {
                                     <p className={`text-sm ${!n.read_at ? 'font-bold text-black' : 'font-medium text-gray-700'}`}>
                                         {n.title}
                                     </p>
-                                    <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">
+                                    <p className="text-sm text-gray-600 mt-0.5">
                                         {n.message}
                                     </p>
                                     <p className="text-xs text-gray-400 mt-1">

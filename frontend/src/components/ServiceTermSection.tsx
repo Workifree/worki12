@@ -77,6 +77,9 @@ export default function ServiceTermSection({
     // C-TERM-CONSENT: checkbox "Li e concordo com os termos acima" — pré-condição
     // SOMADA ao gate de leitura, nunca substituta.
     const [agreedToTerm, setAgreedToTerm] = useState(false);
+    // Caso legado SEM termo: a confirmacao bilateral e irreversivel e disparava em UM toque.
+    // O checkbox e a mesma friccao deliberada do caminho com termo (N5) — nunca confirmar sem gesto explicito.
+    const [confirmoRecebimento, setConfirmoRecebimento] = useState(false);
 
     const fetchTerm = async (): Promise<void> => {
         const result = await ServiceTermService.getByShiftPayment(shiftPaymentId);
@@ -377,13 +380,27 @@ export default function ServiceTermSection({
                     </div>
                 ) : isWorkerViewer ? (
                     <div className="print:hidden space-y-2">
+                        {!mustReadTerm && (
+                            <label className="flex items-start gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={confirmoRecebimento}
+                                    onChange={(e) => setConfirmoRecebimento(e.target.checked)}
+                                    className="mt-1 h-4 w-4 accent-primary"
+                                />
+                                <span className="text-sm font-bold text-gray-700">
+                                    Confirmo que recebi este valor. Esta confirmação não pode ser desfeita.
+                                </span>
+                            </label>
+                        )}
                         <button
                             type="button"
                             onClick={handleConfirmReceipt}
                             disabled={
                                 confirming ||
                                 fetchFailed ||
-                                (mustReadTerm && (!showFullText || !agreedToTerm))
+                                (mustReadTerm && (!showFullText || !agreedToTerm)) ||
+                                (!mustReadTerm && !confirmoRecebimento)
                             }
                             className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center gap-2 min-h-[44px]"
                         >

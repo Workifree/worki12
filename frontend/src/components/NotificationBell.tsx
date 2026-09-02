@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Bell, Check, Info, MessageSquare, CreditCard, AlertCircle } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
-import { format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 
@@ -140,7 +140,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                                                 {notification.message}
                                             </p>
                                             <p className="text-[10px] text-gray-400 mt-2">
-                                                {format(new Date(notification.created_at), "d 'de' MMM, HH:mm", { locale: ptBR })}
+                                                {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: ptBR })}
                                             </p>
                                         </div>
                                         {!notification.read_at && (

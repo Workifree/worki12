@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react';
+import ErroDeCarga from '../components/ErroDeCarga';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check } from 'lucide-react';
@@ -183,7 +184,7 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
 // ---------------------------------------------------------------------------
 
 export default function CarteiraClientes() {
-  const { myStores, pendingConnections, loading, acceptConnection, blockConnection, declineConnection } = useWorkerStores();
+  const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
   const fecharPeloFundo = useModalDismiss(() => { if (confirmLeaveId) setConfirmLeaveId(null); });
@@ -212,6 +213,14 @@ export default function CarteiraClientes() {
     await blockConnection(id);
     setRespondingId(null);
   };
+
+  if (erroCarga && !loading) {
+    return (
+      <div className="max-w-4xl mx-auto pb-24 pt-6">
+        <ErroDeCarga onRetry={() => { void refresh(); }} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

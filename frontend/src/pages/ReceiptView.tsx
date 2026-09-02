@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ErroDeCarga from '../components/ErroDeCarga';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -56,6 +57,7 @@ export default function ReceiptView() {
 
     const [loading, setLoading] = useState(true);
     const [receipt, setReceipt] = useState<ShiftPaymentReceipt | null>(null);
+    const [erroCarga, setErroCarga] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     // Chegada/saída reais do turno — trazidas do recibo pra ser um documento de conferência,
     // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
@@ -107,6 +109,9 @@ export default function ReceiptView() {
             }
         } catch (error) {
             logError('ReceiptView: fetchReceipt', error);
+            // Falha de rede ≠ "recibo não existe / sem permissão" — colapsar os dois faria o
+            // freela achar que o pagamento sumiu (dinheiro é o pior lugar para um falso negativo).
+            setErroCarga(true);
         } finally {
             setLoading(false);
         }
@@ -117,6 +122,15 @@ export default function ReceiptView() {
             <div className="max-w-2xl mx-auto p-4 md:p-8 animate-pulse space-y-4">
                 <div className="h-8 w-40 bg-gray-200 rounded-xl" />
                 <div className="h-96 bg-gray-200 rounded-2xl" />
+            </div>
+        );
+    }
+
+    if (erroCarga && !receipt) {
+        return (
+            <div className="max-w-2xl mx-auto p-4 md:p-8">
+                <PageMeta title="Erro ao carregar recibo" />
+                <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); fetchReceipt(); }} mensagem="O recibo não sumiu — a carga falhou. Tente de novo." />
             </div>
         );
     }
