@@ -76,6 +76,7 @@ import { getAuthenticatedCompanyId } from '../../../services/companyScopeService
 
 describe('CompanyCreateJob — validação por etapa (canProceed)', () => {
   beforeEach(() => {
+    localStorage.clear()  // o rascunho de um teste nao pode restaurar no seguinte
     vi.clearAllMocks()
   })
 

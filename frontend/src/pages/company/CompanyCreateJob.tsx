@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -128,6 +128,46 @@ export default function CompanyCreateJob() {
         return () => { ativo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- roda uma vez por modo de entrada
     }, [isEditing, repetirId]);
+
+    // ── Rascunho: trabalho digitado nunca se perde em silencio ──────────────────────────────
+    // Prevencao de perda (Nielsen #5) + efeito Zeigarnik: quem escreveu a descricao e saiu num
+    // toque errado (ou o celular matou a aba) deve RETOMAR, nao recomecar. localStorage (nao
+    // session: aba morta e justamente o caso), 24h de validade, e o rascunho so existe se ha
+    // conteudo digitado — campo vazio nunca vira rascunho. Criou o turno? Rascunho morre.
+    // Edicao e ?repetir= ficam de fora: intencao explicita vence rascunho.
+    const RASCUNHO_KEY = 'worki_rascunho_turno';
+    const rascunhoRestaurado = useRef(false);
+    useEffect(() => {
+        if (isEditing || repetirId || rascunhoRestaurado.current) return;
+        rascunhoRestaurado.current = true;
+        try {
+            const bruto = localStorage.getItem(RASCUNHO_KEY);
+            if (!bruto) return;
+            const r = JSON.parse(bruto) as { em?: number; step?: number; formData?: typeof formData };
+            if (!r?.formData || Date.now() - (r.em ?? 0) > 24 * 60 * 60 * 1000) {
+                localStorage.removeItem(RASCUNHO_KEY);
+                return;
+            }
+            setFormData((prev) => ({ ...prev, ...r.formData }));
+            if (r.step === 2 || r.step === 3) setStep(r.step);
+            addToast('Rascunho recuperado — continue de onde parou.', 'info');
+        } catch {
+            /* rascunho ilegivel: ignora e segue com o formulario limpo */
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restauracao unica no mount
+    }, []);
+
+    useEffect(() => {
+        if (isEditing || showInvitePanel) return;   // editar nao gera rascunho; criado = rascunho morto
+        const t = setTimeout(() => {
+            try {
+                const temAlgo = formData.title.trim() || formData.description.trim() || formData.budget;
+                if (!temAlgo) { localStorage.removeItem(RASCUNHO_KEY); return; }
+                localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ em: Date.now(), step, formData }));
+            } catch { /* storage indisponivel: rascunho e conveniencia */ }
+        }, 600);
+        return () => clearTimeout(t);
+    }, [formData, step, isEditing, showInvitePanel]);
 
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
@@ -459,6 +499,7 @@ export default function CompanyCreateJob() {
                 addToast('Turno criado! Convide um freela do seu elenco.', 'success');
                 setCreatedJobId(newJob.id);
                 setShowInvitePanel(true);
+                try { localStorage.removeItem('worki_rascunho_turno'); } catch { /* ok */ }
             }
         } catch (error: unknown) {
             logError('Error saving job:', error);
