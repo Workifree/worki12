@@ -120,3 +120,40 @@ toque, ação vs estado no rótulo, obrigatório/opcional marcado, ação destru
 cobre fechar/atualizar a aba (`beforeunload`); navegação interna via BottomNav não dispara. A correção
 (useBlocker) exige migrar de `<BrowserRouter>` para data router (createBrowserRouter) — mudança
 arquitetural que precisa de ADR. Registrado, não meia-implementado.
+
+## Rodada 3 (02/09/2026) — fechamento das telas/fluxos que faltavam
+
+Método: workflow heurístico das últimas telas (41 achados: 2 P1, 14 P2, 25 P3) + audit de layout
+responsivo a 390px (WCAG 2.5.5/Fitts) + click-test em produção.
+
+**Click-testado (verificado no banco quando mutava estado):**
+- ✅ /admin — auth própria gateia e barra não-admin ("Acesso negado"). Internos exigem credencial de
+  administrador (owner-only) — não exercitáveis por mim; declarado.
+- ✅ Públicas: /termos, /privacidade, /ajuda, /sobre — renderizam sem erro.
+- ✅ /esqueci-senha — submit tratou 429 (rate-limit) com mensagem clara.
+- ✅ Editar turno (/company/jobs/:id/edit) — pré-preenchido, "EDITAR TURNO".
+- ✅ /company/worker/:id — painéis de certificação + treinamento presentes.
+- ✅ F4 pedir confirmação (empresa, RPC 200 + DB) E responder (freela "Sim, vou" → DB 'confirmed').
+- ✅ Dispensa de freela — confirmação com consequência clara → app 'cancelled', freela notificado, vaga reabre.
+- ✅ **Onboarding do freela** — signup real → 3 passos → DB: full_name, CPF, primary_role, onboarding_completed=true → /dashboard.
+- ✅ **Onboarding da empresa** — signup real → 2 passos → DB: name, doc, onboarding_completed=true → /company/dashboard.
+- ✅ **delete-account / anonimização** — validado ponta a ponta ao limpar contas de teste (ver bug crítico abaixo).
+
+**Bug CRÍTICO encontrado e corrigido (migração 20260902000200):**
+`anonymize_account` referenciava colunas dropadas na limpeza Asaas/Stripe (workers.address e 6 outras,
+companies: postal_code/address_number/province/income_value/stripe_customer_id) → falhava com 42703.
+Como a guarda LGPD bloqueia DELETE em auth.users sem anonimizar antes, **a exclusão de conta e o
+apagamento LGPD estavam 100% travados em produção**. Corrigido e verificado (anonymize→'anonymized' + DELETE ok).
+
+**NÃO click-completado (honesto) — operações de menor prioridade sobre subsistemas já verificados, cada uma
+exige setup de estado específico:**
+- Agendar Pagamento (scheduled) + estorno/void — variantes de `shift_payments` (o REGISTRAR pagamento já
+  foi testado ponta a ponta em rodada 1); fricção do modal de confirmação manual de presença bloqueou o instrumento.
+- Cancelar turno pelo freela — o botão existe só em turnos AGENDADOS (futuros); a UI corretamente não o
+  oferece em turno em andamento. Visto, não clicado (substrato era turno de hoje).
+- Badges F12 — precisa de turno concluído no histórico.
+- SOS F11 disparo real — precisa de turno futuro <4h + freela discoverable fora do elenco.
+- Aceite de indicação F10 ponta a ponta — precisa de 2 empresas + worker vivos simultaneamente.
+
+**Layout (390px):** sem scroll lateral de página, sem botão escondido (faixas de abas rolam). Alvos <44px
+corrigidos: Profile (trocar foto), Dashboard (declarar), CompanyTeam (2 ícones), Toast (fechar).
