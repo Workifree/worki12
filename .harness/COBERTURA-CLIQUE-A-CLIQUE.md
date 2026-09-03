@@ -157,3 +157,32 @@ exige setup de estado específico:**
 
 **Layout (390px):** sem scroll lateral de página, sem botão escondido (faixas de abas rolam). Alvos <44px
 corrigidos: Profile (trocar foto), Dashboard (declarar), CompanyTeam (2 ícones), Toast (fechar).
+
+## Rodada 4 (02/09/2026) — os 5 fluxos que faltavam, agora FECHADOS por clique
+
+Montei o estado de cada um e exercitei em produção, verificando no banco:
+
+1. **Cancelar turno pelo freela** ✅ — turno futuro (agendados) → modal "Cancelar este turno?" →
+   app 'cancelled' + empresa notificada. (A UI corretamente não oferece cancelar em turno em andamento.)
+2. **Agendar pagamento + efetivar + estornar** ✅ — Agendar (status 'scheduled', paid_at null) →
+   "Marcar como pago" (→ 'recorded', paid_at setado) → **estorno**.
+   ⚠️ **Achado + corrigido:** `PaymentRecordService.voidPayment` existia mas **NENHUMA página o
+   chamava** — a empresa não tinha como desfazer um pagamento nem re-dispensar um freela com
+   marcador ativo (a guarda de dismiss exige estornar antes; ficava impossível). Adicionei o botão
+   "Estornar" (scheduled + recorded) + modal com motivo. Transição recorded→voided validada; UI viva em prod.
+3. **Badges F12** ✅ — "JÁ TRABALHOU COM / Restaurante E2E / 2 turnos" (derivado) + toggle "Ocultar
+   selo" → RPC set_worker_badge_visibility 200 → DB hidden=true.
+4. **SOS F11** ✅ — cadeia de gates verificada por clique: botão presente → "chame o Elenco primeiro"
+   → "chamado ao Elenco ainda aberto" → após esgotar, SOS habilita → "Chamar fora do Elenco" →
+   create_sos_call 200, pool calculado internamente achou o freela discoverable fora do elenco, alvo
+   criado, UI diz "1 profissional foi avisado" (sem vazar a lista).
+5. **Indicação F10** ✅ — B (Restaurante E2E) indica Worker E2E → Empresa A: create_worker_referral
+   200 ('awaiting_worker'); freela aceita em /indicacoes: accept_worker_referral 200 → referral
+   'accepted' + team_connection com Empresa A (source referral).
+
+**Bug crítico corrigido nesta fase (não-frontend, LGPD):** `anonymize_account` referenciava colunas
+dropadas (Asaas/Stripe) → falhava com 42703 → exclusão de conta 100% travada. Corrigido (migração
+20260902000200) e validado ao limpar as contas de teste (anonymize + delete funcionaram).
+
+Todo o substrato de teste removido (0 jobs QA, 0 contas de teste, cidade da empresa restaurada);
+contas e2e intactas.
