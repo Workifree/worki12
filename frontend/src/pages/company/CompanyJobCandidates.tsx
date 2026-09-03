@@ -266,6 +266,12 @@ export default function CompanyJobCandidates() {
     const [paymentScheduled, setPaymentScheduled] = useState(false);
     // Efetivação de um pagamento já agendado ("Marcar como pago") — guarda o id em efetivação.
     const [effectivatingId, setEffectivatingId] = useState<string | null>(null);
+    // Estorno de marcador de pagamento (scheduled|recorded → voided). Nao havia UI: voidPayment
+    // existia no service mas nenhum botao o chamava, entao a empresa nao conseguia desfazer um
+    // pagamento nem re-dispensar um freela com marcador ativo (a guarda de dismiss exige void antes).
+    const [voidingPayment, setVoidingPayment] = useState<ShiftPayment | null>(null);
+    const [voidReason, setVoidReason] = useState('');
+    const [voidSubmitting, setVoidSubmitting] = useState(false);
 
     // "Convidar outro" — convite expirado sem resposta; o slot está livre para outro freela (R8).
     const [reopenApp, setReopenApp] = useState<Application | null>(null);
@@ -280,8 +286,9 @@ export default function CompanyJobCandidates() {
     // O ShiftCallModal fica fora da cadeia: ele ja tem o proprio ESC/fundo no componente.
     // So um modal abre por vez; a cadeia fecha o primeiro que encontrar aberto.
     const fecharModalAberto = () => {
-        if (submittingReview || confirmingManualAttendance || dismissing || scheduling || releasing) return;
-        if (ratingModalOpen) setRatingModalOpen(false);
+        if (submittingReview || confirmingManualAttendance || dismissing || scheduling || releasing || voidSubmitting) return;
+        if (voidingPayment) { setVoidingPayment(null); setVoidReason(''); }
+        else if (ratingModalOpen) setRatingModalOpen(false);
         else if (scheduleModalApp) setScheduleModalApp(null);
         else if (paymentModalApp) setPaymentModalApp(null);
         else if (dismissApp) { setDismissApp(null); setDismissThenCall(false); }
@@ -786,6 +793,27 @@ export default function CompanyJobCandidates() {
         }
     };
 
+    const handleVoidPayment = async () => {
+        if (!voidingPayment) return;
+        setVoidSubmitting(true);
+        try {
+            const result = await PaymentRecordService.voidPayment(voidingPayment.id, voidReason.trim());
+            if (!result.success) {
+                addToast(result.error || 'Não foi possível estornar o pagamento.', 'error');
+                return;
+            }
+            addToast('Pagamento estornado.', 'success');
+            setVoidingPayment(null);
+            setVoidReason('');
+            fetchCandidates();
+        } catch (error) {
+            logError('CompanyJobCandidates: handleVoidPayment', error);
+            addToast('Erro ao estornar o pagamento.', 'error');
+        } finally {
+            setVoidSubmitting(false);
+        }
+    };
+
     const handleSubmitReview = async () => {
         if (!selectedApp) return;
         setSubmittingReview(true);
@@ -1068,6 +1096,12 @@ export default function CompanyJobCandidates() {
             >
                 <Receipt size={14} /> Ver Comprovante
             </button>
+            <button
+                onClick={(e) => { e.stopPropagation(); setVoidingPayment(payment); setVoidReason(''); }}
+                className="py-2 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:border-red-500 transition-colors flex items-center gap-1"
+            >
+                Estornar
+            </button>
         </div>
     );
 
@@ -1089,12 +1123,20 @@ export default function CompanyJobCandidates() {
         const matchingPayment = paymentByWorker[app.worker_id] ?? null;
         if (matchingPayment?.status === 'recorded') {
             return (
-                <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
-                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
-                >
-                    <Receipt size={14} /> Ver Recibo
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
+                        className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    >
+                        <Receipt size={14} /> Ver Recibo
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setVoidingPayment(matchingPayment); setVoidReason(''); }}
+                        className="py-2 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:border-red-500 transition-colors flex items-center gap-1"
+                    >
+                        Estornar
+                    </button>
+                </div>
             );
         }
         if (matchingPayment?.status === 'scheduled') {
@@ -1860,6 +1902,44 @@ export default function CompanyJobCandidates() {
                                 {dismissing
                                     ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</>
                                     : dismissThenCall ? 'Confirmar e Chamar Substituto' : 'Confirmar Dispensa'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de estorno de pagamento (scheduled|recorded -> voided) */}
+            {voidingPayment && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                        <h2 className="text-xl font-black uppercase tracking-tight mb-3">Estornar pagamento</h2>
+                        <p className="text-gray-600 font-medium mb-4">
+                            {voidingPayment.status === 'scheduled'
+                                ? 'Isto cancela o agendamento. O freela é avisado e o comprovante deixa de valer.'
+                                : 'Isto estorna o registro de pagamento. O freela é avisado. Use se registrou por engano ou o pagamento não aconteceu.'}
+                        </p>
+                        <label className="block text-xs font-bold uppercase mb-1">Motivo (opcional)</label>
+                        <textarea
+                            value={voidReason}
+                            onChange={(e) => setVoidReason(e.target.value)}
+                            placeholder="Ex.: registrei no turno errado"
+                            className="w-full border-2 border-black rounded-xl p-3 mb-6 outline-none focus:ring-2 focus:ring-primary"
+                            rows={2}
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { setVoidingPayment(null); setVoidReason(''); }}
+                                disabled={voidSubmitting}
+                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 min-h-11"
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                onClick={handleVoidPayment}
+                                disabled={voidSubmitting}
+                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
+                            >
+                                {voidSubmitting ? <><Loader2 size={16} className="animate-spin" /> Estornando...</> : 'Confirmar Estorno'}
                             </button>
                         </div>
                     </div>
