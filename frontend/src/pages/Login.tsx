@@ -102,6 +102,7 @@ export default function Login() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (loading) return; // trava de reentrada: Enter repetido nao dispara outra chamada de auth
         setLoading(true);
         setError(null);
         setSuccessMessage(null);
@@ -196,6 +197,8 @@ export default function Login() {
                 );
             } else if (msg.includes('rate_limit') || msg.includes('429') || msg.includes('over_email_send_rate_limit') || (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 429)) {
                 setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+            } else if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) {
+                setError('Sem conexão com a internet. Verifique sua rede e tente novamente.');
             } else {
                 setError('Erro ao fazer login. Tente novamente.');
             }
@@ -212,7 +215,7 @@ export default function Login() {
             {/* Back Button */}
             <Button
                 variant="secondary"
-                size="sm"
+                size="md"
                 onClick={() => navigate('/')}
                 iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
                 className="absolute top-4 left-4 sm:top-6 sm:left-6"
@@ -306,7 +309,7 @@ export default function Login() {
                                     <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                         <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300 rounded-full`} />
                                     </div>
-                                    <p className="text-xs text-gray-600 mt-1">Forca: {strength.label}</p>
+                                    <p className="text-xs text-gray-600 mt-1">Força: {strength.label}</p>
                                 </div>
                             );
                         })()}
@@ -349,9 +352,9 @@ export default function Login() {
                 </div>
 
                 <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <a href="/sobre" className="py-2 hover:text-black transition-colors">Sobre a Worki</a>
-                    <a href="/termos" className="py-2 hover:text-black transition-colors">Termos</a>
-                    <a href="/privacidade" className="py-2 hover:text-black transition-colors">Privacidade</a>
+                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
+                    <Link to="/termos" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Termos</Link>
+                    <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
                     <Link to="/ajuda" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Ajuda</Link>
                 </nav>
             </Card>

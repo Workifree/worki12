@@ -86,7 +86,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={() => navigate('/')}
-            className="text-2xl font-black tracking-tighter hover:text-primary transition-colors"
+            className="inline-flex items-center min-h-11 pr-3 text-2xl font-black tracking-tighter hover:text-primary transition-colors"
           >
             Worki
           </button>

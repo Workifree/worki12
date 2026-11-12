@@ -111,7 +111,7 @@ export default function ResetPassword() {
 
                     <Button
                         variant="ghost"
-                        size="sm"
+                        size="md"
                         aria-pressed={mostrarSenha}
                         onClick={() => setMostrarSenha(v => !v)}
                         iconLeft={mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}

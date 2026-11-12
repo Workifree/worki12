@@ -835,7 +835,7 @@ export default function CompanyProfile() {
                                             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                                 <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
                                             </div>
-                                            <p className="text-xs text-gray-600 mt-1">Forca: {strength.label}</p>
+                                            <p className="text-xs text-gray-600 mt-1">Força: {strength.label}</p>
                                         </div>
                                     );
                                 })()}
