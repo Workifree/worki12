@@ -19,9 +19,10 @@ import { useEffect, useRef, useState } from 'react';
 import LocalDoTurno from './LocalDoTurno';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
-import { X, CheckCircle2, XCircle, Loader2, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useNotifications } from '../contexts/NotificationContext';
+import { Button } from './ui';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
 
 // Deve espelhar o título usado em ShiftInviteService.inviteWorkerToShift (notificação in-app).
@@ -148,6 +149,18 @@ export default function InviteTakeover() {
     navigate(`/empresa/${companyId}`);
   };
 
+  const companyAvatar = (
+    <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+      {companyLogo ? (
+        <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Building2 size={22} className="text-gray-400" />
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -156,17 +169,17 @@ export default function InviteTakeover() {
       aria-modal="true"
       aria-labelledby="invite-takeover-title"
     >
-      <div className="relative bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <button
-          type="button"
+      <div className="relative bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+        <Button
+          variant="ghost"
           onClick={dismiss}
           aria-label="Fechar aviso de convite"
-          className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-xl border-2 border-black bg-white hover:bg-gray-100 transition-colors"
+          className="absolute top-3 right-3 w-11 !px-0"
         >
-          <X size={18} />
-        </button>
+          <X size={20} />
+        </Button>
 
-        <span className="inline-block bg-primary-light text-primary text-xs font-black uppercase px-3 py-1.5 rounded-pill border border-green-200 mb-4">
+        <span className="inline-block bg-primary-light text-primary text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-pill border border-green-200 mb-4">
           Convite de turno
         </span>
 
@@ -174,58 +187,42 @@ export default function InviteTakeover() {
           <button
             type="button"
             onClick={handleViewCompany}
-            className="flex items-center gap-3 mb-4 w-full text-left group"
+            className="flex items-center gap-3 mb-4 w-full min-h-11 text-left group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
             aria-label={`Ver perfil da empresa ${companyName}`}
           >
-            <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-              {companyLogo ? (
-                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Building2 size={22} className="text-gray-400" />
-                </div>
-              )}
-            </div>
+            {companyAvatar}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold uppercase text-gray-400">Empresa</p>
-              <p className="font-black uppercase truncate group-hover:text-primary transition-colors">{companyName}</p>
+              <p className="text-xs text-gray-600">Empresa</p>
+              <p className="font-bold truncate group-hover:text-primary transition-colors">{companyName}</p>
             </div>
-            <span className="flex items-center gap-1 text-xs font-black uppercase text-primary flex-shrink-0">
+            <span className="flex items-center gap-0.5 text-xs font-semibold text-primary flex-shrink-0">
               Ver perfil <ChevronRight size={16} />
             </span>
           </button>
         ) : (
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-              {companyLogo ? (
-                <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Building2 size={22} className="text-gray-400" />
-                </div>
-              )}
-            </div>
+            {companyAvatar}
             <div>
-              <p className="text-xs font-bold uppercase text-gray-400">Empresa</p>
-              <p className="font-black uppercase">{companyName}</p>
+              <p className="text-xs text-gray-600">Empresa</p>
+              <p className="font-bold">{companyName}</p>
             </div>
           </div>
         )}
 
-        <h2 id="invite-takeover-title" className="font-black text-2xl uppercase mb-3">
+        <h2 id="invite-takeover-title" className="font-bold text-xl sm:text-2xl tracking-tight mb-3">
           {jobTitle}
         </h2>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+          <span className="flex items-center gap-1.5 text-xs font-semibold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-xl">
             <Clock size={14} /> {startDate}
             {startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
           </span>
-          <span className="flex items-center gap-1.5 text-xs font-bold bg-primary-light text-primary px-3 py-1.5 rounded-xl">
+          <span className="flex items-center gap-1.5 text-xs font-semibold bg-primary-light text-primary px-3 py-1.5 rounded-xl">
             <DollarSign size={14} /> R$ {budget.toFixed(2).replace('.', ',')}
           </span>
           {location && (
-            <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+            <span className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
               <LocalDoTurno location={location} size={14} />
             </span>
           )}
@@ -233,23 +230,27 @@ export default function InviteTakeover() {
 
         {briefing && (
           <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-6">
-            <p className="text-xs font-bold uppercase text-gray-400 mb-1">Briefing</p>
-            <p className="text-sm font-medium text-gray-700 line-clamp-4">{briefing}</p>
+            <p className="text-xs font-semibold text-gray-600 mb-1">Briefing</p>
+            <p className="text-sm text-gray-700 line-clamp-4">{briefing}</p>
           </div>
         )}
 
         <div className="flex gap-3">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
+            className="flex-1"
             onClick={() => void handleRespond('accepted')}
             disabled={isResponding}
-            className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            loading={isResponding && acaoEmCurso === 'accepted'}
+            iconLeft={<CheckCircle2 size={18} />}
           >
-            {isResponding && acaoEmCurso === 'accepted' ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
             Aceitar
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={recusaArmada ? 'danger' : 'secondary'}
+            size="lg"
+            className="flex-1"
             onClick={() => {
               if (recusaArmada) {
                 if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
@@ -262,13 +263,11 @@ export default function InviteTakeover() {
               recusaTimerRef.current = setTimeout(() => setRecusaArmada(false), 4000);
             }}
             disabled={isResponding}
-            className={`flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              recusaArmada ? 'bg-red-600 text-white border-red-600' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
-            }`}
+            loading={isResponding && acaoEmCurso === 'declined'}
+            iconLeft={<XCircle size={18} />}
           >
-            {isResponding && acaoEmCurso === 'declined' ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
             {recusaArmada ? 'Confirmar recusa' : 'Recusar'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

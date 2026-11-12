@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { X, Loader2, Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
+import { Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { TeamListService } from '../../services/teamListService';
 import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
@@ -16,6 +16,8 @@ import type { TeamMember, ShiftCallReason, Job, TeamListWithMembers } from '../.
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../company/seriesWeekRisk';
 import { getWeekdayIndex } from '../../lib/dateUtils';
 import { periodForTime, isWorkerAvailableFor } from '../../lib/availability';
+import { ModalShell } from './ModalShell';
+import { Button, Field } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -346,272 +348,25 @@ export function ShiftCallModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !dispatching) onClose();
-      }}
-    >
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg max-h-[92vh] flex flex-col">
-        {/* Cabeçalho */}
-        <div className="p-6 pb-4 border-b-2 border-black">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
-              <Megaphone size={20} /> Chamar freelas
-            </h2>
-            <button
-              onClick={onClose}
-              disabled={dispatching}
-              aria-label="Fechar"
-              className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <p className="text-sm font-bold text-gray-500">
-            {job.title} · {slots === 1 ? '1 vaga' : `${slots} vagas`}
-          </p>
-        </div>
-
-        {/* Corpo */}
-        <div className="p-6 overflow-y-auto flex-1">
-          {/* F8 — aviso ADVISORY (nunca trava, R11): o turno tem um requisito de certificação
-              declarado pela empresa. Uma linha, sem filtrar/desabilitar ninguém na lista abaixo —
-              a decisão de quem chamar continua inteiramente da empresa. */}
-          {job.certification_requirement && (
-            <div className="flex items-start gap-2 text-xs font-bold text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 mb-4">
-              <Award size={14} className="flex-shrink-0 mt-0.5" />
-              <span>
-                Este turno pede: {job.certification_requirement}. É só um aviso — não filtra nem
-                impede a seleção de ninguém.
-              </span>
-            </div>
-          )}
-
-          {/* Motivo + janela */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-            <div>
-              <label htmlFor="call-reason" className="block text-xs font-black uppercase text-gray-500 mb-1">
-                Motivo
-              </label>
-              <select
-                id="call-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value as ShiftCallReason)}
-                disabled={dispatching}
-                className="w-full border-2 border-black rounded-xl px-3 py-2 font-bold text-sm bg-white disabled:opacity-50"
-              >
-                {(Object.keys(SHIFT_CALL_REASON_LABELS) as ShiftCallReason[]).map((key) => (
-                  <option key={key} value={key}>
-                    {SHIFT_CALL_REASON_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="call-expiry" className="block text-xs font-black uppercase text-gray-500 mb-1">
-                Expira em
-              </label>
-              <select
-                id="call-expiry"
-                value={expiryHours === null ? 'shift_start' : String(expiryHours)}
-                onChange={(e) =>
-                  setExpiryHours(e.target.value === 'shift_start' ? null : Number(e.target.value))
-                }
-                disabled={dispatching}
-                className="w-full border-2 border-black rounded-xl px-3 py-2 font-bold text-sm bg-white disabled:opacity-50"
-              >
-                {CALL_EXPIRY_PRESETS.map((preset) => (
-                  <option key={preset.value} value={String(preset.value)}>
-                    {preset.label}
-                  </option>
-                ))}
-                <option value="shift_start">Até o início do turno</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Chips de listas salvas (F2) — só aparece se a empresa tem listas; zero listas = zero mudança visual */}
-          {lists.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {lists.map((list) => {
-                const availableIds = listAvailability.get(list.id) ?? [];
-                const isEmpty = availableIds.length === 0;
-                const isActive = !isEmpty && availableIds.every((id) => selected.has(id));
-                return (
-                  <button
-                    key={list.id}
-                    type="button"
-                    onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
-                    disabled={dispatching || isEmpty}
-                    aria-pressed={isActive}
-                    className={`min-h-11 px-4 py-2.5 rounded-pill border-2 border-black font-black uppercase text-sm flex items-center transition-colors ${
-                      isEmpty
-                        ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-400'
-                        : isActive
-                          ? 'bg-black text-white'
-                          : 'bg-white hover:bg-gray-100'
-                    }`}
-                  >
-                    {list.name} ({availableIds.length})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Busca + selecionar todos */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="relative flex-1">
-              <label htmlFor="shift-call-search" className="sr-only">
-                Buscar por nome ou função
-              </label>
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="shift-call-search"
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome ou função"
-                disabled={dispatching}
-                className="w-full border-2 border-gray-200 focus:border-black rounded-xl pl-9 pr-3 py-2 font-bold text-sm outline-none transition-colors disabled:opacity-50"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={toggleAllVisible}
-              disabled={dispatching || visible.length === 0}
-              className="px-3 py-2 rounded-xl border-2 border-black font-black uppercase text-xs hover:bg-gray-100 transition-colors disabled:opacity-40 whitespace-nowrap"
-            >
-              {allVisibleSelected ? 'Limpar' : 'Todos'}
-            </button>
-          </div>
-
-          {/* F5 — estado PRÓPRIO, nunca segura a lista abaixo (LM-10): só um aviso discreto de
-              que os selos de frequência ainda estão chegando. */}
-          {riskLoading && (
-            <p className="text-[11px] font-bold text-gray-400 mb-2" aria-live="polite">
-              Verificando frequência da semana...
-            </p>
-          )}
-
-          {/* Lista do elenco */}
-          {loadingTeam && (
-            <div className="space-y-2 animate-pulse">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-14 bg-gray-200 rounded-xl" />
-              ))}
-            </div>
-          )}
-
-          {!loadingTeam && available.length === 0 && (
-            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-              <Users size={32} className="mx-auto mb-2 opacity-30" />
-              <p className="font-bold text-sm">Ninguém disponível no elenco para este turno.</p>
-              <p className="text-xs mt-1">
-                Todos os seus freelas já estão neste turno ou já foram chamados.
-              </p>
-            </div>
-          )}
-
-          {!loadingTeam && available.length > 0 && visible.length === 0 && (
-            <p className="text-center py-6 text-sm font-bold text-gray-400">
-              Nenhum freela encontrado para "{search}".
-            </p>
-          )}
-
-          {!loadingTeam &&
-            visible.map((member) => {
-              const isSelected = selected.has(member.worker.id);
-              // F5 — selo é fato, não parecer jurídico (R7): só para quem está SELECIONADO e cuja
-              // contagem prospectiva (existente + este chamado) ultrapassa o limite configurado.
-              // Fica na linha do NOME de propósito — a linha do cargo é do contêiner de sinais da
-              // F7 (disponibilidade declarada), construído logo abaixo.
-              const prospectiveCount = riskCountsEffective
-                ? (riskCountsEffective.get(member.worker.id) ?? 0) + 1
-                : 0;
-              const showRiskBadge =
-                isSelected && riskCountsEffective !== null && prospectiveCount > riskThreshold;
-              // F7: sinal na linha do CARGO (R10), nunca na do nome (reservada à F5). Contorno,
-              // nunca fill (LM-10) — o card selecionado já pinta o fundo de `bg-primary-light`, e
-              // um pill verde preenchido sumiria nele. Ausência de sinal (não declarou, ou
-              // declarou outro período) não recebe NENHUMA marca — mesmo patamar visual, sem
-              // penalização (A3/A4 do DDL).
-              const showAvailabilityBadge = matchingAvailabilityIds.has(member.worker.id);
-              return (
-                <label
-                  key={member.worker.id}
-                  className={`flex items-center gap-3 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-all ${
-                    isSelected ? 'border-black bg-primary-light' : 'border-gray-100 hover:border-black'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggle(member.worker.id)}
-                    disabled={dispatching}
-                    className="w-5 h-5 accent-black flex-shrink-0"
-                  />
-                  <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                    {member.worker.avatar_url ? (
-                      <img
-                        src={member.worker.avatar_url}
-                        alt={member.worker.full_name ?? ''}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-400">
-                        {(member.worker.full_name ?? '?').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p className="font-black text-sm truncate">{member.worker.full_name}</p>
-                      {showRiskBadge && (
-                        <span className="inline-flex items-center gap-1 flex-shrink-0 text-[10px] font-black uppercase text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5">
-                          <AlertTriangle size={10} /> Já {prospectiveCount}x esta semana com você
-                        </span>
-                      )}
-                    </div>
-                    {(member.worker.primary_role || showAvailabilityBadge) && (
-                      <div className="flex items-center gap-2 min-w-0">
-                        {member.worker.primary_role && (
-                          <p className="text-xs font-bold text-gray-500 truncate">
-                            {member.worker.primary_role}
-                          </p>
-                        )}
-                        {/* F7 — contêiner de sinais da linha secundária: vazio quando não há
-                            selo, para a F8 (certificações) entrar como vizinho sem refazer o
-                            layout das duas linhas (LM-10 do DDL). */}
-                        <span className="inline-flex items-center gap-1 flex-shrink-0">
-                          {showAvailabilityBadge && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-primary border border-primary rounded-pill px-2 py-0.5"
-                              title="Disponível para este dia e período, segundo a grade que este freela declarou"
-                              aria-label="Freela declarou disponibilidade para este turno"
-                            >
-                              <CalendarCheck2 size={10} /> Disponível
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
-        </div>
-
-        {/* Rodapé */}
-        <div className="p-6 pt-4 border-t-2 border-black">
+    <ModalShell
+      title={
+        <>
+          <Megaphone size={20} /> Chamar freelas
+        </>
+      }
+      subtitle={`${job.title} · ${slots === 1 ? '1 vaga' : `${slots} vagas`}`}
+      onClose={onClose}
+      locked={dispatching}
+      size="lg"
+      footer={
+        <div className="space-y-3">
           {/* F5 — banner só se pelo menos 1 SELECIONADO está com aviso; fato + config +
               devolução da decisão, nunca conclusão jurídica (R7). Nunca desabilita o disparo
               (A7) — mesma área do aviso de vagas incompletas, os dois podem coexistir. */}
           {riskyByCount.length > 0 && (
-            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50 mb-3">
+            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50">
               <AlertTriangle size={16} className="text-yellow-700 flex-shrink-0 mt-0.5" />
-              <div className="text-xs font-bold text-yellow-800 space-y-1">
+              <div className="text-xs text-yellow-800 space-y-1">
                 {riskyByCount.map(({ count, names }) => (
                   <p key={count}>
                     Atenção: {names.join(', ')} já teria{names.length > 1 ? 'm' : ''} {count}ª vez
@@ -629,35 +384,255 @@ export function ShiftCallModal({
           {/* Aviso honesto: selecionar menos gente que o número de vagas não preenche o turno.
               É melhor dizer isso ANTES do disparo do que o gerente descobrir no dia. */}
           {selected.size > 0 && selected.size < slots && (
-            <p className="flex items-start gap-2 text-xs font-bold text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-xl p-2 mb-3">
+            <p className="flex items-start gap-2 text-xs text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-xl p-3">
               <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
               Você selecionou {selected.size} para {slots} vagas. Mesmo que todos aceitem, o turno
               ficará incompleto.
             </p>
           )}
-          <button
+          <Button
+            variant="dark"
+            size="lg"
+            fullWidth
             onClick={() => void handleDispatch()}
-            disabled={selected.size === 0 || dispatching}
-            className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={selected.size === 0}
+            loading={dispatching}
+            iconLeft={<Megaphone size={18} />}
           >
-            {dispatching ? <Loader2 className="animate-spin" size={18} /> : <Megaphone size={18} />}
             {dispatching
               ? 'Enviando...'
               : selected.size === 0
                 ? 'Selecione os freelas'
                 : selected.size === 1
                   ? 'Enviar convite'
-                  : selected.size === 1
-                    ? 'Chamar 1 freela'
-                    : `Chamar ${selected.size} freelas`}
-          </button>
+                  : `Chamar ${selected.size} freelas`}
+          </Button>
           {selected.size > 1 && (
-            <p className="text-xs text-gray-500 text-center mt-2 font-bold">
+            <p className="text-xs text-gray-600 text-center">
               Todos recebem ao mesmo tempo. Quem aceitar primeiro fica com a vaga.
             </p>
           )}
         </div>
+      }
+    >
+      {/* F8 — aviso ADVISORY (nunca trava, R11): o turno tem um requisito de certificação
+          declarado pela empresa. Uma linha, sem filtrar/desabilitar ninguém na lista abaixo —
+          a decisão de quem chamar continua inteiramente da empresa. */}
+      {job.certification_requirement && (
+        <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 mb-4">
+          <Award size={14} className="flex-shrink-0 mt-0.5" />
+          <span>
+            Este turno pede: {job.certification_requirement}. É só um aviso — não filtra nem
+            impede a seleção de ninguém.
+          </span>
+        </div>
+      )}
+
+      {/* Motivo + janela */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+        <Field label="Motivo">
+          <select
+            id="call-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value as ShiftCallReason)}
+            disabled={dispatching}
+          >
+            {(Object.keys(SHIFT_CALL_REASON_LABELS) as ShiftCallReason[]).map((key) => (
+              <option key={key} value={key}>
+                {SHIFT_CALL_REASON_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Expira em">
+          <select
+            id="call-expiry"
+            value={expiryHours === null ? 'shift_start' : String(expiryHours)}
+            onChange={(e) =>
+              setExpiryHours(e.target.value === 'shift_start' ? null : Number(e.target.value))
+            }
+            disabled={dispatching}
+          >
+            {CALL_EXPIRY_PRESETS.map((preset) => (
+              <option key={preset.value} value={String(preset.value)}>
+                {preset.label}
+              </option>
+            ))}
+            <option value="shift_start">Até o início do turno</option>
+          </select>
+        </Field>
       </div>
-    </div>
+
+      {/* Chips de listas salvas (F2) — só aparece se a empresa tem listas; zero listas = zero mudança visual */}
+      {lists.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {lists.map((list) => {
+            const availableIds = listAvailability.get(list.id) ?? [];
+            const isEmpty = availableIds.length === 0;
+            const isActive = !isEmpty && availableIds.every((id) => selected.has(id));
+            return (
+              <button
+                key={list.id}
+                type="button"
+                onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
+                disabled={dispatching || isEmpty}
+                aria-pressed={isActive}
+                className={`h-11 px-4 rounded-pill border-2 border-black font-semibold text-sm flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                  isEmpty
+                    ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-500'
+                    : isActive
+                      ? 'bg-black text-white'
+                      : 'bg-white hover:bg-gray-100'
+                }`}
+              >
+                {list.name} ({availableIds.length})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Busca + selecionar todos */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1">
+          <label htmlFor="shift-call-search" className="sr-only">
+            Buscar por nome ou função
+          </label>
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            id="shift-call-search"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou função"
+            disabled={dispatching}
+            className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+          />
+        </div>
+        <Button
+          variant="secondary"
+          onClick={toggleAllVisible}
+          disabled={dispatching || visible.length === 0}
+          className="whitespace-nowrap"
+        >
+          {allVisibleSelected ? 'Limpar' : 'Todos'}
+        </Button>
+      </div>
+
+      {/* F5 — estado PRÓPRIO, nunca segura a lista abaixo (LM-10): só um aviso discreto de
+          que os selos de frequência ainda estão chegando. */}
+      {riskLoading && (
+        <p className="text-xs text-gray-600 mb-2" aria-live="polite">
+          Verificando frequência da semana...
+        </p>
+      )}
+
+      {/* Lista do elenco */}
+      {loadingTeam && (
+        <div className="space-y-2 animate-pulse">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-14 bg-gray-200 rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {!loadingTeam && available.length === 0 && (
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+          <Users size={32} className="mx-auto mb-2 text-gray-400" />
+          <p className="font-semibold text-sm">Ninguém disponível no elenco para este turno.</p>
+          <p className="text-xs mt-1">
+            Todos os seus freelas já estão neste turno ou já foram chamados.
+          </p>
+        </div>
+      )}
+
+      {!loadingTeam && available.length > 0 && visible.length === 0 && (
+        <p className="text-center py-6 text-sm text-gray-600">
+          Nenhum freela encontrado para "{search}".
+        </p>
+      )}
+
+      {!loadingTeam &&
+        visible.map((member) => {
+          const isSelected = selected.has(member.worker.id);
+          // F5 — selo é fato, não parecer jurídico (R7): só para quem está SELECIONADO e cuja
+          // contagem prospectiva (existente + este chamado) ultrapassa o limite configurado.
+          // Fica na linha do NOME de propósito — a linha do cargo é do contêiner de sinais da
+          // F7 (disponibilidade declarada), construído logo abaixo.
+          const prospectiveCount = riskCountsEffective
+            ? (riskCountsEffective.get(member.worker.id) ?? 0) + 1
+            : 0;
+          const showRiskBadge =
+            isSelected && riskCountsEffective !== null && prospectiveCount > riskThreshold;
+          // F7: sinal na linha do CARGO (R10), nunca na do nome (reservada à F5). Contorno,
+          // nunca fill (LM-10) — o card selecionado já pinta o fundo de `bg-primary-light`, e
+          // um pill verde preenchido sumiria nele. Ausência de sinal (não declarou, ou
+          // declarou outro período) não recebe NENHUMA marca — mesmo patamar visual, sem
+          // penalização (A3/A4 do DDL).
+          const showAvailabilityBadge = matchingAvailabilityIds.has(member.worker.id);
+          return (
+            <label
+              key={member.worker.id}
+              className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
+                isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggle(member.worker.id)}
+                disabled={dispatching}
+                className="w-5 h-5 accent-black flex-shrink-0"
+              />
+              <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                {member.worker.avatar_url ? (
+                  <img
+                    src={member.worker.avatar_url}
+                    alt={member.worker.full_name ?? ''}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-500">
+                    {(member.worker.full_name ?? '?').charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                  {showRiskBadge && (
+                    <span className="inline-flex items-center gap-1 flex-shrink-0 text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5">
+                      <AlertTriangle size={10} /> Já {prospectiveCount}x esta semana com você
+                    </span>
+                  )}
+                </div>
+                {(member.worker.primary_role || showAvailabilityBadge) && (
+                  <div className="flex items-center gap-2 min-w-0">
+                    {member.worker.primary_role && (
+                      <p className="text-xs text-gray-600 truncate">
+                        {member.worker.primary_role}
+                      </p>
+                    )}
+                    {/* F7 — contêiner de sinais da linha secundária: vazio quando não há
+                        selo, para a F8 (certificações) entrar como vizinho sem refazer o
+                        layout das duas linhas (LM-10 do DDL). */}
+                    <span className="inline-flex items-center gap-1 flex-shrink-0">
+                      {showAvailabilityBadge && (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary border border-primary rounded-pill px-2 py-0.5"
+                          title="Disponível para este dia e período, segundo a grade que este freela declarou"
+                          aria-label="Freela declarou disponibilidade para este turno"
+                        >
+                          <CalendarCheck2 size={10} /> Disponível
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </label>
+          );
+        })}
+    </ModalShell>
   );
 }

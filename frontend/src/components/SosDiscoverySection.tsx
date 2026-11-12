@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Siren, Loader2 } from 'lucide-react';
+import { Button, Card } from './ui';
+import { Siren } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
@@ -102,11 +103,11 @@ export default function SosDiscoverySection() {
     // pré-requisito de produto (DDL §5). Zero texto de consentimento aqui: nada foi oferecido
     // ainda, então não há nada a consentir.
     return (
-      <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6">
-        <h3 className="text-xl font-black uppercase mb-2 flex items-center gap-2 text-gray-400">
-          <Siren size={20} /> Descoberta em urgência
+      <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-5 sm:p-6">
+        <h3 className="text-lg font-bold mb-1 flex items-center gap-2 text-gray-500">
+          <Siren size={20} aria-hidden="true" /> Descoberta em urgência
         </h3>
-        <p className="text-sm font-bold text-gray-400">
+        <p className="text-sm text-gray-600">
           Declare sua disponibilidade da semana acima para poder ativar este recurso.
         </p>
       </div>
@@ -114,42 +115,39 @@ export default function SosDiscoverySection() {
   }
 
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-6">
-      <h3 className="text-xl font-black uppercase mb-2 flex items-center gap-2">
-        <Siren size={20} /> Descoberta em urgência
+    <Card>
+      <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+        <Siren size={20} aria-hidden="true" /> Descoberta em urgência
       </h3>
 
       {/* Texto de consentimento — sempre visível, nunca em tooltip/"saiba mais"/depois do
           toggle (contrato §5 do ddl-aprovado.md). A lista de dados expostos é a lista REAL
           (can_view_worker_profile libera a linha inteira de workers, não só telefone/PIX). */}
-      <p className="text-sm text-gray-600 font-medium mb-2">
+      <p className="text-sm text-gray-600 mb-3">
         Empresas que você ainda não conhece podem te chamar para turnos que começam em menos de 4
         horas, na sua cidade, no máximo 2 chamados por semana.
       </p>
-      <p className="text-sm font-bold text-black bg-yellow-50 border-2 border-black rounded-xl p-3 mb-4">
+      <p className="text-sm font-semibold text-black bg-yellow-50 border-2 border-black rounded-xl p-3 mb-4">
         Se você aceitar um desses chamados, a empresa passa a ver seus dados de contratação —
         telefone, CPF, data de nascimento e chave PIX — para poder te pagar. Recusar não tem
         nenhum efeito no seu perfil. Você pode desligar isto a qualquer momento.
       </p>
 
       <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">
-        <span className="font-black uppercase text-sm">
+        <span className="font-bold text-sm">
           {discoverable ? 'Descoberta ativada' : 'Descoberta desativada'}
         </span>
-        <button
-          type="button"
+        <Button
           role="switch"
           aria-checked={discoverable}
           aria-label="Ativar descoberta em urgência para empresas fora do meu Elenco"
+          variant={discoverable ? 'secondary' : 'primary'}
           onClick={() => void handleToggle()}
-          disabled={saving}
-          className={`min-h-11 min-w-11 px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-2 border-2 border-black ${
-            discoverable ? 'bg-primary hover:bg-black text-white' : 'bg-white hover:bg-gray-100 text-black'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          loading={saving}
         >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : discoverable ? 'Desativar' : 'Ativar'}
-        </button>
+          {discoverable ? 'Desativar' : 'Ativar'}
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

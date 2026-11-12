@@ -3,7 +3,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import LocalDoTurno from '../components/LocalDoTurno';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { CheckCircle2, Clock, XCircle, Loader2, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { CheckCircle2, Clock, XCircle, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
+import { Button, Card, PageHeader } from '../components/ui';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
@@ -123,6 +125,53 @@ function fmtTime(iso: string | null): string {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Peças visuais locais (só desta tela): chip de meta, linha de status, estado vazio.
+// ---------------------------------------------------------------------------
+
+type ChipTone = 'neutral' | 'brand' | 'info';
+
+const CHIP_TONES: Record<ChipTone, string> = {
+    neutral: 'bg-gray-100 text-gray-700',
+    brand: 'bg-primary-light text-primary',
+    info: 'bg-blue-50 text-blue-700',
+};
+
+function Chip({ tone = 'neutral', children }: { tone?: ChipTone; children: ReactNode }) {
+    return (
+        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl ${CHIP_TONES[tone]}`}>
+            {children}
+        </span>
+    );
+}
+
+type StatusTone = 'success' | 'info' | 'waiting' | 'neutral';
+
+const STATUS_TONES: Record<StatusTone, string> = {
+    success: 'bg-green-50 text-green-800',
+    info: 'bg-blue-50 text-blue-700',
+    waiting: 'bg-yellow-50 text-yellow-800',
+    neutral: 'bg-gray-100 text-gray-700',
+};
+
+function StatusLine({ tone, icon, children }: { tone: StatusTone; icon: ReactNode; children: ReactNode }) {
+    return (
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${STATUS_TONES[tone]}`}>
+            {icon}
+            {children}
+        </div>
+    );
+}
+
+function EmptyState({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
+    return (
+        <div className="text-center py-12 px-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            {icon && <div className="mb-3 flex justify-center text-gray-300">{icon}</div>}
+            <p className="font-semibold text-gray-700">{title}</p>
+            {description && <p className="text-sm text-gray-600 mt-1">{description}</p>}
+        </div>
+    );
+}
 
 export default function MyJobs() {
     const navigate = useNavigate();
@@ -595,9 +644,9 @@ export default function MyJobs() {
 
     if (loading) return (
         <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse">
-            <div className="h-10 bg-gray-200 rounded w-1/3" />
+            <div className="h-9 bg-gray-200 rounded-xl w-1/3" />
             <div className="flex gap-2">
-                {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-gray-200 rounded-xl w-24" />)}
+                {[...Array(4)].map((_, i) => <div key={i} className="h-11 bg-gray-200 rounded-xl w-24" />)}
             </div>
             <div className="space-y-4">
                 {[...Array(4)].map((_, i) => (
@@ -607,13 +656,23 @@ export default function MyJobs() {
         </div>
     );
 
+    const tabs: { id: ActiveTab; label: string; count: number; tone: 'brand' | 'dark' | 'neutral' }[] = [
+        { id: 'invites', label: 'Convites', count: pendingInvites.length, tone: 'brand' },
+        { id: 'in_progress', label: 'Em Andamento', count: jobs.in_progress.length, tone: 'dark' },
+        { id: 'scheduled', label: 'Agendados', count: jobs.scheduled.length, tone: 'neutral' },
+        { id: 'history', label: 'Histórico', count: jobs.history.length, tone: 'neutral' },
+    ];
+    const TAB_COUNT_TONES = {
+        brand: 'bg-primary text-white',
+        dark: 'bg-black text-white',
+        neutral: 'bg-gray-200 text-gray-700',
+    } as const;
+
     return (
         <div className="flex flex-col gap-6 pb-24 font-sans text-accent max-w-4xl mx-auto">
             <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
 
-            <header>
-                <h2 className="text-4xl font-black uppercase tracking-tighter">Meus Turnos</h2>
-            </header>
+            <PageHeader title="Meus Turnos" className="!mb-0" />
 
             {/* Confirmação de véspera (D-1) — card destacado, resposta em UM toque, sempre visível
                 no topo (fora das abas): o turno é amanhã, não pode depender do freela estar na aba certa.
@@ -632,91 +691,94 @@ export default function MyJobs() {
                         const localResponse = respondedConfirmations[confirmation.id];
 
                         return (
-                            <div
+                            <Card
                                 key={confirmation.id}
-                                className="bg-white border-2 border-black rounded-2xl p-6 shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]"
+                                className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
                             >
                                 <div className="flex items-center gap-2 mb-3">
                                     <CalendarClock size={18} className="text-primary" />
-                                    <span className="text-xs font-black uppercase text-primary">
+                                    <span className="text-sm font-semibold text-primary">
                                         Confirma seu turno {rotuloDeQuando(job.raw_date)}?
                                     </span>
                                 </div>
-                                <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
-                                <p className="text-sm font-bold text-gray-500 mb-3">{job.company_name}</p>
+                                <h3 className="font-bold text-lg mb-0.5">{job.title}</h3>
+                                <p className="text-sm text-gray-600 mb-3">{job.company_name}</p>
                                 <div className="flex flex-wrap gap-2 mb-5">
-                                    <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+                                    <Chip>
                                         <Clock size={14} /> {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
-                                    </span>
-                                    <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+                                    </Chip>
+                                    <Chip tone="info">
                                         <LocalDoTurno location={job.location} />
-                                    </span>
+                                    </Chip>
                                 </div>
                                 {localResponse === 'confirmed' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full bg-primary-light text-primary px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary rounded-xl font-bold text-sm">
                                         <ThumbsUp size={18} /> Confirmado
                                     </span>
                                 ) : localResponse === 'cannot_attend' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 border-2 border-red-200 px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-red-50 text-red-600 border-2 border-red-200 rounded-xl font-bold text-sm">
                                         <ThumbsDown size={18} /> Avisou que não vai
                                     </span>
                                 ) : localResponse === 'already_responded' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full bg-gray-100 text-gray-600 px-6 py-3 rounded-xl font-black uppercase min-h-[44px]">
+                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm">
                                         Você já respondeu
                                     </span>
                                 ) : (
                                     <div className="flex gap-3">
-                                        <button
+                                        <Button
+                                            variant="primary"
+                                            className="flex-1"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'confirmed')}
                                             disabled={isResponding}
-                                            className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                                            loading={isResponding}
+                                            iconLeft={<ThumbsUp size={18} />}
                                         >
-                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <ThumbsUp size={18} />}
                                             Sim, vou
-                                        </button>
-                                        <button
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            className="flex-1"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'cannot_attend')}
                                             disabled={isResponding}
-                                            className="flex-1 bg-white hover:bg-red-50 text-red-600 border-2 border-red-200 hover:border-red-400 px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                                            loading={isResponding}
+                                            iconLeft={<ThumbsDown size={18} />}
                                         >
-                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <ThumbsDown size={18} />}
                                             Não vou poder
-                                        </button>
+                                        </Button>
                                     </div>
                                 )}
-                            </div>
+                            </Card>
                         );
                     })}
                 </div>
             )}
 
             {/* Tabs — Convites PRIMEIRO */}
-            <div className="flex gap-2 border-b-2 border-gray-200 pb-1 overflow-x-auto scrollbar-hide">
-                {[
-                    { id: 'invites' as ActiveTab, label: 'Convites', count: pendingInvites.length, urgent: true },
-                    { id: 'in_progress' as ActiveTab, label: 'Em Andamento', count: jobs.in_progress.length },
-                    { id: 'scheduled' as ActiveTab, label: 'Agendados', count: jobs.scheduled.length },
-                    { id: 'history' as ActiveTab, label: 'Histórico', count: jobs.history.length }
-                ].map((tab) => (
+            <div
+                role="tablist"
+                aria-label="Seções dos seus turnos"
+                className="flex gap-1 border-b-2 border-gray-200 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+                {tabs.map((tab) => (
                     <button
                         key={tab.id}
+                        id={`meus-turnos-tab-${tab.id}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === tab.id}
+                        aria-controls="meus-turnos-painel"
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-                            min-h-11 px-6 py-2 rounded-t-xl font-bold uppercase transition-all whitespace-nowrap flex items-center gap-2
+                            min-h-11 px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
+                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black rounded-t-xl
                             ${activeTab === tab.id
-                                ? 'bg-black text-white translate-y-[2px]'
-                                : 'text-gray-400 hover:text-black hover:bg-gray-100'}
+                                ? 'border-black text-black'
+                                : 'border-transparent text-gray-500 hover:text-black hover:bg-gray-100'}
                         `}
                     >
                         {tab.label}
                         {tab.count > 0 && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${
-                                tab.urgent
-                                    ? 'bg-primary text-white animate-pulse'
-                                    : tab.id === 'in_progress'
-                                        ? 'bg-red-500 text-white animate-pulse'
-                                        : 'bg-gray-200 text-gray-700'
-                            }`}>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${TAB_COUNT_TONES[tab.tone]}`}>
                                 {tab.count}
                             </span>
                         )}
@@ -725,7 +787,12 @@ export default function MyJobs() {
             </div>
 
             {/* Content */}
-            <div className="grid gap-4">
+            <div
+                id="meus-turnos-painel"
+                role="tabpanel"
+                aria-labelledby={`meus-turnos-tab-${activeTab}`}
+                className="grid gap-4"
+            >
 
                 {/* ── ABA CONVITES ── */}
                 {activeTab === 'invites' && (
@@ -739,11 +806,11 @@ export default function MyJobs() {
                         )}
 
                         {!invitesLoading && pendingInvites.length === 0 && (
-                            <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                                <Bell size={48} className="mx-auto mb-4 opacity-30" />
-                                <p className="font-bold text-lg">Nenhum convite pendente.</p>
-                                <p className="text-sm mt-2">Quando uma empresa te convidar para um turno, aparecerá aqui.</p>
-                            </div>
+                            <EmptyState
+                                icon={<Bell size={40} />}
+                                title="Nenhum convite pendente."
+                                description="Quando uma empresa te convidar para um turno, aparecerá aqui."
+                            />
                         )}
 
                         {!invitesLoading && pendingInvites.map((invite) => {
@@ -761,112 +828,123 @@ export default function MyJobs() {
                             const endTime = job?.work_end_time ?? '';
                             const location = job?.location ?? 'Local a definir';
                             const isResponding = respondingId === invite.id;
+                            // Spans (não divs): o mesmo conteúdo vai dentro de <button> quando a empresa tem perfil.
+                            const cabecalhoEmpresa = (
+                                <>
+                                    <span className="block w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                        {companyLogo ? (
+                                            <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="w-full h-full flex items-center justify-center">
+                                                <Building2 size={20} className="text-gray-400" />
+                                            </span>
+                                        )}
+                                    </span>
+                                    <span className="block min-w-0">
+                                        <span className="block text-xs text-gray-600">Convite de</span>
+                                        <span className={`block font-bold truncate ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
+                                    </span>
+                                </>
+                            );
 
                             return (
-                                <div key={invite.id} className="bg-white border-2 border-black rounded-2xl p-6 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                                <Card key={invite.id} className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
                                     {/* Empresa */}
                                     <div className="flex items-center gap-3 mb-4">
-                                        <div
-                                            role={companyId ? 'button' : undefined}
-                                            tabIndex={companyId ? 0 : undefined}
-                                            onClick={companyId ? () => navigate(`/empresa/${companyId}`) : undefined}
-                                            onKeyDown={companyId ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/empresa/${companyId}`); } } : undefined}
-                                            className={`flex items-center gap-3 flex-1 min-w-0 ${companyId ? 'cursor-pointer' : ''}`}
-                                        >
-                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                                                {companyLogo ? (
-                                                    <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center">
-                                                        <Building2 size={20} className="text-gray-400" />
-                                                    </div>
-                                                )}
+                                        {companyId ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/empresa/${companyId}`)}
+                                                className="group flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                                            >
+                                                {cabecalhoEmpresa}
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                {cabecalhoEmpresa}
                                             </div>
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase text-gray-400">Convite de</p>
-                                                <p className={`font-black uppercase truncate ${companyId ? 'hover:text-primary transition-colors' : ''}`}>{companyName}</p>
-                                            </div>
-                                        </div>
+                                        )}
                                         {/* Corrida explícita: o freela precisa saber que a vaga é disputada ANTES
                                             de decidir. Esconder isso seria deixá-lo achar que tem o tempo todo do
                                             mundo e perder a vaga sem entender por quê. */}
                                         {invite.disputed ? (
-                                            <span className="ml-auto bg-yellow-100 text-yellow-800 text-xs font-black uppercase px-2 py-1 rounded-xl border border-yellow-300 flex-shrink-0">
+                                            <span className="ml-auto bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-pill border border-yellow-300 flex-shrink-0">
                                                 Quem aceitar primeiro
                                             </span>
                                         ) : (
-                                            <span className="ml-auto bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200 flex-shrink-0">
+                                            <span className="ml-auto bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
                                                 Novo convite
                                             </span>
                                         )}
                                     </div>
 
                                     {/* Detalhes do turno */}
-                                    <h3 className="font-black text-xl uppercase mb-3">{jobTitle}</h3>
+                                    <h3 className="font-bold text-lg mb-3">{jobTitle}</h3>
                                     <div className="flex flex-wrap gap-2 mb-4">
-                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
+                                        <Chip>
                                             <Clock size={14} /> {startDate}{startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
-                                        </span>
-                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-primary-light text-primary px-3 py-1.5 rounded-xl">
+                                        </Chip>
+                                        <Chip tone="brand">
                                             <DollarSign size={14} /> {formatBRL(budget)}
-                                        </span>
+                                        </Chip>
                                         {location && (
-                                            <span className="flex items-center gap-1.5 text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+                                            <Chip tone="info">
                                                 <LocalDoTurno location={location} />
-                                            </span>
+                                            </Chip>
                                         )}
                                     </div>
 
                                     {/* Briefing */}
                                     {(job?.briefing || job?.description) && (
                                         <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-4">
-                                            <p className="text-xs font-bold uppercase text-gray-400 mb-1">Briefing</p>
-                                            <p className="text-sm font-medium text-gray-700 line-clamp-3">{job.briefing || job.description}</p>
+                                            <p className="text-xs font-semibold text-gray-600 mb-1">Briefing</p>
+                                            <p className="text-sm text-gray-700 line-clamp-3">{job.briefing || job.description}</p>
                                         </div>
                                     )}
 
                                     {/* Disputa + expiração */}
                                     {invite.disputed && (
-                                        <p className="text-xs font-bold text-yellow-700 mb-2 flex items-center gap-1">
+                                        <p className="text-xs font-semibold text-yellow-700 mb-2 flex items-center gap-1">
                                             <Users size={12} />
                                             {invite.targetsCount === 1 ? 'Você foi o único chamado' : `${invite.targetsCount} freelas receberam este turno`}
                                             {invite.slots > 1 ? ` · ${invite.slots} vagas` : ' · 1 vaga'}
                                         </p>
                                     )}
                                     {invite.expiresAt && (
-                                        <p className="text-xs font-bold text-yellow-600 mb-4 flex items-center gap-1">
+                                        <p className="text-xs font-semibold text-yellow-700 mb-4 flex items-center gap-1">
                                             <Clock size={12} />
                                             Expira {formatDistanceToNow(new Date(invite.expiresAt), { addSuffix: true, locale: ptBR })}
                                         </p>
                                     )}
 
-                                    {/* Ações */}
+                                    {/* Ações — Aceitar é a ação primária; Recusar é secundária (e arma antes de confirmar) */}
                                     <div className="flex gap-3">
-                                        <button
+                                        <Button
+                                            variant="primary"
+                                            size="lg"
+                                            className="flex-1"
                                             onClick={() => respond(invite.id, 'accepted')}
                                             disabled={isResponding}
-                                            className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            loading={isResponding}
+                                            iconLeft={<CheckCircle2 size={18} />}
                                         >
-                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                                             Aceitar
-                                        </button>
-                                        <button
+                                        </Button>
+                                        <Button
+                                            variant={recusaArmada === invite.id ? 'danger' : 'secondary'}
+                                            size="lg"
+                                            className="flex-1"
                                             onClick={() => armarOuRecusar(invite.id, () => respond(invite.id, 'declined'))}
                                             disabled={isResponding}
-                                            className={`flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                                                recusaArmada === invite.id
-                                                    ? 'bg-red-600 text-white border-red-600'
-                                                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
-                                            }`}
+                                            iconLeft={<XCircle size={18} />}
                                         >
-                                            {isResponding ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
                                             {recusaArmada === invite.id ? 'Confirmar recusa' : 'Recusar'}
-                                        </button>
+                                        </Button>
                                     </div>
-                                    <p className="text-xs text-gray-400 text-center mt-2 font-bold">
+                                    <p className="text-xs text-gray-600 text-center mt-3">
                                         Recusar não afeta sua reputação.
                                     </p>
-                                </div>
+                                </Card>
                             );
                         })}
                     </>
@@ -874,239 +952,249 @@ export default function MyJobs() {
 
                 {/* ── ABA EM ANDAMENTO ── */}
                 {activeTab === 'in_progress' && jobs.in_progress.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <AlertCircle size={48} className="mx-auto mb-4 opacity-30" />
-                        <p className="font-bold">Nenhum trabalho em andamento.</p>
-                        <p className="text-sm mt-2">Trabalhos agendados para hoje aparecerão aqui durante o horário de trabalho.</p>
-                    </div>
+                    <EmptyState
+                        icon={<AlertCircle size={40} />}
+                        title="Nenhum trabalho em andamento."
+                        description="Trabalhos agendados para hoje aparecerão aqui durante o horário de trabalho."
+                    />
                 )}
                 {activeTab === 'in_progress' && jobs.in_progress.map((job) => (
-                    <div key={job.id} className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 p-6 rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]">
-                        <div className="flex flex-col md:flex-row justify-between gap-4">
-                            <div className="flex gap-4 items-start">
-                                <div className="bg-green-600 text-white p-3 rounded-xl min-w-[70px] text-center animate-pulse">
-                                    <Play size={24} className="mx-auto" />
-                                    <span className="block text-xs font-bold uppercase mt-1">AO VIVO</span>
+                    <Card key={job.id} className="flex flex-col gap-4 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                        <div>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h3 className="font-bold text-lg">{job.title}</h3>
+                                    <p className="text-sm text-gray-600">{job.company_name}</p>
                                 </div>
-                                <div>
-                                    <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
-                                    <p className="text-sm font-bold text-gray-600">{job.company_name}</p>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-gray-600 px-3 py-1.5 rounded-lg border">
-                                            <Clock size={14} /> {job.time} - {job.end_time}
-                                        </span>
-                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-green-700 px-3 py-1.5 rounded-lg border">
-                                            <DollarSign size={14} /> {formatBRL(job.pay)}
-                                        </span>
-                                        <span className="flex items-center gap-1.5 text-xs font-bold bg-white text-gray-600 px-3 py-1.5 rounded-lg border">
-                                            <LocalDoTurno location={job.location} />
-                                        </span>
-                                    </div>
-                                    {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
-                                        em andamento — promessa de escrow que o produto não cumpre. O piloto é
-                                        100% modo A: o dinheiro nunca passa pelo Worki, não há nada em garantia.
-                                        Este turno, conferido no banco, tem zero linhas em escrow_transactions.
-                                        Prometer custódia de dinheiro que ninguém segura é a pior classe de copy
-                                        errado: o freela decide confiar com base nela. */}
-                                    {job.status === 'in_progress' && (
-                                        <p className="text-xs text-gray-500 font-bold flex items-center gap-1 mt-1">
-                                            Pagamento combinado direto com a empresa — o Worki registra o recibo
-                                        </p>
-                                    )}
-                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
+                                    <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
+                                </span>
                             </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                <Chip>
+                                    <Clock size={14} /> {job.time}{job.end_time ? ` - ${job.end_time}` : ''}
+                                </Chip>
+                                <Chip tone="brand">
+                                    <DollarSign size={14} /> {formatBRL(job.pay)}
+                                </Chip>
+                                <Chip tone="info">
+                                    <LocalDoTurno location={job.location} />
+                                </Chip>
+                            </div>
+                            {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
+                                em andamento — promessa de escrow que o produto não cumpre. O piloto é
+                                100% modo A: o dinheiro nunca passa pelo Worki, não há nada em garantia.
+                                Este turno, conferido no banco, tem zero linhas em escrow_transactions.
+                                Prometer custódia de dinheiro que ninguém segura é a pior classe de copy
+                                errado: o freela decide confiar com base nela. */}
+                            {job.status === 'in_progress' && (
+                                <p className="text-xs text-gray-600 mt-3">
+                                    Pagamento combinado direto com a empresa — o Worki registra o recibo
+                                </p>
+                            )}
                         </div>
-                        <div className="border-t border-gray-100 mt-3 pt-3">
+
+                        <div className="border-t-2 border-gray-100 pt-4">
                             <JobLifecycleStepper steps={computeWorkerSteps(job)} />
                         </div>
-                        <div className="flex flex-col gap-3 mt-3">
-                            <div className="flex flex-col gap-3 min-w-[200px]">
-                                {/* A empresa pode registrar chegada/saída sem o freela tocar no app
-                                    (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
-                                    `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
-                                    ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
-                                    o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
-                                    quando presente, mesmo em turno já pago). */}
-                                {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
-                                    <button
-                                        onClick={() => handleCheckin(job.id)}
-                                        disabled={actionLoading === job.id}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm shadow-sm"
-                                    >
-                                        {actionLoading === job.id ? (
-                                            <Loader2 className="animate-spin" size={18} />
-                                        ) : (
-                                            <><Play size={18} /> Check-in</>
-                                        )}
-                                    </button>
-                                ) : job.worker_checkin_at ? (
-                                    <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
-                                        <CheckCircle2 size={16} />
-                                        Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
-                                    </div>
-                                ) : (
-                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
-                                        <CheckCircle2 size={16} />
-                                        Empresa registrou sua chegada
-                                    </div>
-                                )}
 
-                                {job.worker_checkin_at && (
-                                    <div className={`px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 ${job.company_checkin_confirmed_at ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                        {job.company_checkin_confirmed_at ? (
-                                            <><CheckCircle2 size={16} /> Empresa confirmou chegada</>
-                                        ) : (
-                                            <><Clock size={16} /> Aguardando confirmação da empresa</>
-                                        )}
-                                    </div>
-                                )}
-
-                                {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
-                                    <button
-                                        onClick={() => handleCheckout(job.id)}
-                                        disabled={actionLoading === job.id}
-                                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                        {actionLoading === job.id ? (
-                                            <Loader2 className="animate-spin" size={20} />
-                                        ) : (
-                                            <><Square size={20} /> Check-out</>
-                                        )}
-                                    </button>
-                                )}
-
-                                {job.worker_checkout_at && (
-                                    <div className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
-                                        <CheckCircle2 size={16} />
-                                        Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
-                                    </div>
-                                )}
-
-                                {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
-                                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
-                                        <CheckCircle2 size={16} />
-                                        Empresa registrou sua saída
-                                    </div>
-                                )}
-
-                                {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
-                                <button
-                                    onClick={() => handleChat(job)}
-                                    disabled={chattingId === job.id}
-                                    className="bg-white hover:bg-black text-black hover:text-white border-2 border-black px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm"
+                        {/* A empresa pode registrar chegada/saída sem o freela tocar no app
+                            (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
+                            `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
+                            ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
+                            o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
+                            quando presente, mesmo em turno já pago). */}
+                        <div className="flex flex-col gap-3">
+                            {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    fullWidth
+                                    onClick={() => handleCheckin(job.id)}
+                                    loading={actionLoading === job.id}
+                                    iconLeft={<Play size={18} />}
                                 >
-                                    {chattingId === job.id ? <Loader2 className="animate-spin" size={18} /> : <MessageCircle size={18} />}
-                                    Falar com a empresa
-                                </button>
-                            </div>
+                                    Check-in
+                                </Button>
+                            ) : job.worker_checkin_at ? (
+                                <StatusLine tone="success" icon={<CheckCircle2 size={16} />}>
+                                    Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
+                                </StatusLine>
+                            ) : (
+                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
+                                    Empresa registrou sua chegada
+                                </StatusLine>
+                            )}
+
+                            {job.worker_checkin_at && (
+                                job.company_checkin_confirmed_at ? (
+                                    <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
+                                        Empresa confirmou chegada
+                                    </StatusLine>
+                                ) : (
+                                    <StatusLine tone="waiting" icon={<Clock size={16} />}>
+                                        Aguardando confirmação da empresa
+                                    </StatusLine>
+                                )
+                            )}
+
+                            {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    fullWidth
+                                    onClick={() => handleCheckout(job.id)}
+                                    loading={actionLoading === job.id}
+                                    iconLeft={<Square size={18} />}
+                                >
+                                    Check-out
+                                </Button>
+                            )}
+
+                            {job.worker_checkout_at && (
+                                <StatusLine tone="neutral" icon={<CheckCircle2 size={16} />}>
+                                    Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
+                                </StatusLine>
+                            )}
+
+                            {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
+                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
+                                    Empresa registrou sua saída
+                                </StatusLine>
+                            )}
+
+                            {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
+                            <Button
+                                variant="secondary"
+                                fullWidth
+                                onClick={() => handleChat(job)}
+                                loading={chattingId === job.id}
+                                iconLeft={<MessageCircle size={18} />}
+                            >
+                                Falar com a empresa
+                            </Button>
                         </div>
-                    </div>
+                    </Card>
                 ))}
 
                 {/* ── ABA AGENDADOS ── */}
                 {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Nenhum turno agendado no momento.</p>
-                    </div>
+                    <EmptyState title="Nenhum turno agendado no momento." />
                 )}
                 {activeTab === 'scheduled' && jobs.scheduled.map((job) => (
-                    <div key={job.id} className="bg-white border-2 border-black p-6 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col md:flex-row justify-between md:items-center gap-4 group hover:-translate-y-1 transition-transform">
-                        <div className="flex gap-4 items-center">
-                            <div className="bg-black text-white p-3 rounded-xl border-2 border-black min-w-[70px] text-center group-hover:bg-primary group-hover:border-primary transition-colors">
-                                <span className="block text-xs font-bold uppercase">{job.month}</span>
-                                <span className="block text-2xl font-black">{job.day}</span>
+                    <Card
+                        key={job.id}
+                        className="flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]"
+                    >
+                        <div className="flex gap-4 items-center min-w-0">
+                            <div className="bg-black text-white px-3 py-2 rounded-xl min-w-[64px] text-center flex-shrink-0">
+                                <span className="block text-xs font-semibold uppercase">{job.month}</span>
+                                <span className="block text-2xl font-bold">{job.day}</span>
                             </div>
-                            <div>
-                                <h3 className="font-black text-xl uppercase mb-1">{job.title}</h3>
-                                <span className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg uppercase">
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-lg mb-1.5">{job.title}</h3>
+                                <Chip>
                                     <Clock size={14} /> {job.date} • {job.time}
-                                </span>
-                                <span className="flex items-center gap-1.5 text-xs font-bold bg-green-100 text-green-700 px-3 py-1.5 rounded-lg uppercase ml-2">
-                                    <DollarSign size={14} /> {formatBRL(job.pay)}
-                                </span>
-                                <p className="text-sm font-bold text-gray-500 flex items-center gap-1 mt-1">
+                                </Chip>
+                                <p className="text-sm text-gray-600 flex items-center gap-1 mt-2">
                                     <LocalDoTurno location={job.location} />
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 w-full md:w-auto">
-                            <div>
-                                <span className="block text-sm font-bold text-gray-400 uppercase">Receber</span>
-                                <span className="block text-2xl font-black text-primary">{formatBRL(job.pay)}</span>
+                        <div className="flex flex-col gap-4 border-t-2 border-gray-100 md:border-t-0 md:border-l-2 pt-4 md:pt-0 md:pl-6 w-full md:w-56 flex-shrink-0">
+                            <div className="flex items-end justify-between gap-3">
+                                <div>
+                                    <span className="block text-xs text-gray-600">Receber</span>
+                                    <span className="block text-2xl font-bold tabular-nums text-primary">{formatBRL(job.pay)}</span>
+                                </div>
+                                <span className="bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200">Contratado</span>
                             </div>
-                            <div className="flex flex-col items-end gap-2">
-                                <span className="bg-green-100 text-green-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-green-200">Contratado</span>
-                                <button
+                            <div className="flex flex-col gap-2">
+                                <Button
+                                    variant="secondary"
+                                    fullWidth
                                     onClick={() => handleChat(job)}
-                                    disabled={chattingId === job.id}
-                                    className="text-xs font-black text-black hover:text-white hover:bg-black uppercase px-3 py-2 rounded-xl border-2 border-black transition-colors flex items-center gap-1 min-h-[44px] disabled:opacity-50"
+                                    loading={chattingId === job.id}
+                                    iconLeft={<MessageCircle size={16} />}
                                 >
-                                    {chattingId === job.id ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
                                     Falar com a empresa
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    fullWidth
+                                    className="!text-red-600 enabled:hover:bg-red-50"
                                     onClick={() => setCancelJob(job)}
-                                    className="text-xs font-black text-red-600 hover:text-white hover:bg-red-500 uppercase px-3 py-2 rounded-xl border-2 border-red-200 hover:border-red-500 transition-colors flex items-center gap-1 min-h-[44px]"
+                                    iconLeft={<XCircle size={16} />}
                                 >
-                                    <XCircle size={14} /> Cancelar turno
-                                </button>
+                                    Cancelar turno
+                                </Button>
                             </div>
                         </div>
-                    </div>
+                    </Card>
                 ))}
 
                 {/* ── ABA HISTÓRICO ── */}
                 {activeTab === 'history' && jobs.history.length === 0 && (
-                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <p className="font-bold">Seu histórico está vazio.</p>
-                    </div>
+                    <EmptyState title="Seu histórico está vazio." />
                 )}
                 {activeTab === 'history' && jobs.history.map((job) => (
-                    <div
+                    <Card
                         key={job.id}
+                        padding="sm"
+                        interactive
                         role="button"
                         tabIndex={0}
                         onClick={() => setDetailJob(job)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailJob(job); } }}
-                        className="bg-gray-50 border-2 border-transparent hover:border-black p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center transition-all cursor-pointer gap-2"
+                        onKeyDown={(e) => {
+                            // Só o próprio card abre o detalhe: Enter/Espaço em "Recibo"/"Avaliar" seguem a ação do botão.
+                            if (e.target !== e.currentTarget) return;
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailJob(job); }
+                        }}
+                        className="cursor-pointer !bg-gray-50 !border-gray-200 hover:!border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                     >
-                        <div>
-                            <h3 className="font-black text-lg uppercase mb-1 text-gray-700">{job.title}</h3>
-                            <p className="text-sm font-bold text-gray-400">{job.date} • {job.company_name}</p>
-                        </div>
-                        <div className="flex items-center justify-between w-full md:w-auto gap-4">
-                            <span className="block font-black text-gray-600">{formatBRL(job.pay)}</span>
-                            {job.status === 'completed' ? (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-black text-green-600 flex items-center gap-1 uppercase bg-green-100 px-2 py-1 rounded-xl">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <h3 className="font-semibold text-gray-800 truncate">{job.title}</h3>
+                                <p className="text-sm text-gray-600">{job.date} • {job.company_name}</p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                                <span className="font-bold tabular-nums text-gray-800">{formatBRL(job.pay)}</span>
+                                {job.status === 'completed' ? (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-pill">
                                         <CheckCircle2 size={12} /> Concluído
                                     </span>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
-                                        className="text-xs font-black text-gray-600 hover:text-black flex items-center gap-1 uppercase px-2 min-h-11 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
-                                    >
-                                        <Receipt size={12} /> Recibo
-                                    </button>
-                                    {!reviewedJobIds.has(job.job_id) ? (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                            className="text-xs font-black text-white bg-black hover:bg-yellow-500 hover:text-black flex items-center gap-1 uppercase px-3 min-h-11 rounded-xl transition-colors"
-                                        >
-                                            <Star size={12} /> Avaliar
-                                        </button>
-                                    ) : (
-                                        <span className="text-xs font-bold text-gray-400 flex items-center gap-1 uppercase">
-                                            <Star size={12} fill="currentColor" /> Avaliado
-                                        </span>
-                                    )}
-                                </div>
-                            ) : (
-                                <span className="text-xs font-black text-red-500 flex items-center gap-1 uppercase bg-red-100 px-2 py-1 rounded-xl">
-                                    <XCircle size={12} /> {job.status === 'declined' ? 'Recusado' : 'Cancelado'}
-                                </span>
-                            )}
+                                ) : (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2.5 py-1 rounded-pill">
+                                        <XCircle size={12} /> {job.status === 'declined' ? 'Recusado' : 'Cancelado'}
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                        {job.status === 'completed' && (
+                            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                                <Button
+                                    variant="secondary"
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
+                                    iconLeft={<Receipt size={14} />}
+                                >
+                                    Recibo
+                                </Button>
+                                {!reviewedJobIds.has(job.job_id) ? (
+                                    <Button
+                                        variant="primary"
+                                        onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
+                                        iconLeft={<Star size={14} />}
+                                    >
+                                        Avaliar
+                                    </Button>
+                                ) : (
+                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                        <Star size={12} fill="currentColor" /> Avaliado
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </Card>
                 ))}
             </div>
 
@@ -1123,10 +1211,15 @@ export default function MyJobs() {
             {/* Detalhe do turno no histórico */}
             {detailJob && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
                     onClick={(e) => { if (e.target === e.currentTarget) setDetailJob(null); }}
                 >
-                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="detalhe-turno-titulo"
+                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+                    >
                         <div className="flex items-start justify-between gap-3 mb-5">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
@@ -1137,23 +1230,28 @@ export default function MyJobs() {
                                     )}
                                 </div>
                                 <div className="min-w-0">
-                                    <h3 className="text-xl font-black uppercase tracking-tight truncate">{detailJob.title}</h3>
-                                    <p className="text-sm font-bold text-gray-500 truncate">{detailJob.company_name}</p>
+                                    <h3 id="detalhe-turno-titulo" className="text-lg font-bold tracking-tight truncate">{detailJob.title}</h3>
+                                    <p className="text-sm text-gray-600 truncate">{detailJob.company_name}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setDetailJob(null)} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors flex-shrink-0">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDetailJob(null)}
+                                aria-label="Fechar"
+                                className="w-11 !px-0 flex-shrink-0"
+                            >
                                 <X size={20} />
-                            </button>
+                            </Button>
                         </div>
 
                         {/* Status */}
                         <div className="mb-5">
                             {detailJob.status === 'completed' ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-black text-green-700 bg-green-100 border-2 border-green-200 px-3 py-1.5 rounded-xl uppercase">
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-pill">
                                     <CheckCircle2 size={14} /> Concluído
                                 </span>
                             ) : (
-                                <span className="inline-flex items-center gap-1 text-xs font-black text-red-600 bg-red-100 border-2 border-red-200 px-3 py-1.5 rounded-xl uppercase">
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-3 py-1.5 rounded-pill">
                                     <XCircle size={14} /> {detailJob.status === 'declined' ? 'Recusado' : 'Cancelado'}
                                 </span>
                             )}
@@ -1161,25 +1259,25 @@ export default function MyJobs() {
 
                         {/* Grid de infos */}
                         <div className="grid grid-cols-2 gap-3 mb-5">
-                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
-                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Data</p>
-                                <p className="font-bold text-sm">{detailJob.date}</p>
+                            <div className="bg-gray-50 rounded-xl p-3">
+                                <p className="text-xs text-gray-600 mb-1">Data</p>
+                                <p className="font-semibold text-sm">{detailJob.date}</p>
                             </div>
-                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
-                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Valor</p>
-                                <p className="font-black text-sm text-primary">{formatBRL(detailJob.pay)}</p>
+                            <div className="bg-gray-50 rounded-xl p-3">
+                                <p className="text-xs text-gray-600 mb-1">Valor</p>
+                                <p className="font-bold text-sm tabular-nums text-primary">{formatBRL(detailJob.pay)}</p>
                             </div>
-                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
-                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
-                                <p className="font-bold text-sm">{fmtTime(detailJob.worker_checkin_at)}</p>
+                            <div className="bg-gray-50 rounded-xl p-3">
+                                <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkin_at)}</p>
                             </div>
-                            <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3">
-                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
-                                <p className="font-bold text-sm">{fmtTime(detailJob.worker_checkout_at)}</p>
+                            <div className="bg-gray-50 rounded-xl p-3">
+                                <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkout_at)}</p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm font-bold text-gray-500 mb-5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 mb-5">
                             <LocalDoTurno location={detailJob.location} size={16} />
                             <span className="text-gray-300">•</span>
                             <Clock size={16} /> {detailJob.time}{detailJob.end_time ? ` - ${detailJob.end_time}` : ''}
@@ -1188,16 +1286,19 @@ export default function MyJobs() {
                         {/* Avaliação */}
                         {detailJob.status === 'completed' && (
                             reviewedJobIds.has(detailJob.job_id) ? (
-                                <div className="flex items-center gap-2 text-sm font-bold text-gray-500 border-t-2 border-gray-100 pt-4">
+                                <div className="flex items-center gap-2 text-sm text-gray-600 border-t-2 border-gray-100 pt-4">
                                     <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
                                 </div>
                             ) : (
-                                <button
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    fullWidth
                                     onClick={() => { const j = detailJob; setDetailJob(null); handleOpenRateModal(j); }}
-                                    className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors border-t-2 border-gray-100"
+                                    iconLeft={<Star size={16} />}
                                 >
-                                    <Star size={16} /> Avaliar esta empresa
-                                </button>
+                                    Avaliar esta empresa
+                                </Button>
                             )
                         )}
                     </div>
@@ -1207,43 +1308,50 @@ export default function MyJobs() {
             {/* Confirmação de cancelamento de turno agendado */}
             {cancelJob && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
                     onClick={(e) => { if (e.target === e.currentTarget && !cancelLoading) setCancelJob(null); }}
                 >
-                    <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="cancelar-turno-titulo"
+                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6"
+                    >
                         <div className="flex items-start gap-3 mb-4">
                             <div className="w-10 h-10 rounded-xl border-2 border-black bg-red-100 flex items-center justify-center flex-shrink-0">
                                 <XCircle size={20} className="text-red-600" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-black uppercase tracking-tight">Cancelar este turno?</h3>
-                                <p className="text-sm font-bold text-gray-500 mt-1">
+                                <h3 id="cancelar-turno-titulo" className="text-lg font-bold tracking-tight">Cancelar este turno?</h3>
+                                <p className="text-sm text-gray-600 mt-1">
                                     A empresa será avisada e o turno volta a ficar disponível.
                                 </p>
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-3 mb-5">
-                            <p className="font-black text-sm uppercase">{cancelJob.title}</p>
-                            <p className="text-xs font-bold text-gray-500">{cancelJob.date} • {cancelJob.time}</p>
+                        <div className="bg-gray-50 rounded-xl p-3 mb-5">
+                            <p className="font-semibold text-sm">{cancelJob.title}</p>
+                            <p className="text-xs text-gray-600">{cancelJob.date} • {cancelJob.time}</p>
                         </div>
 
                         <div className="flex gap-3">
-                            <button
+                            <Button
+                                variant="secondary"
+                                className="flex-1"
                                 onClick={() => setCancelJob(null)}
                                 disabled={cancelLoading}
-                                className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-4 py-3 rounded-xl font-black uppercase border-2 border-gray-300 transition-colors disabled:opacity-50 min-h-[44px]"
                             >
                                 Voltar
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                variant="danger"
+                                className="flex-1"
                                 onClick={handleCancelShift}
-                                disabled={cancelLoading}
-                                className="flex-1 bg-red-500 hover:bg-black text-white px-4 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 min-h-[44px]"
+                                loading={cancelLoading}
+                                iconLeft={<XCircle size={18} />}
                             >
-                                {cancelLoading ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
                                 Cancelar turno
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>

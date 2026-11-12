@@ -5,7 +5,6 @@ import {
   ShieldCheck,
   ShieldOff,
   Plus,
-  Loader2,
   Ban,
   X,
 } from 'lucide-react';
@@ -15,6 +14,7 @@ import { logError } from '../../lib/logger';
 import { isCertificationExpired, formatDateOnly, todayLocalDate } from '../../lib/dateUtils';
 import { CertificationService } from '../../services/certificationService';
 import type { WorkerCertification, WorkerTraining } from '../../types';
+import { Button, Card, Field } from '../ui';
 
 // ---------------------------------------------------------------------------
 // F8 (empresa) — o que a empresa vê no perfil de um freela do seu elenco: as certificações
@@ -191,7 +191,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       {/* Certificações — auto-declaradas pelo freela, conferência atribuída (D3) */}
       <div>
-        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
           <Award size={20} /> Certificações
         </h3>
 
@@ -204,7 +204,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
         )}
 
         {!certLoading && certifications.length === 0 && (
-          <p className="text-gray-400 italic font-medium text-sm">
+          <p className="text-gray-600 text-sm">
             Este freela ainda não cadastrou certificações.
           </p>
         )}
@@ -216,20 +216,20 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
               const verified = !!cert.verified_by_company_id && !!cert.verified_at;
               const verifiedByThisCompany = cert.verified_by_company_id === companyId;
               return (
-                <div key={cert.id} className="bg-white p-4 rounded-xl border-2 border-gray-100">
+                <Card key={cert.id} padding="sm" className="border-gray-200">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-black text-sm">{cert.title}</h4>
+                    <h4 className="font-bold text-sm">{cert.title}</h4>
                     {expired && (
-                      <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-[10px] font-black uppercase">
+                      <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-[11px] font-bold">
                         Vencida
                       </span>
                     )}
                   </div>
-                  {cert.issuer && <p className="text-xs text-gray-500 font-bold mt-0.5">{cert.issuer}</p>}
+                  {cert.issuer && <p className="text-xs text-gray-600 mt-0.5">{cert.issuer}</p>}
                   {cert.registration_number && (
-                    <p className="text-xs text-gray-500 font-medium">Nº {cert.registration_number}</p>
+                    <p className="text-xs text-gray-600">Nº {cert.registration_number}</p>
                   )}
-                  <p className="text-xs text-gray-400 font-medium mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     {cert.issued_at && <>Emitida em {formatDateOnly(cert.issued_at, 'dd/MM/yyyy')}</>}
                     {cert.issued_at && cert.expires_at && ' · '}
                     {cert.expires_at && <>Válida até {formatDateOnly(cert.expires_at, 'dd/MM/yyyy')}</>}
@@ -237,51 +237,41 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
                   {/* D3 — nunca um selo genérico; sempre nomear quem conferiu. */}
                   {verified ? (
-                    <p className="mt-2 flex items-start gap-1.5 text-xs font-bold text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                    <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-green-800 bg-green-50 rounded-xl px-3 py-2">
                       <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                       Conferida por {verifierNames[cert.verified_by_company_id as string] ?? 'uma empresa'} em{' '}
                       {formatTimestampBR(cert.verified_at as string)} — confirma ter visto o documento
                       original. O Worki não verifica diplomas nem consulta conselhos profissionais.
                     </p>
                   ) : (
-                    <p className="mt-2 text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <p className="mt-2 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
                       Cadastrado pelo próprio profissional — não conferido.
                     </p>
                   )}
 
                   <div className="mt-2">
                     {!verified && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="dark"
                         onClick={() => void handleVerify(cert)}
-                        disabled={verifyingId === cert.id}
-                        className="min-h-11 px-4 py-2 bg-black hover:bg-blue-600 text-white rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        loading={verifyingId === cert.id}
+                        iconLeft={<ShieldCheck size={14} />}
                       >
-                        {verifyingId === cert.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <ShieldCheck size={14} />
-                        )}
                         Marcar como conferida
-                      </button>
+                      </Button>
                     )}
                     {verified && verifiedByThisCompany && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
                         onClick={() => void handleUnverify(cert)}
-                        disabled={unverifyingId === cert.id}
-                        className="min-h-11 px-4 py-2 border-2 border-black hover:bg-gray-50 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        loading={unverifyingId === cert.id}
+                        iconLeft={<ShieldOff size={14} />}
                       >
-                        {unverifyingId === cert.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <ShieldOff size={14} />
-                        )}
                         Desfazer conferência
-                      </button>
+                      </Button>
                     )}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -291,16 +281,12 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
       {/* Treinamentos — registro operacional da própria empresa sobre o freela (não é o freela quem escreve) */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-black uppercase flex items-center gap-2">
+          <h3 className="text-lg font-bold flex items-center gap-2">
             <GraduationCap size={20} /> Treinamentos
           </h3>
-          <button
-            type="button"
-            onClick={openTrainingForm}
-            className="min-h-11 px-4 py-2 bg-black hover:bg-blue-600 text-white rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors"
-          >
-            <Plus size={14} /> Registrar
-          </button>
+          <Button variant="dark" onClick={openTrainingForm} iconLeft={<Plus size={14} />}>
+            Registrar
+          </Button>
         </div>
 
         {trainingsLoading && (
@@ -312,7 +298,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
         )}
 
         {!trainingsLoading && trainings.length === 0 && (
-          <p className="text-gray-400 italic font-medium text-sm">
+          <p className="text-gray-600 text-sm">
             Sua empresa ainda não registrou nenhum treinamento para este freela.
           </p>
         )}
@@ -322,40 +308,42 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
             {trainings.map((training) => {
               const revoked = !!training.revoked_at;
               return (
-                <div
+                <Card
                   key={training.id}
-                  className={`bg-white p-4 rounded-xl border-2 ${revoked ? 'border-gray-100 opacity-60' : 'border-gray-100'}`}
+                  padding="sm"
+                  className={revoked ? 'border-gray-200 opacity-60' : 'border-gray-200'}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-black text-sm">{training.title}</h4>
+                    <h4 className="font-bold text-sm">{training.title}</h4>
                     {revoked && (
-                      <span className="bg-gray-100 text-gray-500 border border-gray-300 rounded-pill px-2 py-0.5 text-[10px] font-black uppercase flex-shrink-0">
+                      <span className="bg-gray-100 text-gray-700 border border-gray-300 rounded-pill px-2 py-0.5 text-[11px] font-bold flex-shrink-0">
                         Revogado
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     Concluído em {formatDateOnly(training.completed_at, 'dd/MM/yyyy')}
                   </p>
-                  {training.note && <p className="text-xs text-gray-500 font-medium mt-1">{training.note}</p>}
+                  {training.note && <p className="text-xs text-gray-600 mt-1">{training.note}</p>}
                   {revoked && training.revoked_reason && (
-                    <p className="text-xs text-gray-400 font-medium mt-1 italic">
+                    <p className="text-xs text-gray-600 mt-1 italic">
                       Motivo da revogação: {training.revoked_reason}
                     </p>
                   )}
                   {!revoked && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      className="mt-2"
                       onClick={() => {
                         setRevokingId(training.id);
                         setRevokeReason('');
                       }}
-                      className="mt-2 min-h-11 px-4 py-2 border-2 border-black hover:bg-gray-50 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors"
+                      iconLeft={<Ban size={14} />}
                     >
-                      <Ban size={14} /> Revogar
-                    </button>
+                      Revogar
+                    </Button>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -365,29 +353,31 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
       {/* Modal — registrar treinamento */}
       {trainingFormOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !trainingSaving) setTrainingFormOpen(false);
           }}
         >
-          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="training-form-title"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-black uppercase">Registrar Treinamento</h3>
+              <h3 id="training-form-title" className="text-lg font-bold">Registrar Treinamento</h3>
               <button
                 type="button"
                 onClick={() => setTrainingFormOpen(false)}
                 disabled={trainingSaving}
                 aria-label="Fechar"
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                className="h-11 w-11 -mr-2 flex items-center justify-center hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
               >
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={(e) => void handleRegisterTraining(e)} className="space-y-3">
-              <div>
-                <label htmlFor="training-title" className="block text-xs font-bold uppercase mb-1">
-                  Título *
-                </label>
+            <form onSubmit={(e) => void handleRegisterTraining(e)} className="space-y-4">
+              <Field label="Título *">
                 <input
                   id="training-title"
                   type="text"
@@ -396,13 +386,9 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   value={trainingTitle}
                   onChange={(e) => setTrainingTitle(e.target.value)}
                   placeholder="Ex: Boas práticas RDC 216"
-                  className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
                 />
-              </div>
-              <div>
-                <label htmlFor="training-completed" className="block text-xs font-bold uppercase mb-1">
-                  Concluído em *
-                </label>
+              </Field>
+              <Field label="Concluído em *">
                 <input
                   id="training-completed"
                   type="date"
@@ -410,30 +396,21 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   max={todayLocalDate()}
                   value={trainingCompletedAt}
                   onChange={(e) => setTrainingCompletedAt(e.target.value)}
-                  className="w-full border-2 border-black rounded-xl px-3 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
                 />
-              </div>
-              <div>
-                <label htmlFor="training-note" className="block text-xs font-bold uppercase mb-1">
-                  Observação
-                </label>
+              </Field>
+              <Field label="Observação">
                 <textarea
                   id="training-note"
                   maxLength={500}
                   value={trainingNote}
                   onChange={(e) => setTrainingNote(e.target.value)}
-                  className="w-full h-20 border-2 border-black rounded-xl p-3 focus:ring-2 focus:ring-blue-600 outline-none resize-none"
+                  className="!h-auto min-h-20 resize-none py-3"
                   placeholder="Ex: treinamento presencial de 2h com o gerente da unidade"
                 />
-              </div>
-              <button
-                type="submit"
-                disabled={trainingSaving}
-                className="w-full min-h-11 bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-              >
-                {trainingSaving ? <Loader2 className="animate-spin" size={18} /> : null}
+              </Field>
+              <Button type="submit" variant="dark" size="lg" fullWidth loading={trainingSaving}>
                 {trainingSaving ? 'Salvando...' : 'Registrar'}
-              </button>
+              </Button>
             </form>
           </div>
         </div>
@@ -442,45 +419,49 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
       {/* Modal — revogar treinamento */}
       {revokingId && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !revoking) setRevokingId(null);
           }}
         >
-          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
-            <h3 className="text-xl font-black uppercase mb-2">Revogar Treinamento?</h3>
-            <p className="text-xs font-bold text-gray-400 mb-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revoke-training-title"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+          >
+            <h3 id="revoke-training-title" className="text-lg font-bold mb-2">Revogar Treinamento?</h3>
+            <p className="text-sm text-gray-600 mb-4">
               Esta ação é definitiva — o registro fica marcado como revogado, nunca é apagado.
             </p>
-            <label htmlFor="revoke-reason" className="block text-xs font-bold uppercase mb-1">
-              Motivo *
-            </label>
-            <textarea
-              id="revoke-reason"
-              maxLength={300}
-              value={revokeReason}
-              onChange={(e) => setRevokeReason(e.target.value)}
-              className="w-full h-20 border-2 border-black rounded-xl p-3 focus:ring-2 focus:ring-blue-600 outline-none resize-none mb-4"
-              placeholder="Ex: registrado por engano, treinamento duplicado"
-            />
+            <Field label="Motivo *" className="mb-4">
+              <textarea
+                id="revoke-reason"
+                maxLength={300}
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                className="!h-auto min-h-20 resize-none py-3"
+                placeholder="Ex: registrado por engano, treinamento duplicado"
+              />
+            </Field>
             <div className="flex gap-3">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                className="flex-1"
                 onClick={() => setRevokingId(null)}
                 disabled={revoking}
-                className="flex-1 min-h-11 bg-gray-100 hover:bg-gray-200 text-black py-3 rounded-xl font-black uppercase text-xs transition-colors disabled:opacity-50"
               >
                 Cancelar
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
                 onClick={() => void handleRevoke()}
-                disabled={revoking}
-                className="flex-1 min-h-11 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                loading={revoking}
+                iconLeft={revoking ? undefined : <Ban size={14} />}
               >
-                {revoking ? <Loader2 className="animate-spin" size={16} /> : <Ban size={14} />}
                 Revogar
-              </button>
+              </Button>
             </div>
           </div>
         </div>

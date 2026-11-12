@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList, MessageCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList, MessageCircle } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import ProfileReviews from '../components/ProfileReviews';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
+import { Button, Card } from '../components/ui';
 
 interface CompanyPublicData {
     id: string;
@@ -152,16 +153,13 @@ export default function CompanyPublicProfile() {
         return (
             <div className="max-w-4xl mx-auto pb-24">
                 <PageMeta title="Empresa não encontrada" />
-                <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
+                <div className="text-center py-16 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
                     <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
-                    <h1 className="text-xl font-black uppercase mb-2">Empresa não encontrada</h1>
-                    <p className="text-gray-500 font-bold mb-6">Não conseguimos localizar este perfil.</p>
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="inline-flex items-center gap-2 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors"
-                    >
-                        <ArrowLeft size={16} strokeWidth={3} /> Voltar
-                    </button>
+                    <h1 className="text-xl font-bold mb-2">Empresa não encontrada</h1>
+                    <p className="text-sm text-gray-600 mb-6">Não conseguimos localizar este perfil.</p>
+                    <Button variant="primary" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />}>
+                        Voltar
+                    </Button>
                 </div>
             </div>
         );
@@ -181,24 +179,21 @@ export default function CompanyPublicProfile() {
                 ogImage={company.logo_url || undefined}
             />
 
-            <button
-                onClick={() => navigate(-1)}
-                className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6"
-            >
-                <ArrowLeft size={16} strokeWidth={3} /> Voltar
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
+                Voltar
+            </Button>
 
             {/* Card principal */}
-            <div className="bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,166,81,1)] mb-8">
+            <Card padding="none" className="overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-6">
                 <div className="h-32 sm:h-48 bg-black relative">
                     {company.cover_url && (
                         <img src={company.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
                     )}
                 </div>
 
-                <div className="px-6 sm:px-8 pb-8">
+                <div className="px-5 sm:px-8 pb-6 sm:pb-8">
                     <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem]">
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex items-center justify-center overflow-hidden">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden">
                             {company.logo_url ? (
                                 <img src={company.logo_url} alt={company.name} className="w-full h-full object-cover" />
                             ) : (
@@ -207,12 +202,12 @@ export default function CompanyPublicProfile() {
                         </div>
                     </div>
 
-                    <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter">{company.name}</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{company.name}</h1>
                     {company.industry && (
-                        <p className="text-lg font-bold text-gray-500 mt-1 uppercase">{company.industry}</p>
+                        <p className="text-sm sm:text-base font-semibold text-gray-600 mt-1">{company.industry}</p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 mt-4 text-sm font-bold text-gray-600">
+                    <div className="flex flex-wrap items-center gap-2 mt-4 text-sm font-semibold text-gray-600">
                         {company.address && (
                             <a
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`}
@@ -241,7 +236,7 @@ export default function CompanyPublicProfile() {
                     </div>
 
                     {company.description && (
-                        <p className="text-base text-gray-600 font-medium mt-6 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-sm sm:text-base text-gray-700 mt-6 leading-relaxed whitespace-pre-wrap">
                             {company.description}
                         </p>
                     )}
@@ -249,36 +244,38 @@ export default function CompanyPublicProfile() {
                     {/* "Falar com a empresa" — só aparece se houver relação (uma application
                         do freela com um turno desta empresa); sem isso não há canal para criar. */}
                     {applicationId && (
-                        <button
+                        <Button
+                            variant="primary"
+                            fullWidth
+                            className="mt-6 sm:w-auto"
                             onClick={() => void handleChat()}
-                            disabled={chatLoading}
-                            className="mt-6 inline-flex items-center gap-2 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            loading={chatLoading}
+                            iconLeft={<MessageCircle size={18} />}
                         >
-                            {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageCircle size={18} />}
                             Falar com a empresa
-                        </button>
+                        </Button>
                     )}
                 </div>
-            </div>
+            </Card>
 
             {/* Briefing padrão — regras da casa, dress code, apresentação */}
-            <div className="bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] mb-8">
-                <h2 className="text-xl font-black uppercase mb-1 flex items-center gap-2">
+            <Card className="mb-6">
+                <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
                     <ClipboardList size={20} /> Regras da casa
                 </h2>
-                <p className="text-sm text-gray-500 font-bold mb-4">
+                <p className="text-sm text-gray-600 mb-4">
                     O que esta empresa costuma pedir dos freelas antes do turno.
                 </p>
                 {company.default_briefing ? (
-                    <p className="text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light border-2 border-primary rounded-xl p-4 font-bold">
+                    <p className="text-sm sm:text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light border-2 border-primary rounded-xl p-4 font-medium">
                         {company.default_briefing}
                     </p>
                 ) : (
-                    <p className="text-sm text-gray-400 italic font-bold bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+                    <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
                         Esta empresa ainda não definiu um briefing padrão.
                     </p>
                 )}
-            </div>
+            </Card>
 
             {/* Avaliações de outros freelas sobre esta empresa — título explícito: quem vê
                 aqui é um freela TERCEIRO (não o dono do perfil), então o fallback padrão do

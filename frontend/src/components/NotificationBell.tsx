@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
+import { Button } from './ui';
 
 export default function NotificationBell({ className = "" }: { className?: string }) {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
@@ -90,12 +91,14 @@ export default function NotificationBell({ className = "" }: { className?: strin
             <button
                 ref={buttonRef}
                 onClick={toggleOpen}
-                className={`relative min-h-11 min-w-11 inline-flex items-center justify-center rounded-full hover:bg-white/10 transition-colors ${className}`}
+                className={`relative min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${className || 'hover:bg-gray-100'}`}
                 aria-label="Notificações"
+                aria-haspopup="true"
+                aria-expanded={isOpen}
             >
-                <Bell size={24} className={unreadCount > 0 ? "text-primary" : "currentColor"} />
+                <Bell size={22} className={unreadCount > 0 ? "text-primary" : "currentColor"} aria-hidden="true" />
                 {unreadCount > 0 && (
-                    <span className="absolute top-0 right-0 h-5 w-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    <span className="absolute top-0.5 right-0.5 h-5 w-5 bg-red-600 text-white text-xs font-bold tabular-nums rounded-full flex items-center justify-center border-2 border-white">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                 )}
@@ -105,34 +108,35 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 <div
                     ref={panelRef}
                     style={{ position: 'fixed', top: coords.top, right: coords.right }}
-                    className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-xl shadow-2xl border-2 border-black z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right"
+                    className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] border-2 border-black z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right"
                 >
-                    <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                        <h3 className="font-bold text-sm">Notificações</h3>
+                    <div className="px-4 py-2 border-b-2 border-black flex justify-between items-center gap-2 bg-white">
+                        <h3 className="font-bold text-base">Notificações</h3>
                         {unreadCount > 0 && (
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="md"
                                 onClick={() => markAllAsRead()}
-                                className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
+                                iconLeft={<Check size={14} aria-hidden="true" />}
                             >
-                                <Check size={12} />
                                 Marcar todas como lidas
-                            </button>
+                            </Button>
                         )}
                     </div>
 
                     <div className="max-h-[70vh] overflow-y-auto">
                         {notifications.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400">
+                            <div className="p-8 text-center text-gray-600">
                                 <Bell size={32} className="mx-auto mb-2 opacity-20" />
                                 <p className="text-sm">Nenhuma notificação.</p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-gray-100">
+                            <div className="divide-y divide-gray-200">
                                 {notifications.map((notification) => (
                                     <div
                                         key={notification.id}
                                         onClick={() => handleNotificationClick(notification.id, notification.link)}
-                                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ${!notification.read_at ? 'bg-blue-50/50' : ''}`}
+                                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ${!notification.read_at ? 'bg-gray-50' : ''}`}
                                     >
                                         <div className={`mt-1 h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${!notification.read_at ? 'bg-white shadow-sm' : 'bg-gray-100'}`}>
                                             {getIcon(notification.type)}
@@ -141,10 +145,10 @@ export default function NotificationBell({ className = "" }: { className?: strin
                                             <p className={`text-sm ${!notification.read_at ? 'font-bold text-black' : 'font-medium text-gray-700'}`}>
                                                 {notification.title}
                                             </p>
-                                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                                                 {notification.message}
                                             </p>
-                                            <p className="text-[10px] text-gray-400 mt-2">
+                                            <p className="text-xs text-gray-600 mt-2">
                                                 {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: ptBR })}
                                             </p>
                                         </div>
@@ -156,13 +160,14 @@ export default function NotificationBell({ className = "" }: { className?: strin
                             </div>
                         )}
                     </div>
-                    <div className="border-t border-gray-100 p-3 text-center">
-                        <button
+                    <div className="border-t-2 border-black p-3">
+                        <Button
+                            variant="secondary"
+                            fullWidth
                             onClick={() => { setIsOpen(false); navigate(notificationsPath); }}
-                            className="text-sm font-bold text-primary hover:underline"
                         >
                             Ver todas as notificações
-                        </button>
+                        </Button>
                     </div>
                 </div>,
                 document.body

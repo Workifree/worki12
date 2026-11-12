@@ -6,6 +6,7 @@ import { todayLocalDate } from '../../lib/dateUtils';
 import { JobSeriesService } from '../../services/jobSeriesService';
 import { SHIFT_CATEGORIES } from './shiftCategories';
 import { describeSeriesPreview } from './seriesPreviewText';
+import { Button, Field } from '../ui';
 
 /**
  * Snapshot mínimo de um `jobs` que pertence a uma série — o suficiente para pré-preencher o
@@ -160,40 +161,46 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="edit-series-title"
+                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+            >
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+                    <h2 id="edit-series-title" className="text-lg font-bold tracking-tight flex items-center gap-2">
                         <Repeat size={20} /> Editar os futuros
                     </h2>
-                    <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
                 {phase === 'form' && (
                     <div className="space-y-4">
-                        <p className="text-xs font-bold text-gray-500">
+                        <p className="text-xs text-gray-600">
                             Essa alteração vale para as próximas ocorrências desta série que ainda estão em aberto, sem freela
                             confirmado e sem chamado ativo. O valor do turno não muda (é travado após a criação).
                         </p>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-title" className="text-xs font-bold uppercase tracking-wide">Título</label>
+                        <Field label="Título">
                             <input
                                 id="es-title"
                                 type="text"
-                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold transition-all"
                                 value={form.title}
                                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-category" className="text-xs font-bold uppercase tracking-wide">Função</label>
+                        <Field label="Função">
                             <select
                                 id="es-category"
-                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold appearance-none"
                                 value={form.category}
                                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                             >
@@ -201,92 +208,78 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                                     <option key={cat.slug} value={cat.slug}>{cat.name}</option>
                                 ))}
                             </select>
-                        </div>
+                        </Field>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-description" className="text-xs font-bold uppercase tracking-wide">Descrição</label>
+                        <Field label="Descrição">
                             <textarea
                                 id="es-description"
-                                className="w-full h-20 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm transition-all resize-none"
+                                className="!h-auto min-h-20 resize-y py-3"
                                 value={form.description}
                                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-requirements" className="text-xs font-bold uppercase tracking-wide">Requisitos</label>
+                        <Field label="Requisitos">
                             <textarea
                                 id="es-requirements"
-                                className="w-full h-16 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm transition-all resize-none"
+                                className="!h-auto min-h-16 resize-y py-3"
                                 value={form.requirements}
                                 onChange={(e) => setForm({ ...form, requirements: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-briefing" className="text-xs font-bold uppercase tracking-wide">Briefing</label>
+                        <Field label="Briefing">
                             <textarea
                                 id="es-briefing"
-                                className="w-full h-16 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-medium text-sm transition-all resize-none"
+                                className="!h-auto min-h-16 resize-y py-3"
                                 value={form.briefing}
                                 onChange={(e) => setForm({ ...form, briefing: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-location" className="text-xs font-bold uppercase tracking-wide">Localização</label>
+                        <Field label="Localização">
                             <input
                                 id="es-location"
                                 type="text"
-                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold transition-all"
                                 value={form.location}
                                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label htmlFor="es-start" className="text-xs font-bold uppercase tracking-wide">Entrada</label>
+                            <Field label="Entrada">
                                 <input
                                     id="es-start"
                                     type="time"
-                                    className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold transition-all"
                                     value={form.work_start_time}
                                     onChange={(e) => setForm({ ...form, work_start_time: e.target.value })}
                                 />
-                            </div>
-                            <div className="space-y-2">
-                                <label htmlFor="es-end" className="text-xs font-bold uppercase tracking-wide">Saída</label>
+                            </Field>
+                            <Field label="Saída">
                                 <input
                                     id="es-end"
                                     type="time"
-                                    className="w-full bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold transition-all"
                                     value={form.work_end_time}
                                     onChange={(e) => setForm({ ...form, work_end_time: e.target.value })}
                                 />
-                            </div>
+                            </Field>
                         </div>
 
-                        <div className="space-y-2">
-                            <label htmlFor="es-slots" className="text-xs font-bold uppercase tracking-wide">Quantas pessoas</label>
+                        <Field label="Quantas pessoas">
                             <input
                                 id="es-slots"
                                 type="number"
                                 min={1}
                                 step={1}
-                                className="w-full sm:w-40 bg-gray-50 border-2 border-transparent focus:border-black outline-none rounded-xl p-3 font-bold transition-all"
+                                className="sm:w-40"
                                 value={form.slots}
                                 onChange={(e) => setForm({ ...form, slots: e.target.value })}
                             />
-                        </div>
+                        </Field>
 
-                        <button
-                            onClick={() => setPhase('confirm')}
-                            disabled={!canContinue}
-                            className="w-full min-h-[44px] bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                        <Button variant="dark" size="lg" fullWidth onClick={() => setPhase('confirm')} disabled={!canContinue}>
                             Continuar
-                        </button>
+                        </Button>
                     </div>
                 )}
 
@@ -318,21 +311,12 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <button
-                                onClick={() => setPhase('form')}
-                                disabled={saving}
-                                className="flex-1 min-h-[44px] px-4 py-3 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
-                            >
+                            <Button variant="secondary" onClick={() => setPhase('form')} disabled={saving} className="flex-1">
                                 Voltar
-                            </button>
-                            <button
-                                onClick={handleApply}
-                                disabled={confirmDisabled}
-                                className="flex-1 min-h-[44px] px-4 py-3 rounded-xl bg-black hover:bg-primary text-white font-black uppercase text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+                            </Button>
+                            <Button variant="dark" onClick={handleApply} disabled={confirmDisabled} loading={saving} className="flex-1">
                                 {saving ? 'Aplicando...' : 'Confirmar e aplicar'}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -355,12 +339,9 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                                 )}
                             </div>
                         )}
-                        <button
-                            onClick={onClose}
-                            className="w-full min-h-[44px] bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
-                        >
+                        <Button variant="dark" size="lg" fullWidth onClick={onClose}>
                             Fechar
-                        </button>
+                        </Button>
                     </div>
                 )}
             </div>

@@ -1,13 +1,14 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, Briefcase, Loader2, Check, CheckCheck } from 'lucide-react';
+import { MessageSquare, Send, ArrowLeft, Briefcase, Check, CheckCheck } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
+import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../components/ui'
 
 interface ConversationItem {
     id: string;
@@ -372,14 +373,14 @@ export default function Messages() {
     if (loading) {
         return (
             <div className="flex flex-col h-[calc(100vh-140px)] max-w-6xl mx-auto animate-pulse">
-                <div className="h-10 bg-gray-200 rounded w-1/4 mb-4" />
+                <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-4" />
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
                     <div className="space-y-3">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="h-16 bg-gray-200 rounded-xl" />
                         ))}
                     </div>
-                    <div className="bg-gray-200 rounded-xl" />
+                    <div className="bg-gray-200 rounded-2xl" />
                 </div>
             </div>
         );
@@ -387,19 +388,18 @@ export default function Messages() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] font-sans text-accent max-w-6xl mx-auto">
+            <PageHeader
+                title="Mensagens"
+                subtitle="Converse com empresas sobre seus turnos."
+                className="!mb-4"
+            />
 
-            {/* Header */}
-            <div className="mb-4">
-                <h2 className="text-4xl font-black uppercase tracking-tighter">Mensagens</h2>
-                <p className="text-gray-500 font-bold">Converse com empresas sobre seus turnos.</p>
-            </div>
-
-            <div className="flex-1 flex gap-6 min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
+            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
 
                 {/* Conversations List */}
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-4 border-b border-gray-200">
-                        <h3 className="font-bold uppercase text-sm text-gray-500">Conversas ({conversations.length})</h3>
+                    <div className="px-4 py-3 border-b-2 border-gray-100">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Conversas ({conversations.length})</h3>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -408,8 +408,8 @@ export default function Messages() {
                                 <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
                             </div>
                         ) : conversations.length === 0 ? (
-                            <div className="p-6 text-center text-gray-400">
-                                <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
+                            <div className="p-6 text-center text-gray-600">
+                                <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>
                                 <p className="text-sm mt-2">Aceite um convite de turno para iniciar uma conversa.</p>
                             </div>
@@ -418,7 +418,7 @@ export default function Messages() {
                                 <button
                                     key={conv.id}
                                     onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-primary' : ''}`}
+                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-primary' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
                                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -432,16 +432,16 @@ export default function Messages() {
                                             <div className="flex justify-between items-start gap-2">
                                                 <h4 className="font-bold text-sm truncate">{conv.company_name}</h4>
                                                 {conv.unread_count > 0 ? (
-                                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white tabular-nums">
                                                         {conv.unread_count}
                                                     </span>
                                                 ) : (
-                                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${getStatusColor(conv.status)}`}>
+                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
                                                         {getStatusLabel(conv.status)}
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className={`text-xs truncate mt-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-500'}`}>{conv.job_title}</p>
+                                            <p className={`text-xs truncate mt-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>{conv.job_title}</p>
                                         </div>
                                     </div>
                                 </button>
@@ -455,10 +455,10 @@ export default function Messages() {
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 border-b-2 border-gray-100 flex items-center gap-4">
+                            <div className="p-4 border-b-2 border-black flex items-center gap-3">
                                 <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
-                                    className="md:hidden p-3 hover:bg-gray-100 rounded-lg"
+                                    className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
@@ -482,9 +482,9 @@ export default function Messages() {
                                     ) : (
                                         <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
                                     )}
-                                    <p className="text-xs text-gray-500">{selectedConversation.job_title}</p>
+                                    <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
                                 </div>
-                                <span className={`text-xs font-bold uppercase px-3 py-1 rounded-full ${getStatusColor(selectedConversation.status)}`}>
+                                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
                                     {getStatusLabel(selectedConversation.status)}
                                 </span>
                             </div>
@@ -496,17 +496,17 @@ export default function Messages() {
                                 <ErroDeCarga onRetry={() => setReloadMensagens(k => k + 1)} mensagem="O histórico não sumiu — a carga falhou. Tente de novo." />
                             </div>
                         ) : messages.length === 0 ? (
-                                    <div className="text-center py-12 text-gray-400">
-                                        <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
+                                    <div className="text-center py-12 text-gray-600">
+                                        <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>
                                         <p className="text-sm mt-2">Inicie a conversa enviando uma mensagem.</p>
                                     </div>
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[75%] p-4 rounded-2xl shadow-sm ${msg.is_mine ? 'bg-primary text-white rounded-tr-none' : 'bg-white border border-gray-100 rounded-tl-none'}`}>
-                                                <p className="text-sm font-medium whitespace-pre-wrap break-words">{msg.content}</p>
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] uppercase font-bold tracking-wider ${msg.is_mine ? 'text-white/80' : 'text-gray-400'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-primary text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                                <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
                                                         relógio ao lado de uma mensagem significa "pendente" em qualquer app de
                                                         conversa — aqui não significava nada, e nunca sumia.
@@ -535,7 +535,7 @@ export default function Messages() {
 
                             {/* Typing Indicator */}
                             {isOtherTyping && (
-                                <div className="px-4 py-2 text-xs text-gray-400 font-bold flex items-center gap-2">
+                                <div className="px-4 py-2 text-xs text-gray-600 font-semibold flex items-center gap-2">
                                     <span className="animate-bounce">•</span>
                                     <span className="animate-bounce" style={{ animationDelay: '0.1s' }}>•</span>
                                     <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>•</span>
@@ -544,10 +544,11 @@ export default function Messages() {
                             )}
 
                             {/* Message Input */}
-                            <div className="p-4 border-t-2 border-gray-100 bg-white">
-                                <div className="flex gap-3">
+                            <div className="p-4 border-t-2 border-black bg-white">
+                                <div className="flex gap-2 sm:gap-3">
                                     <input
                                         type="text"
+                                        aria-label="Mensagem"
                                         value={newMessage}
                                         onChange={(e) => {
                                             setNewMessage(e.target.value);
@@ -561,29 +562,27 @@ export default function Messages() {
                                         }}
                                         onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                                         placeholder="Digite sua mensagem..."
-                                        className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:outline-none transition-colors font-medium"
+                                        className={`${FIELD_CONTROL_CLASS} flex-1 min-w-0`}
                                         disabled={sending}
                                     />
-                                    <button
+                                    <Button
+                                        variant="primary"
                                         onClick={handleSendMessage}
-                                        disabled={!newMessage.trim() || sending}
-                                        className="bg-black text-white px-6 py-3 rounded-xl font-bold uppercase flex items-center gap-2 hover:bg-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={!newMessage.trim()}
+                                        loading={sending}
+                                        aria-label="Enviar mensagem"
+                                        iconLeft={<Send size={18} />}
                                     >
-                                        {sending ? (
-                                            <Loader2 size={20} className="animate-spin" />
-                                        ) : (
-                                            <Send size={20} />
-                                        )}
                                         <span className="hidden sm:inline">Enviar</span>
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-400">
+                        <div className="flex-1 flex items-center justify-center text-gray-600">
                             <div className="text-center">
-                                <MessageSquare size={64} className="mx-auto mb-4 opacity-20" />
-                                <p className="font-bold text-lg">Selecione uma conversa</p>
+                                <MessageSquare size={48} className="mx-auto mb-4 opacity-30" />
+                                <p className="font-bold text-lg text-black">Selecione uma conversa</p>
                                 <p className="text-sm mt-2">Escolha uma conversa à esquerda para ver as mensagens.</p>
                             </div>
                         </div>

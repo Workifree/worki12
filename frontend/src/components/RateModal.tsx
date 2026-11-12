@@ -1,9 +1,10 @@
 
 import { useState, useEffect } from 'react';
 import { useModalDismiss } from '../hooks/useModalDismiss';
-import { Star, XCircle, Loader2 } from 'lucide-react';
+import { Star, X } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logError } from '../lib/logger'
+import { Button, Field } from './ui'
 
 interface RateModalProps {
     isOpen: boolean;
@@ -40,7 +41,7 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
         setSubmitting(true);
         try {
             await onSubmit(rating, comment);
-            setRating(5);
+            setRating(0);
             setComment('');
             onClose();
         } catch (error) {
@@ -53,7 +54,7 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
 
     return (
         <div
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={fecharPeloFundo}
         >
             <div
@@ -61,36 +62,43 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="rate-modal-title"
-                className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                className="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
             >
-                <div className="flex justify-between items-center mb-6">
-                    <h3 id="rate-modal-title" className="text-2xl font-black uppercase tracking-tight">{title}</h3>
-                    <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                        <XCircle size={24} />
-                    </button>
+                <div className="flex justify-between items-center gap-3 mb-6">
+                    <h3 id="rate-modal-title" className="text-xl font-bold tracking-tight">{title}</h3>
+                    <Button
+                        variant="ghost"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="w-11 !px-0 shrink-0"
+                    >
+                        <X size={20} />
+                    </Button>
                 </div>
 
-                <div className="flex flex-col items-center mb-6">
+                <div className="flex flex-col items-center text-center mb-6">
                     <div className="w-20 h-20 rounded-full bg-gray-200 border-2 border-black overflow-hidden mb-3">
                         {targetPhotoUrl ? (
                             <img src={targetPhotoUrl} alt={targetName} className="w-full h-full object-cover" />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-2xl">
+                            <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-2xl">
                                 {targetName?.[0]}
                             </div>
                         )}
                     </div>
                     <h4 className="font-bold text-lg">{targetName}</h4>
-                    {subtitle && <p className="text-sm text-gray-500 font-bold uppercase">{subtitle}</p>}
+                    {subtitle && <p className="text-sm text-gray-600">{subtitle}</p>}
                 </div>
 
-                <div className="flex justify-center gap-2 mb-6">
+                <div className="flex justify-center gap-1 mb-6">
                     {[1, 2, 3, 4, 5].map((star) => (
                         <button
                             key={star}
+                            type="button"
                             onClick={() => setRating(star)}
+                            aria-pressed={rating === star}
                             aria-label={`${star} estrela${star > 1 ? 's' : ''}`}
-                            className="star-btn transform hover:scale-110 transition-transform"
+                            className="star-btn flex h-11 w-11 items-center justify-center rounded-xl transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                         >
                             <Star
                                 size={32}
@@ -102,25 +110,25 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                     ))}
                 </div>
 
-                <div className="mb-6">
-                    <label className="block text-sm font-bold uppercase mb-2">Comentário (Opcional)</label>
+                <Field label="Comentário (opcional)" className="mb-6">
                     <textarea
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
-                        aria-label="Comentário"
                         placeholder="Como foi a experiência?"
-                        className="w-full border-2 border-gray-200 rounded-xl p-3 focus:outline-none focus:border-black transition-colors font-medium h-24 resize-none"
+                        className="!h-24 py-3 resize-none"
                     />
-                </div>
+                </Field>
 
-                <button
+                <Button
+                    variant="primary"
+                    size="lg"
+                    fullWidth
                     onClick={handleSubmit}
-                    disabled={submitting || rating === 0}
-                    className="w-full bg-black text-white py-4 rounded-xl font-black uppercase tracking-wide hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                    loading={submitting}
+                    disabled={rating === 0}
                 >
-                    {submitting ? <Loader2 className="animate-spin" /> : null}
-                    {submitting ? 'Enviando...' : rating === 0 ? 'Toque nas estrelas para avaliar' : 'Enviar Avaliação'}
-                </button>
+                    {submitting ? 'Enviando...' : rating === 0 ? 'Toque nas estrelas para avaliar' : 'Enviar avaliação'}
+                </Button>
             </div>
         </div>
     );

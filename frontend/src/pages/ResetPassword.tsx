@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Loader2, CheckCircle } from 'lucide-react';
+import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getPasswordStrength } from '../lib/validation';
+import { Button, Card, Field, PageHeader } from '../components/ui';
 
 export default function ResetPassword() {
     const navigate = useNavigate();
@@ -52,92 +53,89 @@ export default function ResetPassword() {
     if (success) {
         return (
             <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl border-2 border-black p-8 max-w-md w-full text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle size={32} className="text-green-600" />
+                <Card padding="lg" className="max-w-md w-full text-center">
+                    <div className="w-14 h-14 bg-green-100 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle size={28} className="text-green-600" />
                     </div>
-                    <h1 className="text-2xl font-black uppercase mb-2">Senha Redefinida</h1>
-                    <p className="text-gray-600 mb-6">Sua senha foi alterada com sucesso.</p>
-                    <button
-                        onClick={() => navigate('/login')}
-                        className="w-full bg-black text-white py-3 rounded-xl font-bold uppercase hover:bg-gray-800 transition-colors"
-                    >
+                    <h1 className="text-2xl font-bold tracking-tight mb-2">Senha Redefinida</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mb-6">Sua senha foi alterada com sucesso.</p>
+                    <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/login')}>
                         Ir para Login
-                    </button>
-                </div>
+                    </Button>
+                </Card>
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl border-2 border-black p-8 max-w-md w-full">
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Lock size={24} className="text-blue-600" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black uppercase">Nova Senha</h1>
-                        <p className="text-sm text-gray-500">Escolha uma senha segura</p>
-                    </div>
-                </div>
+            <Card padding="lg" className="max-w-md w-full">
+                <PageHeader
+                    as="h1"
+                    title="Nova Senha"
+                    subtitle="Escolha uma senha segura"
+                    className="sm:mb-6"
+                />
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="text-xs font-bold uppercase block mb-1">Nova Senha</label>
-                        <div className="relative">
+                        <Field label="Nova senha">
                             <input
                                 type={mostrarSenha ? 'text' : 'password'}
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                aria-label="Nova senha"
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 pr-24 focus:border-black outline-none"
                                 placeholder="Mínimo 8 caracteres"
+                                autoComplete="new-password"
                                 autoFocus
                             />
-                            <button
-                                type="button"
-                                onClick={() => setMostrarSenha(v => !v)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-black uppercase text-gray-500 hover:text-black min-h-11 px-2"
-                            >
-                                {mostrarSenha ? 'Ocultar' : 'Mostrar'}
-                            </button>
-                        </div>
+                        </Field>
                         {password.length > 0 && (
                             <div className="mt-2">
                                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                     <div className={`h-full ${strength.color} ${strength.width} transition-all duration-300 rounded-full`} />
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">Força: {strength.label}</p>
+                                <p className="text-xs text-gray-600 mt-1">Força: {strength.label}</p>
                             </div>
                         )}
                     </div>
 
-                    <div>
-                        <label className="text-xs font-bold uppercase block mb-1">Confirmar Senha</label>
+                    <Field label="Confirmar senha">
                         <input
                             type={mostrarSenha ? 'text' : 'password'}
                             value={confirm}
                             onChange={e => setConfirm(e.target.value)}
-                            aria-label="Confirmar senha"
-                            className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none"
                             placeholder="Repita a senha"
+                            autoComplete="new-password"
                         />
-                    </div>
+                    </Field>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-pressed={mostrarSenha}
+                        onClick={() => setMostrarSenha(v => !v)}
+                        iconLeft={mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                        className="-ml-3"
+                    >
+                        {mostrarSenha ? 'Ocultar senhas' : 'Mostrar senhas'}
+                    </Button>
 
                     {error && (
-                        <p className="text-red-600 text-sm font-bold">{error}</p>
+                        <p role="alert" className="text-sm font-bold text-red-600">{error}</p>
                     )}
 
-                    <button
+                    <Button
                         type="submit"
-                        disabled={loading || !password || !confirm}
-                        className="w-full bg-black text-white py-3 rounded-xl font-bold uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        variant="dark"
+                        size="lg"
+                        fullWidth
+                        loading={loading}
+                        disabled={!password || !confirm}
                     >
-                        {loading ? <Loader2 className="animate-spin" size={20} /> : 'Redefinir Senha'}
-                    </button>
+                        Redefinir Senha
+                    </Button>
                 </form>
-            </div>
+            </Card>
         </div>
     );
 }

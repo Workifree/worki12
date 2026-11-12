@@ -14,13 +14,13 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
-import { BarChart3, Calendar } from 'lucide-react';
 import { OperationAnalyticsService, emptyAnalytics } from '../../services/operationAnalyticsService';
 import type { OperationAnalyticsPeriod } from '../../services/operationAnalyticsService';
 import type { OperationAnalytics } from '../../types';
 import { todayInBrazil } from '../../lib/dateUtils';
 import { logError } from '../../lib/logger';
 import PageMeta from '../../components/PageMeta';
+import { Card, Field, PageHeader } from '../../components/ui';
 import { AnalyticsSkeleton } from '../../components/company/analytics/AnalyticsStates';
 import { TruncatedBanner } from '../../components/company/analytics/TruncatedBanner';
 import { ErrorBanner } from '../../components/company/analytics/ErrorBanner';
@@ -136,75 +136,56 @@ export default function CompanyOperationAnalytics() {
     <div className="flex flex-col gap-6 pb-20 md:pb-12 font-sans text-accent max-w-6xl mx-auto">
       <PageMeta title="Analytics de Operação" />
 
-      <header>
+      <div>
         <PainelNumerosTabs />
-<h1 className="text-3xl md:text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
-          <BarChart3 size={32} strokeWidth={3} /> Analytics de Operação
-        </h1>
         {/* Espelho do subtitulo do Relatorio de Pagamentos: cada pagina diz o que responde. */}
-        <p className="text-sm font-bold text-gray-500 mt-1">
-          Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite.
-        </p>
-        <p className="text-gray-500 text-sm max-w-2xl">
-          Gasto, custo por hora, tempo de preenchimento e presença por freela — o que hoje você monta na mão,
-          automatizado. Somente leitura, não move saldo.
-        </p>
-      </header>
+        <PageHeader
+          title="Analytics de Operação"
+          subtitle="Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite. Somente leitura, não move saldo."
+          className="!mb-0"
+        />
+      </div>
 
       {/* Seletor de período */}
-      <div className="bg-white border-2 border-black rounded-2xl p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4">
-        <div className="flex flex-wrap gap-3">
+      <Card className="flex flex-col gap-4">
+        <div role="group" aria-label="Período" className="flex flex-wrap gap-2 self-start">
           {(['hoje', 'semana', 'mes'] as const).map((key) => (
             <button
               key={key}
+              type="button"
               onClick={() => applyPreset(key)}
-              className={`px-5 py-2.5 rounded-xl border-2 font-black uppercase text-sm transition-all min-h-[44px]
-                ${preset === key
-                  ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]'
-                  : 'bg-white text-gray-500 border-black hover:bg-gray-100'
-                }`}
+              aria-pressed={preset === key}
+              className={`h-11 px-5 rounded-full border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                preset === key ? 'bg-black text-white border-black' : 'bg-white text-gray-700 border-gray-300 hover:border-black'
+              }`}
             >
               {PRESET_LABELS[key]}
             </button>
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="analyticsFromInput" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              De
-            </label>
-            <div className="relative">
-              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="analyticsFromInput"
-                type="date"
-                value={from}
-                max={to}
-                onChange={(e) => handleCustomDateChange('from', e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="analyticsToInput" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              Até
-            </label>
-            <div className="relative">
-              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="analyticsToInput"
-                type="date"
-                value={to}
-                min={from}
-                max={today}
-                onChange={(e) => handleCustomDateChange('to', e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              />
-            </div>
-          </div>
+          <Field label="De">
+            <input
+              id="analyticsFromInput"
+              type="date"
+              value={from}
+              max={to}
+              onChange={(e) => handleCustomDateChange('from', e.target.value)}
+            />
+          </Field>
+          <Field label="Até">
+            <input
+              id="analyticsToInput"
+              type="date"
+              value={to}
+              min={from}
+              max={today}
+              onChange={(e) => handleCustomDateChange('to', e.target.value)}
+            />
+          </Field>
         </div>
-        <p className="text-xs font-bold text-gray-400">Período: {periodLabel}</p>
-      </div>
+        <p className="text-xs text-gray-600">Período: {periodLabel}</p>
+      </Card>
 
       {loading || !analytics ? (
         <AnalyticsSkeleton rows={5} />

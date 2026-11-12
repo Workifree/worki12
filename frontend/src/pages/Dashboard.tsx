@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
 import {
-    Clock, Star, TrendingUp, Award, Zap,
+    Clock, Star, TrendingUp, Award,
     ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight, CalendarClock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +16,7 @@ import { useWorkerStores } from '../hooks/useTeamConnections';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
+import { Button, Card, PageHeader } from '../components/ui';
 
 interface NextJobData {
     status: string;
@@ -34,6 +35,7 @@ interface NextJobData {
 }
 
 interface HistoryItem {
+    id: string;
     status: string;
     created_at: string;
     job: {
@@ -124,7 +126,7 @@ export default function Dashboard() {
             if (!user) return [];
             const { data, error } = await supabase
                 .from('applications')
-                .select('status, created_at, job:jobs(title)')
+                .select('id, status, created_at, job:jobs(title)')
                 .eq('worker_id', user.id)
                 .in('status', ['completed', 'rejected', 'cancelled'])
                 .order('created_at', { ascending: false })
@@ -170,7 +172,7 @@ export default function Dashboard() {
         enabled: !!worker
     });
 
-    // "Meus clientes" — empresas conectadas (equipe aceita), atalho para a Carteira.
+    // "Minhas Empresas" — empresas conectadas (equipe aceita), atalho para /carteira.
     const { myStores, loading: storesLoading } = useWorkerStores();
 
     // Quests Logic (derived from worker data)
@@ -243,275 +245,289 @@ export default function Dashboard() {
     const primaryInviteCompany = (primaryInvite?.job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
     const primaryInviteTitle = primaryInvite?.job?.title ?? 'Novo turno';
 
+    const firstName = worker.full_name?.split(' ')[0] ?? '';
+    const progresso = levelProgress(worker.xp || 0);
+    const nota = worker.rating_average != null ? Number(worker.rating_average).toFixed(1) : null;
+    const temAtencao = pendingReceipts.length > 0 || (!invitesLoading && !!primaryInvite);
+    // Uma ação primária por tela: o que está esperando o freela agora ganha o botão cheio; o convite
+    // só vira secundário quando um pagamento a confirmar já ocupa o primeiro plano.
+    const conviteEhPrimario = pendingReceipts.length === 0;
+    const parsedDate = nextJob?.job?.start_date ? new Date(nextJob.job.start_date) : null;
+    const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
+    const perfilIncompleto = hasNoDeclaredAvailability || completedQuests < totalQuests;
+
     return (
-        <div className="flex flex-col gap-6 pb-12 font-sans text-accent">
+        <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-5xl mx-auto w-full">
             <PageMeta title="Dashboard" />
 
-            {/* --- WELCOME HEADER (leve — sem barra de XP em destaque) --- */}
-            <div className="flex items-center justify-between bg-black text-white p-6 rounded-3xl border-2 border-black">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight mb-1 flex items-center gap-2">
-                        Fala, <span className="text-primary">{worker.full_name?.split(' ')[0]}</span>! <Zap className="text-yellow-400 fill-current" size={22} />
-                    </h1>
-                    <p className="text-gray-400 font-bold text-sm">Pronto para faturar hoje?</p>
-                </div>
-                <div className="hidden sm:flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-white/10 flex-shrink-0">
-                    <Award size={16} className="text-primary" />
-                    <span className="text-xs font-black uppercase text-gray-300">Lvl {worker.level || 1}</span>
-                </div>
-            </div>
+            <PageHeader
+                className="!mb-0"
+                title={firstName ? `Fala, ${firstName}!` : 'Fala!'}
+                subtitle="Pronto para faturar hoje?"
+            />
 
-            {/* --- INDICADOR PERSISTENTE: PAGAMENTO AGUARDANDO CONFIRMAÇÃO ---
-                Vem ANTES do convite: é o fecho de um trabalho JÁ FEITO (a empresa declarou que
-                pagou; falta o freela confirmar), enquanto o convite é trabalho futuro. --- */}
-            {pendingReceipts.length > 0 && (
-                <section className="bg-black text-white p-6 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <span className="inline-flex items-center gap-1.5 bg-primary text-white text-[10px] font-black uppercase px-3 py-1 rounded-pill mb-2">
-                            <AlertCircle size={12} /> Pagamento para confirmar
-                        </span>
-                        <h2 className="text-xl font-black uppercase truncate">
-                            {totalReceipts.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </h2>
-                        <p className="text-sm font-bold text-white/80 truncate">
-                            {pendingReceipts.length === 1
-                                ? `${primaryReceiptCompany} registrou este pagamento. Confirme que recebeu.`
-                                : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
-                        className="bg-primary hover:bg-white hover:text-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors whitespace-nowrap flex-shrink-0"
-                    >
-                        Confirmar recebimento
-                    </button>
-                </section>
-            )}
-
-            {/* --- HERO: CONVITE PENDENTE (push-first) --- */}
-            {!invitesLoading && primaryInvite && (
-                <section className="bg-primary text-white p-6 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <span className="inline-flex items-center gap-1.5 bg-black text-primary text-[10px] font-black uppercase px-3 py-1 rounded-pill mb-2">
-                            <Send size={12} /> Convite pendente
-                        </span>
-                        <h2 className="text-xl font-black uppercase truncate">{primaryInviteTitle}</h2>
-                        <p className="text-sm font-bold text-white/80 truncate">{primaryInviteCompany} está te chamando para um turno.</p>
-                    </div>
-                    <button
-                        onClick={() => navigate('/my-jobs')}
-                        className="bg-black hover:bg-white hover:text-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors whitespace-nowrap flex-shrink-0"
-                    >
-                        Ver Convite{pendingInvites.length > 1 ? `s (${pendingInvites.length})` : ''}
-                    </button>
-                </section>
-            )}
-
-            {/* --- CTA: DECLARAR DISPONIBILIDADE (F7 — R14/A10) --- */}
-            {hasNoDeclaredAvailability && (
-                <section className="bg-white p-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex items-center justify-between gap-4 flex-wrap">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <CalendarClock size={20} className="text-primary flex-shrink-0" />
-                        <p className="text-sm font-bold text-gray-700 min-w-0">
-                            Declare sua disponibilidade para receber chamados mais certeiros.
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => navigate('/profile')}
-                        className="bg-primary hover:bg-black text-white px-6 min-h-11 rounded-xl font-black uppercase text-xs transition-colors whitespace-nowrap flex-shrink-0"
-                    >
-                        Declarar agora
-                    </button>
-                </section>
-            )}
-
-            {/* --- PRÓXIMO TURNO + MEUS CLIENTES --- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                {/* Próximo Turno */}
-                <div className="bg-black text-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]">
-                    <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-primary" /> {nextJob?.status === 'in_progress' ? 'Você está no turno agora' : 'Próximo Turno'}
-                    </h3>
-                    {nextJob ? (
-                        <>
-                            <div className="bg-white/10 p-4 rounded-xl border border-white/10 mb-4">
-                                <div className="flex justify-between items-start mb-2">
-                                    {(() => {
-                                        const parsedDate = nextJob.job?.start_date ? new Date(nextJob.job.start_date) : null;
-                                        const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
-                                        return hasValidDate ? (
-                                            <span className="text-2xl font-black">{parsedDate!.getDate()} {parsedDate!.toLocaleString('pt-BR', { month: 'short' }).toUpperCase()}</span>
-                                        ) : (
-                                            <span className="text-sm font-black text-gray-400 uppercase">Data indefinida</span>
-                                        );
-                                    })()}
-                                    <span className="bg-primary text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                                        {nextJob.status === 'in_progress' ? 'Em andamento' : 'Agendado'}
-                                    </span>
-                                </div>
-                                <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
-                                {nextJob.job.company?.name && (
-                                    <p className="text-sm font-bold text-gray-300">{nextJob.job.company.name}</p>
-                                )}
-                                {nextJob.job.location && (
-                                    <p className="text-xs text-gray-400 truncate">{nextJob.job.location}</p>
-                                )}
-                                <p className="text-sm text-gray-400">
-                                    {nextJob.job.work_start_time
-                                        ? `${nextJob.job.work_start_time}${nextJob.job.work_end_time ? ` – ${nextJob.job.work_end_time}` : ''}`
-                                        : 'Horário indefinido'}
+            {/* --- PRECISA DA SUA ATENÇÃO (ação pendente, persistente) ---
+                Pagamento vem ANTES do convite: é o fecho de um trabalho JÁ FEITO (a empresa
+                declarou que pagou; falta o freela confirmar), enquanto o convite é trabalho futuro. */}
+            {temAtencao && (
+                <section aria-label="Precisa da sua atenção" className="flex flex-col gap-4">
+                    {pendingReceipts.length > 0 && (
+                        <Card padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="min-w-0">
+                                <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary text-xs font-bold px-3 py-1 rounded-pill mb-2">
+                                    <AlertCircle size={12} /> Pagamento para confirmar
+                                </span>
+                                <p className="text-2xl font-bold tabular-nums truncate">
+                                    {totalReceipts.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                    {pendingReceipts.length === 1
+                                        ? `${primaryReceiptCompany} registrou este pagamento. Confirme que recebeu.`
+                                        : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
                                 </p>
                             </div>
-                            <button onClick={() => navigate('/my-jobs')} className="w-full bg-white text-black font-black uppercase py-3 rounded-xl hover:bg-primary hover:text-white transition-colors">
+                            <Button
+                                variant="primary"
+                                className="sm:flex-shrink-0 w-full sm:w-auto"
+                                onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
+                            >
+                                Confirmar recebimento
+                            </Button>
+                        </Card>
+                    )}
+
+                    {!invitesLoading && primaryInvite && (
+                        <Card padding="sm" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="min-w-0">
+                                <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 text-xs font-bold px-3 py-1 rounded-pill mb-2">
+                                    <Send size={12} /> Convite pendente
+                                </span>
+                                <h2 className="text-lg font-bold truncate">{primaryInviteTitle}</h2>
+                                <p className="text-sm text-gray-600 truncate">{primaryInviteCompany} está te chamando para um turno.</p>
+                            </div>
+                            <Button
+                                variant={conviteEhPrimario ? 'primary' : 'secondary'}
+                                className="sm:flex-shrink-0 w-full sm:w-auto"
+                                onClick={() => navigate('/my-jobs')}
+                            >
+                                Ver Convite{pendingInvites.length > 1 ? `s (${pendingInvites.length})` : ''}
+                            </Button>
+                        </Card>
+                    )}
+                </section>
+            )}
+
+            {/* --- PRÓXIMO TURNO + GANHOS (a resposta de relance) --- */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="md:col-span-2 flex flex-col">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Clock size={18} className="text-primary" /> {nextJob?.status === 'in_progress' ? 'Você está no turno agora' : 'Próximo turno'}
+                    </h2>
+                    {nextJob ? (
+                        <>
+                            <div className="flex items-start gap-4 mb-5">
+                                <div className="flex-shrink-0 w-16 rounded-xl border-2 border-black bg-gray-50 py-2 text-center">
+                                    {hasValidDate ? (
+                                        <>
+                                            <span className="block text-2xl font-bold leading-none tabular-nums">{parsedDate!.getDate()}</span>
+                                            <span className="block mt-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                                {parsedDate!.toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <span className="block px-1 text-xs font-semibold text-gray-600">Data indefinida</span>
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <span className="inline-block mb-1 bg-primary-light text-primary text-xs font-bold px-2.5 py-0.5 rounded-pill">
+                                        {nextJob.status === 'in_progress' ? 'Em andamento' : 'Agendado'}
+                                    </span>
+                                    <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
+                                    {nextJob.job.company?.name && (
+                                        <p className="text-sm text-gray-700">{nextJob.job.company.name}</p>
+                                    )}
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {nextJob.job.work_start_time
+                                            ? `${nextJob.job.work_start_time}${nextJob.job.work_end_time ? ` – ${nextJob.job.work_end_time}` : ''}`
+                                            : 'Horário indefinido'}
+                                        {nextJob.job.location ? ` · ${nextJob.job.location}` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                variant={temAtencao ? 'secondary' : 'primary'}
+                                className="mt-auto w-full sm:w-auto sm:self-start"
+                                onClick={() => navigate('/my-jobs')}
+                            >
                                 Ver Detalhes
-                            </button>
+                            </Button>
                         </>
                     ) : carregandoNextJob ? (
-                        <div className="h-16 bg-white/5 rounded-xl animate-pulse" />
+                        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
                     ) : erroNextJob ? (
-                        <div className="text-center py-6 text-red-300 font-bold bg-white/5 rounded-xl border border-red-400/30">
+                        <div className="text-center py-6 text-red-600 text-sm font-bold bg-red-50 rounded-xl border border-red-200">
                             Não foi possível carregar. Recarregue a página.
                         </div>
                     ) : (
-                        <div className="text-center py-6 text-gray-500 font-bold bg-white/5 rounded-xl border border-white/5">
+                        <div className="text-center py-6 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
                             Sem próximos turnos marcados.
                         </div>
                     )}
-                </div>
+                </Card>
 
-                {/* Meus Clientes */}
-                <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-sm flex flex-col justify-between">
+                <Card className="flex flex-col">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <TrendingUp size={18} className="text-primary" /> Ganhos
+                    </h2>
+                    <p className="text-3xl font-bold tabular-nums truncate" title={formatBRL(worker.earnings_total || 0)}>
+                        {formatBRL(worker.earnings_total || 0)}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                        {worker.completed_jobs_count || 0} turno{(worker.completed_jobs_count || 0) === 1 ? '' : 's'} realizado{(worker.completed_jobs_count || 0) === 1 ? '' : 's'}
+                    </p>
+                    <p className="mt-auto pt-4 inline-flex items-center gap-1.5 text-sm text-gray-700">
+                        <Star size={14} className="text-yellow-500" fill="currentColor" aria-hidden="true" />
+                        <span>Sua nota: <span className="font-bold">{nota ?? '—'}</span></span>
+                    </p>
+                </Card>
+            </section>
+
+            {/* --- EMPRESAS + NÍVEL (contexto, sem competir com o que é urgente) --- */}
+            <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card padding="sm" className="flex flex-col justify-between gap-4">
                     <div>
-                        <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                            <Building2 size={18} /> Meus Clientes
-                        </h3>
+                        <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
+                            <Building2 size={16} /> Minhas Empresas
+                        </h2>
                         {storesLoading ? (
-                            <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+                            <div className="h-9 bg-gray-100 rounded-xl animate-pulse" />
                         ) : myStores.length > 0 ? (
-                            <p className="text-4xl font-black mb-1">{myStores.length}</p>
+                            <>
+                                <p className="text-3xl font-bold tabular-nums">{myStores.length}</p>
+                                <p className="text-sm text-gray-600">
+                                    empresa{myStores.length > 1 ? 's' : ''} confiando no seu trabalho.
+                                </p>
+                            </>
                         ) : (
-                            <p className="text-sm font-bold text-gray-400 mb-4">
-                                Você ainda não tem empresas na sua carteira.
-                            </p>
-                        )}
-                        {myStores.length > 0 && (
-                            <p className="text-sm font-bold text-gray-500 mb-4">
-                                empresa{myStores.length > 1 ? 's' : ''} confiando no seu trabalho.
-                            </p>
+                            <p className="text-sm text-gray-600">Você ainda não tem empresas conectadas.</p>
                         )}
                     </div>
-                    <button
+                    <Button
+                        variant="secondary"
+                        className="w-full sm:w-auto sm:self-start"
                         onClick={() => navigate('/carteira')}
-                        className="w-full bg-primary hover:bg-black text-white font-black uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                        iconRight={<ArrowRight size={16} />}
                     >
-                        Ver Carteira <ArrowRight size={16} />
-                    </button>
-                </div>
-            </div>
+                        Ver Empresas
+                    </Button>
+                </Card>
 
-            {/* --- ONBOARDING / INVESTMENT (Hooked: Investment) --- */}
-            {completedQuests < totalQuests && (
-                <section className="bg-[#F4F4F0] border-2 border-black rounded-2xl p-6 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-2 h-full bg-primary"></div>
-
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
-                        <div>
-                            <h3 className="text-xl font-black uppercase mb-1 flex items-center gap-2">
-                                <AlertCircle size={20} className="text-primary" /> Complete seu Perfil
-                            </h3>
-                            <p className="text-sm font-bold text-gray-500">
-                                Complete essas tarefas para ganhar <span className="text-black bg-white px-1">XP</span> e passar mais confiança para as empresas.
-                            </p>
-                        </div>
-
-                        <div className="w-full md:w-auto flex flex-col gap-3">
-                            {quests.filter(q => !q.done).slice(0, 2).map(quest => (
-                                <button key={quest.id} onClick={() => navigate('/profile')} className="flex items-center justify-between w-full md:w-80 bg-white p-3 rounded-xl border-2 border-gray-200 hover:border-black hover:shadow-md transition-all group text-left">
-                                    <span className="text-sm font-bold text-gray-700">{quest.title}</span>
-                                    {quest.xp > 0 ? (
-                                        <span className="text-xs font-black bg-primary text-white px-2 py-1 rounded-md group-hover:scale-110 transition-transform">
-                                            +{quest.xp} XP
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs font-black bg-gray-200 text-gray-600 px-2 py-1 rounded-md group-hover:scale-110 transition-transform">
-                                            Verificação
-                                        </span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
+                <Card padding="sm">
+                    <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
+                        <Award size={16} className="text-primary" /> Nível
+                    </h2>
+                    <p className="text-3xl font-bold tabular-nums mb-3">{worker.level || 1}</p>
+                    <div
+                        className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200"
+                        role="progressbar"
+                        aria-label="Progresso para o próximo nível"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(progresso.percent)}
+                    >
+                        <div className="h-full bg-primary" style={{ width: `${progresso.percent}%` }} />
                     </div>
+                    <p className="text-xs text-gray-600 mt-2">
+                        {progresso.faltam > 0 ? `Faltam ${progresso.faltam} XP para o próximo nível` : 'Nível máximo!'}
+                    </p>
+                </Card>
+            </section>
+
+            {/* --- COMPLETAR PERFIL (disponibilidade F7 + quests; um bloco só, sem competir com o resto) --- */}
+            {perfilIncompleto && (
+                <section aria-label="Complete seu perfil">
+                    <Card padding="sm" className="bg-[#F4F4F0] flex flex-col gap-4">
+                        <h2 className="text-lg font-bold flex items-center gap-2">
+                            <AlertCircle size={18} className="text-primary" /> Complete seu perfil
+                        </h2>
+
+                        {/* F7 — R14/A10: visível SÓ enquanto o freela nunca declarou disponibilidade. */}
+                        {hasNoDeclaredAvailability && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-xl border-2 border-black p-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <CalendarClock size={20} className="text-primary flex-shrink-0" />
+                                    <p className="text-sm text-gray-700 min-w-0">
+                                        Declare sua disponibilidade para receber chamados mais certeiros.
+                                    </p>
+                                </div>
+                                <Button variant="secondary" className="w-full sm:w-auto sm:flex-shrink-0" onClick={() => navigate('/profile')}>
+                                    Declarar agora
+                                </Button>
+                            </div>
+                        )}
+
+                        {completedQuests < totalQuests && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm text-gray-600">
+                                    Ganhe <span className="font-bold text-black">XP</span> e passe mais confiança para as empresas.
+                                </p>
+                                {quests.filter(q => !q.done).slice(0, 2).map(quest => (
+                                    <button
+                                        key={quest.id}
+                                        onClick={() => navigate('/profile')}
+                                        className="flex items-center justify-between gap-3 w-full min-h-11 bg-white px-3 py-2 rounded-xl border-2 border-gray-300 hover:border-black transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                                    >
+                                        <span className="text-sm font-semibold text-gray-800">{quest.title}</span>
+                                        {quest.xp > 0 ? (
+                                            <span className="text-xs font-bold bg-primary-light text-primary px-2.5 py-1 rounded-pill flex-shrink-0">
+                                                +{quest.xp} XP
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs font-bold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-pill flex-shrink-0">
+                                                Verificação
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
                 </section>
             )}
 
-            {/* --- STANDING PROFISSIONAL (rebaixado — era o herói da tela, agora é secundário) --- */}
-            <section className="space-y-3">
-                <h2 className="text-xs font-black uppercase text-gray-400 tracking-wide px-1">Seu standing profissional</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-                    {/* Level & XP */}
-                    <div className="bg-white p-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Award size={16} className="text-primary" />
-                            <span className="text-xs font-black uppercase text-gray-400">Nível</span>
-                        </div>
-                        <p className="text-2xl font-black italic mb-2">LVL {worker.level || 1}</p>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-primary" style={{ width: `${levelProgress(worker.xp || 0).percent}%` }} />
-                        </div>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1">{levelProgress(worker.xp || 0).faltam > 0 ? `Faltam ${levelProgress(worker.xp || 0).faltam} XP para o próximo nível` : 'Nível máximo!'}</p>
-                    </div>
-
-                    {/* Earnings */}
-                    <div className="bg-white p-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center gap-2 mb-2">
-                            <TrendingUp size={16} className="text-green-600" />
-                            <span className="text-xs font-black uppercase text-gray-400">Ganhos Totais</span>
-                        </div>
-                        <p className="text-2xl font-black truncate" title={formatBRL(worker.earnings_total || 0)}>{formatBRL(worker.earnings_total || 0)}</p>
-                    </div>
-
-                    {/* Rating */}
-                    <div className="bg-white p-4 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Star size={16} className="text-yellow-500" />
-                            <span className="text-xs font-black uppercase text-gray-400">Sua Nota</span>
-                        </div>
-                        <p className="text-2xl font-black mb-1">{worker.rating_average ?? '-'}</p>
-                        <p className="text-[10px] text-gray-400 font-bold">{worker.completed_jobs_count || 0} turnos realizados</p>
-                    </div>
-                </div>
-            </section>
-
             {/* --- HISTÓRICO RECENTE --- */}
-            <section className="bg-white p-6 rounded-2xl border-2 border-black shadow-sm">
-                <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                    <CheckCircle2 size={18} /> Histórico Recente
-                </h3>
-                <div className="space-y-3">
-                    {history.length > 0 ? history.map((h, i) => (
-                        <div key={i} onClick={() => navigate('/my-jobs')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/my-jobs'); }} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer border-b border-gray-100 last:border-0">
-                            <div>
-                                <p className="font-bold text-sm truncate max-w-[200px]" title={h.job.title}>{h.job.title}</p>
-                                <p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
+            <Card as="section">
+                <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+                    <CheckCircle2 size={18} /> Histórico recente
+                </h2>
+                <div>
+                    {history.length > 0 ? history.map((h) => (
+                        <button
+                            type="button"
+                            key={h.id}
+                            onClick={() => navigate('/my-jobs')}
+                            className="flex w-full justify-between items-center gap-3 min-h-14 px-2 -mx-2 py-2 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer border-b border-gray-100 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                        >
+                            <div className="min-w-0">
+                                <p className="font-semibold text-sm truncate" title={h.job.title}>{h.job.title}</p>
+                                <p className="text-xs text-gray-600">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
-                            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${h.status === 'completed' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
+                            <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-pill ${h.status === 'completed' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}`}>
                                 {h.status === 'completed' ? 'Concluído' : h.status === 'rejected' ? 'Não selecionado' : 'Cancelado'}
                             </span>
-                        </div>
+                        </button>
                     )) : carregandoHistory ? (
                         <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />
                     ) : erroHistory ? (
-                        <p className="text-sm text-red-500 font-bold text-center py-4">Não foi possível carregar o histórico.</p>
+                        <p className="text-sm text-red-600 font-bold text-center py-4">Não foi possível carregar o histórico.</p>
                     ) : (
-                        <p className="text-sm text-gray-400 text-center py-4">Sem histórico recente.</p>
+                        <p className="text-sm text-gray-600 text-center py-4">Sem histórico recente.</p>
                     )}
                 </div>
-                <button onClick={() => navigate('/my-jobs')} className="min-h-11 px-2 -mx-2 inline-flex items-center w-full mt-4 text-xs font-black uppercase text-gray-500 hover:text-black flex items-center justify-center gap-1">
-                    Ver tudo <ChevronRight size={12} />
-                </button>
-            </section>
+                <Button variant="ghost" fullWidth className="mt-3" onClick={() => navigate('/my-jobs')} iconRight={<ChevronRight size={14} />}>
+                    Ver tudo
+                </Button>
+            </Card>
         </div>
     );
 }

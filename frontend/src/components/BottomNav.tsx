@@ -11,9 +11,9 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     const workerNavItems = [
         { icon: Home, label: 'Início', path: '/dashboard' },
         { icon: Inbox, label: 'Turnos', path: '/my-jobs' },
-        { icon: Contact, label: 'Clientes', path: '/carteira' },
-        { icon: Receipt, label: 'Receb.', path: '/recebimentos' }, // Shortened label ("Meus Recebimentos")
-        { icon: MessageSquare, label: 'Msgs', path: '/messages' }, // Shortened label
+        { icon: Contact, label: 'Empresas', path: '/carteira' },
+        { icon: Receipt, label: 'Recebimentos', path: '/recebimentos' },
+        { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
         { icon: User, label: 'Perfil', path: '/profile' },
     ];
 
@@ -22,7 +22,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
         { icon: Users, label: 'Elenco', path: '/company/team' },
         { icon: PlusCircle, label: 'Criar', path: '/company/create' },
         { icon: Briefcase, label: 'Turnos', path: '/company/jobs' },
-        { icon: MessageSquare, label: 'Msgs', path: '/company/messages' }, // Shortened label (mesmo padrão do worker)
+        { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: User, label: 'Perfil', path: '/company/profile' },
     ];
 
@@ -30,35 +30,39 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     const isCompany = type === 'company';
 
     return (
-        <nav aria-label="Menu de navegacao" className={`md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50 ${isCompany ? 'border-b-4 border-b-blue-600' : 'border-b-4 border-b-primary'}`}>
-            <div className="flex justify-around items-center h-16 px-1">
+        <nav aria-label="Menu de navegacao" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
+            <div className="flex justify-around items-stretch h-16 px-1">
                 {navItems.map((item) => (
                     <NavLink
                         key={item.path}
                         to={item.path}
                         aria-label={item.label}
                         className={({ isActive }) => `
-                 flex flex-col items-center justify-center w-full h-full gap-1 py-2 px-1
+                 relative flex flex-col items-center justify-center w-full min-h-11 gap-1 py-2 px-1
+                 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
                                 ? (isCompany ? 'text-blue-600' : 'text-primary')
-                                : 'text-gray-400 hover:text-black'}
+                                : 'text-gray-500 hover:text-black'}
                `}
                     >
                         {({ isActive }) => (
                             <>
-                                <item.icon size={22} strokeWidth={isActive ? 3 : 2} />
+                                {/* Indicador de rota ativa: barrinha na borda superior (sutil, sem
+                                    mudar a largura nem a altura do item). */}
+                                <span
+                                    aria-hidden="true"
+                                    className={`absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full transition-opacity duration-150 ${isCompany ? 'bg-blue-600' : 'bg-primary'} ${isActive ? 'opacity-100' : 'opacity-0'}`}
+                                />
+                                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
                                 {/* px-1 (em vez de p-2) libera ~4px/item — medido com Playwright: fecha o
                                     overflow horizontal do nav do worker a 320px (iPhone SE 1ª geração,
-                                    o pior caso; "Convites"/8 chars era o item que estourava) sem reduzir
-                                    a fonte de 10px em nenhum item, nos dois papéis.
+                                    o pior caso) sem reduzir a fonte de 10px em nenhum item, nos dois papéis.
                                     `truncate` (SEM `min-w-0` no link pai) é só rede de segurança: cai o
                                     texto com reticências se algum rótulo futuro/escala de fonte do SO
-                                    não couber, mas não some com o "floor" de conteúdo do flex item, então
-                                    não altera a distribuição/legibilidade no caso normal — confirmado por
-                                    medição que em 320/360/375px nenhum rótulo hoje é cortado. Sem isso,
-                                    o pior cenário seria a barra ganhar scroll horizontal, pior ainda numa
-                                    barra fixa. */}
-                                <span className={`text-[10px] font-black uppercase truncate max-w-full ${isActive ? (isCompany ? 'text-blue-600' : 'text-primary') : 'text-gray-400'}`}>
+                                    não couber, sem alterar a distribuição no caso normal. Rótulos SEM
+                                    uppercase e SEM font-black (semibold é mais estreito que bold/black):
+                                    "Recebimentos" precisa caber a 390px. */}
+                                <span className="text-[10px] leading-none font-semibold truncate max-w-full">
                                     {item.label}
                                 </span>
                             </>

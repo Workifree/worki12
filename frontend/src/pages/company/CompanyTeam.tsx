@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Clock, UserPlus, ListChecks, Plus, Pencil, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Users, Clock, UserPlus, ListChecks, Plus, Pencil, Trash2, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
+import { TeamConnectionService } from '../../services/teamConnectionService';
 import type { TeamMember, TeamListWithMembers } from '../../types';
 import { MemberCard } from '../../components/team/MemberCard';
 import { PendingCard } from '../../components/team/PendingCard';
@@ -13,6 +14,7 @@ import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
 import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
+import { Button, Card, PageHeader } from '../../components/ui';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
@@ -26,6 +28,7 @@ export default function CompanyTeam() {
   const { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const { addToast } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   // R "Convidar direto do elenco": modal por membro + histórico batch (1 query p/ todo o elenco).
@@ -116,11 +119,29 @@ export default function CompanyTeam() {
     return () => { active = false; };
   }, [companyId, teamMembers]);
 
+  // Link do elenco: mesmo caminho do Perfil Empresa (token estável via serviço, falha tratada).
+  const handleCopyTeamLink = async () => {
+    if (!companyId) return;
+    const gerado = await TeamConnectionService.generateInviteToken(companyId);
+    if (!gerado) {
+      addToast('Não foi possível obter o link do seu elenco agora.', 'error');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(gerado.url);
+      setLinkCopied(true);
+      addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      addToast('Não foi possível copiar o link.', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20">
-        <div className="h-10 bg-gray-200 rounded-xl w-48" />
-        <div className="h-12 bg-gray-200 rounded-xl w-40" />
+        <div className="h-9 bg-gray-200 rounded-xl w-48" />
+        <div className="h-11 bg-gray-200 rounded-xl w-40" />
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-24 bg-gray-200 rounded-2xl" />
@@ -132,30 +153,42 @@ export default function CompanyTeam() {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter">Meu Elenco</h1>
-          <p className="text-gray-500 font-bold mt-1">
-            {teamMembers.length} freela{teamMembers.length !== 1 ? 's' : ''} no elenco
-            {pendingConnections.length > 0 && (
-              <span className="ml-2 text-yellow-600">· {pendingConnections.length} aguardando aceite</span>
-            )}
+      <PageHeader
+        title="Meu Elenco"
+        subtitle={`${teamMembers.length} freela${teamMembers.length !== 1 ? 's' : ''} no elenco${
+          pendingConnections.length > 0 ? ` · ${pendingConnections.length} aguardando aceite` : ''
+        }`}
+        action={
+          <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>
+            Adicionar Freela
+          </Button>
+        }
+      />
+
+      {/* Link do elenco — antes só existia dentro do Perfil Empresa. Discreto: secundário, sem competir com a ação principal. */}
+      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do seu elenco</p>
+          <p className="text-xs text-gray-600 mt-1">
+            Mande por WhatsApp: o freela abre o link e entra no seu elenco.
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center gap-2 transition-colors shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={handleCopyTeamLink}
+          disabled={!companyId}
+          iconLeft={linkCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
         >
-          <UserPlus size={20} /> Adicionar Freela
-        </button>
-      </div>
+          {linkCopied ? 'Link copiado!' : 'Copiar link'}
+        </Button>
+      </Card>
 
       {/* Elenco aceito */}
       {teamMembers.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-            <Users size={20} /> Elenco Ativo
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Users size={20} aria-hidden="true" /> Elenco ativo
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {teamMembers.map((member) => (
@@ -174,15 +207,12 @@ export default function CompanyTeam() {
       {/* Listas do Elenco (F2) — atalhos por função pra chamar o grupo inteiro de uma vez */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-xl font-black uppercase flex items-center gap-2">
-            <ListChecks size={20} /> Listas do Elenco
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <ListChecks size={20} aria-hidden="true" /> Listas do elenco
           </h2>
-          <button
-            onClick={() => setShowListModal(true)}
-            className="bg-black hover:bg-primary text-white min-h-11 px-4 py-2 rounded-xl font-black uppercase text-xs inline-flex items-center gap-2 transition-colors"
-          >
-            <Plus size={16} /> Nova Lista
-          </button>
+          <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
+            Nova lista
+          </Button>
         </div>
 
         {loadingLists && (
@@ -199,39 +229,42 @@ export default function CompanyTeam() {
         {!loadingLists && lists.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {lists.map((list) => (
-              <div
+              <Card
                 key={list.id}
-                className="bg-white border-2 border-black rounded-2xl p-4 flex items-center justify-between gap-3"
+                padding="sm"
+                className="flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <p className="font-black uppercase truncate">{list.name}</p>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="font-bold truncate">{list.name}</p>
+                  <p className="text-xs text-gray-600">
                     {list.memberIds.length} {list.memberIds.length === 1 ? 'membro' : 'membros'}
                   </p>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <div className="flex gap-1 shrink-0">
                   <button
+                    type="button"
                     onClick={() => setEditingList(list)}
                     aria-label={`Editar lista ${list.name}`}
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-gray-100 transition-colors"
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                   >
-                    <Pencil size={16} />
+                    <Pencil size={16} aria-hidden="true" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setDeletingList(list)}
                     aria-label={`Excluir lista ${list.name}`}
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-red-50 text-red-600 transition-colors"
+                    className="h-11 w-11 inline-flex items-center justify-center rounded-xl hover:bg-red-50 text-red-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}
 
         {!loadingLists && lists.length === 0 && (
-          <p className="text-sm font-bold text-gray-400">
+          <p className="text-sm text-gray-600">
             Nenhuma lista ainda. Crie atalhos por função (ex.: "Cozinha", "Salão") para chamar o time
             inteiro de uma vez ao abrir um turno.
           </p>
@@ -241,8 +274,8 @@ export default function CompanyTeam() {
       {/* Convites pendentes */}
       {pendingConnections.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-2 text-yellow-700">
-            <Clock size={20} /> Aguardando Aceite
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-700">
+            <Clock size={20} aria-hidden="true" /> Aguardando aceite
           </h2>
           <div className="space-y-3">
             {pendingConnections.map((conn) => (
@@ -254,19 +287,16 @@ export default function CompanyTeam() {
 
       {/* Empty state */}
       {teamMembers.length === 0 && pendingConnections.length === 0 && (
-        <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
-          <Users size={48} className="mx-auto mb-4 text-gray-300" />
-          <h3 className="text-xl font-black uppercase mb-2">Elenco vazio</h3>
-          <p className="text-gray-500 font-bold mb-6 max-w-sm mx-auto">
+        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+          <Users size={44} className="mx-auto mb-4 text-gray-300" aria-hidden="true" />
+          <h3 className="text-lg font-bold mb-2">Elenco vazio</h3>
+          <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">
             Adicione freelas pelo QR de identidade, Worki ID ou pelo link de perfil que eles te enviarem.
             Eles aparecerão aqui após aceitarem.
           </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-black hover:bg-primary text-white px-8 py-3 rounded-xl font-black uppercase inline-flex items-center gap-2 transition-colors"
-          >
-            <UserPlus size={20} /> Adicionar Primeiro Freela
-          </button>
+          <Button variant="dark" size="lg" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>
+            Adicionar primeiro freela
+          </Button>
         </div>
       )}
 
@@ -319,33 +349,30 @@ export default function CompanyTeam() {
             if (e.target === e.currentTarget && !isDeletingList) setDeletingList(null);
           }}
         >
-          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-list-title" className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
-            <h3 className="text-xl font-black uppercase mb-2">Excluir Lista?</h3>
-            <p className="text-sm font-bold text-gray-600 mb-2">
-              Tem certeza que deseja excluir <span className="text-black font-black">{deletingList.name}</span>?
+            <h3 id="delete-list-title" className="text-lg font-bold mb-2">Excluir lista?</h3>
+            <p className="text-sm text-gray-600 mb-2">
+              Tem certeza que deseja excluir <span className="text-black font-bold">{deletingList.name}</span>?
             </p>
-            <p className="text-xs font-bold text-gray-400 mb-6">
+            <p className="text-xs text-gray-600 mb-6">
               Excluir esta lista não remove ninguém do Elenco.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setDeletingList(null)}
-                disabled={isDeletingList}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-black py-3 rounded-xl font-black uppercase text-xs transition-colors disabled:opacity-50"
-              >
+              <Button variant="secondary" fullWidth onClick={() => setDeletingList(null)} disabled={isDeletingList}>
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
+                fullWidth
+                loading={isDeletingList}
                 onClick={() => void handleConfirmDeleteList()}
-                disabled={isDeletingList}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                iconLeft={<Trash2 size={16} aria-hidden="true" />}
               >
-                {isDeletingList ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                 {isDeletingList ? 'Excluindo...' : 'Excluir'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

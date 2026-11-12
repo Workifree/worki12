@@ -1,11 +1,12 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { X, Search, Loader2, Building2 } from 'lucide-react';
+import { X, Search, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
 import { ReferralService } from '../../services/referralService';
 import type { TeamMember } from '../../types';
+import { Button, Field, FIELD_CONTROL_CLASS } from '../ui';
 
 // ---------------------------------------------------------------------------
 // "Indicar freela para outra empresa" (F10) — empresa indicadora (B).
@@ -174,37 +175,38 @@ export default function CreateReferralModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
             onClick={fecharPeloFundo}>
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-referral-title"
+        className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-black uppercase">Indicar Freela</h2>
+          <h2 id="create-referral-title" className="text-lg font-bold tracking-tight">Indicar Freela</h2>
           <button
             type="button"
             aria-label="Fechar"
             onClick={handleClose}
-            className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-gray-100"
+            className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >
             <X size={20} />
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 font-bold mb-4">
+        <p className="text-sm text-gray-600 mb-4">
           Apresente um freela do seu elenco a outra empresa. Quem decide se a conexão acontece é
           sempre o freela.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="referral-worker" className="block text-xs font-black uppercase mb-1">
-              Freela do seu elenco
-            </label>
+          <Field label="Freela do seu elenco">
             <select
               id="referral-worker"
               value={workerId}
               onChange={(e) => setWorkerId(e.target.value)}
               required
-              className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary font-bold"
             >
               <option value="">Selecione um freela</option>
               {teamMembers.map((m) => (
@@ -213,25 +215,25 @@ export default function CreateReferralModal({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
           <div>
-            <label htmlFor="referral-company-search" className="block text-xs font-black uppercase mb-1">
+            <label htmlFor="referral-company-search" className="block text-sm font-bold text-black mb-1.5">
               Empresa destino
             </label>
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={16} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 id="referral-company-search"
                 type="text"
                 value={searchTerm}
                 onChange={(e) => handleSearchTermChange(e.target.value)}
                 placeholder="Buscar empresa pelo nome"
-                className="w-full border-2 border-black rounded-xl pl-9 pr-4 py-3 focus:ring-2 focus:ring-primary font-bold"
+                className={`${FIELD_CONTROL_CLASS} pl-9`}
               />
             </div>
 
-            {searching && <p className="text-xs text-gray-400 mt-2">Buscando...</p>}
+            {searching && <p className="text-xs text-gray-600 mt-2">Buscando...</p>}
 
             {!selectedCompany && results.length > 0 && (
               <ul className="mt-2 border-2 border-black rounded-xl divide-y divide-gray-200 max-h-40 overflow-y-auto">
@@ -244,7 +246,7 @@ export default function CreateReferralModal({
                         setSearchTerm(c.name);
                         setResults([]);
                       }}
-                      className="w-full text-left px-4 py-3 min-h-11 flex items-center gap-2 hover:bg-gray-50 font-bold"
+                      className="w-full text-left px-4 py-3 min-h-11 flex items-center gap-2 hover:bg-gray-50 text-sm font-bold focus-visible:outline-none focus-visible:bg-gray-100"
                     >
                       <Building2 size={16} /> {c.name}
                     </button>
@@ -254,16 +256,13 @@ export default function CreateReferralModal({
             )}
 
             {selectedCompany && (
-              <p className="text-xs text-primary font-black uppercase mt-2 flex items-center gap-1">
+              <p className="text-xs text-primary-dark font-bold mt-2 flex items-center gap-1">
                 <Building2 size={14} /> {selectedCompany.name} selecionada
               </p>
             )}
           </div>
 
-          <div>
-            <label htmlFor="referral-message" className="block text-xs font-black uppercase mb-1">
-              Recado (opcional)
-            </label>
+          <Field label="Recado (opcional)">
             <textarea
               id="referral-message"
               value={message}
@@ -271,26 +270,23 @@ export default function CreateReferralModal({
               maxLength={500}
               rows={3}
               placeholder="Ex.: A Ana é ótima no salão, trabalhou aqui várias vezes."
-              className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary font-bold resize-none"
+              className="!h-auto resize-none py-3"
             />
-          </div>
+          </Field>
 
           <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={submitting}
-              className="flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-gray-100 transition-colors disabled:opacity-50"
-            >
+            <Button variant="secondary" onClick={handleClose} disabled={submitting} className="flex-1">
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={!workerId || !selectedCompany || submitting}
-              className="flex-1 bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              variant="dark"
+              disabled={!workerId || !selectedCompany}
+              loading={submitting}
+              className="flex-1"
             >
-              {submitting ? <Loader2 size={18} className="animate-spin" /> : 'Indicar'}
-            </button>
+              Indicar
+            </Button>
           </div>
         </form>
       </div>

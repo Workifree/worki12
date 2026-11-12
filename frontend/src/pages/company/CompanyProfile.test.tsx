@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import CompanyProfile from './CompanyProfile'
 
 // ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ function setupMocks() {
 
 async function renderAndEnterEditMode() {
   const mocks = setupMocks()
-  render(<CompanyProfile />)
+  render(<MemoryRouter><CompanyProfile /></MemoryRouter>)
 
   await waitFor(() => {
     expect(screen.getAllByText('Divino Fogão').length).toBeGreaterThan(0)

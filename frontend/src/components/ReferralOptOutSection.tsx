@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Share2, Loader2 } from 'lucide-react';
+import { Button, Card } from './ui';
+import { Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
@@ -90,32 +91,29 @@ export default function ReferralOptOutSection() {
   }
 
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-6">
-      <h3 className="text-xl font-black uppercase mb-2 flex items-center gap-2">
-        <Share2 size={20} /> Indicação entre empresas
+    <Card>
+      <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+        <Share2 size={20} aria-hidden="true" /> Indicação entre empresas
       </h3>
-      <p className="text-sm text-gray-500 font-bold mb-4">
+      <p className="text-sm text-gray-600 mb-4">
         Empresas do seu elenco podem indicar você a outras empresas que confiam nelas. Você
         sempre decide: a empresa que recebe a indicação só te conhece se você aceitar.
       </p>
       <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">
-        <span className="font-black uppercase text-sm">
+        <span className="font-bold text-sm">
           {accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
         </span>
-        <button
-          type="button"
+        <Button
           role="switch"
           aria-checked={accepts}
           aria-label="Aceitar indicações de empresas do meu elenco"
+          variant={accepts ? 'primary' : 'secondary'}
           onClick={handleToggle}
-          disabled={saving}
-          className={`min-h-11 min-w-11 px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors flex items-center justify-center gap-2 border-2 border-black ${
-            accepts ? 'bg-primary hover:bg-black text-white' : 'bg-white hover:bg-gray-100 text-black'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          loading={saving}
         >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : accepts ? 'Ativado' : 'Desativado'}
-        </button>
+          {accepts ? 'Ativado' : 'Desativado'}
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

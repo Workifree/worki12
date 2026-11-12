@@ -5,6 +5,7 @@ import { logError } from '../../lib/logger';
 import { todayLocalDate } from '../../lib/dateUtils';
 import { JobSeriesService } from '../../services/jobSeriesService';
 import { describeSeriesPreview } from './seriesPreviewText';
+import { Button } from '../ui';
 
 interface CancelSeriesModalProps {
     seriesId: string;
@@ -93,11 +94,21 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
+        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cancel-series-title"
+                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6"
+            >
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black uppercase tracking-tight">Cancelar a série</h2>
-                    <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+                    <h2 id="cancel-series-title" className="text-lg font-bold tracking-tight">Cancelar a série</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    >
                         <X size={20} />
                     </button>
                 </div>
@@ -134,21 +145,18 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <button
-                                onClick={onClose}
-                                disabled={loading}
-                                className="flex-1 min-h-[44px] px-4 py-3 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
-                            >
+                            <Button variant="secondary" onClick={onClose} disabled={loading} className="flex-1">
                                 Voltar
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                variant="danger"
                                 onClick={handleConfirm}
                                 disabled={confirmDisabled}
-                                className="flex-1 min-h-[44px] px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                loading={loading}
+                                className="flex-1"
                             >
-                                {loading ? <Loader2 className="animate-spin" size={16} /> : null}
                                 {loading ? 'Cancelando...' : 'Cancelar a série'}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -172,12 +180,9 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                                 )}
                             </div>
                         )}
-                        <button
-                            onClick={onClose}
-                            className="w-full min-h-[44px] bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
-                        >
+                        <Button variant="dark" size="lg" fullWidth onClick={onClose}>
                             Fechar
-                        </button>
+                        </Button>
                     </div>
                 )}
             </div>

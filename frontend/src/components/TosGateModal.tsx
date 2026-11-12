@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
+import { Button } from './ui';
 
 interface TosGateModalProps {
     userRole: 'worker' | 'company';
@@ -54,11 +55,16 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg p-8 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                <h2 className="text-2xl font-black uppercase mb-4">Termos de Uso Atualizados</h2>
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="tos-gate-title"
+                className="bg-white rounded-2xl w-full max-w-lg p-6 sm:p-8 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+            >
+                <h2 id="tos-gate-title" className="text-2xl font-bold tracking-tight mb-3">Termos de Uso Atualizados</h2>
 
-                <p className="text-gray-700 mb-4 leading-relaxed">
+                <p className="text-sm sm:text-base text-gray-700 mb-3 leading-relaxed">
                     Para continuar usando a Worki, você precisa aceitar nossos Termos de Uso. Eles definem suas responsabilidades e direitos na plataforma.
                 </p>
 
@@ -71,7 +77,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     Ler os Termos de Uso
                 </a>
 
-                <div className="flex items-start gap-3 mt-6 mb-6">
+                <div className="flex items-start gap-3 mt-5 mb-6">
                     <input
                         type="checkbox"
                         id="tos-checkbox"
@@ -79,22 +85,20 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                         checked={checked}
                         onChange={(e) => setChecked(e.target.checked)}
                     />
-                    <label htmlFor="tos-checkbox" className="text-sm font-medium text-gray-800 cursor-pointer">
+                    <label htmlFor="tos-checkbox" className="text-sm text-gray-800 cursor-pointer">
                         Li e aceito os Termos de Uso e a Política de Privacidade
                     </label>
                 </div>
 
-                <button
+                <Button
+                    size="lg"
+                    fullWidth
                     onClick={handleAccept}
-                    disabled={!checked || loading}
-                    className={`w-full py-4 font-black uppercase tracking-tight text-white rounded-xl border-2 border-black transition-all ${
-                        !checked || loading
-                            ? 'bg-gray-400 opacity-50 cursor-not-allowed'
-                            : 'bg-primary shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1'
-                    }`}
+                    disabled={!checked}
+                    loading={loading}
                 >
                     {loading ? 'Salvando...' : 'Aceitar e Continuar'}
-                </button>
+                </Button>
             </div>
         </div>
     );

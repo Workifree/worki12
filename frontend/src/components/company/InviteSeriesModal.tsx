@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Loader2, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { ShiftCallService } from '../../services/shiftCallService';
 import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import type { TeamMember } from '../../types';
+import { Button } from '../ui';
 
 import {
     DEFAULT_LINK_RISK_THRESHOLD,
@@ -143,18 +144,28 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
+        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="invite-series-title"
+                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6"
+            >
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black uppercase tracking-tight">Convidar para a série</h2>
-                    <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+                    <h2 id="invite-series-title" className="text-lg font-bold tracking-tight">Convidar para a série</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                        className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
                 {!result && (
                     <>
-                        <p className="text-sm font-bold text-gray-600 mb-4">
+                        <p className="text-sm text-gray-600 mb-4">
                             Escolha um freela do seu elenco para convidar de uma vez para {targetJobIds.length} turno{targetJobIds.length !== 1 ? 's' : ''} desta
                             série ainda sem freela.
                         </p>
@@ -183,34 +194,36 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                         ? weeksOverThreshold(targets, riskThreshold, existingByWeek)
                                         : [];
                                     return (
-                                        <div key={member.connection.id} className="p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
+                                        <div key={member.connection.id} className="p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
                                                     {avatarUrl ? (
                                                         <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
+                                                        <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold">
                                                             {member.worker.full_name[0]?.toUpperCase()}
                                                         </div>
                                                     )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
+                                                    <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
                                                     {/* Linha do cargo — reservada para o selo verde de disponibilidade
                                                         da F7 (spec pronta, ainda não construída). O selo de risco de
                                                         vínculo (amarelo) NÃO entra aqui, de propósito. */}
                                                     {member.worker.primary_role && (
-                                                        <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
+                                                        <p className="text-xs text-gray-600 truncate">{member.worker.primary_role}</p>
                                                     )}
                                                 </div>
-                                                <button
+                                                <Button
+                                                    variant="dark"
                                                     onClick={() => handleInvite(member.worker.id)}
                                                     disabled={inviting}
-                                                    className="min-h-[44px] bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                                    loading={inviting}
+                                                    iconLeft={<Send size={14} />}
+                                                    className="flex-shrink-0"
                                                 >
-                                                    {inviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
                                                     {inviting && progress ? `${progress.done}/${progress.total}` : inviting ? '...' : 'Convidar'}
-                                                </button>
+                                                </Button>
                                             </div>
 
                                             {/* R10/A7 — aviso NÃO-bloqueante, factual (nunca conclusão jurídica):
@@ -220,7 +233,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                     {riskyWeeks.map((w) => (
                                                         <span
                                                             key={w.weekStart}
-                                                            className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
+                                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
                                                         >
                                                             <AlertTriangle size={10} className="flex-shrink-0" />
                                                             Ficaria {w.count}x com você na sem. {weekRangeLabel(w.weekStart)}
@@ -235,7 +248,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         )}
 
                         {teamMembers.length > 0 && riskEnabled && (
-                            <p className="text-[11px] font-bold text-gray-400 mt-3">
+                            <p className="text-xs text-gray-600 mt-3">
                                 Sua empresa tolera até {riskThreshold}x na mesma semana (dom–sáb) para o mesmo
                                 freela — o aviso aparece acima disso. A decisão de convidar é sua — consulte seu contador/jurídico se
                                 tiver dúvida sobre frequência e risco de vínculo.
@@ -257,12 +270,9 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                 {result.failed} turno{result.failed !== 1 ? 's' : ''} não recebeu convite — tente convidar manualmente na agenda.
                             </div>
                         )}
-                        <button
-                            onClick={onClose}
-                            className="w-full min-h-[44px] bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
-                        >
+                        <Button variant="dark" size="lg" fullWidth onClick={onClose}>
                             Fechar
-                        </button>
+                        </Button>
                     </div>
                 )}
             </div>

@@ -1,4 +1,4 @@
-import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, Loader2, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -16,6 +16,17 @@ import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/com
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
+import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+
+type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
+const FILTERS: Array<{ key: JobFilter; label: string }> = [
+    { key: 'all', label: 'Todos' },
+    { key: 'open', label: 'Abertos' },
+    { key: 'andamento', label: 'Em andamento' },
+    { key: 'closed', label: 'Finalizados' },
+];
+
+const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1). Selo discreto na agenda
 // ("Série · toda quinta") deriva o dia da própria `series_occurrence_date` da ocorrência — uma
@@ -158,171 +169,184 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
     const urgentGap = missingFreela && isNearTerm;
 
     return (
-        <div
-            className={`bg-white border-2 rounded-xl p-6 transition-all group shadow-sm hover:shadow-md ${urgentGap ? 'border-amber-400 bg-amber-50/60' : 'border-gray-100 hover:border-black'
-                }`}
+        <Card
+            padding="sm"
+            className={`sm:!p-5 ${urgentGap ? '!bg-amber-50' : ''}`}
         >
-            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
-                <div>
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h3 className="font-bold text-lg">{job.title}</h3>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {job.status === 'open' ? 'Ativa' : 'Fechada'}
-                        </span>
+                <div className="min-w-0">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-bold sm:text-lg">{job.title}</h3>
+                        {/* Turno aberto e o normal — so o desvio ganha selo. */}
+                        {job.status !== 'open' && (
+                            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                                {job.status === 'paused' ? 'Pausado' : 'Fechado'}
+                            </span>
+                        )}
                         {urgentGap && (
-                            <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
-                                <AlertTriangle size={11} /> Sem freela
+                            <span className="flex items-center gap-1 rounded-full border border-amber-500 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                                <AlertTriangle size={12} /> Sem freela
                             </span>
                         )}
                         {job.series_id && (
-                            <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-500" title="Este turno faz parte de uma série recorrente">
-                                <Repeat size={11} /> Série · {seriesBadgeLabel(job)}
+                            <span className="flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Este turno faz parte de uma série recorrente">
+                                <Repeat size={12} /> Série · {seriesBadgeLabel(job)}
                             </span>
                         )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 font-medium">
-                        <span className="bg-gray-50 px-2 py-1 rounded uppercase font-bold">{job.type === 'freelance' ? 'Freelance' : 'Fixo'}</span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 sm:text-sm">
                         {timeRange && (
-                            <span className="flex items-center gap-1 font-bold text-black">
-                                <Clock size={12} /> {timeRange}
+                            <span className="flex items-center gap-1 font-semibold text-black">
+                                <Clock size={14} /> {timeRange}
                             </span>
                         )}
                         {job.start_date && !isNearTerm && (
                             <span className="flex items-center gap-1 capitalize">
-                                <Calendar size={12} /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
+                                <Calendar size={14} /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
                             </span>
                         )}
-                        {job.location && <span>• {job.location}</span>}
+                        {job.location && <span className="truncate">{job.location}</span>}
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 border-t md:border-t-0 pt-4 md:pt-0 border-gray-100">
+                <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 md:justify-end md:border-t-0 md:pt-0">
                     {/* Estado do freela (modelo push) — no lugar de Candidatos/Visitas */}
                     {job.freela ? (
                         <button
                             onClick={() => navigate(`/company/jobs/${job.id}/candidates`)}
-                            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                            className="flex min-h-11 min-w-0 items-center gap-3 text-left transition-opacity hover:opacity-80"
                         >
-                            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
                                 {job.freela.avatarUrl ? (
-                                    <img src={job.freela.avatarUrl} alt={job.freela.name} className="w-full h-full object-cover" />
+                                    <img src={job.freela.avatarUrl} alt={job.freela.name} className="h-full w-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-sm">
+                                    <div className="flex h-full w-full items-center justify-center bg-black text-sm font-bold text-white">
                                         {job.freela.name[0]?.toUpperCase()}
                                     </div>
                                 )}
                             </div>
-                            <div className="flex flex-col">
-                                <span className="font-bold text-sm truncate max-w-[140px]">
+                            <div className="flex min-w-0 flex-col">
+                                <span className="max-w-[140px] truncate text-sm font-bold">
                                     {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
                                 </span>
-                                <span className={`text-[10px] font-black uppercase ${job.freela.state === 'confirmed' ? 'text-green-600' :
-                                    job.freela.state === 'completed' ? 'text-blue-600' : 'text-orange-500'
+                                <span className={`text-xs font-semibold ${job.freela.state === 'confirmed' ? 'text-green-700' :
+                                    job.freela.state === 'completed' ? 'text-gray-700' : 'text-amber-900'
                                     }`}>
                                     {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Finalizado' : 'Aguardando resposta'}
                                 </span>
                             </div>
                             {job.freela.state === 'confirmed' && (
-                                <span className="ml-1 bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded-lg font-black uppercase text-[10px] flex items-center gap-1 transition-colors">
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary">
                                     <PlayCircle size={12} /> Presença
                                 </span>
                             )}
                         </button>
                     ) : canInvite ? (
-                        <button
+                        <Button
+                            variant="dark"
                             onClick={(e) => { e.stopPropagation(); setInviteJobId(job.id); }}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors ${urgentGap ? 'bg-amber-500 hover:bg-black text-white' : 'bg-black text-white hover:bg-blue-600'
-                                }`}
+                            iconLeft={<UserPlus size={16} strokeWidth={2.5} />}
                         >
-                            <UserPlus size={16} strokeWidth={3} /> Convidar Freela
-                        </button>
+                            Convidar freela
+                        </Button>
                     ) : (
-                        <span className="flex items-center gap-1 text-xs font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+                        <span className="flex items-center gap-1 rounded-full border border-amber-500 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
                             <AlertTriangle size={12} /> Sem freela
                         </span>
                     )}
 
-                    <div className="relative">
-                        <button
+                    <div className="relative shrink-0" data-job-menu>
+                        <Button
+                            variant="ghost"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenMenu(openMenu === job.id ? null : job.id);
                             }}
-                            className="min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors"
+                            className="w-11 !px-0"
                             aria-label="Mais opções do turno"
+                            aria-haspopup="menu"
+                            aria-expanded={openMenu === job.id}
                         >
-                            <MoreHorizontal size={20} className="text-gray-400" />
-                        </button>
+                            <MoreHorizontal size={20} className="text-gray-600" />
+                        </Button>
 
                         {openMenu === job.id && (
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden">
+                            <div role="menu" aria-label="Ações do turno" className="absolute right-0 top-full z-10 mt-2 w-52 divide-y divide-gray-100 overflow-hidden rounded-xl border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/candidates`); }}
-                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-b border-gray-100"
+                                    className={MENU_ITEM}
                                 >
                                     <Users size={16} /> Presença e Pagamento
                                 </button>
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}`); }}
-                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2"
+                                    className={MENU_ITEM}
                                 >
                                     <Eye size={16} /> Ver Detalhes
                                 </button>
-                                {/* Repetir: a empresa refaz o MESMO tipo de turno o tempo todo, e criar
-                                    do zero custa sete entradas obrigatorias em tres etapas. Aqui ela
+                                {/* Repetir: a empresa refaz o MESMO tipo de turno o tempo todo. Aqui ela
                                     reaproveita o turno inteiro e so escolhe a data nova. */}
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/company/create?repetir=${job.id}`); }}
-                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                    className={MENU_ITEM}
                                 >
                                     <Copy size={16} /> Repetir turno
                                 </button>
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/edit`); }}
-                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                    className={MENU_ITEM}
                                 >
                                     <Edit2 size={16} /> Editar
                                 </button>
                                 {job.series_id && (
                                     <>
                                         <button
+                                    role="menuitem"
                                             onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onInviteSeries(job.series_id!); }}
-                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                            className={MENU_ITEM}
                                         >
                                             <Repeat size={16} /> Convidar para a série
                                         </button>
                                         <button
+                                    role="menuitem"
                                             onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onEditSeries(job); }}
-                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                            className={MENU_ITEM}
                                         >
                                             <Edit2 size={16} /> Editar os futuros
                                         </button>
                                         <button
+                                    role="menuitem"
                                             onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onCancelSeries(job.series_id!); }}
-                                            className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                            className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
                                         >
                                             <XCircle size={16} /> Cancelar a série
                                         </button>
                                     </>
                                 )}
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open');
                                     }}
-                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                    className={MENU_ITEM}
                                 >
                                     {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
                                     {job.status === 'open' ? 'Pausar' : 'Reativar'}
                                 </button>
                                 <button
+                                    role="menuitem"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenu(null);
                                         setDeleteJobId(job.id);
                                     }}
-                                    className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                    className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
                                 >
                                     <Trash2 size={16} /> Excluir
                                 </button>
@@ -332,7 +356,7 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                 </div>
 
             </div>
-        </div>
+        </Card>
     );
 }
 
@@ -356,6 +380,27 @@ export default function CompanyJobs() {
     // (é exatamente o que ela pediu pra ver) e continua alternável manualmente.
     const [pastExpanded, setPastExpanded] = useState(initialFilter === 'closed');
     const { addToast } = useToast();
+
+    // Menu de ações do turno: fecha com Esc e com clique/toque fora (o gatilho e o menu
+    // levam `data-job-menu`, então tocar no gatilho continua alternando normalmente).
+    useEffect(() => {
+        if (openMenu === null) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpenMenu(null);
+        };
+        const onPointerDown = (e: MouseEvent | TouchEvent) => {
+            if (e.target instanceof Element && e.target.closest('[data-job-menu]')) return;
+            setOpenMenu(null);
+        };
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('touchstart', onPointerDown);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('mousedown', onPointerDown);
+            document.removeEventListener('touchstart', onPointerDown);
+        };
+    }, [openMenu]);
 
     // Ações de série (F3, R11/R10) — cada uma abre seu próprio modal de confirmação.
     const [editSeriesJob, setEditSeriesJob] = useState<SeriesJobSnapshot | null>(null);
@@ -553,67 +598,63 @@ export default function CompanyJobs() {
         <>
         <PageMeta title="Meus Turnos" />
         {deleteJobId && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                    <h3 className="text-xl font-black uppercase mb-2">Excluir Turno</h3>
-                    <p className="text-sm text-gray-600 mb-6">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                <Card
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="excluir-turno-titulo"
+                    className="w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                >
+                    <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
+                    <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
                     <div className="flex gap-3">
-                        <button onClick={() => setDeleteJobId(null)} className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-bold uppercase text-sm hover:bg-gray-50">Cancelar</button>
-                        <button onClick={() => handleDelete(deleteJobId)} className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white font-bold uppercase text-sm hover:bg-red-700">Excluir</button>
+                        <Button variant="secondary" fullWidth onClick={() => setDeleteJobId(null)}>Cancelar</Button>
+                        <Button variant="danger" fullWidth onClick={() => handleDelete(deleteJobId)}>Excluir</Button>
                     </div>
-                </div>
+                </Card>
             </div>
         )}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Meus Turnos</h1>
-                    <p className="text-gray-500 font-medium">Sua agenda de turnos, dia a dia.</p>
-                </div>
-                <button
-                    onClick={() => navigate('/company/create')}
-                    className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-bold uppercase text-sm hover:bg-blue-600 transition-colors"
-                >
-                    <PlusCircle size={18} strokeWidth={3} /> Novo Turno
-                </button>
-            </div>
+            <PageHeader
+                title="Meus turnos"
+                subtitle="Sua agenda, dia a dia."
+                action={
+                    <Button
+                        variant="dark"
+                        onClick={() => navigate('/company/create')}
+                        iconLeft={<PlusCircle size={18} strokeWidth={2.5} />}
+                    >
+                        Novo turno
+                    </Button>
+                }
+            />
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 md:gap-4 mb-6">
-                <div className="relative flex-1 min-w-[160px] max-w-md">
-                    <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+            {/* Busca + filtros: uma linha de controles, o ativo em preto */}
+            <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
+                <div className="relative md:max-w-xs md:flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                     <input
                         type="text"
                         placeholder="Buscar turnos..."
+                        aria-label="Buscar turnos"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="w-full min-h-11 bg-white border-2 border-transparent focus:border-black rounded-xl py-2.5 pl-10 pr-4 font-medium outline-none transition-all placeholder:font-medium text-sm"
+                        className={`${FIELD_CONTROL_CLASS} pl-10`}
                     />
                 </div>
-                <button
-                    onClick={() => changeFilter('all')}
-                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'all' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
-                >
-                    Todos
-                </button>
-                <button
-                    onClick={() => changeFilter('open')}
-                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'open' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
-                >
-                    Abertos
-                </button>
-                <button
-                    onClick={() => changeFilter('andamento')}
-                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'andamento' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
-                >
-                    Em Andamento
-                </button>
-                <button
-                    onClick={() => changeFilter('closed')}
-                    className={`min-h-11 px-4 py-2 border-2 rounded-xl font-bold uppercase text-xs transition-all ${filter === 'closed' ? 'bg-black text-white border-black' : 'bg-white border-transparent hover:border-black'}`}
-                >
-                    Finalizados
-                </button>
+                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0 md:pb-0" role="group" aria-label="Filtrar turnos">
+                    {FILTERS.map(({ key, label }) => (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => changeFilter(key)}
+                            aria-pressed={filter === key}
+                            className={`h-11 shrink-0 rounded-xl border-2 px-4 text-sm font-bold transition-colors ${filter === key ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-black hover:border-black'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Agenda por dia */}
@@ -625,7 +666,7 @@ export default function CompanyJobs() {
                         ))}
                     </div>
                 ) : filteredJobs.length === 0 ? (
-                    <div className="text-center py-10 font-bold text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                    <div className="rounded-2xl border-2 border-dashed border-gray-300 py-10 text-center text-sm font-semibold text-gray-600">
                         Nenhum turno encontrado.
                     </div>
                 ) : (
@@ -634,18 +675,19 @@ export default function CompanyJobs() {
                             {bucket.key === 'past' ? (
                                 <button
                                     onClick={() => setPastExpanded(v => !v)}
-                                    className="w-full sticky top-0 z-10 -mx-4 px-4 md:mx-0 md:px-0 py-2 mb-3 bg-[#F4F4F0]/95 backdrop-blur-sm flex items-center justify-between gap-2 border-b-2 border-black/10"
+                                    aria-expanded={pastExpanded}
+                                    className="-mx-4 mb-3 flex min-h-11 w-full items-center justify-between gap-2 border-b-2 border-black/10 bg-[#F4F4F0]/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0"
                                 >
-                                    <span className="flex items-center gap-2 text-sm font-black uppercase tracking-tight text-gray-500">
+                                    <span className="flex items-center gap-2 text-sm font-bold text-gray-600">
                                         {bucket.label}
-                                        <span className="text-[10px] font-black bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{bucket.jobs.length}</span>
+                                        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">{bucket.jobs.length}</span>
                                     </span>
-                                    {pastExpanded ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+                                    {pastExpanded ? <ChevronUp size={18} className="text-gray-600" /> : <ChevronDown size={18} className="text-gray-600" />}
                                 </button>
                             ) : (
-                                <div className="sticky top-0 z-10 -mx-4 px-4 md:mx-0 md:px-0 py-2 mb-3 bg-[#F4F4F0]/95 backdrop-blur-sm flex items-center gap-2 border-b-2 border-black/10">
-                                    <h2 className="text-sm font-black uppercase tracking-tight text-gray-500">{bucket.label}</h2>
-                                    <span className="text-[10px] font-black bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{bucket.jobs.length}</span>
+                                <div className="-mx-4 mb-3 flex items-center gap-2 border-b-2 border-black/10 bg-[#F4F4F0]/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0">
+                                    <h2 className="text-sm font-bold text-gray-600">{bucket.label}</h2>
+                                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">{bucket.jobs.length}</span>
                                 </div>
                             )}
 
@@ -678,18 +720,24 @@ export default function CompanyJobs() {
         {/* Modal "Convidar Freela" — atrela um freela do elenco a uma vaga já criada */}
         {inviteJobId && (
             <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-2xl font-black uppercase tracking-tight">Convidar Freela</h2>
-                        <button
+                <Card
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="convidar-freela-titulo"
+                    className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>
+                        <Button
+                            variant="ghost"
                             onClick={() => setInviteJobId(null)}
                             aria-label="Fechar"
-                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            className="w-11 shrink-0 !px-0"
                         >
                             <X size={20} />
-                        </button>
+                        </Button>
                     </div>
-                    <p className="text-sm font-bold text-gray-600 mb-5">
+                    <p className="mb-5 text-sm text-gray-600">
                         Escolha um freela do seu elenco para atrelar a este turno.
                     </p>
 
@@ -700,55 +748,57 @@ export default function CompanyJobs() {
                     )}
 
                     {!teamLoading && teamMembers.length === 0 && (
-                        <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-                            <Users size={32} className="mx-auto mb-2 opacity-30" />
-                            <p className="font-bold text-sm">Seu elenco está vazio.</p>
-                            <p className="text-xs mt-1">Adicione freelas em <strong>Meu Elenco</strong> antes de convidar.</p>
-                            <button
+                        <div className="rounded-2xl border-2 border-dashed border-gray-300 py-8 text-center text-gray-600">
+                            <Users size={32} className="mx-auto mb-2 opacity-40" />
+                            <p className="text-sm font-bold">Seu elenco está vazio.</p>
+                            <p className="mt-1 text-xs">Adicione freelas em <strong>Meu Elenco</strong> antes de convidar.</p>
+                            <Button
+                                variant="dark"
                                 onClick={() => { setInviteJobId(null); navigate('/company/team'); }}
-                                className="mt-4 bg-black hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors"
+                                className="mt-4"
                             >
                                 Ir para Meu Elenco
-                            </button>
+                            </Button>
                         </div>
                     )}
 
                     {!teamLoading && teamMembers.length > 0 && (
-                        <div className="space-y-3 max-h-72 overflow-y-auto">
+                        <div className="max-h-72 space-y-3 overflow-y-auto">
                             {teamMembers.map((member: TeamMember) => {
                                 const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
                                 const isInviting = invitingWorkerId === member.worker.id;
                                 return (
-                                    <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
-                                        <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                    <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border-2 border-gray-200 p-3">
+                                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
                                             {avatarUrl ? (
-                                                <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
+                                                <img src={avatarUrl} alt={member.worker.full_name} className="h-full w-full object-cover" />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
+                                                <div className="flex h-full w-full items-center justify-center bg-black font-bold text-white">
                                                     {member.worker.full_name[0]?.toUpperCase()}
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-bold">{member.worker.full_name}</p>
                                             {member.worker.primary_role && (
-                                                <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
+                                                <p className="truncate text-xs text-gray-600">{member.worker.primary_role}</p>
                                             )}
                                         </div>
-                                        <button
+                                        <Button
+                                            variant="dark"
                                             onClick={() => handleInvite(member.worker.id)}
-                                            disabled={isInviting}
-                                            className="bg-black hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                                            loading={isInviting}
+                                            iconLeft={!isInviting ? <Send size={14} /> : undefined}
+                                            className="shrink-0"
                                         >
-                                            {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                                            {isInviting ? '...' : 'Convidar'}
-                                        </button>
+                                            Convidar
+                                        </Button>
                                     </div>
                                 );
                             })}
                         </div>
                     )}
-                </div>
+                </Card>
             </div>
         )}
 

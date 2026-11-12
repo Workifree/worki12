@@ -14,20 +14,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
-import {
-  FileText,
-  Printer,
-  Download,
-  Calendar,
-  Loader2,
-  AlertTriangle,
-} from 'lucide-react';
+import { FileText, Printer, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { OrderReportService, toCSV } from '../../services/orderReportService';
 import type { OrderReport, OrderRow, OrderStatus } from '../../services/orderReportService';
 import { ORDER_STATUS_LABELS, PAYMENT_SOURCE_LABELS } from '../../services/orderReportService';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
 import PageMeta from '../../components/PageMeta';
+import { Button, Card, Field, PageHeader } from '../../components/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers de data/format
@@ -77,7 +71,7 @@ const STATUS_OPTIONS: Array<{ key: OrderStatus | 'todas'; label: string }> = [
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   aberta: 'bg-yellow-100 text-yellow-700 border-yellow-300',
   paga: 'bg-blue-100 text-blue-700 border-blue-300',
-  conciliada: 'bg-primary-light text-primary border-black',
+  conciliada: 'bg-primary-light text-primary-dark border-primary',
 };
 
 // ---------------------------------------------------------------------------
@@ -159,45 +153,40 @@ export default function CompanyOrdersReport() {
   const periodLabel = `${formatDDMMYYYY(from)} a ${formatDDMMYYYY(to)}`;
 
   return (
-    <div className="flex flex-col gap-8 pb-20 md:pb-12 font-sans text-accent max-w-5xl mx-auto print:pb-0">
+    <div className="flex flex-col gap-6 pb-20 md:pb-12 font-sans text-accent max-w-5xl mx-auto print:pb-0">
       <PageMeta title="Relatório de Pagamentos" />
 
       {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
-      <header className="print:hidden">
+      <div className="print:hidden">
         <PainelNumerosTabs />
-<h1 className="text-4xl font-black uppercase tracking-tighter mb-2 flex items-center gap-3">
-          <FileText size={32} strokeWidth={3} /> Relatório de Pagamentos
-        </h1>
         {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
             (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
-        <p className="text-sm font-bold text-gray-500 mt-1">
-          Quanto foi pago, a quem, quando — com exportação para o financeiro.
-        </p>
-        <p className="text-gray-500 text-sm">
-          Visão consolidada dos turnos e seus pagamentos — um turno com mais de um freela
-          vira uma ordem por freela — export pro financeiro/estoquista.
-        </p>
-      </header>
+        <PageHeader
+          title="Relatório de Pagamentos"
+          subtitle="Quanto foi pago, a quem, quando — com exportação para o financeiro. Um turno com mais de um freela vira uma ordem por freela."
+          className="!mb-0"
+        />
+      </div>
 
       {/* Cabeçalho de impressão — só aparece no print */}
       <div className="hidden print:block">
-        <h1 className="text-2xl font-black uppercase">Relatório de Ordens</h1>
-        <p className="text-sm font-bold">Período: {periodLabel}</p>
+        <h1 className="text-2xl font-bold">Relatório de Ordens</h1>
+        <p className="text-sm font-semibold">Período: {periodLabel}</p>
       </div>
 
       {/* Filtros + ações — não imprime */}
-      <div className="bg-white border-2 border-black rounded-2xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:hidden flex flex-col gap-5">
+      <Card className="print:hidden flex flex-col gap-5">
         {/* Presets */}
-        <div className="flex flex-wrap gap-3">
+        <div role="group" aria-label="Período" className="flex flex-wrap gap-2 self-start">
           {(['hoje', 'semana', 'mes'] as PresetKey[]).map((key) => (
             <button
               key={key}
+              type="button"
               onClick={() => applyPreset(key)}
-              className={`min-h-11 px-5 py-2.5 rounded-xl border-2 font-black uppercase text-sm transition-all
-                ${preset === key
-                  ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]'
-                  : 'bg-white text-gray-500 border-black hover:bg-gray-100'
-                }`}
+              aria-pressed={preset === key}
+              className={`h-11 px-5 rounded-full border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                preset === key ? 'bg-black text-white border-black' : 'bg-white text-gray-700 border-gray-300 hover:border-black'
+              }`}
             >
               {key === 'hoje' ? 'Hoje' : key === 'semana' ? 'Semana' : 'Mês'}
             </button>
@@ -206,47 +195,29 @@ export default function CompanyOrdersReport() {
 
         {/* Intervalo custom + status */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label htmlFor="fromInput" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              De
-            </label>
-            <div className="relative">
-              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="fromInput"
-                type="date"
-                value={from}
-                max={to}
-                onChange={(e) => handleCustomDateChange('from', e.target.value)}
-                className="min-h-11 w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="toInput" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              Até
-            </label>
-            <div className="relative">
-              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                id="toInput"
-                type="date"
-                value={to}
-                min={from}
-                onChange={(e) => handleCustomDateChange('to', e.target.value)}
-                className="min-h-11 w-full pl-9 pr-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="statusSelect" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              Status
-            </label>
+          <Field label="De">
+            <input
+              id="fromInput"
+              type="date"
+              value={from}
+              max={to}
+              onChange={(e) => handleCustomDateChange('from', e.target.value)}
+            />
+          </Field>
+          <Field label="Até">
+            <input
+              id="toInput"
+              type="date"
+              value={to}
+              min={from}
+              onChange={(e) => handleCustomDateChange('to', e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
             <select
               id="statusSelect"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as OrderStatus | 'todas')}
-              className="min-h-11 w-full px-3 py-2.5 border-2 border-black rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.key} value={opt.key}>
@@ -254,27 +225,29 @@ export default function CompanyOrdersReport() {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
 
-        {/* Ações */}
-        <div className="flex flex-wrap gap-3 border-t-2 border-black pt-5">
-          <button
+        {/* Ações — uma primária, uma secundária */}
+        <div className="flex flex-col sm:flex-row gap-3 border-t-2 border-gray-100 pt-5">
+          <Button
+            variant="dark"
             onClick={handleExportCSV}
             disabled={loading || rows.length === 0}
-            className="min-h-11 flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            iconLeft={<Download size={16} />}
           >
-            <Download size={16} /> Exportar CSV
-          </button>
-          <button
+            Exportar CSV
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => window.print()}
             disabled={loading || rows.length === 0}
-            className="min-h-11 flex items-center gap-2 px-5 py-2.5 border-2 border-black rounded-xl font-black uppercase text-sm hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            iconLeft={<Printer size={16} />}
           >
-            <Printer size={16} /> Imprimir / PDF
-          </button>
+            Imprimir / PDF
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Resumo */}
       {summary && (
@@ -284,11 +257,11 @@ export default function CompanyOrdersReport() {
         // Valor pago (realizado) e valor previsto (passivo em aberto, estimado) são
         // números de natureza diferente — nunca somados num "Valor Total" só, que
         // mentiria misturando dinheiro que já saiu com estimativa do que falta pagar.
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 print:grid-cols-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 print:grid-cols-6">
           <SummaryCard label="Ordens" value={String(summary.total)} />
           <SummaryCard label="Abertas" value={String(summary.abertas)} className="text-yellow-700" />
           <SummaryCard label="Pagas" value={String(summary.pagas)} className="text-blue-700" />
-          <SummaryCard label="Conciliadas" value={String(summary.conciliadas)} className="text-primary" />
+          <SummaryCard label="Conciliadas" value={String(summary.conciliadas)} className="text-primary-dark" />
           <SummaryCard label="Valor Pago" value={formatBRL(summary.valorPago)} />
           <SummaryCard label="Valor Previsto" value={formatBRL(summary.valorPrevisto)} className="text-yellow-700" />
         </div>
@@ -300,21 +273,18 @@ export default function CompanyOrdersReport() {
           <Loader2 size={28} className="animate-spin text-gray-400" />
         </div>
       ) : error ? (
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center print:hidden">
+        <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center print:hidden">
           <AlertTriangle size={28} className="mx-auto mb-2 text-red-500" />
-          <p className="font-black text-red-600 uppercase text-sm">{error}</p>
-          <button
-            onClick={fetchReport}
-            className="min-h-11 mt-3 px-6 py-2 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-black hover:text-white transition-colors"
-          >
+          <p className="font-semibold text-red-600 text-sm mb-4">{error}</p>
+          <Button variant="secondary" onClick={fetchReport}>
             Tentar novamente
-          </button>
+          </Button>
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white border-2 border-black rounded-2xl p-10 text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none">
+        <Card padding="lg" className="text-center">
           <FileText size={40} className="mx-auto mb-4 text-gray-300" />
-          <p className="font-black text-gray-500 uppercase text-sm">Nenhum pagamento no período.</p>
-        </div>
+          <p className="font-semibold text-gray-600 text-sm">Nenhum pagamento no período.</p>
+        </Card>
       ) : (
         <>
           {/* Mobile: cards */}
@@ -325,17 +295,17 @@ export default function CompanyOrdersReport() {
           </div>
 
           {/* Desktop / impressão: tabela */}
-          <div className="hidden md:block print:block bg-white border-2 border-black rounded-2xl overflow-x-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none">
+          <Card padding="none" className="hidden md:block print:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-black bg-gray-50 text-left">
-                  <th className="px-4 py-3 font-black uppercase text-xs">Data</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs">Função</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs">Freela</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs text-right">Valor</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs">Forma</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs">Status</th>
-                  <th className="px-4 py-3 font-black uppercase text-xs">Data Pgto</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Data</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Função</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Freela</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600 text-right">Valor</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Forma</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Status</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Data Pgto</th>
                 </tr>
               </thead>
               <tbody>
@@ -344,7 +314,7 @@ export default function CompanyOrdersReport() {
                     <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
                     <td className="px-4 py-3 font-medium">{row.category ?? row.title}</td>
                     <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>
-                    <td className="px-4 py-3 font-black tabular-nums text-right whitespace-nowrap">{formatBRL(row.amount)}</td>
+                    <td className="px-4 py-3 font-bold tabular-nums text-right whitespace-nowrap">{formatBRL(row.amount)}</td>
                     <td className="px-4 py-3">{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={row.status} />
@@ -354,7 +324,7 @@ export default function CompanyOrdersReport() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         </>
       )}
     </div>
@@ -367,16 +337,16 @@ export default function CompanyOrdersReport() {
 
 function SummaryCard({ label, value, className = '' }: { label: string; value: string; className?: string }) {
   return (
-    <div className="bg-white border-2 border-black rounded-xl p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] print:shadow-none">
-      <p className="text-[10px] font-black uppercase text-gray-500 mb-1">{label}</p>
-      <p className={`text-xl font-black tabular-nums truncate ${className}`}>{value}</p>
-    </div>
+    <Card padding="sm">
+      <p className="text-xs font-semibold text-gray-600 mb-1">{label}</p>
+      <p className={`text-xl font-bold tabular-nums truncate ${className}`}>{value}</p>
+    </Card>
   );
 }
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   return (
-    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full border-2 ${STATUS_BADGE_CLASS[status]}`}>
+    <span className={`text-xs font-semibold px-2.5 py-1 rounded-pill border whitespace-nowrap ${STATUS_BADGE_CLASS[status]}`}>
       {ORDER_STATUS_LABELS[status]}
     </span>
   );
@@ -384,22 +354,22 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 
 function OrderCard({ row }: { row: OrderRow }) {
   return (
-    <div className="bg-white border-2 border-black rounded-xl p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2">
+    <Card padding="sm" className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-black text-sm truncate">{row.category ?? row.title}</p>
-          <p className="text-xs text-gray-500">{row.date ? formatDDMMYYYY(row.date) : '—'}</p>
+          <p className="font-bold text-sm truncate">{row.category ?? row.title}</p>
+          <p className="text-xs text-gray-600">{row.date ? formatDDMMYYYY(row.date) : '—'}</p>
         </div>
         <StatusBadge status={row.status} />
       </div>
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium text-gray-600 truncate">{row.workerName ?? '—'}</span>
-        <span className="font-black tabular-nums">{formatBRL(row.amount)}</span>
+        <span className="font-bold tabular-nums">{formatBRL(row.amount)}</span>
       </div>
-      <div className="flex items-center justify-between text-xs text-gray-400">
+      <div className="flex items-center justify-between text-xs text-gray-600">
         <span>{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</span>
         <span>{row.paidAt ? `Pago em ${formatDDMMYYYY(row.paidAt)}` : ''}</span>
       </div>
-    </div>
+    </Card>
   );
 }

@@ -1,22 +1,27 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Card, PageHeader } from '../components/ui';
 
 export default function Privacy() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
       <div className="max-w-3xl mx-auto">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-600 mb-6 hover:text-gray-900">
-          <ArrowLeft size={20} /> Voltar
-        </button>
-        <h1 className="text-3xl font-bold mb-6">Política de Privacidade</h1>
-        <div className="bg-white rounded-xl border-2 border-black p-8 space-y-4 text-sm leading-relaxed">
-          <p className="text-gray-600">Última atualização: 16 de agosto de 2026</p>
+        <Button
+          variant="ghost"
+          onClick={() => navigate(-1)}
+          iconLeft={<ArrowLeft size={18} />}
+          className="-ml-3 mb-2"
+        >
+          Voltar
+        </Button>
+        <PageHeader title="Política de Privacidade" subtitle="Última atualização: 16 de agosto de 2026" />
+        <Card padding="lg" className="space-y-4 text-sm sm:text-base leading-relaxed text-gray-800">
 
           <p>Esta Política de Privacidade descreve como a Worki ("nós", "nossa Plataforma") coleta, utiliza, compartilha e protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).</p>
 
-          <h2 className="text-xl font-bold mt-6">1. Dados Coletados</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">1. Dados Coletados</h2>
           <p>Coletamos os seguintes dados pessoais:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Dados de cadastro:</strong> nome completo, e-mail, telefone, CPF (Workers) e data de nascimento (Workers)</li>
@@ -30,7 +35,7 @@ export default function Privacy() {
             <li><strong>Dados de uso:</strong> páginas acessadas, ações realizadas, data/hora de acesso, dispositivo e navegador</li>
           </ul>
 
-          <h2 className="text-xl font-bold mt-6">2. Finalidade do Tratamento</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">2. Finalidade do Tratamento</h2>
           <p>Utilizamos seus dados para:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li>Criação e gerenciamento de conta</li>
@@ -43,7 +48,7 @@ export default function Privacy() {
             <li>Cumprimento de obrigações legais e regulatórias</li>
           </ul>
 
-          <h2 className="text-xl font-bold mt-6">3. Base Legal (LGPD Art. 7)</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">3. Base Legal (LGPD Art. 7)</h2>
           <p>O tratamento de dados é fundamentado nas seguintes bases legais:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Execução de contrato:</strong> para prestação dos serviços da Plataforma</li>
@@ -52,7 +57,7 @@ export default function Privacy() {
             <li><strong>Interesse legítimo:</strong> para prevenção de fraudes e melhoria da Plataforma</li>
           </ul>
 
-          <h2 className="text-xl font-bold mt-6">4. Compartilhamento de Dados</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">4. Compartilhamento de Dados</h2>
           <p>Compartilhamos seus dados apenas com:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Contratante com vínculo:</strong> a chave PIX e o telefone do Worker ficam visíveis apenas para a Contratante com quem ele tem <strong>elenco aceito</strong> (um convite de elenco ainda pendente NÃO dá esse acesso — só o aceite do Worker dá), ou pelo menos uma candidatura/convite de turno em comum (incluindo turnos já concluídos ou cancelados, para manter o recibo e o histórico legíveis) — com a finalidade exclusiva de permitir que essa Contratante efetue o pagamento combinado pelo turno. A base legal é a execução do contrato entre as partes. Nenhuma outra conta da Plataforma tem acesso a esses dados. Quando o vínculo é só de elenco (sem turno já registrado), o Worker pode encerrar esse acesso a qualquer momento saindo do elenco ou bloqueando a Contratante — e o bloqueio feito pelo Worker não pode ser desfeito pela Contratante</li>
@@ -64,7 +69,7 @@ export default function Privacy() {
           </ul>
           <p>Não vendemos, alugamos ou compartilhamos seus dados com terceiros para fins de marketing.</p>
 
-          <h2 className="text-xl font-bold mt-6">5. Retenção de Dados</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">5. Retenção de Dados</h2>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Dados de conta:</strong> mantidos enquanto a conta estiver ativa. Ao excluir a conta, suas credenciais de acesso são apagadas e <strong>seu nome, CPF, telefone, data de nascimento, chave PIX e demais dados pessoais são removidos</strong> em até 30 dias.</li>
             <li><strong>O que permanece após a exclusão, e por quê:</strong> os registros dos turnos que você trabalhou, dos pagamentos recebidos e dos termos de prestação de serviço que você aceitou <strong>continuam existindo, sem os seus dados pessoais</strong> — ligados apenas a um identificador interno que não permite identificá-lo. Isso é exigido pela legislação fiscal e trabalhista brasileira (Lei Geral de Proteção de Dados, art. 16, I e II) e protege igualmente você e a empresa contratante, porque é a prova de que o trabalho foi feito e pago. O mesmo vale para o registro de que uma pessoa operou determinada unidade de uma empresa e quando.</li>
@@ -73,7 +78,7 @@ export default function Privacy() {
             <li><strong>Dados de disputa:</strong> mantidos por 2 anos após a resolução.</li>
           </ul>
 
-          <h2 className="text-xl font-bold mt-6">6. Segurança</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">6. Segurança</h2>
           <p>Adotamos as seguintes medidas de segurança:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li>Criptografia em trânsito (HTTPS/TLS) e em repouso</li>
@@ -83,7 +88,7 @@ export default function Privacy() {
             <li>Monitoramento contínuo de erros e acessos suspeitos</li>
           </ul>
 
-          <h2 className="text-xl font-bold mt-6">7. Seus Direitos (LGPD Art. 18)</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">7. Seus Direitos (LGPD Art. 18)</h2>
           <p>Como titular dos dados, você tem direito a:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Confirmação e acesso:</strong> saber se tratamos seus dados e acessar uma cópia</li>
@@ -94,24 +99,24 @@ export default function Privacy() {
             <li><strong>Informação sobre compartilhamento:</strong> saber com quais entidades seus dados são compartilhados</li>
             <li><strong>Oposição:</strong> opor-se ao tratamento quando não baseado em consentimento</li>
           </ul>
-          <p className="mt-2">Para exercer seus direitos, envie um e-mail para <a href="mailto:privacidade@worki.com.br" className="text-green-600 font-bold">privacidade@worki.com.br</a> com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
+          <p className="mt-2">Para exercer seus direitos, envie um e-mail para <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a> com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
 
-          <h2 className="text-xl font-bold mt-6">8. Cookies</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">8. Cookies</h2>
           <p>Utilizamos apenas cookies essenciais para autenticação e funcionamento da Plataforma (tokens de sessão). Não utilizamos cookies de rastreamento, publicidade ou analíticos de terceiros.</p>
 
-          <h2 className="text-xl font-bold mt-6">9. Transferência Internacional</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">9. Transferência Internacional</h2>
           <p>Seus dados podem ser processados em servidores localizados fora do Brasil (infraestrutura em nuvem). Nestes casos, garantimos que os provedores adotam níveis adequados de proteção de dados conforme a LGPD.</p>
 
-          <h2 className="text-xl font-bold mt-6">10. Alterações nesta Política</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">10. Alterações nesta Política</h2>
           <p>Podemos atualizar esta Política periodicamente. Alterações significativas serão comunicadas por e-mail ou pela Plataforma. O uso continuado após as alterações constitui aceitação da nova Política.</p>
 
-          <h2 className="text-xl font-bold mt-6">11. Contato e Encarregado (DPO)</h2>
+          <h2 className="text-lg font-bold mt-8 first:mt-0">11. Contato e Encarregado (DPO)</h2>
           <p>Para questões de privacidade e proteção de dados:</p>
           <ul className="list-disc pl-6 space-y-1">
-            <li><strong>E-mail:</strong> <a href="mailto:privacidade@worki.com.br" className="text-green-600 font-bold">privacidade@worki.com.br</a></li>
-            <li><strong>E-mail geral:</strong> <a href="mailto:contato@worki.com.br" className="text-green-600 font-bold">contato@worki.com.br</a></li>
+            <li><strong>E-mail:</strong> <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a></li>
+            <li><strong>E-mail geral:</strong> <a href="mailto:contato@worki.com.br" className="text-primary font-bold">contato@worki.com.br</a></li>
           </ul>
-        </div>
+        </Card>
       </div>
     </div>
   );

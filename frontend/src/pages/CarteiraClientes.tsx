@@ -2,15 +2,17 @@ import { useState, type MouseEvent } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check } from 'lucide-react';
+import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
+import { Button, Card, PageHeader } from '../components/ui';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import type { MyStore, TeamConnection } from '../types';
 
 // ---------------------------------------------------------------------------
-// Subcomponent: card de loja/cliente aceito
+// Subcomponent: card de empresa aceita
 // ---------------------------------------------------------------------------
 
 interface StoreCardProps {
@@ -51,19 +53,26 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
   const handleOpenProfile = () => navigate(`/empresa/${connection.company_id}`);
 
   return (
-    <div
+    <Card
+      as="article"
+      padding="sm"
+      interactive
       role="button"
       tabIndex={0}
       onClick={handleOpenProfile}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenProfile(); } }}
-      className="bg-white border-2 border-black rounded-2xl p-5 flex items-start gap-4 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all cursor-pointer"
+      onKeyDown={(e) => {
+        // Só o próprio card abre o perfil; Enter/Espaço nos botões internos seguem a ação deles.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenProfile(); }
+      }}
+      className="flex items-center gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       {/* Logo */}
       <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
         {company.logo_url ? (
           <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-xl">
+          <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-xl">
             {name[0]?.toUpperCase() ?? '?'}
           </div>
         )}
@@ -71,26 +80,26 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-black uppercase text-base truncate">{name}</h3>
+        <h3 className="font-bold text-base truncate">{name}</h3>
         {company.industry && (
-          <p className="text-sm font-bold text-gray-500 uppercase truncate">{company.industry}</p>
+          <p className="text-sm text-gray-600 truncate">{company.industry}</p>
         )}
         <div className="flex flex-wrap gap-2 mt-2">
           {/* Empresa sem nenhuma avaliação exibia "5.0 (0)" -- nota cheia onde não há dado.
               Este selo é prova social: o freela lê antes de aceitar convite daquela empresa. */}
           {typeof company.rating_average === 'number' && (company.reviews_count ?? 0) > 0 ? (
-            <span className="flex items-center gap-1 text-xs font-bold bg-yellow-50 text-yellow-700 px-2 py-1 rounded-xl border border-yellow-200">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-yellow-50 text-yellow-700 px-2.5 py-1 rounded-pill border border-yellow-200">
               <Star size={12} fill="currentColor" /> {company.rating_average.toFixed(1)}
               {` (${company.reviews_count})`}
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-xs font-bold bg-gray-50 text-gray-400 px-2 py-1 rounded-xl border border-gray-200">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-gray-50 text-gray-600 px-2.5 py-1 rounded-pill border border-gray-200">
               <Star size={12} /> Sem avaliações
             </span>
           )}
           {company.address && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-xl">
-              <MapPin size={12} /> {company.address}
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-pill max-w-full">
+              <MapPin size={12} className="flex-shrink-0" /> <span className="truncate">{company.address}</span>
             </span>
           )}
         </div>
@@ -99,24 +108,26 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
       {/* Ações: repassar link / sair-bloquear */}
       <div className="flex flex-col gap-1 flex-shrink-0">
         <button
+          type="button"
           onClick={handleShareLink}
           aria-label={`Repassar link da empresa ${name}`}
           title="Repassar link desta empresa para outro freela"
-          className="p-3 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-light transition-colors"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-primary hover:bg-primary-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
         >
           {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
         </button>
         <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onLeave(connection.id); }}
           disabled={leaving}
-          aria-label={`Sair do cliente ${name}`}
-          title="Sair / bloquear cliente"
-          className="p-3 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label={`Sair da empresa ${name}`}
+          title="Sair / bloquear empresa"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
         >
           {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
         </button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -137,45 +148,47 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
   const isResponding = respondingId === connection.id;
 
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+    <Card as="article" padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+        <div className="w-11 h-11 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
           {company?.logo_url ? (
             <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <Building2 size={20} className="text-gray-400" />
+              <Building2 size={20} className="text-gray-600" />
             </div>
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase text-gray-400">Convite de</p>
-          <p className="font-black uppercase truncate">{name}</p>
+          <p className="text-xs text-gray-600">Convite de</p>
+          <p className="font-bold truncate">{name}</p>
         </div>
-        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary text-xs font-black uppercase px-2 py-1 rounded-xl border border-green-200">
+        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary text-xs font-bold px-2.5 py-1 rounded-pill">
           Novo
         </span>
       </div>
 
       <div className="flex gap-3">
-        <button
+        <Button
+          variant="primary"
+          className="flex-1"
           onClick={() => onAccept(connection.id)}
-          disabled={isResponding}
-          className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          loading={isResponding}
+          iconLeft={<CheckCircle2 size={18} />}
         >
-          {isResponding ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
           Aceitar
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          className="flex-1"
           onClick={() => onDecline(connection.id)}
           disabled={isResponding}
-          className="flex-1 bg-white hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-xl font-black uppercase border-2 border-gray-300 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          iconLeft={<XCircle size={18} />}
         >
-          {isResponding ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
           Recusar
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -185,6 +198,9 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
 
 export default function CarteiraClientes() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
+  const { user } = useAuth();
+  const [myLinkCopied, setMyLinkCopied] = useState(false);
   const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
@@ -215,6 +231,20 @@ export default function CarteiraClientes() {
     setRespondingId(null);
   };
 
+  // Atalho: mesmo serviço do Perfil (link do freela → empresa abre e adiciona ao elenco).
+  const handleCopyMyLink = async () => {
+    if (!user) return;
+    const { url } = TeamConnectionService.generateWorkerInviteToken(user.id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setMyLinkCopied(true);
+      addToast('Link copiado! Envie para uma empresa te adicionar ao elenco.', 'success');
+      setTimeout(() => setMyLinkCopied(false), 2500);
+    } catch {
+      addToast('Não foi possível copiar o link.', 'error');
+    }
+  };
+
   if (erroCarga && !loading) {
     return (
       <div className="max-w-4xl mx-auto pb-24 pt-6">
@@ -226,7 +256,7 @@ export default function CarteiraClientes() {
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-24">
-        <div className="h-10 bg-gray-200 rounded-xl w-64" />
+        <div className="h-9 bg-gray-200 rounded-xl w-56" />
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-24 bg-gray-200 rounded-2xl" />
@@ -241,26 +271,35 @@ export default function CarteiraClientes() {
   return (
     <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">
       <PageMeta
-        title="Carteira de Clientes"
-        description="Acompanhe os clientes que fazem parte da sua carteira e responda a convites de novas empresas."
+        title="Minhas Empresas"
+        description="Acompanhe as empresas que têm você no elenco e responda a convites de novas empresas."
       />
 
-      {/* Header */}
-      <header className="mb-8">
-        <h1 className="text-4xl font-black uppercase tracking-tighter">Carteira de Clientes</h1>
-        <p className="text-gray-500 font-bold mt-1">
-          {myStores.length} cliente{myStores.length !== 1 ? 's' : ''}
-          {pendingConnections.length > 0 && (
-            <span className="ml-2 text-yellow-600">· {pendingConnections.length} convite{pendingConnections.length !== 1 ? 's' : ''} pendente{pendingConnections.length !== 1 ? 's' : ''}</span>
-          )}
-        </p>
-      </header>
+      <PageHeader
+        title="Minhas Empresas"
+        subtitle={
+          `${myStores.length} empresa${myStores.length !== 1 ? 's' : ''}` +
+          (pendingConnections.length > 0
+            ? ` · ${pendingConnections.length} convite${pendingConnections.length !== 1 ? 's' : ''} pendente${pendingConnections.length !== 1 ? 's' : ''}`
+            : '')
+        }
+        action={
+          <Button
+            variant="secondary"
+            onClick={handleCopyMyLink}
+            disabled={!user}
+            iconLeft={myLinkCopied ? <Check size={18} /> : <Copy size={18} />}
+          >
+            {myLinkCopied ? 'Link copiado!' : 'Copiar meu link'}
+          </Button>
+        }
+      />
 
       {/* Convites pendentes */}
       {pendingConnections.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-2 text-yellow-700">
-            <Clock size={20} /> Convites Pendentes
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <Clock size={18} className="text-yellow-700" /> Convites pendentes
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {pendingConnections.map((conn) => (
@@ -276,12 +315,16 @@ export default function CarteiraClientes() {
         </section>
       )}
 
-      {/* Clientes aceitos */}
+      {/* Empresas aceitas */}
       {myStores.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-            <Users size={20} /> Meus Clientes
-          </h2>
+          {/* A página já se chama "Minhas Empresas": o título da seção só entra quando há
+              convites pendentes acima, para separar os dois grupos. */}
+          {pendingConnections.length > 0 && (
+            <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Users size={18} /> Minhas Empresas
+            </h2>
+          )}
           <div className="grid grid-cols-1 gap-4">
             {myStores.map((store) => (
               <StoreCard
@@ -297,42 +340,38 @@ export default function CarteiraClientes() {
 
       {/* Empty state */}
       {isEmpty && (
-        <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50">
-          <Users size={48} className="mx-auto mb-4 text-gray-300" />
-          <h3 className="text-xl font-black uppercase mb-2">Você ainda não tem clientes</h3>
-          <p className="text-gray-500 font-bold max-w-sm mx-auto">
-            Aceite um convite de uma empresa ou compartilhe seu link de perfil para começar a construir sua carteira de clientes.
+        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+          <Users size={40} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-bold mb-2">Você ainda não tem empresas</h3>
+          <p className="text-sm text-gray-600 max-w-sm mx-auto">
+            Aceite um convite de uma empresa ou compartilhe seu link de perfil para começar a montar sua lista de empresas.
           </p>
-          <button
-            onClick={() => navigate('/profile')}
-            className="mt-6 inline-flex items-center gap-2 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors min-h-11"
-          >
+          <Button variant="primary" size="lg" className="mt-6" onClick={() => navigate('/profile')}>
             Ver meu link de perfil
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Modal de confirmação: sair/bloquear */}
       {confirmLeaveId && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharPeloFundo}>
-          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6">
-            <h3 className="text-xl font-black uppercase mb-2">Sair deste cliente?</h3>
-            <p className="text-sm font-bold text-gray-500 mb-6">
-              Você não fará mais parte da carteira dessa empresa. Esta ação não pode ser desfeita.
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sair-empresa-titulo"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6"
+          >
+            <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2">Sair desta empresa?</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Você não fará mais parte do elenco dessa empresa. Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmLeaveId(null)}
-                className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-black uppercase text-sm hover:bg-gray-100 transition-colors"
-              >
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirmLeaveId(null)}>
                 Voltar
-              </button>
-              <button
-                onClick={handleConfirmLeave}
-                className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-sm transition-colors"
-              >
+              </Button>
+              <Button variant="danger" className="flex-1" onClick={handleConfirmLeave}>
                 Sair
-              </button>
+              </Button>
             </div>
           </div>
         </div>
