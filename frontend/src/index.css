@@ -37,3 +37,17 @@
 .animate-slide-in {
   animation: slideIn 0.3s ease-out forwards;
 }
+
+/* Safe-area (PWA standalone + iPhone com notch): `pb-safe` era usada no BottomNav mas nao existia.
+   Com viewport-fit=cover o conteudo vai ate a borda; sem isto a barra inferior ficaria sob o indicador de home. */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Em paisagem (viewport-fit=cover) o conteudo nao pode ficar sob o notch lateral. */
+body {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.tsx'
+import { initPwa } from './lib/pwa'
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
 
@@ -15,6 +16,9 @@ if (SENTRY_DSN) {
     replaysOnErrorSampleRate: 1.0,
   })
 }
+
+// PWA: listeners de instalacao (cedo, o beforeinstallprompt dispara uma vez) + service worker (so em producao).
+initPwa()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
