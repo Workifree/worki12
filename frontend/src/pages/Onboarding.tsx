@@ -185,7 +185,6 @@ export default function Onboarding() {
 
       {/* Final CTA */}
       <section className="py-16 sm:py-20 px-6 bg-primary text-white text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="relative z-10 max-w-3xl mx-auto space-y-6">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">Pronto para começar?</h2>
           <p className="text-lg sm:text-xl max-w-xl mx-auto">Monte sua equipe de confiança ou entre pra uma — leva menos de 2 minutos.</p>

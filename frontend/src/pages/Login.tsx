@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -47,6 +47,9 @@ function roleLabel(userType: string | undefined | null): string {
 }
 
 export default function Login() {
+    // Trava de reentrada SINCRONA: o estado `loading` so atualiza no proximo render, entao tres envios no
+    // mesmo tick (Enter repetido) passavam e geravam tres POSTs em auth/v1/token.
+    const enviandoRef = useRef(false);
     const [searchParams] = useSearchParams();
     // 'explicitType' só existe quando o usuário chegou por um link que declara a intenção
     // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
@@ -102,7 +105,8 @@ export default function Login() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (loading) return; // trava de reentrada: Enter repetido nao dispara outra chamada de auth
+        if (enviandoRef.current) return;
+        enviandoRef.current = true;
         setLoading(true);
         setError(null);
         setSuccessMessage(null);
@@ -203,6 +207,7 @@ export default function Login() {
                 setError('Erro ao fazer login. Tente novamente.');
             }
         } finally {
+            enviandoRef.current = false;
             setLoading(false);
         }
     };
@@ -353,9 +358,9 @@ export default function Login() {
 
                 <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
                     <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
-                    <Link to="/termos" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Termos</Link>
+                    <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
                     <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
-                    <Link to="/ajuda" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Ajuda</Link>
+                    <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Ajuda</Link>
                 </nav>
             </Card>
         </div>
