@@ -103,7 +103,7 @@ export default function ForgotPassword() {
             <Card padding="lg" className="max-w-md w-full">
                 <Button
                     variant="ghost"
-                    size="sm"
+                    size="md"
                     onClick={() => navigate('/login')}
                     iconLeft={<ArrowLeft size={16} />}
                     className="-ml-3 mb-4"
