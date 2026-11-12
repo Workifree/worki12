@@ -19,6 +19,7 @@ import { acceptManagerInvite } from '../services/organizationService';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
+import { Button, Card } from '../components/ui';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 
 type PageState =
@@ -134,6 +135,19 @@ export default function AcceptManagerInvite() {
   const current = CONTENT[page];
   const isSuccess = page === 'accepted' || page === 'already_accepted';
 
+  // P1: no caso mais provavel (convidado ja e freela logado), o corpo diz "crie uma
+  // conta de empresa" mas o botao mandava pro login. Alinha destino e rotulo a acao.
+  const alvo = isSuccess
+    ? '/company/dashboard'
+    : page === 'worker_cannot_be_manager'
+      ? '/login?type=hire&cadastro=1'
+      : '/login';
+  const rotulo = isSuccess
+    ? 'Ir para o Dashboard'
+    : page === 'worker_cannot_be_manager'
+      ? 'Criar conta de empresa'
+      : 'Voltar ao Login';
+
   return (
     <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
       <PageMeta
@@ -142,65 +156,50 @@ export default function AcceptManagerInvite() {
       />
 
       <div className="w-full max-w-md">
-        <div
-          className={`bg-white border-2 border-black rounded-2xl p-8 text-center ${
-            page === 'loading'
-              ? 'shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'
-              : isSuccess
-                ? 'shadow-[8px_8px_0px_0px_rgba(37,99,235,1)]'
-                : 'shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]'
+        <Card
+          padding="lg"
+          className={`text-center ${
+            page !== 'loading' && isSuccess
+              ? 'shadow-[6px_6px_0px_0px_rgba(37,99,235,1)]'
+              : 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
           }`}
         >
           <div
-            className={`w-16 h-16 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+            className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${
               page === 'loading' ? 'bg-blue-50' : isSuccess ? 'bg-blue-600' : 'bg-red-50'
             }`}
           >
             {page === 'loading' ? (
-              <Building2 size={32} className="text-blue-600" />
+              <Building2 size={28} className="text-blue-600" />
             ) : isSuccess ? (
-              <CheckCircle2 size={32} className="text-white" />
+              <CheckCircle2 size={28} className="text-white" />
             ) : (
-              <XCircle size={32} className="text-red-500" />
+              <XCircle size={28} className="text-red-500" />
             )}
           </div>
 
-          <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">{current.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight mb-2">{current.title}</h1>
 
           {page === 'loading' ? (
-            <div className="flex items-center justify-center gap-3 text-gray-500 mt-6">
-              <Loader2 className="animate-spin text-blue-600" size={24} />
-              <span className="font-bold">Confirmando seu acesso...</span>
+            <div className="flex items-center justify-center gap-3 text-gray-600 mt-5" role="status">
+              <Loader2 className="animate-spin text-blue-600" size={22} />
+              <span className="text-sm font-semibold">Confirmando seu acesso...</span>
             </div>
           ) : (
             <>
-              <p className="text-gray-600 font-bold mb-8">{current.body}</p>
-              {(() => {
-                // P1: no caso mais provavel (convidado ja e freela logado), o corpo diz "crie uma
-                // conta de empresa" mas o botao mandava pro login. Alinha destino e rotulo a acao.
-                const alvo = isSuccess
-                  ? '/company/dashboard'
-                  : page === 'worker_cannot_be_manager'
-                    ? '/login?type=hire&cadastro=1'
-                    : '/login';
-                const rotulo = isSuccess
-                  ? 'Ir para o Dashboard'
-                  : page === 'worker_cannot_be_manager'
-                    ? 'Criar conta de empresa'
-                    : 'Voltar ao Login';
-                return (
-                  <button
-                    onClick={() => navigate(alvo)}
-                    className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
-                  >
-                    {rotulo}
-                    <ArrowRight size={18} />
-                  </button>
-                );
-              })()}
+              <p className="text-sm sm:text-base text-gray-600 mb-6">{current.body}</p>
+              <Button
+                variant="dark"
+                size="lg"
+                fullWidth
+                onClick={() => navigate(alvo)}
+                iconRight={<ArrowRight size={18} />}
+              >
+                {rotulo}
+              </Button>
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

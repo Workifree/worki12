@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useId, useState, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -12,11 +13,12 @@ import { SosCallButton } from '../../components/team/SosCallButton';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
-import { ArrowLeft, Star, MapPin, Clock, ChevronRight, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Loader2, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone, Bell, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone, Bell, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
+import { Button, Card, Field, PageHeader } from '../../components/ui';
 import { todayLocalDate, formatDateOnly } from '../../lib/dateUtils';
 import type {
     Application,
@@ -173,6 +175,62 @@ function buildManualAttendanceTimestamp(
 // é 100% via convite do Elenco (push). O pull-hire dispara reserve_escrow (HARD-requer saldo), o que
 // contradiz o pagamento opcional (modo A, ADR-20260630). Religar na Fase 2 = flip para true.
 const PULL_HIRE_ENABLED = false;
+
+// ── Primitivos locais de apresentação ───────────────────────────────────────────────────────
+/** Botão só-ícone (alvo de toque 44px) sobre o `Button` ghost. */
+const ICON_BUTTON_CLASS = '!px-0 w-11 shrink-0';
+/** Ação destrutiva de baixa ênfase (Estornar, Dispensar, Cancelar Convite): ghost em vermelho. */
+const DESTRUCTIVE_GHOST_CLASS = '!text-red-600 enabled:hover:!bg-red-50';
+
+type ChipTone = 'neutral' | 'muted' | 'info' | 'success' | 'warning' | 'danger';
+const CHIP_TONES: Record<ChipTone, string> = {
+    neutral: 'border-gray-300 bg-gray-100 text-gray-700',
+    muted: 'border-gray-200 bg-gray-50 text-gray-600',
+    info: 'border-blue-200 bg-blue-50 text-blue-700',
+    success: 'border-green-200 bg-green-50 text-green-700',
+    warning: 'border-yellow-200 bg-yellow-50 text-yellow-800',
+    danger: 'border-red-200 bg-red-50 text-red-600',
+};
+
+/** Pílula de estado (não clicável) — distinta de botão: sem sombra, sem borda preta. */
+function StatusChip({ tone, icon, children }: { tone: ChipTone; icon?: ReactNode; children: ReactNode }) {
+    return (
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${CHIP_TONES[tone]}`}>
+            {icon}
+            {children}
+        </span>
+    );
+}
+
+/** Id do título do modal corrente — liga `aria-labelledby` da casca ao `ModalTitle` filho. */
+const ModalTitleIdContext = createContext<string | undefined>(undefined);
+
+/**
+ * Casca padrão dos modais desta tela (overlay + caixa neo-brutalista). Overlay em z-[70] para
+ * ficar ACIMA da BottomNav (z-50). Semântica de diálogo (role/aria-modal/aria-labelledby) vive
+ * aqui, uma vez; cada modal só precisa renderizar o título com `ModalTitle`.
+ */
+function ModalShell({ onBackdropClick, children }: { onBackdropClick: (e: React.MouseEvent<HTMLElement>) => void; children: ReactNode }) {
+    const titleId = useId();
+    return (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={onBackdropClick}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="bg-white rounded-2xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+            >
+                <ModalTitleIdContext.Provider value={titleId}>{children}</ModalTitleIdContext.Provider>
+            </div>
+        </div>
+    );
+}
+
+/** Título do modal — recebe o id que a `ModalShell` referencia em `aria-labelledby`. */
+function ModalTitle({ as: Tag = 'h2', className, children }: { as?: 'h2' | 'h3'; className?: string; children: ReactNode }) {
+    const id = useContext(ModalTitleIdContext);
+    return <Tag id={id} className={className}>{children}</Tag>;
+}
 
 export default function CompanyJobCandidates() {
     const { id } = useParams();
@@ -1075,34 +1133,56 @@ export default function CompanyJobCandidates() {
 
     // Bloco de ações para um marcador 'scheduled' (promessa) — reaproveitado no gatilho de
     // conclusão e na seção pós-conclusão (mesma lógica, dois pontos de renderização).
+    // Fragmento: os itens entram direto na linha de ações do card (flex-wrap do pai).
     const renderScheduledPaymentBlock = (payment: ShiftPayment) => (
-        <div className="flex items-center gap-2 flex-wrap">
+        <>
             {payment.scheduled_for && (
-                <span className="flex items-center gap-1 text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-yellow-50 border-yellow-200 text-yellow-700">
-                    <CalendarClock size={14} /> Agendado p/ {formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy')}
-                </span>
+                <StatusChip tone="warning" icon={<CalendarClock size={14} />}>
+                    Agendado p/ {formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy')}
+                </StatusChip>
             )}
-            <button
+            <Button
+                variant="dark"
                 onClick={(e) => { e.stopPropagation(); handleEffectivatePayment(payment.id); }}
-                disabled={effectivatingId === payment.id}
-                className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1 disabled:opacity-50"
+                loading={effectivatingId === payment.id}
             >
-                {effectivatingId === payment.id && <Loader2 size={14} className="animate-spin" />}
                 Marcar como pago
-            </button>
-            <button
+            </Button>
+            <Button
+                variant="secondary"
+                iconLeft={<Receipt size={16} />}
                 onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${payment.job_id}?worker=${payment.worker_id}`); }}
-                className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
             >
-                <Receipt size={14} /> Ver Comprovante
-            </button>
-            <button
+                Ver Comprovante
+            </Button>
+            <Button
+                variant="ghost"
+                className={DESTRUCTIVE_GHOST_CLASS}
                 onClick={(e) => { e.stopPropagation(); setVoidingPayment(payment); setVoidReason(''); }}
-                className="py-2 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:border-red-500 transition-colors flex items-center gap-1"
             >
                 Estornar
-            </button>
-        </div>
+            </Button>
+        </>
+    );
+
+    // Par "Registrar Pagamento" (primário) + "Agendar Pagamento" (secundário) — usado no gatilho
+    // de conclusão e na rede de segurança do turno já concluído sem marcador.
+    const renderRegisterPaymentActions = (app: Application) => (
+        <>
+            <Button
+                variant="dark"
+                onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
+            >
+                Registrar Pagamento
+            </Button>
+            <Button
+                variant="secondary"
+                iconLeft={<CalendarClock size={16} />}
+                onClick={(e) => { e.stopPropagation(); openScheduleModal(app); }}
+            >
+                Agendar Pagamento
+            </Button>
+        </>
     );
 
     // Ramificação modo A (pagamento externo, registrado OU agendado) vs C (postpago/cartão)
@@ -1112,92 +1192,83 @@ export default function CompanyJobCandidates() {
         const kind = escrowKindMap[app.id];
         if (kind === 'prepaid' || kind === 'postpaid') {
             return (
-                <button
+                <Button
+                    variant="dark"
                     onClick={(e) => { e.stopPropagation(); setConfirmDeliveryApp(app); }}
-                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
                 >
                     Confirmar Entrega
-                </button>
+                </Button>
             );
         }
         const matchingPayment = paymentByWorker[app.worker_id] ?? null;
         if (matchingPayment?.status === 'recorded') {
             return (
-                <div className="flex items-center gap-2 flex-wrap">
-                    <button
+                <>
+                    <Button
+                        variant="secondary"
+                        iconLeft={<Receipt size={16} />}
                         onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
-                        className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
                     >
-                        <Receipt size={14} /> Ver Recibo
-                    </button>
-                    <button
+                        Ver Recibo
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className={DESTRUCTIVE_GHOST_CLASS}
                         onClick={(e) => { e.stopPropagation(); setVoidingPayment(matchingPayment); setVoidReason(''); }}
-                        className="py-2 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:border-red-500 transition-colors flex items-center gap-1"
                     >
                         Estornar
-                    </button>
-                </div>
+                    </Button>
+                </>
             );
         }
         if (matchingPayment?.status === 'scheduled') {
             return renderScheduledPaymentBlock(matchingPayment);
         }
-        return (
-            <div className="flex items-center gap-2 flex-wrap">
-                <button
-                    onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
-                    className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                >
-                    Registrar Pagamento
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); openScheduleModal(app); }}
-                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
-                >
-                    <CalendarClock size={14} /> Agendar Pagamento
-                </button>
-            </div>
-        );
+        return renderRegisterPaymentActions(app);
     };
 
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-2">
-                        <ArrowLeft size={16} strokeWidth={3} /> Voltar para Turnos
-                    </button>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Presença e Pagamento</h1>
-                    <p className="text-gray-500 font-bold">
-                        {jobTitle} • {filledCount} de {jobSlots} vaga{jobSlots !== 1 ? 's' : ''} preenchida{filledCount !== 1 ? 's' : ''}
-                    </p>
-                </div>
-                {/* O gesto de 8h30: um clique, vários freelas, quem aceitar primeiro leva.
-                    Some quando o turno já está completo — não há vaga para disputar. */}
-                {filledCount < jobSlots && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                            onClick={() => setCallModalOpen(true)}
-                            className="bg-black hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors flex-shrink-0"
-                        >
-                            <Megaphone size={16} /> Chamar Freelas
-                        </button>
-                        {/* F11 — SOS: fallback do chamado ao Elenco. Só habilita quando o Elenco
-                            já esgotou e o turno começa em menos de 4h (RPC reverifica tudo). */}
-                        {id && (
-                            <SosCallButton
-                                jobId={id}
-                                refreshKey={`${calls.length}-${filledCount}`}
-                                onDispatched={() => {
-                                    refreshCalls();
-                                    void fetchCandidates();
-                                }}
-                            />
-                        )}
-                    </div>
-                )}
-            </div>
+            <Button
+                variant="ghost"
+                onClick={() => navigate('/company/jobs')}
+                iconLeft={<ArrowLeft size={16} />}
+                className="-ml-4 mb-1"
+            >
+                Voltar para Turnos
+            </Button>
+            <PageHeader
+                title="Presença e Pagamento"
+                subtitle={`${jobTitle} • ${filledCount} de ${jobSlots} vaga${jobSlots !== 1 ? 's' : ''} preenchida${filledCount !== 1 ? 's' : ''}`}
+                action={
+                    /* O gesto de 8h30: um clique, vários freelas, quem aceitar primeiro leva.
+                       Some quando o turno já está completo — não há vaga para disputar. */
+                    filledCount < jobSlots ? (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button
+                                variant="dark"
+                                iconLeft={<Megaphone size={16} />}
+                                onClick={() => setCallModalOpen(true)}
+                            >
+                                Chamar Freelas
+                            </Button>
+                            {/* F11 — SOS: fallback do chamado ao Elenco. Só habilita quando o Elenco
+                                já esgotou e o turno começa em menos de 4h (RPC reverifica tudo). */}
+                            {id && (
+                                <SosCallButton
+                                    jobId={id}
+                                    refreshKey={`${calls.length}-${filledCount}`}
+                                    onDispatched={() => {
+                                        refreshCalls();
+                                        void fetchCandidates();
+                                    }}
+                                />
+                            )}
+                        </div>
+                    ) : undefined
+                }
+            />
 
             <ShiftCallsPanel
                 calls={calls}
@@ -1236,29 +1307,27 @@ export default function CompanyJobCandidates() {
                 const hasAnyConfirmationActivity = summary.confirmed + summary.cannotAttend + summary.noResponse > 0;
                 if (activeCandidates.length === 0 || !hasAnyConfirmationActivity) return null;
                 return (
-                    <div className="bg-white border-2 border-black rounded-2xl p-4 mb-6 flex flex-wrap items-center gap-3">
-                        <span className="text-xs font-black uppercase text-gray-400 flex items-center gap-1.5">
+                    <Card padding="sm" className="mb-6 flex flex-wrap items-center gap-2">
+                        <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <CalendarClock size={14} /> Confirmação de véspera
                         </span>
-                        <span className="text-xs font-black bg-primary-light text-primary px-3 py-1.5 rounded-xl">
+                        <StatusChip tone="success">
                             {summary.confirmed} confirmado{summary.confirmed !== 1 ? 's' : ''}
-                        </span>
+                        </StatusChip>
                         {summary.noResponse > 0 && (
-                            <span className="text-xs font-black bg-gray-100 text-gray-600 px-3 py-1.5 rounded-xl">
-                                {summary.noResponse} sem resposta
-                            </span>
+                            <StatusChip tone="neutral">{summary.noResponse} sem resposta</StatusChip>
                         )}
                         {summary.cannotAttend > 0 && (
-                            <span className="text-xs font-black bg-red-50 text-red-600 px-3 py-1.5 rounded-xl">
+                            <StatusChip tone="danger">
                                 {summary.cannotAttend} não {summary.cannotAttend === 1 ? 'vem' : 'vêm'}
-                            </span>
+                            </StatusChip>
                         )}
                         {summary.notAsked > 0 && (
-                            <span className="text-xs font-black bg-gray-50 text-gray-400 px-3 py-1.5 rounded-xl border border-gray-200">
+                            <StatusChip tone="muted">
                                 {summary.notAsked} não perguntado{summary.notAsked !== 1 ? 's' : ''}
-                            </span>
+                            </StatusChip>
                         )}
-                    </div>
+                    </Card>
                 );
             })()}
 
@@ -1267,544 +1336,521 @@ export default function CompanyJobCandidates() {
                 {loading ? (
                     <div className="space-y-4 animate-pulse">
                         {[...Array(3)].map((_, i) => (
-                            <div key={i} className="bg-gray-200 rounded-xl h-32" />
+                            <div key={i} className="bg-gray-200 rounded-2xl h-32" />
                         ))}
                     </div>
                 ) : candidates.length === 0 ? (
-                    <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
-                        <Users size={40} className="mx-auto mb-3 text-gray-300" />
-                        <p className="text-gray-500 text-lg font-bold">Nenhum freela atrelado a este turno.</p>
-                        <p className="text-gray-400 text-sm mt-2 mb-5">Convide um freela do seu elenco para começar.</p>
-                        <button
+                    <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl">
+                        <Users size={40} className="mx-auto mb-3 text-gray-400" />
+                        <p className="text-base font-bold text-gray-900">Nenhum freela atrelado a este turno.</p>
+                        <p className="text-sm text-gray-600 mt-1 mb-6">Convide um freela do seu elenco para começar.</p>
+                        <Button
+                            variant="dark"
+                            iconLeft={<Send size={16} />}
                             onClick={() => void openInvitePicker()}
-                            className="bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors"
                         >
-                            <Send size={16} /> Convidar Freela do Elenco
-                        </button>
+                            Convidar Freela do Elenco
+                        </Button>
                     </div>
                 ) : (
                     candidates.map((app) => (
-                        <div key={app.id} role="button" tabIndex={0} className="bg-white border-2 border-gray-100 hover:border-black rounded-xl p-6 transition-all group hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer" onClick={() => navigate(`/company/worker/${app.worker_id}`)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/company/worker/${app.worker_id}`); } }}>
-                            <div className="flex flex-col md:flex-row gap-6">
+                        <Card
+                            key={app.id}
+                            role="button"
+                            tabIndex={0}
+                            interactive
+                            className="cursor-pointer"
+                            onClick={() => navigate(`/company/worker/${app.worker_id}`)}
+                            onKeyDown={(e) => {
+                                // Só reage ao teclado do próprio card — Enter/Espaço em um botão
+                                // interno (ações) não pode navegar nem engolir o clique dele.
+                                if (e.target !== e.currentTarget) return;
+                                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/company/worker/${app.worker_id}`); }
+                            }}
+                        >
+                            <div className="flex items-start gap-4">
                                 {/* Avatar */}
-                                <div className="flex-shrink-0">
-                                    <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-black overflow-hidden relative">
-                                        {app.worker?.avatar_url ? (
-                                            <img src={app.worker.avatar_url} alt={app.worker.full_name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-xl">
-                                                {app.worker?.full_name?.[0] || '?'}
-                                            </div>
-                                        )}
-                                    </div>
+                                <div className="w-14 h-14 shrink-0 rounded-full bg-gray-200 border-2 border-black overflow-hidden">
+                                    {app.worker?.avatar_url ? (
+                                        <img src={app.worker.avatar_url} alt={app.worker.full_name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-lg">
+                                            {app.worker?.full_name?.[0] || '?'}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Info */}
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h3 className="font-black text-xl flex items-center gap-2">
-                                                {app.worker?.full_name || 'Usuário Worki'}
-                                                <span className="bg-black text-white text-[10px] px-2 py-0.5 rounded-full uppercase">Lvl {app.worker?.level || 1}</span>
-                                            </h3>
-                                            <div className="flex items-center gap-4 text-xs font-bold text-gray-500 mt-1">
-                                                <span className="flex items-center gap-1"><MapPin size={12} /> {app.worker?.city || 'Não informado'}</span>
-                                                {/* Sem avaliação, isto mostrava "5.0 (0 avaliações)" -- nota
-                                                    maxima inventada para quem nunca foi avaliado, no lugar exato
-                                                    onde a empresa decide quem chamar. "Novo" diz a verdade. */}
-                                                {app.worker?.rating_average && (app.worker?.reviews_count ?? 0) > 0 ? (
-                                                    <span className="flex items-center gap-1">
-                                                        <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                                                        {Number(app.worker.rating_average).toFixed(1)}
-                                                        <span className="text-gray-400 font-medium ml-1">({app.worker.reviews_count === 1 ? '1 avaliação' : `${app.worker.reviews_count} avaliações`})</span>
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-1 text-gray-400">
-                                                        <Star size={12} /> Sem avaliações ainda
-                                                    </span>
-                                                )}
-                                                <span className="flex items-center gap-1"><Clock size={12} /> Convidado {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 flex-wrap justify-end">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleChat(app); }}
-                                                className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-colors"
-                                                title="Chat"
-                                                aria-label="Abrir chat com freela"
-                                            >
-                                                <MessageSquare size={24} />
-                                            </button>
-                                            {PULL_HIRE_ENABLED && app.status === 'pending' && (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
-                                                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
-                                                        title="Descartar"
-                                                        aria-label="Descartar freela"
-                                                    >
-                                                        <XCircle size={24} />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'interview'); }}
-                                                        className="p-2 hover:bg-green-50 text-gray-300 hover:text-green-600 rounded-lg transition-colors"
-                                                        title="Aprovar para Entrevista"
-                                                        aria-label="Aprovar freela para entrevista"
-                                                    >
-                                                        <CheckCircle size={24} />
-                                                    </button>
-                                                </>
-                                            )}
-                                            {app.status !== 'pending' && (
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    {isInviteExpired(app) ? (
-                                                            <>
-                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-500">
-                                                                    Não respondeu (expirado)
-                                                                </span>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
-                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                                                                >
-                                                                    <Send size={14} /> Convidar outro
-                                                                </button>
-                                                            </>
-                                                    ) : isInviteCancelledUnanswered(app) ? (
-                                                            <>
-                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-500">
-                                                                    Convite cancelado
-                                                                </span>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
-                                                                    className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                                                                >
-                                                                    <Send size={14} /> Convidar outro
-                                                                </button>
-                                                            </>
-                                                    ) : app.status === 'invited' ? (
-                                                            <>
-                                                                <span className="text-xs font-black uppercase px-3 py-1 rounded-lg border-2 bg-blue-50 border-blue-100 text-blue-600">
-                                                                    Aguardando resposta
-                                                                </span>
-                                                                {app.worker?.phone ? (
-                                                                    <button
-                                                                        onClick={(e) => { e.stopPropagation(); handleWhatsAppNotify(app); }}
-                                                                        className="p-1 px-3 bg-[#25D366] text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-black transition-colors flex items-center gap-1"
-                                                                    >
-                                                                        <MessageCircle size={14} /> Avisar no WhatsApp
-                                                                    </button>
-                                                                ) : (
-                                                                    <span
-                                                                        title="Freela sem telefone cadastrado"
-                                                                        className="text-xs font-bold uppercase px-3 py-1 rounded-lg border-2 bg-gray-100 border-gray-300 text-gray-400"
-                                                                    >
-                                                                        WhatsApp indisponível
-                                                                    </span>
-                                                                )}
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); void handleCancelInvite(app); }}
-                                                                    disabled={cancelInviteId === app.id}
-                                                                    className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-1 disabled:opacity-50"
-                                                                >
-                                                                    {cancelInviteId === app.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                                                                    Cancelar Convite
-                                                                </button>
-                                                            </>
-                                                    ) : (
-                                                        <span className={`text-xs font-black uppercase px-3 py-1 rounded-lg border-2 ${app.status === 'hired' ? 'bg-green-100 border-green-200 text-green-700' :
-                                                            app.status === 'in_progress' ? 'bg-orange-100 border-orange-200 text-orange-700' :
-                                                            app.status === 'completed' ? 'bg-blue-100 border-blue-200 text-blue-700' :
-                                                                app.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-500' :
-                                                                    'bg-blue-50 border-blue-100 text-blue-600'
-                                                            }`}>
-                                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
-                                                        </span>
-                                                    )}
-
-                                                    {app.status === 'interview' && (
-                                                        <>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleChat(app); }}
-                                                                className="p-1 px-3 bg-blue-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-blue-600 transition-colors flex items-center gap-1"
-                                                            >
-                                                                <MessageSquare size={14} /> Chat
-                                                            </button>
-                                                            {PULL_HIRE_ENABLED && (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
-                                                                    className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-green-600 transition-colors"
-                                                                >
-                                                                    Contratar
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    )}
-
-                                                    {(app.status === 'hired' || app.status === 'in_progress') && (
-                                                        <>
-                                                            {/* Show check-in status */}
-                                                            {!app.company_checkin_confirmed_at ? (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (app.worker_checkin_at) {
-                                                                            handleConfirmCheckin(app.id);
-                                                                        } else {
-                                                                            openManualAttendanceModal(app, 'checkin');
-                                                                        }
-                                                                    }}
-                                                                    disabled={confirmingCheckin === app.id}
-                                                                    className="p-1.5 px-3 bg-green-600 text-white rounded-lg text-xs font-black uppercase hover:bg-green-700 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-                                                                >
-                                                                    {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                                                                    {app.worker_checkin_at ? 'Confirmar Chegada' : 'Confirmar Presença'}
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-xs font-black text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                    <CheckCircle size={13} />
-                                                                    {app.worker_checkin_at ? 'Chegada OK' : 'Chegada registrada pela empresa'}
-                                                                </span>
-                                                            )}
-
-                                                            {/* Show check-out status — mesmo fallback do check-in: a empresa pode
-                                                                confirmar a saída mesmo se o freela não apertou "saída" no celular
-                                                                (turno acabou tarde da noite, sem sinal do app). Sem isso, o turno
-                                                                fica impagável para sempre. O rótulo distingue os dois casos para
-                                                                não sugerir que o freela marcou algo que não marcou.
-
-                                                                Ordem chegada→saída EXIGIDA (revisão pré-piloto): registrar/confirmar
-                                                                a saída antes da chegada estar confirmada quebra
-                                                                `buildManualAttendanceTimestamp` (sem `company_checkin_confirmed_at`
-                                                                nem `worker_checkin_at` como referência, `refMinutes` fica null,
-                                                                `dayOffset` sempre 0 — em turno sem `work_start_time`, a saída pode
-                                                                gravar ANTES da chegada que só será registrada depois).
-                                                                `calculateWorkedHours` então devolve null e o recibo perde as horas
-                                                                para sempre (`shift_payments` é imutável). Falha segura, não mente —
-                                                                mas o único artefato de auditoria do modo A fica sem o dado. A
-                                                                cronologia real (ninguém sai antes de entrar) resolve na origem: só
-                                                                oferece "Registrar/Confirmar Saída" depois que a chegada estiver
-                                                                confirmada; antes disso, mostra um estado neutro explicando o motivo. */}
-                                                            {!app.company_checkin_confirmed_at ? (
-                                                                <span className="text-xs font-bold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                    <Square size={12} /> Confirme a chegada primeiro
-                                                                </span>
-                                                            ) : !app.company_checkout_confirmed_at ? (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        if (app.worker_checkout_at) {
-                                                                            handleConfirmCheckout(app.id);
-                                                                        } else {
-                                                                            openManualAttendanceModal(app, 'checkout');
-                                                                        }
-                                                                    }}
-                                                                    disabled={confirmingCheckin === app.id}
-                                                                    className="p-1 px-3 bg-purple-500 text-white rounded-lg text-xs font-bold uppercase hover:bg-purple-600 transition-colors flex items-center gap-1 disabled:opacity-50"
-                                                                >
-                                                                    {confirmingCheckin === app.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                                                                    {app.worker_checkout_at ? 'Confirmar Saída' : 'Registrar Saída'}
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded flex items-center gap-1">
-                                                                    <CheckCircle size={12} />
-                                                                    {app.worker_checkout_at ? 'Saída OK' : 'Saída registrada pela empresa'}
-                                                                </span>
-                                                            )}
-
-                                                            {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
-                                                            {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
-
-                                                            {/* Confirmação de véspera (F4) — badge de status + "Pedir confirmação" (A7/A9/A10). */}
-                                                            {(() => {
-                                                                const { response, requestCount, lastRequestedAt } = summarizeConfirmation(
-                                                                    confirmationsByApp[app.id],
-                                                                );
-                                                                const cooldownMs = confirmationCooldownRemainingMs(lastRequestedAt);
-                                                                const canRequest =
-                                                                    response === null && requestCount < CONFIRMATION_REQUEST_CAP && cooldownMs === 0;
-                                                                const isRequesting = requestingConfirmationId === app.id;
-                                                                const disabledReason =
-                                                                    response !== null
-                                                                        ? null
-                                                                        : requestCount >= CONFIRMATION_REQUEST_CAP
-                                                                            ? 'Limite de 2 pedidos atingido'
-                                                                            : cooldownMs > 0
-                                                                                ? `Aguarde ${formatCooldownRemaining(cooldownMs)}`
-                                                                                : null;
-
-                                                                return (
-                                                                    <>
-                                                                        {response === 'confirmed' && (
-                                                                            <span className="text-xs font-black text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                                <ThumbsUp size={13} /> Confirmou presença
-                                                                            </span>
-                                                                        )}
-                                                                        {response === 'cannot_attend' && (
-                                                                            <span className="text-xs font-black text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                                <ThumbsDown size={13} /> Avisou que não vai
-                                                                            </span>
-                                                                        )}
-                                                                        {response === null && requestCount > 0 && (
-                                                                            <span className="text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                                <Bell size={12} /> Sem resposta
-                                                                            </span>
-                                                                        )}
-                                                                        {response === null && (
-                                                                            <button
-                                                                                onClick={(e) => { e.stopPropagation(); void handleRequestConfirmation(app.id); }}
-                                                                                disabled={!canRequest || isRequesting}
-                                                                                title={disabledReason ?? 'Envia um lembrete de confirmação para o freela'}
-                                                                                className="p-1 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-blue-50 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                            >
-                                                                                {isRequesting ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
-                                                                                Pedir confirmação
-                                                                            </button>
-                                                                        )}
-                                                                        {/* `title` (tooltip nativo) some em touch — o contexto real do
-                                                                            gerente no chão de loja. A10 pede o motivo VISÍVEL, não só
-                                                                            hover-only. Linha própria (`w-full`) dentro do flex-wrap para
-                                                                            não brigar de espaço com os botões/badges vizinhos. */}
-                                                                        {disabledReason && (
-                                                                            <span className="w-full text-[10px] font-bold text-gray-400 uppercase">
-                                                                                {disabledReason}
-                                                                            </span>
-                                                                        )}
-                                                                    </>
-                                                                );
-                                                            })()}
-
-                                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
-                                                                "Dispensar" é para ANTES do turno acontecer. `hasAttendedShift` (mesmo
-                                                                predicado usado por shiftInviteService.dismissFromShift — nunca replicado
-                                                                condição a condição) cobre os TRÊS sinais de comparecimento, incluindo
-                                                                "empresa confirmou a chegada" mesmo sem o freela ter batido check-in no
-                                                                app (o caminho canônico do modo A). Sem qualquer um dos três, dispensar
-                                                                deixaria um turno trabalhado sem pagamento e sem recibo, e a application
-                                                                'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
-                                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar).
-
-                                                                F4 (blocker 3 do ddl-aprovado.md): com sinal de risco vindo da confirmação
-                                                                de véspera ("não vai poder" OU pedido sem resposta), o botão vira
-                                                                "Dispensar e chamar substituto" — dispara o MESMO modal de confirmação,
-                                                                mas marcado (`dismissThenCall`) para encadear o Chamado de Turno (F1) só
-                                                                DEPOIS do dispensar ter sucesso. Sem sinal de risco, continua o
-                                                                "Dispensar" simples de sempre — não muda o comportamento de turnos que
-                                                                nunca usaram a confirmação de véspera. */}
-                                                            {!hasAttendedShift(app) && (() => {
-                                                                const { response, requestCount } = summarizeConfirmation(confirmationsByApp[app.id]);
-                                                                const hasRiskSignal = response === 'cannot_attend' || (response === null && requestCount > 0);
-                                                                return hasRiskSignal ? (
-                                                                    <button
-                                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(true); }}
-                                                                        className="p-1 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-blue-600 hover:border-blue-600 transition-colors flex items-center gap-1"
-                                                                    >
-                                                                        <Megaphone size={14} /> Dispensar e chamar substituto
-                                                                    </button>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(false); }}
-                                                                        className="p-1 px-3 bg-white text-red-600 border-2 border-red-200 rounded-lg text-xs font-bold uppercase hover:bg-red-50 hover:border-red-400 transition-colors flex items-center gap-1"
-                                                                    >
-                                                                        <UserX size={14} /> Dispensar
-                                                                    </button>
-                                                                );
-                                                            })()}
-                                                        </>
-                                                    )}
-
-                                                    {/* Turno finalizado via modo A (pagamento externo) — ramifica por status do marcador. */}
-                                                    {app.status === 'completed' && !escrowKindMap[app.id] && (() => {
-                                                        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
-                                                        if (matchingPayment?.status === 'recorded') {
-                                                            return (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
-                                                                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
-                                                                >
-                                                                    <Receipt size={14} /> Ver Recibo
-                                                                </button>
-                                                            );
-                                                        }
-                                                        if (matchingPayment?.status === 'scheduled') {
-                                                            return renderScheduledPaymentBlock(matchingPayment);
-                                                        }
-                                                        // Rede de segurança (defense-in-depth): turno concluído em modo A (sem escrow)
-                                                        // mas sem registro/agendamento de pagamento — caminho de recuperação caso o
-                                                        // registro tenha falhado depois da conclusão em algum fluxo legado/edge case.
-                                                        return (
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); openPaymentModal(app); }}
-                                                                    className="py-2 px-3 bg-black text-white border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-primary transition-colors flex items-center gap-1"
-                                                                >
-                                                                    Registrar Pagamento
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); openScheduleModal(app); }}
-                                                                    className="py-2 px-3 bg-white text-black border-2 border-black rounded-lg text-xs font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-1"
-                                                                >
-                                                                    <CalendarClock size={14} /> Agendar Pagamento
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })()}
-
-                                                    {/* Botão Avaliar — apenas para candidatos já finalizados */}
-                                                    {app.status === 'completed' && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedApp(app); setRatingModalOpen(true); }}
-                                                            className="p-1 px-3 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-gray-800 transition-colors"
-                                                        >
-                                                            Avaliar
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="flex flex-wrap items-center gap-2 text-lg font-bold leading-tight">
+                                        {app.worker?.full_name || 'Usuário Worki'}
+                                        <span className="rounded-full bg-black px-2 py-0.5 text-xs font-semibold text-white">Lvl {app.worker?.level || 1}</span>
+                                    </h3>
+                                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                                        <span className="flex items-center gap-1"><MapPin size={12} /> {app.worker?.city || 'Não informado'}</span>
+                                        {/* Sem avaliação, isto mostrava "5.0 (0 avaliações)" -- nota
+                                            maxima inventada para quem nunca foi avaliado, no lugar exato
+                                            onde a empresa decide quem chamar. "Novo" diz a verdade. */}
+                                        {app.worker?.rating_average && (app.worker?.reviews_count ?? 0) > 0 ? (
+                                            <span className="flex items-center gap-1">
+                                                <Star size={12} className="text-yellow-500 fill-yellow-500" />
+                                                {Number(app.worker.rating_average).toFixed(1)}
+                                                <span className="text-gray-600">({app.worker.reviews_count === 1 ? '1 avaliação' : `${app.worker.reviews_count} avaliações`})</span>
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center gap-1">
+                                                <Star size={12} /> Sem avaliações ainda
+                                            </span>
+                                        )}
+                                        <span className="flex items-center gap-1"><Clock size={12} /> Convidado {app.created_at ? formatDistanceToNow(new Date(app.created_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
                                     </div>
-
-                                    {/* Job Lifecycle Stepper */}
-                                    {['hired', 'in_progress', 'completed'].includes(app.status) && (
-                                        <div className="border-t border-gray-100 mt-4 pt-4">
-                                            <JobLifecycleStepper steps={computeSteps(app)} />
-                                        </div>
-                                    )}
-
-                                    {/* Cover Letter Snippet */}
-                                    <div className="mt-4 bg-gray-50 p-3 rounded-xl border-l-4 border-gray-300">
-                                        <p className="text-sm font-medium text-gray-600 italic line-clamp-2">
-                                            "{app.cover_letter || 'Sem observações do freela.'}"
-                                        </p>
-                                    </div>
-
-                                    {/* Tags */}
-                                    {app.worker?.tags && (
-                                        <div className="flex gap-2 mt-4 flex-wrap">
-                                            {app.worker.tags.map((tag: string) => (
-                                                <span key={tag} className="text-[10px] font-bold uppercase bg-gray-100 px-2 py-1 rounded text-gray-600">
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
                                 </div>
 
-                                <div className="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <ChevronRight size={24} className="text-gray-400" />
+                                <div className="-mr-2 -mt-1 flex shrink-0 items-center">
+                                    <Button
+                                        variant="ghost"
+                                        className={ICON_BUTTON_CLASS}
+                                        onClick={(e) => { e.stopPropagation(); handleChat(app); }}
+                                        title="Chat"
+                                        aria-label="Abrir chat com freela"
+                                    >
+                                        <MessageSquare size={20} />
+                                    </Button>
+                                    {PULL_HIRE_ENABLED && app.status === 'pending' && (
+                                        <>
+                                            <Button
+                                                variant="ghost"
+                                                className={`${ICON_BUTTON_CLASS} !text-red-600 hover:!bg-red-50`}
+                                                onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'rejected'); }}
+                                                title="Descartar"
+                                                aria-label="Descartar freela"
+                                            >
+                                                <XCircle size={20} />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                className={`${ICON_BUTTON_CLASS} !text-primary hover:!bg-primary-light`}
+                                                onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'interview'); }}
+                                                title="Aprovar para Entrevista"
+                                                aria-label="Aprovar freela para entrevista"
+                                            >
+                                                <CheckCircle size={20} />
+                                            </Button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
-                        </div>
+
+                            {/* Estado + ações: linha própria, largura total (no mobile não espreme o nome). */}
+                            {app.status !== 'pending' && (
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    {isInviteExpired(app) ? (
+                                        <>
+                                            <StatusChip tone="neutral">Não respondeu (expirado)</StatusChip>
+                                            <Button
+                                                variant="dark"
+                                                iconLeft={<Send size={16} />}
+                                                onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
+                                            >
+                                                Convidar outro
+                                            </Button>
+                                        </>
+                                    ) : isInviteCancelledUnanswered(app) ? (
+                                        <>
+                                            <StatusChip tone="neutral">Convite cancelado</StatusChip>
+                                            <Button
+                                                variant="dark"
+                                                iconLeft={<Send size={16} />}
+                                                onClick={(e) => { e.stopPropagation(); void openReopenModal(app); }}
+                                            >
+                                                Convidar outro
+                                            </Button>
+                                        </>
+                                    ) : app.status === 'invited' ? (
+                                        <>
+                                            <StatusChip tone="info">Aguardando resposta</StatusChip>
+                                            {app.worker?.phone ? (
+                                                <Button
+                                                    variant="secondary"
+                                                    iconLeft={<MessageCircle size={16} className="text-green-600" />}
+                                                    onClick={(e) => { e.stopPropagation(); handleWhatsAppNotify(app); }}
+                                                >
+                                                    Avisar no WhatsApp
+                                                </Button>
+                                            ) : (
+                                                <span title="Freela sem telefone cadastrado">
+                                                    <StatusChip tone="muted">WhatsApp indisponível</StatusChip>
+                                                </span>
+                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                className={DESTRUCTIVE_GHOST_CLASS}
+                                                iconLeft={<X size={16} />}
+                                                onClick={(e) => { e.stopPropagation(); void handleCancelInvite(app); }}
+                                                loading={cancelInviteId === app.id}
+                                            >
+                                                Cancelar Convite
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <StatusChip
+                                            tone={
+                                                app.status === 'hired' ? 'success' :
+                                                    app.status === 'in_progress' ? 'warning' :
+                                                        app.status === 'completed' ? 'info' :
+                                                            app.status === 'rejected' ? 'danger' :
+                                                                'info'
+                                            }
+                                        >
+                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
+                                        </StatusChip>
+                                    )}
+
+                                    {/* Em entrevista, o chat já está no ícone do topo do card — aqui só o próximo passo. */}
+                                    {app.status === 'interview' && PULL_HIRE_ENABLED && (
+                                        <Button
+                                            variant="dark"
+                                            onClick={(e) => { e.stopPropagation(); handleUpdateStatus(app.id, 'hired'); }}
+                                        >
+                                            Contratar
+                                        </Button>
+                                    )}
+
+                                    {(app.status === 'hired' || app.status === 'in_progress') && (
+                                        <>
+                                            {/* Show check-in status */}
+                                            {!app.company_checkin_confirmed_at ? (
+                                                <Button
+                                                    variant="dark"
+                                                    iconLeft={<Play size={16} />}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (app.worker_checkin_at) {
+                                                            handleConfirmCheckin(app.id);
+                                                        } else {
+                                                            openManualAttendanceModal(app, 'checkin');
+                                                        }
+                                                    }}
+                                                    loading={confirmingCheckin === app.id}
+                                                >
+                                                    {app.worker_checkin_at ? 'Confirmar Chegada' : 'Confirmar Presença'}
+                                                </Button>
+                                            ) : (
+                                                <StatusChip tone="success" icon={<CheckCircle size={13} />}>
+                                                    {app.worker_checkin_at ? 'Chegada OK' : 'Chegada registrada pela empresa'}
+                                                </StatusChip>
+                                            )}
+
+                                            {/* Show check-out status — mesmo fallback do check-in: a empresa pode
+                                                confirmar a saída mesmo se o freela não apertou "saída" no celular
+                                                (turno acabou tarde da noite, sem sinal do app). Sem isso, o turno
+                                                fica impagável para sempre. O rótulo distingue os dois casos para
+                                                não sugerir que o freela marcou algo que não marcou.
+
+                                                Ordem chegada→saída EXIGIDA (revisão pré-piloto): registrar/confirmar
+                                                a saída antes da chegada estar confirmada quebra
+                                                `buildManualAttendanceTimestamp` (sem `company_checkin_confirmed_at`
+                                                nem `worker_checkin_at` como referência, `refMinutes` fica null,
+                                                `dayOffset` sempre 0 — em turno sem `work_start_time`, a saída pode
+                                                gravar ANTES da chegada que só será registrada depois).
+                                                `calculateWorkedHours` então devolve null e o recibo perde as horas
+                                                para sempre (`shift_payments` é imutável). Falha segura, não mente —
+                                                mas o único artefato de auditoria do modo A fica sem o dado. A
+                                                cronologia real (ninguém sai antes de entrar) resolve na origem: só
+                                                oferece "Registrar/Confirmar Saída" depois que a chegada estiver
+                                                confirmada; antes disso, mostra um estado neutro explicando o motivo. */}
+                                            {!app.company_checkin_confirmed_at ? (
+                                                <StatusChip tone="muted" icon={<Square size={12} />}>
+                                                    Confirme a chegada primeiro
+                                                </StatusChip>
+                                            ) : !app.company_checkout_confirmed_at ? (
+                                                <Button
+                                                    variant="dark"
+                                                    iconLeft={<Square size={16} />}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (app.worker_checkout_at) {
+                                                            handleConfirmCheckout(app.id);
+                                                        } else {
+                                                            openManualAttendanceModal(app, 'checkout');
+                                                        }
+                                                    }}
+                                                    loading={confirmingCheckin === app.id}
+                                                >
+                                                    {app.worker_checkout_at ? 'Confirmar Saída' : 'Registrar Saída'}
+                                                </Button>
+                                            ) : (
+                                                <StatusChip tone="success" icon={<CheckCircle size={13} />}>
+                                                    {app.worker_checkout_at ? 'Saída OK' : 'Saída registrada pela empresa'}
+                                                </StatusChip>
+                                            )}
+
+                                            {/* Confirmar Entrega (escrow) OU Registrar Pagamento (modo A) — ramificado por escrow.kind */}
+                                            {app.company_checkin_confirmed_at && app.company_checkout_confirmed_at && renderCompletionAction(app)}
+
+                                            {/* Confirmação de véspera (F4) — badge de status + "Pedir confirmação" (A7/A9/A10). */}
+                                            {(() => {
+                                                const { response, requestCount, lastRequestedAt } = summarizeConfirmation(
+                                                    confirmationsByApp[app.id],
+                                                );
+                                                const cooldownMs = confirmationCooldownRemainingMs(lastRequestedAt);
+                                                const canRequest =
+                                                    response === null && requestCount < CONFIRMATION_REQUEST_CAP && cooldownMs === 0;
+                                                const isRequesting = requestingConfirmationId === app.id;
+                                                const disabledReason =
+                                                    response !== null
+                                                        ? null
+                                                        : requestCount >= CONFIRMATION_REQUEST_CAP
+                                                            ? 'Limite de 2 pedidos atingido'
+                                                            : cooldownMs > 0
+                                                                ? `Aguarde ${formatCooldownRemaining(cooldownMs)}`
+                                                                : null;
+
+                                                return (
+                                                    <>
+                                                        {response === 'confirmed' && (
+                                                            <StatusChip tone="success" icon={<ThumbsUp size={13} />}>
+                                                                Confirmou presença
+                                                            </StatusChip>
+                                                        )}
+                                                        {response === 'cannot_attend' && (
+                                                            <StatusChip tone="danger" icon={<ThumbsDown size={13} />}>
+                                                                Avisou que não vai
+                                                            </StatusChip>
+                                                        )}
+                                                        {response === null && requestCount > 0 && (
+                                                            <StatusChip tone="neutral" icon={<Bell size={12} />}>
+                                                                Sem resposta
+                                                            </StatusChip>
+                                                        )}
+                                                        {response === null && (
+                                                            <Button
+                                                                variant="secondary"
+                                                                iconLeft={<Bell size={16} />}
+                                                                onClick={(e) => { e.stopPropagation(); void handleRequestConfirmation(app.id); }}
+                                                                disabled={!canRequest}
+                                                                loading={isRequesting}
+                                                                title={disabledReason ?? 'Envia um lembrete de confirmação para o freela'}
+                                                            >
+                                                                Pedir confirmação
+                                                            </Button>
+                                                        )}
+                                                        {/* `title` (tooltip nativo) some em touch — o contexto real do
+                                                            gerente no chão de loja. A10 pede o motivo VISÍVEL, não só
+                                                            hover-only. Linha própria (`w-full`) dentro do flex-wrap para
+                                                            não brigar de espaço com os botões/badges vizinhos. */}
+                                                        {disabledReason && (
+                                                            <span className="w-full text-xs text-gray-600">
+                                                                {disabledReason}
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {/* "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação no modal.
+                                                "Dispensar" é para ANTES do turno acontecer. `hasAttendedShift` (mesmo
+                                                predicado usado por shiftInviteService.dismissFromShift — nunca replicado
+                                                condição a condição) cobre os TRÊS sinais de comparecimento, incluindo
+                                                "empresa confirmou a chegada" mesmo sem o freela ter batido check-in no
+                                                app (o caminho canônico do modo A). Sem qualquer um dos três, dispensar
+                                                deixaria um turno trabalhado sem pagamento e sem recibo, e a application
+                                                'cancelled' torna o slot irrecuperável (UNIQUE(job_id, worker_id)). Nesse
+                                                ponto o gesto correto é registrar o pagamento (ou, se necessário, estornar).
+
+                                                F4 (blocker 3 do ddl-aprovado.md): com sinal de risco vindo da confirmação
+                                                de véspera ("não vai poder" OU pedido sem resposta), o botão vira
+                                                "Dispensar e chamar substituto" — dispara o MESMO modal de confirmação,
+                                                mas marcado (`dismissThenCall`) para encadear o Chamado de Turno (F1) só
+                                                DEPOIS do dispensar ter sucesso. Sem sinal de risco, continua o
+                                                "Dispensar" simples de sempre — não muda o comportamento de turnos que
+                                                nunca usaram a confirmação de véspera. */}
+                                            {!hasAttendedShift(app) && (() => {
+                                                const { response, requestCount } = summarizeConfirmation(confirmationsByApp[app.id]);
+                                                const hasRiskSignal = response === 'cannot_attend' || (response === null && requestCount > 0);
+                                                return hasRiskSignal ? (
+                                                    <Button
+                                                        variant="secondary"
+                                                        iconLeft={<Megaphone size={16} />}
+                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(true); }}
+                                                    >
+                                                        Dispensar e chamar substituto
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        variant="ghost"
+                                                        className={DESTRUCTIVE_GHOST_CLASS}
+                                                        iconLeft={<UserX size={16} />}
+                                                        onClick={(e) => { e.stopPropagation(); setDismissApp(app); setDismissThenCall(false); }}
+                                                    >
+                                                        Dispensar
+                                                    </Button>
+                                                );
+                                            })()}
+                                        </>
+                                    )}
+
+                                    {/* Turno finalizado via modo A (pagamento externo) — ramifica por status do marcador. */}
+                                    {app.status === 'completed' && !escrowKindMap[app.id] && (() => {
+                                        const matchingPayment = paymentByWorker[app.worker_id] ?? null;
+                                        if (matchingPayment?.status === 'recorded') {
+                                            return (
+                                                <Button
+                                                    variant="secondary"
+                                                    iconLeft={<Receipt size={16} />}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${app.job_id}?worker=${app.worker_id}`); }}
+                                                >
+                                                    Ver Recibo
+                                                </Button>
+                                            );
+                                        }
+                                        if (matchingPayment?.status === 'scheduled') {
+                                            return renderScheduledPaymentBlock(matchingPayment);
+                                        }
+                                        // Rede de segurança (defense-in-depth): turno concluído em modo A (sem escrow)
+                                        // mas sem registro/agendamento de pagamento — caminho de recuperação caso o
+                                        // registro tenha falhado depois da conclusão em algum fluxo legado/edge case.
+                                        return renderRegisterPaymentActions(app);
+                                    })()}
+
+                                    {/* Botão Avaliar — apenas para candidatos já finalizados */}
+                                    {app.status === 'completed' && (
+                                        <Button
+                                            variant="secondary"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedApp(app); setRatingModalOpen(true); }}
+                                        >
+                                            Avaliar
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Job Lifecycle Stepper */}
+                            {['hired', 'in_progress', 'completed'].includes(app.status) && (
+                                <div className="border-t border-gray-200 mt-4 pt-4">
+                                    <JobLifecycleStepper steps={computeSteps(app)} />
+                                </div>
+                            )}
+
+                            {/* Cover Letter Snippet */}
+                            <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2 text-sm italic text-gray-600 line-clamp-2">
+                                "{app.cover_letter || 'Sem observações do freela.'}"
+                            </p>
+
+                            {/* Tags */}
+                            {app.worker?.tags && (
+                                <div className="flex gap-2 mt-3 flex-wrap">
+                                    {app.worker.tags.map((tag: string) => (
+                                        <span key={tag} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
                     ))
                 )}
             </div>
 
             {/* Modal "Convidar Freela" — vaga sem freela (invitePickerOpen) ou convite expirado (reopenApp, R8) */}
             {(reopenApp || invitePickerOpen) && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-black uppercase tracking-tight">{reopenApp ? 'Convidar Outro Freela' : 'Convidar Freela'}</h2>
-                            <button
-                                onClick={closeReopenModal}
-                                aria-label="Fechar"
-                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <p className="text-sm font-bold text-gray-600 mb-5">
-                            {reopenApp
-                                ? 'O convite anterior expirou sem resposta. O slot deste turno está livre — escolha outro freela da sua equipe.'
-                                : 'Escolha um freela do seu elenco para atrelar a este turno.'}
-                        </p>
-
-                        {reopenLoading && (
-                            <div className="space-y-3 animate-pulse">
-                                {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
-                            </div>
-                        )}
-
-                        {!reopenLoading && reopenTeamMembers.length === 0 && (
-                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-                                <Users size={32} className="mx-auto mb-2 opacity-30" />
-                                <p className="font-bold text-sm">Nenhum freela disponível para convidar.</p>
-                                <p className="text-xs mt-1">Todos da equipe já foram convidados para este turno, ou seu elenco está vazio.</p>
-                            </div>
-                        )}
-
-                        {!reopenLoading && reopenTeamMembers.length > 0 && (
-                            <div className="space-y-3 max-h-72 overflow-y-auto">
-                                {reopenTeamMembers.map((member) => {
-                                    const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
-                                    const isInviting = reopenInvitingWorkerId === member.worker.id;
-                                    return (
-                                        <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 hover:border-black transition-all">
-                                            <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                                                {avatarUrl ? (
-                                                    <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black">
-                                                        {member.worker.full_name[0]?.toUpperCase()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-black uppercase text-sm truncate">{member.worker.full_name}</p>
-                                                {member.worker.primary_role && (
-                                                    <p className="text-xs font-bold text-gray-400 uppercase truncate">{member.worker.primary_role}</p>
-                                                )}
-                                            </div>
-                                            <button
-                                                onClick={() => void handlePickReopenWorker(member.worker.id)}
-                                                disabled={isInviting}
-                                                className="bg-black hover:bg-primary text-white px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                                            >
-                                                {isInviting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                                                {isInviting ? '...' : 'Convidar'}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        <button
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                        <ModalTitle className="text-lg font-bold tracking-tight">{reopenApp ? 'Convidar Outro Freela' : 'Convidar Freela'}</ModalTitle>
+                        <Button
+                            variant="ghost"
+                            className={`${ICON_BUTTON_CLASS} -mr-2 -mt-2`}
                             onClick={closeReopenModal}
-                            className="w-full mt-5 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors"
+                            aria-label="Fechar"
                         >
-                            Fechar
-                        </button>
+                            <X size={20} />
+                        </Button>
                     </div>
-                </div>
+                    <p className="text-sm text-gray-600 mb-5">
+                        {reopenApp
+                            ? 'O convite anterior expirou sem resposta. O slot deste turno está livre — escolha outro freela da sua equipe.'
+                            : 'Escolha um freela do seu elenco para atrelar a este turno.'}
+                    </p>
+
+                    {reopenLoading && (
+                        <div className="space-y-3 animate-pulse">
+                            {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
+                        </div>
+                    )}
+
+                    {!reopenLoading && reopenTeamMembers.length === 0 && (
+                        <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+                            <Users size={32} className="mx-auto mb-2 text-gray-400" />
+                            <p className="font-bold text-sm">Nenhum freela disponível para convidar.</p>
+                            <p className="text-xs mt-1">Todos da equipe já foram convidados para este turno, ou seu elenco está vazio.</p>
+                        </div>
+                    )}
+
+                    {!reopenLoading && reopenTeamMembers.length > 0 && (
+                        <div className="space-y-3 max-h-72 overflow-y-auto">
+                            {reopenTeamMembers.map((member) => {
+                                const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
+                                const isInviting = reopenInvitingWorkerId === member.worker.id;
+                                return (
+                                    <div key={member.connection.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors">
+                                        <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 shrink-0">
+                                            {avatarUrl ? (
+                                                <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold">
+                                                    {member.worker.full_name[0]?.toUpperCase()}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                                            {member.worker.primary_role && (
+                                                <p className="text-xs text-gray-600 truncate">{member.worker.primary_role}</p>
+                                            )}
+                                        </div>
+                                        <Button
+                                            variant="dark"
+                                            iconLeft={<Send size={16} />}
+                                            onClick={() => void handlePickReopenWorker(member.worker.id)}
+                                            loading={isInviting}
+                                            className="shrink-0"
+                                        >
+                                            {isInviting ? '...' : 'Convidar'}
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </ModalShell>
             )}
 
             {/* Modal de Confirmação de Entrega */}
             {confirmDeliveryApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">Confirmar Entrega</h2>
-                        <p className="text-gray-600 font-medium mb-6">
-                            Tem certeza que deseja confirmar a entrega? O pagamento será liberado imediatamente ao profissional.
-                        </p>
-                        <div className="flex gap-3 mt-6">
-                            <button
-                                onClick={() => setConfirmDeliveryApp(null)}
-                                disabled={releasing}
-                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={() => handleConfirmDelivery(confirmDeliveryApp)}
-                                disabled={releasing}
-                                className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {releasing ? <><Loader2 size={16} className="animate-spin" /> Processando...</> : 'Confirmar'}
-                            </button>
-                        </div>
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <ModalTitle className="text-lg font-bold tracking-tight mb-3">Confirmar Entrega</ModalTitle>
+                    <p className="text-sm text-gray-600">
+                        Tem certeza que deseja confirmar a entrega? O pagamento será liberado imediatamente ao profissional.
+                    </p>
+                    <div className="flex gap-3 mt-6">
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => setConfirmDeliveryApp(null)}
+                            disabled={releasing}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="dark"
+                            className="flex-1"
+                            onClick={() => handleConfirmDelivery(confirmDeliveryApp)}
+                            loading={releasing}
+                        >
+                            {releasing ? 'Processando...' : 'Confirmar'}
+                        </Button>
                     </div>
-                </div>
+                </ModalShell>
             )}
 
             {/* Modal de horário manual — chegada/saída sem marcação do freela no app. O recibo é o
@@ -1813,50 +1859,46 @@ export default function CompanyJobCandidates() {
                 às 02h) como se fosse o horário real. Pré-preenchido com o horário PLANEJADO do
                 turno; o gerente confirma ou ajusta. */}
             {manualAttendance && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-1">
-                            {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
-                        </h2>
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-5">
-                            {manualAttendance.app.worker?.full_name || 'Este freela'} não marcou {manualAttendance.type === 'checkin' ? 'a chegada' : 'a saída'} no app
-                        </p>
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <ModalTitle className="text-lg font-bold tracking-tight">
+                        {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
+                    </ModalTitle>
+                    <p className="text-sm text-gray-600 mt-1 mb-5">
+                        {manualAttendance.app.worker?.full_name || 'Este freela'} não marcou {manualAttendance.type === 'checkin' ? 'a chegada' : 'a saída'} no app
+                    </p>
 
-                        <div className="mb-6">
-                            <label htmlFor="manual-attendance-time" className="block text-sm font-bold uppercase mb-2">
-                                Horário real de {manualAttendance.type === 'checkin' ? 'chegada' : 'saída'}
-                            </label>
-                            <input
-                                id="manual-attendance-time"
-                                type="time"
-                                value={manualAttendanceTime}
-                                onChange={(e) => setManualAttendanceTime(e.target.value)}
-                                className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
-                            />
-                            <p className="text-xs font-medium text-gray-500 mt-2">
-                                Pré-preenchido com o horário planejado do turno. Ajuste para o horário real, se
-                                foi diferente — este dado vai para o recibo do freela.
-                            </p>
-                        </div>
+                    <Field
+                        label={`Horário real de ${manualAttendance.type === 'checkin' ? 'chegada' : 'saída'}`}
+                        hint="Pré-preenchido com o horário planejado do turno. Ajuste para o horário real, se foi diferente — este dado vai para o recibo do freela."
+                    >
+                        <input
+                            id="manual-attendance-time"
+                            type="time"
+                            value={manualAttendanceTime}
+                            onChange={(e) => setManualAttendanceTime(e.target.value)}
+                        />
+                    </Field>
 
-                        <div className="flex gap-3">
-                            <button
-                                onClick={closeManualAttendanceModal}
-                                disabled={confirmingManualAttendance}
-                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleConfirmManualAttendance}
-                                disabled={confirmingManualAttendance || !manualAttendanceTime}
-                                className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {confirmingManualAttendance ? <><Loader2 size={16} className="animate-spin" /> Confirmando...</> : 'Confirmar'}
-                            </button>
-                        </div>
+                    <div className="flex gap-3 mt-6">
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={closeManualAttendanceModal}
+                            disabled={confirmingManualAttendance}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="dark"
+                            className="flex-1"
+                            onClick={handleConfirmManualAttendance}
+                            disabled={!manualAttendanceTime}
+                            loading={confirmingManualAttendance}
+                        >
+                            {confirmingManualAttendance ? 'Confirmando...' : 'Confirmar'}
+                        </Button>
                     </div>
-                </div>
+                </ModalShell>
             )}
 
             {/* Modal "Dispensar deste turno" (onda 3) — gesto sério, exige confirmação explícita.
@@ -1865,438 +1907,421 @@ export default function CompanyJobCandidates() {
                 UMA confirmação só — dispensar e chamar substituto é uma decisão manual explícita
                 da empresa, só dividida em dois passos técnicos (blocker 3 do ddl-aprovado.md). */}
             {dismissApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-4">
-                            {dismissThenCall ? 'Dispensar e Chamar Substituto' : 'Dispensar Freela'}
-                        </h2>
-                        <p className="text-gray-600 font-medium mb-3">
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <ModalTitle className="text-lg font-bold tracking-tight mb-3">
+                        {dismissThenCall ? 'Dispensar e Chamar Substituto' : 'Dispensar Freela'}
+                    </ModalTitle>
+                    <div className="space-y-3 text-sm text-gray-600">
+                        <p>
                             {dismissApp.worker?.full_name || 'Este freela'} já foi contratado para este turno e está
                             contando com ele. Ao dispensar, o turno sai da agenda dele imediatamente.
                         </p>
                         {dismissThenCall && (
-                            <p className="text-gray-600 font-medium mb-3">
+                            <p>
                                 Em seguida, a tela de Chamado de Turno abre automaticamente para você chamar um
                                 substituto do elenco.
                             </p>
                         )}
-                        <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                            <p className="text-xs font-bold text-yellow-800">
-                                O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
-                                vale reforçar por telefone/WhatsApp também.
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => { setDismissApp(null); setDismissThenCall(false); }}
-                                disabled={dismissing}
-                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleDismissFromShift}
-                                disabled={dismissing}
-                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {dismissing
-                                    ? <><Loader2 size={16} className="animate-spin" /> Dispensando...</>
-                                    : dismissThenCall ? 'Confirmar e Chamar Substituto' : 'Confirmar Dispensa'}
-                            </button>
-                        </div>
                     </div>
-                </div>
+                    <p className="mt-4 rounded-xl border-2 border-yellow-200 bg-yellow-50 p-3 text-xs font-medium text-yellow-800">
+                        O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
+                        vale reforçar por telefone/WhatsApp também.
+                    </p>
+                    <div className="flex gap-3 mt-6">
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => { setDismissApp(null); setDismissThenCall(false); }}
+                            disabled={dismissing}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="danger"
+                            className="flex-1"
+                            onClick={handleDismissFromShift}
+                            loading={dismissing}
+                        >
+                            {dismissing
+                                ? 'Dispensando...'
+                                : dismissThenCall ? 'Confirmar e Chamar Substituto' : 'Confirmar Dispensa'}
+                        </Button>
+                    </div>
+                </ModalShell>
             )}
 
             {/* Modal de estorno de pagamento (scheduled|recorded -> voided) */}
             {voidingPayment && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <h2 className="text-xl font-black uppercase tracking-tight mb-3">Estornar pagamento</h2>
-                        <p className="text-gray-600 font-medium mb-4">
-                            {voidingPayment.status === 'scheduled'
-                                ? 'Isto cancela o agendamento. O freela é avisado e o comprovante deixa de valer.'
-                                : 'Isto estorna o registro de pagamento. O freela é avisado. Use se registrou por engano ou o pagamento não aconteceu.'}
-                        </p>
-                        <label className="block text-xs font-bold uppercase mb-1">Motivo (opcional)</label>
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <ModalTitle className="text-lg font-bold tracking-tight mb-3">Estornar pagamento</ModalTitle>
+                    <p className="text-sm text-gray-600 mb-5">
+                        {voidingPayment.status === 'scheduled'
+                            ? 'Isto cancela o agendamento. O freela é avisado e o comprovante deixa de valer.'
+                            : 'Isto estorna o registro de pagamento. O freela é avisado. Use se registrou por engano ou o pagamento não aconteceu.'}
+                    </p>
+                    <Field label="Motivo (opcional)">
                         <textarea
                             value={voidReason}
                             onChange={(e) => setVoidReason(e.target.value)}
                             placeholder="Ex.: registrei no turno errado"
-                            className="w-full border-2 border-black rounded-xl p-3 mb-6 outline-none focus:ring-2 focus:ring-primary"
+                            className="!h-20 resize-none py-3"
                             rows={2}
                         />
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => { setVoidingPayment(null); setVoidReason(''); }}
-                                disabled={voidSubmitting}
-                                className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 min-h-11"
-                            >
-                                Voltar
-                            </button>
-                            <button
-                                onClick={handleVoidPayment}
-                                disabled={voidSubmitting}
-                                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
-                            >
-                                {voidSubmitting ? <><Loader2 size={16} className="animate-spin" /> Estornando...</> : 'Confirmar Estorno'}
-                            </button>
-                        </div>
+                    </Field>
+                    <div className="flex gap-3 mt-6">
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => { setVoidingPayment(null); setVoidReason(''); }}
+                            disabled={voidSubmitting}
+                        >
+                            Voltar
+                        </Button>
+                        <Button
+                            variant="danger"
+                            className="flex-1"
+                            onClick={handleVoidPayment}
+                            loading={voidSubmitting}
+                        >
+                            {voidSubmitting ? 'Estornando...' : 'Confirmar Estorno'}
+                        </Button>
                     </div>
-                </div>
+                </ModalShell>
             )}
 
             {/* Modal "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
             {paymentModalApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        {!paymentRecorded ? (
-                            <>
-                                <h2 className="text-xl font-black uppercase tracking-tight mb-1">Registrar Pagamento</h2>
-                                <p className="text-xs font-bold text-gray-500 uppercase mb-5">
-                                    Pagamento feito por fora do Worki — registro declaratório
-                                </p>
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    {!paymentRecorded ? (
+                        <>
+                            <ModalTitle className="text-lg font-bold tracking-tight">Registrar Pagamento</ModalTitle>
+                            <p className="text-sm text-gray-600 mt-1 mb-5">
+                                Pagamento feito por fora do Worki — registro declaratório
+                            </p>
 
-                                <div className="mb-4">
-                                    <span className="block text-sm font-bold uppercase mb-2">Forma de pagamento</span>
+                            <div className="space-y-4">
+                                <fieldset>
+                                    <legend className="mb-1.5 p-0 text-sm font-bold">Forma de pagamento</legend>
                                     <div className="grid grid-cols-3 gap-2">
                                         {(Object.keys(PAYMENT_SOURCE_LABELS) as PaymentSource[]).map((src) => (
-                                            <button
+                                            <Button
                                                 key={src}
-                                                type="button"
+                                                variant={paymentSource === src ? 'dark' : 'secondary'}
                                                 onClick={() => setPaymentSource(src)}
                                                 aria-pressed={paymentSource === src}
-                                                className={`py-3 min-h-[44px] rounded-xl border-2 border-black font-black text-xs uppercase transition-colors ${paymentSource === src ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-50'
-                                                    }`}
+                                                className="!px-2"
                                             >
                                                 {PAYMENT_SOURCE_LABELS[src]}
-                                            </button>
+                                            </Button>
                                         ))}
                                     </div>
-                                </div>
+                                </fieldset>
 
                                 {paymentModalApp.worker?.pix_key && (
-                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
-                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
-                                            <Wallet size={16} className="flex-shrink-0" />
+                                    <div className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-primary/5 py-1 pl-4 pr-1">
+                                        <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-black">
+                                            <Wallet size={16} className="shrink-0" />
                                             <span className="truncate">{paymentModalApp.worker.pix_key}</span>
                                         </span>
-                                        <button
-                                            type="button"
+                                        <Button
+                                            variant="ghost"
+                                            className={ICON_BUTTON_CLASS}
                                             onClick={() => handleCopyPix(paymentModalApp.worker!.pix_key as string)}
                                             aria-label="Copiar chave PIX do freela"
                                             title="Copiar chave PIX"
-                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
                                         >
                                             {pixCopied ? <Check size={16} /> : <Copy size={16} />}
-                                        </button>
+                                        </Button>
                                     </div>
                                 )}
 
-                                <div className="mb-4">
-                                    <label htmlFor="payment-amount" className="block text-sm font-bold uppercase mb-2">
-                                        Valor pago (R$)
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
-                                        <input
-                                            id="payment-amount"
-                                            type="number"
-                                            min="0.01"
-                                            step="0.01"
-                                            value={paymentAmount}
-                                            onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                                            className="w-full border-2 border-black rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold tabular-nums"
-                                        />
-                                    </div>
-                                </div>
+                                <Field label="Valor pago (R$)">
+                                    <input
+                                        id="payment-amount"
+                                        type="number"
+                                        min="0.01"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={paymentAmount}
+                                        onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                                        className="font-bold tabular-nums"
+                                    />
+                                </Field>
 
-                                <div className="mb-4">
-                                    <label htmlFor="payment-paid-at" className="block text-sm font-bold uppercase mb-2">
-                                        Data do pagamento
-                                    </label>
+                                <Field label="Data do pagamento">
                                     <input
                                         id="payment-paid-at"
                                         type="date"
                                         value={paymentPaidAt}
                                         onChange={(e) => setPaymentPaidAt(e.target.value)}
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
                                     />
-                                </div>
+                                </Field>
 
-                                <div className="mb-6">
-                                    <label htmlFor="payment-note" className="block text-sm font-bold uppercase mb-2">
-                                        Nota (opcional)
-                                    </label>
+                                <Field label="Nota (opcional)">
                                     <textarea
                                         id="payment-note"
                                         value={paymentNote}
                                         onChange={(e) => setPaymentNote(e.target.value)}
                                         placeholder="Ex.: pago em 2x, referência do PIX..."
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-medium h-20 resize-none"
+                                        className="!h-20 resize-none py-3"
                                     />
-                                </div>
+                                </Field>
 
-                                <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                                    <p className="text-xs font-bold text-yellow-800">
-                                        O dinheiro não passa pelo Worki. Este registro é declaratório, não é
-                                        documento fiscal, e ao confirmar o turno será marcado como concluído.
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={closePaymentModal}
-                                        disabled={recordingPayment}
-                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        onClick={handleRecordPayment}
-                                        disabled={recordingPayment || !(paymentAmount > 0)}
-                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {recordingPayment ? <><Loader2 size={16} className="animate-spin" /> Registrando...</> : 'Confirmar Registro'}
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center text-center py-4">
-                                <div className="w-16 h-16 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
-                                    <CheckCircle size={32} className="text-primary" />
-                                </div>
-                                <h2 className="text-xl font-black uppercase tracking-tight mb-2">Pagamento registrado!</h2>
-                                <p className="text-gray-600 font-medium mb-6">
-                                    O recibo já está disponível para você e para o profissional.
+                                <p className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-3 text-xs font-medium text-yellow-800">
+                                    O dinheiro não passa pelo Worki. Este registro é declaratório, não é
+                                    documento fiscal, e ao confirmar o turno será marcado como concluído.
                                 </p>
-                                <div className="flex gap-3 w-full">
-                                    <button
-                                        onClick={closePaymentModal}
-                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
-                                    >
-                                        Fechar
-                                    </button>
-                                    <button
-                                        onClick={() => navigate(`/recibo/${paymentModalApp.job_id}?worker=${paymentModalApp.worker_id}`)}
-                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <Receipt size={16} /> Ver Recibo
-                                    </button>
-                                </div>
                             </div>
-                        )}
-                    </div>
-                </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <Button
+                                    variant="secondary"
+                                    className="flex-1"
+                                    onClick={closePaymentModal}
+                                    disabled={recordingPayment}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    variant="dark"
+                                    className="flex-1"
+                                    onClick={handleRecordPayment}
+                                    disabled={!(paymentAmount > 0)}
+                                    loading={recordingPayment}
+                                >
+                                    {recordingPayment ? 'Registrando...' : 'Confirmar Registro'}
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center text-center py-2">
+                            <div className="w-14 h-14 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
+                                <CheckCircle size={28} className="text-primary" />
+                            </div>
+                            <ModalTitle className="text-lg font-bold tracking-tight mb-1">Pagamento registrado!</ModalTitle>
+                            <p className="text-sm text-gray-600 mb-6">
+                                O recibo já está disponível para você e para o profissional.
+                            </p>
+                            <div className="flex gap-3 w-full">
+                                <Button variant="secondary" className="flex-1" onClick={closePaymentModal}>
+                                    Fechar
+                                </Button>
+                                <Button
+                                    variant="dark"
+                                    className="flex-1"
+                                    iconLeft={<Receipt size={16} />}
+                                    onClick={() => navigate(`/recibo/${paymentModalApp.job_id}?worker=${paymentModalApp.worker_id}`)}
+                                >
+                                    Ver Recibo
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </ModalShell>
             )}
 
             {/* Modal "Agendar Pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
             {scheduleModalApp && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        {!paymentScheduled ? (
-                            <>
-                                <h2 className="text-xl font-black uppercase tracking-tight mb-1">Agendar Pagamento</h2>
-                                <p className="text-xs font-bold text-gray-500 uppercase mb-5">
-                                    Promessa de pagamento por fora do Worki — comprovante para o freela
-                                </p>
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    {!paymentScheduled ? (
+                        <>
+                            <ModalTitle className="text-lg font-bold tracking-tight">Agendar Pagamento</ModalTitle>
+                            <p className="text-sm text-gray-600 mt-1 mb-5">
+                                Promessa de pagamento por fora do Worki — comprovante para o freela
+                            </p>
 
-                                <div className="mb-4">
-                                    <span className="block text-sm font-bold uppercase mb-2">Forma de pagamento</span>
+                            <div className="space-y-4">
+                                <fieldset>
+                                    <legend className="mb-1.5 p-0 text-sm font-bold">Forma de pagamento</legend>
                                     <div className="grid grid-cols-3 gap-2">
                                         {(Object.keys(PAYMENT_SOURCE_LABELS) as PaymentSource[]).map((src) => (
-                                            <button
+                                            <Button
                                                 key={src}
-                                                type="button"
+                                                variant={scheduleSource === src ? 'dark' : 'secondary'}
                                                 onClick={() => setScheduleSource(src)}
                                                 aria-pressed={scheduleSource === src}
-                                                className={`py-3 min-h-[44px] rounded-xl border-2 border-black font-black text-xs uppercase transition-colors ${scheduleSource === src ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-50'
-                                                    }`}
+                                                className="!px-2"
                                             >
                                                 {PAYMENT_SOURCE_LABELS[src]}
-                                            </button>
+                                            </Button>
                                         ))}
                                     </div>
-                                </div>
+                                </fieldset>
 
                                 {scheduleModalApp.worker?.pix_key && (
-                                    <div className="mb-4 flex items-center justify-between gap-2 bg-primary/5 border-2 border-black rounded-xl px-4 py-3">
-                                        <span className="flex items-center gap-2 text-sm font-bold text-black min-w-0">
-                                            <Wallet size={16} className="flex-shrink-0" />
+                                    <div className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-primary/5 py-1 pl-4 pr-1">
+                                        <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-black">
+                                            <Wallet size={16} className="shrink-0" />
                                             <span className="truncate">{scheduleModalApp.worker.pix_key}</span>
                                         </span>
-                                        <button
-                                            type="button"
+                                        <Button
+                                            variant="ghost"
+                                            className={ICON_BUTTON_CLASS}
                                             onClick={() => handleCopyPix(scheduleModalApp.worker!.pix_key as string)}
                                             aria-label="Copiar chave PIX do freela"
                                             title="Copiar chave PIX"
-                                            className="p-2 rounded-lg text-black hover:bg-white transition-colors flex-shrink-0"
                                         >
                                             {pixCopied ? <Check size={16} /> : <Copy size={16} />}
-                                        </button>
+                                        </Button>
                                     </div>
                                 )}
 
-                                <div className="mb-4">
-                                    <label htmlFor="schedule-amount" className="block text-sm font-bold uppercase mb-2">
-                                        Valor previsto (R$)
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R$</span>
-                                        <input
-                                            id="schedule-amount"
-                                            type="number"
-                                            min="0.01"
-                                            step="0.01"
-                                            value={scheduleAmount}
-                                            onChange={(e) => setScheduleAmount(Number(e.target.value))}
-                                            className="w-full border-2 border-black rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold tabular-nums"
-                                        />
-                                    </div>
-                                </div>
+                                <Field label="Valor previsto (R$)">
+                                    <input
+                                        id="schedule-amount"
+                                        type="number"
+                                        min="0.01"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={scheduleAmount}
+                                        onChange={(e) => setScheduleAmount(Number(e.target.value))}
+                                        className="font-bold tabular-nums"
+                                    />
+                                </Field>
 
-                                <div className="mb-4">
-                                    <label htmlFor="schedule-for" className="block text-sm font-bold uppercase mb-2">
-                                        Data prevista do pagamento
-                                    </label>
+                                <Field label="Data prevista do pagamento">
                                     <input
                                         id="schedule-for"
                                         type="date"
                                         value={scheduledFor}
                                         onChange={(e) => setScheduledFor(e.target.value)}
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-bold"
                                     />
-                                </div>
+                                </Field>
 
-                                <div className="mb-6">
-                                    <label htmlFor="schedule-note" className="block text-sm font-bold uppercase mb-2">
-                                        Nota (opcional)
-                                    </label>
+                                <Field label="Nota (opcional)">
                                     <textarea
                                         id="schedule-note"
                                         value={scheduleNote}
                                         onChange={(e) => setScheduleNote(e.target.value)}
                                         placeholder="Ex.: pagamento no fechamento do mês..."
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary font-medium h-20 resize-none"
+                                        className="!h-20 resize-none py-3"
                                     />
-                                </div>
+                                </Field>
 
-                                <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                                    <p className="text-xs font-bold text-yellow-800">
-                                        Isto é uma PROMESSA, ainda não um pagamento — o dinheiro não passa pelo Worki.
-                                        O comprovante de agendamento fica disponível para o freela; ao efetivar, marque
-                                        "Marcar como pago". Ao confirmar, o turno será marcado como concluído.
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={closeScheduleModal}
-                                        disabled={scheduling}
-                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        onClick={handleSchedulePayment}
-                                        disabled={scheduling || !(scheduleAmount > 0) || !scheduledFor}
-                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {scheduling ? <><Loader2 size={16} className="animate-spin" /> Agendando...</> : 'Confirmar Agendamento'}
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center text-center py-4">
-                                <div className="w-16 h-16 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
-                                    <CalendarClock size={32} className="text-primary" />
-                                </div>
-                                <h2 className="text-xl font-black uppercase tracking-tight mb-2">Pagamento agendado!</h2>
-                                <p className="text-gray-600 font-medium mb-6">
-                                    O comprovante de agendamento já está disponível para você e para o profissional.
+                                <p className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-3 text-xs font-medium text-yellow-800">
+                                    Isto é uma PROMESSA, ainda não um pagamento — o dinheiro não passa pelo Worki.
+                                    O comprovante de agendamento fica disponível para o freela; ao efetivar, marque
+                                    "Marcar como pago". Ao confirmar, o turno será marcado como concluído.
                                 </p>
-                                <div className="flex gap-3 w-full">
-                                    <button
-                                        onClick={closeScheduleModal}
-                                        className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
-                                    >
-                                        Fechar
-                                    </button>
-                                    <button
-                                        onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}?worker=${scheduleModalApp.worker_id}`)}
-                                        className="flex-1 py-3 bg-black text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-primary hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <Receipt size={16} /> Ver Comprovante
-                                    </button>
-                                </div>
                             </div>
-                        )}
-                    </div>
-                </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <Button
+                                    variant="secondary"
+                                    className="flex-1"
+                                    onClick={closeScheduleModal}
+                                    disabled={scheduling}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    variant="dark"
+                                    className="flex-1"
+                                    onClick={handleSchedulePayment}
+                                    disabled={!(scheduleAmount > 0) || !scheduledFor}
+                                    loading={scheduling}
+                                >
+                                    {scheduling ? 'Agendando...' : 'Confirmar Agendamento'}
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center text-center py-2">
+                            <div className="w-14 h-14 rounded-full bg-primary-light border-2 border-black flex items-center justify-center mb-4">
+                                <CalendarClock size={28} className="text-primary" />
+                            </div>
+                            <ModalTitle className="text-lg font-bold tracking-tight mb-1">Pagamento agendado!</ModalTitle>
+                            <p className="text-sm text-gray-600 mb-6">
+                                O comprovante de agendamento já está disponível para você e para o profissional.
+                            </p>
+                            <div className="flex gap-3 w-full">
+                                <Button variant="secondary" className="flex-1" onClick={closeScheduleModal}>
+                                    Fechar
+                                </Button>
+                                <Button
+                                    variant="dark"
+                                    className="flex-1"
+                                    iconLeft={<Receipt size={16} />}
+                                    onClick={() => navigate(`/recibo/${scheduleModalApp.job_id}?worker=${scheduleModalApp.worker_id}`)}
+                                >
+                                    Ver Comprovante
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </ModalShell>
             )}
 
             {/* Rating Modal */}
             {ratingModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={aoTocarFundo}>
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-black uppercase tracking-tight">Avaliar Freela</h3>
-                            <button onClick={() => setRatingModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                                <XCircle size={24} />
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col items-center mb-6">
-                            <div className="w-20 h-20 rounded-full bg-gray-200 border-2 border-black overflow-hidden mb-3">
-                                {selectedApp?.worker?.avatar_url ? (
-                                    <img src={selectedApp.worker.avatar_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-black text-white font-black text-2xl">
-                                        {selectedApp?.worker?.full_name?.[0]}
-                                    </div>
-                                )}
-                            </div>
-                            <h4 className="font-bold text-lg">{selectedApp?.worker?.full_name}</h4>
-                            <p className="text-sm text-gray-500 font-bold uppercase">{selectedApp?.job?.title}</p>
-                        </div>
-
-                        <div className="flex justify-center gap-2 mb-6">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                                <button
-                                    key={star}
-                                    onClick={() => setRating(star)}
-                                    className="transform hover:scale-110 transition-transform"
-                                >
-                                    <Star
-                                        size={32}
-                                        fill={star <= rating ? "#fbbf24" : "none"}
-                                        className={star <= rating ? "text-yellow-500" : "text-gray-300"}
-                                        strokeWidth={2}
-                                    />
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="mb-6">
-                            <label htmlFor="review-comment" className="block text-sm font-bold uppercase mb-2">Comentário (Opcional)</label>
-                            <textarea
-                                id="review-comment"
-                                value={comment}
-                                onChange={(e) => setComment(e.target.value)}
-                                placeholder="Como foi a experiência?"
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:outline-none focus:border-black transition-colors font-medium h-24 resize-none"
-                            />
-                        </div>
-
-                        <button
-                            onClick={handleSubmitReview}
-                            disabled={submittingReview}
-                            className="w-full bg-black text-white py-4 rounded-xl font-black uppercase tracking-wide hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                <ModalShell onBackdropClick={aoTocarFundo}>
+                    <div className="flex items-start justify-between gap-3 mb-5">
+                        <ModalTitle as="h3" className="text-lg font-bold tracking-tight">Avaliar Freela</ModalTitle>
+                        <Button
+                            variant="ghost"
+                            className={`${ICON_BUTTON_CLASS} -mr-2 -mt-2`}
+                            onClick={() => setRatingModalOpen(false)}
+                            aria-label="Fechar"
                         >
-                            {submittingReview ? 'Enviando...' : 'Enviar Avaliação'}
-                        </button>
+                            <X size={20} />
+                        </Button>
                     </div>
-                </div>
+
+                    <div className="flex flex-col items-center mb-5 text-center">
+                        <div className="w-16 h-16 rounded-full bg-gray-200 border-2 border-black overflow-hidden mb-3">
+                            {selectedApp?.worker?.avatar_url ? (
+                                <img src={selectedApp.worker.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-xl">
+                                    {selectedApp?.worker?.full_name?.[0]}
+                                </div>
+                            )}
+                        </div>
+                        <h4 className="font-bold text-base">{selectedApp?.worker?.full_name}</h4>
+                        <p className="text-sm text-gray-600">{selectedApp?.job?.title}</p>
+                    </div>
+
+                    <div className="flex justify-center gap-1 mb-5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <Button
+                                key={star}
+                                variant="ghost"
+                                className={ICON_BUTTON_CLASS}
+                                onClick={() => setRating(star)}
+                                aria-label={`Nota ${star} de 5`}
+                                aria-pressed={star <= rating}
+                            >
+                                <Star
+                                    size={32}
+                                    fill={star <= rating ? "#fbbf24" : "none"}
+                                    className={star <= rating ? "text-yellow-500" : "text-gray-300"}
+                                    strokeWidth={2}
+                                />
+                            </Button>
+                        ))}
+                    </div>
+
+                    <Field label="Comentário (Opcional)">
+                        <textarea
+                            id="review-comment"
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            placeholder="Como foi a experiência?"
+                            className="!h-24 resize-none py-3"
+                        />
+                    </Field>
+
+                    <Button
+                        variant="dark"
+                        size="lg"
+                        fullWidth
+                        className="mt-6"
+                        onClick={handleSubmitReview}
+                        loading={submittingReview}
+                    >
+                        {submittingReview ? 'Enviando...' : 'Enviar Avaliação'}
+                    </Button>
+                </ModalShell>
             )}
 
             {/* Chamado de turno (F1) — disparo para 1..N do elenco, primeiro-aceite */}

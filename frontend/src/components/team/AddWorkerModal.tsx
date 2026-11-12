@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { Link2, Phone, QrCode, X, Loader2, UserPlus } from 'lucide-react';
+import { Link2, Phone, QrCode, UserPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { QrScannerPane } from './QrScannerPane';
 import { UUID_RE, extractInviteToken } from './utils';
+import { ModalShell } from './ModalShell';
+import { Button, Field } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Adicionar freela"
@@ -106,123 +108,109 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
 
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <ModalShell
+      title="Adicionar freela"
+      subtitle="Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou."
+      onClose={onClose}
     >
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-black uppercase tracking-tight">Adicionar Freela</h2>
-          <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-            <X size={20} />
+      {/* Tabs */}
+      <div role="group" aria-label="Como adicionar" className="flex gap-5 mb-5 border-b-2 border-gray-200">
+        {([
+          { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
+          { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
+          { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setMethod(tab.id)}
+            aria-pressed={method === tab.id}
+            className={`-mb-0.5 min-h-11 px-1 flex items-center gap-2 text-sm font-bold border-b-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 rounded-t-md ${
+              method === tab.id
+                ? 'border-black text-black'
+                : 'border-transparent text-gray-500 hover:text-black'
+            }`}
+          >
+            <tab.icon size={16} /> {tab.label}
           </button>
-        </div>
-        <p className="text-sm font-bold text-gray-500 mb-6">
-          Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou.
-        </p>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b-2 border-gray-200 pb-1">
-          {([
-            { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
-            { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
-            { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setMethod(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-t-xl font-black uppercase text-sm transition-all ${
-                method === tab.id
-                  ? 'bg-black text-white translate-y-[2px]'
-                  : 'text-gray-400 hover:text-black hover:bg-gray-100'
-              }`}
-            >
-              <tab.icon size={16} /> {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Conteúdo por método */}
-        {method === 'link' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Cole o <span className="font-black">link de perfil</span> que o freela te enviou
-              (ele encontra em Perfil → "Copiar meu link").
-            </p>
-            <div className="space-y-2">
-              <label htmlFor="worker-link-input" className="text-xs font-bold uppercase tracking-wide">
-                Link de perfil do freela
-              </label>
-              <input
-                id="worker-link-input"
-                type="text"
-                value={linkInput}
-                onChange={(e) => setLinkInput(e.target.value)}
-                placeholder="Cole aqui o link enviado pelo freela"
-                className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-            <button
-              onClick={handleLinkSubmit}
-              disabled={loading || !linkInput.trim()}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
-              {loading ? 'Adicionando...' : 'Adicionar pelo Link'}
-            </button>
-            <p className="text-xs text-gray-400 text-center">
-              O freela aparecerá em "Aguardando" até aceitar o convite.
-            </p>
-          </div>
-        )}
-
-        {method === 'qr' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Aponte a câmera para o <span className="font-black">QR de Identidade</span> do freela
-              (ele encontra em Perfil → "Meu QR de Identidade").
-            </p>
-            <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
-            <p className="text-xs text-gray-400 text-center">
-              O freela aparecerá em "Aguardando" até aceitar o convite.
-            </p>
-          </div>
-        )}
-
-        {method === 'phone' && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-600">
-              Digite o <span className="font-black">ID do worker</span> (Worki ID) para adicionar diretamente.
-              Peça o Worki ID ao freela (Perfil dele → "Meu QR de Identidade" → "Copiar Worki ID").
-            </p>
-            <div className="space-y-2">
-              <label htmlFor="phone-input" className="text-xs font-bold uppercase tracking-wide">
-                Worki ID do freela
-              </label>
-              <input
-                id="phone-input"
-                type="text"
-                value={workerId}
-                onChange={(e) => setWorkerId(e.target.value)}
-                placeholder="Cole o ID do freela aqui"
-                className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none"
-              />
-            </div>
-            <button
-              onClick={handlePhoneSubmit}
-              disabled={loading || !workerId.trim()}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
-              {loading ? 'Enviando...' : 'Enviar Convite'}
-            </button>
-            <p className="text-xs text-gray-400">
-              Ainda não é possível buscar por CPF ou telefone — peça o Worki ID ao freela.
-            </p>
-          </div>
-        )}
+        ))}
       </div>
-    </div>
+
+      {/* Conteúdo por método */}
+      {method === 'link' && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Cole o <span className="font-bold text-black">link de perfil</span> que o freela te enviou
+            (ele encontra em Perfil → "Copiar meu link").
+          </p>
+          <Field label="Link de perfil do freela">
+            <input
+              id="worker-link-input"
+              type="text"
+              value={linkInput}
+              onChange={(e) => setLinkInput(e.target.value)}
+              placeholder="Cole aqui o link enviado pelo freela"
+            />
+          </Field>
+          <Button
+            variant="dark"
+            fullWidth
+            onClick={handleLinkSubmit}
+            disabled={!linkInput.trim()}
+            loading={loading}
+            iconLeft={<UserPlus size={18} />}
+          >
+            {loading ? 'Adicionando...' : 'Adicionar pelo Link'}
+          </Button>
+          <p className="text-xs text-gray-600 text-center">
+            O freela aparecerá em "Aguardando" até aceitar o convite.
+          </p>
+        </div>
+      )}
+
+      {method === 'qr' && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Aponte a câmera para o <span className="font-bold text-black">QR de Identidade</span> do freela
+            (ele encontra em Perfil → "Meu QR de Identidade").
+          </p>
+          <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
+          <p className="text-xs text-gray-600 text-center">
+            O freela aparecerá em "Aguardando" até aceitar o convite.
+          </p>
+        </div>
+      )}
+
+      {method === 'phone' && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Digite o <span className="font-bold text-black">ID do worker</span> (Worki ID) para adicionar diretamente.
+            Peça o Worki ID ao freela (Perfil dele → "Meu QR de Identidade" → "Copiar Worki ID").
+          </p>
+          <Field label="Worki ID do freela">
+            <input
+              id="phone-input"
+              type="text"
+              value={workerId}
+              onChange={(e) => setWorkerId(e.target.value)}
+              placeholder="Cole o ID do freela aqui"
+            />
+          </Field>
+          <Button
+            variant="dark"
+            fullWidth
+            onClick={handlePhoneSubmit}
+            disabled={!workerId.trim()}
+            loading={loading}
+            iconLeft={<UserPlus size={18} />}
+          >
+            {loading ? 'Enviando...' : 'Enviar Convite'}
+          </Button>
+          <p className="text-xs text-gray-600">
+            Ainda não é possível buscar por CPF ou telefone — peça o Worki ID ao freela.
+          </p>
+        </div>
+      )}
+    </ModalShell>
   );
 }

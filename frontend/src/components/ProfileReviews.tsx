@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../lib/logger';
+import { Card } from './ui';
 
 interface ReviewRow {
     id: string;
@@ -96,8 +97,8 @@ export default function ProfileReviews({
     }, [reviewedId, reviewerRole]);
 
     return (
-        <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+        <Card as="section" className="mt-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <MessageSquareQuote size={20} /> {title ?? `Avaliações sobre ${reviewerRole === 'company' ? 'você' : 'sua empresa'}`}
             </h3>
 
@@ -106,15 +107,15 @@ export default function ProfileReviews({
                     {[...Array(2)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
                 </div>
             ) : reviews.length === 0 ? (
-                <p className="text-sm font-bold text-gray-400 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+                <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
                     Ainda sem avaliações. Elas aparecem aqui após turnos concluídos.
                 </p>
             ) : (
                 <div className="space-y-3">
                     {reviews.map((r) => (
-                        <div key={r.id} className="border-2 border-gray-100 rounded-xl p-4">
+                        <div key={r.id} className="border-2 border-gray-200 rounded-xl p-4">
                             <div className="flex items-center justify-between gap-3 mb-1">
-                                <span className="font-black uppercase text-sm truncate">{r.reviewer_name}</span>
+                                <span className="font-bold text-sm truncate">{r.reviewer_name}</span>
                                 <div className="flex items-center gap-0.5 flex-shrink-0">
                                     {[1, 2, 3, 4, 5].map((s) => (
                                         <Star
@@ -126,17 +127,17 @@ export default function ProfileReviews({
                                 </div>
                             </div>
                             {r.comment ? (
-                                <p className="text-sm text-gray-600 font-medium italic">"{r.comment}"</p>
+                                <p className="text-sm text-gray-700 italic">"{r.comment}"</p>
                             ) : (
-                                <p className="text-xs text-gray-400 font-bold">Sem comentário.</p>
+                                <p className="text-xs text-gray-600">Sem comentário.</p>
                             )}
-                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">
+                            <p className="text-xs text-gray-600 mt-2">
                                 {formatDistanceToNow(new Date(r.created_at), { addSuffix: true, locale: ptBR })}
                             </p>
                         </div>
                     ))}
                 </div>
             )}
-        </div>
+        </Card>
     );
 }

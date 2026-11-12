@@ -11,6 +11,7 @@ import { formatDateOnly, calculateWorkedHours } from '../lib/dateUtils';
 import PageMeta from '../components/PageMeta';
 import ServiceTermSection from '../components/ServiceTermSection';
 import { ArrowLeft, Printer, Clock, AlertTriangle, LogIn, LogOut } from 'lucide-react';
+import { Button, Card } from '../components/ui';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 
@@ -118,6 +119,8 @@ export default function ReceiptView() {
         }
     };
 
+    const voltar = () => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); };
+
     if (loading) {
         return (
             <div className="max-w-2xl mx-auto p-4 md:p-8 animate-pulse space-y-4">
@@ -140,19 +143,16 @@ export default function ReceiptView() {
         return (
             <div className="max-w-2xl mx-auto p-4 md:p-8">
                 <PageMeta title="Recibo não encontrado" />
-                <button
-                    onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); }}
-                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6 min-h-11"
-                >
-                    <ArrowLeft size={16} strokeWidth={3} /> Voltar
-                </button>
-                <div className="bg-white border-2 border-black rounded-2xl p-8 text-center">
+                <Button variant="ghost" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />} className="mb-6">
+                    Voltar
+                </Button>
+                <Card padding="lg" className="text-center">
                     <AlertTriangle size={40} className="mx-auto mb-4 text-gray-400" />
-                    <h1 className="text-xl font-black uppercase mb-2">Recibo não encontrado</h1>
-                    <p className="text-gray-500 font-medium">
+                    <h1 className="text-lg font-bold mb-2">Recibo não encontrado</h1>
+                    <p className="text-sm text-gray-600">
                         Não há registro de pagamento visível para este turno, ou você não tem permissão para vê-lo.
                     </p>
-                </div>
+                </Card>
             </div>
         );
     }
@@ -168,59 +168,54 @@ export default function ReceiptView() {
             <PageMeta title={isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'} />
 
             {/* Barra de ações — não imprime */}
-            <div className="flex items-center justify-between mb-6 print:hidden">
-                <button
-                    onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); }}
-                    className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors min-h-11"
-                >
-                    <ArrowLeft size={16} strokeWidth={3} /> Voltar
-                </button>
-                <button
+            <div className="flex items-center justify-between gap-3 mb-6 print:hidden">
+                <Button variant="ghost" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />}>
+                    Voltar
+                </Button>
+                <Button
+                    variant="secondary"
                     onClick={() => window.print()}
                     aria-label="Imprimir recibo"
-                    className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-primary text-white rounded-xl font-black uppercase text-sm transition-colors min-h-11"
+                    iconLeft={<Printer size={16} />}
                 >
-                    <Printer size={16} /> Imprimir
-                </button>
+                    Imprimir
+                </Button>
             </div>
 
             {/* Recibo */}
-            <div className="bg-white border-2 border-black rounded-2xl p-6 md:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-black">
+            <Card
+                padding="lg"
+                className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-black"
+            >
                 <div className="text-center border-b-2 border-black pb-6 mb-6">
-                    <p className="text-xs font-black uppercase tracking-widest text-gray-500 mb-1">Worki</p>
-                    <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1">Worki</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                         {isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'}
                     </h1>
                     {/* Nome do freela logo abaixo do título — turno com mais de um freela nunca
                         fica ambíguo sobre de quem é este recibo (ADR-20260816). */}
-                    <p className="text-sm font-black mt-1">{worker?.full_name || 'Freela não identificado'}</p>
-                    <p className="text-xs font-bold text-gray-400 uppercase mt-1">Registro Worki (declaratório)</p>
+                    <p className="text-base font-semibold mt-1">{worker?.full_name || 'Freela não identificado'}</p>
+                    <p className="text-xs text-gray-600 mt-1">Registro Worki (declaratório)</p>
                 </div>
 
                 {isScheduled && payment.scheduled_for && (
                     <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-6 flex items-center gap-3">
                         <Clock size={20} className="text-yellow-700 flex-shrink-0" />
-                        <p className="font-bold text-yellow-800">
+                        <p className="text-sm font-semibold text-yellow-800">
                             Pagamento agendado para {formatDateOnly(payment.scheduled_for, "dd/MM/yyyy")}
                         </p>
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-1">Empresa</span>
-                        <p className="font-bold text-lg">{company?.name || 'Não informado'}</p>
-                    </div>
-                    <div>
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-1">Freela</span>
-                        <p className="font-bold text-lg">{worker?.full_name || 'Não informado'}</p>
-                    </div>
+                <div className="mb-6">
+                    <span className="block text-xs font-semibold text-gray-600 mb-1">Empresa</span>
+                    <p className="font-semibold text-lg">{company?.name || 'Não informado'}</p>
                 </div>
 
                 <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-4 mb-6">
-                    <span className="block text-xs font-black uppercase text-gray-400 mb-2">Turno</span>
-                    <p className="font-bold">{job?.title || 'Turno'}</p>
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-gray-500 mt-2">
+                    <span className="block text-xs font-semibold text-gray-600 mb-2">Turno</span>
+                    <p className="font-semibold">{job?.title || 'Turno'}</p>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mt-2">
                         {job?.start_date && (
                             <span className="flex items-center gap-1">
                                 <Clock size={12} />
@@ -242,36 +237,36 @@ export default function ReceiptView() {
                     {attendance && (attendance.checkin || attendance.checkout) && (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-200">
                             <div>
-                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                <span className="flex items-center gap-1 text-xs font-semibold text-gray-600 mb-1">
                                     <LogIn size={12} /> Chegada
                                 </span>
-                                <p className="font-bold text-sm">
+                                <p className="font-semibold text-sm">
                                     {attendance.checkin
                                         ? format(new Date(attendance.checkin), 'HH:mm', { locale: ptBR })
                                         : 'Não registrado'}
                                 </p>
                                 {attendance.checkinSource === 'company' && (
-                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                    <p className="text-xs text-gray-600 mt-0.5">Confirmado pela empresa</p>
                                 )}
                             </div>
                             <div>
-                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                <span className="flex items-center gap-1 text-xs font-semibold text-gray-600 mb-1">
                                     <LogOut size={12} /> Saída
                                 </span>
-                                <p className="font-bold text-sm">
+                                <p className="font-semibold text-sm">
                                     {attendance.checkout
                                         ? format(new Date(attendance.checkout), 'HH:mm', { locale: ptBR })
                                         : 'Não registrado'}
                                 </p>
                                 {attendance.checkoutSource === 'company' && (
-                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5">Confirmado pela empresa</p>
+                                    <p className="text-xs text-gray-600 mt-0.5">Confirmado pela empresa</p>
                                 )}
                             </div>
                             <div>
-                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-gray-400 mb-1">
+                                <span className="flex items-center gap-1 text-xs font-semibold text-gray-600 mb-1">
                                     <Clock size={12} /> Total de horas trabalhadas
                                 </span>
-                                <p className="font-bold text-sm">
+                                <p className="font-semibold text-sm">
                                     {(() => {
                                         const hours = calculateWorkedHours(attendance.checkin, attendance.checkout);
                                         return hours !== null ? formatWorkedHours(hours) : 'Não registrado';
@@ -282,35 +277,36 @@ export default function ReceiptView() {
                     )}
                 </div>
 
+                {/* Valor em destaque (moldura preta); forma e data são apoio (fundo cinza). */}
                 <div className={`grid grid-cols-1 ${isScheduled ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4 mb-6`}>
                     <div className="border-2 border-black rounded-xl p-4">
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-1">
+                        <span className="block text-xs font-semibold text-gray-600 mb-1">
                             {isScheduled ? 'Valor previsto' : 'Valor pago'}
                         </span>
-                        <p className="font-black text-2xl tabular-nums">R$ {payment.amount.toFixed(2).replace('.', ',')}</p>
+                        <p className="font-bold text-2xl tabular-nums">R$ {payment.amount.toFixed(2).replace('.', ',')}</p>
                     </div>
-                    <div className="border-2 border-black rounded-xl p-4">
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-1">Forma</span>
-                        <p className="font-bold text-lg">{PAYMENT_SOURCE_LABELS[payment.source]}</p>
+                    <div className="bg-gray-50 rounded-xl p-4">
+                        <span className="block text-xs font-semibold text-gray-600 mb-1">Forma</span>
+                        <p className="font-semibold text-lg">{PAYMENT_SOURCE_LABELS[payment.source]}</p>
                     </div>
                     {!isScheduled && payment.paid_at && (
-                        <div className="border-2 border-black rounded-xl p-4">
-                            <span className="block text-xs font-black uppercase text-gray-400 mb-1">Data do pagamento</span>
-                            <p className="font-bold text-lg">{formatDateOnly(payment.paid_at, 'dd/MM/yyyy')}</p>
+                        <div className="bg-gray-50 rounded-xl p-4">
+                            <span className="block text-xs font-semibold text-gray-600 mb-1">Data do pagamento</span>
+                            <p className="font-semibold text-lg">{formatDateOnly(payment.paid_at, 'dd/MM/yyyy')}</p>
                         </div>
                     )}
                 </div>
 
                 {payment.note && (
                     <div className="mb-6">
-                        <span className="block text-xs font-black uppercase text-gray-400 mb-1">Nota</span>
-                        <p className="font-medium text-gray-600 italic">"{payment.note}"</p>
+                        <span className="block text-xs font-semibold text-gray-600 mb-1">Nota</span>
+                        <p className="text-sm text-gray-700 italic">"{payment.note}"</p>
                     </div>
                 )}
 
                 {isScheduled && (
                     <div className="border-t-2 border-black pt-6 mb-6">
-                        <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
+                        <p className="text-sm text-gray-600 bg-gray-100 px-4 py-3 rounded-xl">
                             Pagamento ainda não realizado — é uma promessa da empresa. A confirmação de
                             recebimento fica disponível quando o pagamento for efetivado.
                         </p>
@@ -333,19 +329,19 @@ export default function ReceiptView() {
                     />
                 )}
 
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-gray-400 border-t-2 border-black pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 border-t-2 border-black pt-4">
                     <span>Registro Nº {shortId}</span>
                     <span>Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
                 </div>
 
                 <div className="mt-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                    <p className="text-xs font-bold text-yellow-800">
+                    <p className="text-xs text-yellow-800">
                         {isScheduled
                             ? 'Este comprovante é o respaldo de que a empresa se comprometeu a pagar na data prevista — não é garantia de pagamento nem documento fiscal.'
                             : 'O Worki registra a declaração de pagamento entre as partes; o dinheiro não passou pela plataforma. Não é documento fiscal.'}
                     </p>
                 </div>
-            </div>
+            </Card>
         </div>
     );
 }

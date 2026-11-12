@@ -1,5 +1,6 @@
 import { ArrowLeft, Mail, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Card, PageHeader } from '../components/ui';
 
 const faqs = [
     {
@@ -24,7 +25,7 @@ const faqs = [
     },
     {
         q: 'Como saio do elenco de uma empresa, ou como a empresa remove alguém?',
-        a: 'O freela pode sair do elenco de uma empresa a qualquer momento pela Carteira de Clientes, encerrando a conexão. A empresa também pode remover um freela do elenco pela tela Meu Elenco. Em ambos os casos, isso não afeta turnos já combinados nem o histórico de avaliações.',
+        a: 'O freela pode sair do elenco de uma empresa a qualquer momento pela tela Minhas Empresas, encerrando a conexão. A empresa também pode remover um freela do elenco pela tela Meu Elenco. Em ambos os casos, isso não afeta turnos já combinados nem o histórico de avaliações.',
     },
 ];
 
@@ -32,48 +33,56 @@ export default function Help() {
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
+        <div className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
             <div className="max-w-3xl mx-auto">
-                <div className="flex items-center gap-4 mb-8">
-                    <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-200 rounded-lg">
-                        <ArrowLeft size={20} />
-                    </button>
-                    <HelpCircle size={28} className="text-black" />
-                    <h1 className="text-3xl font-black uppercase">Ajuda</h1>
-                </div>
+                <Button
+                    variant="ghost"
+                    size="md"
+                    onClick={() => navigate(-1)}
+                    aria-label="Voltar"
+                    className="mb-4 -ml-3"
+                    iconLeft={<ArrowLeft size={20} aria-hidden="true" />}
+                >
+                    Voltar
+                </Button>
+
+                <PageHeader
+                    title="Ajuda"
+                    subtitle="Respostas rápidas sobre elenco, turnos e pagamento."
+                />
 
                 {/* FAQ */}
-                <div className="bg-white border-2 border-black rounded-2xl p-6 mb-8">
-                    <h2 className="text-xl font-black uppercase mb-6">Perguntas Frequentes</h2>
-                    <div className="space-y-6">
+                <Card as="section" aria-labelledby="faq-title" className="mb-6">
+                    <h2 id="faq-title" className="text-lg font-bold mb-6 flex items-center gap-2">
+                        <HelpCircle size={20} aria-hidden="true" /> Perguntas frequentes
+                    </h2>
+                    <div className="divide-y divide-gray-200">
                         {faqs.map((faq, i) => (
-                            <div key={i}>
-                                <h3 className="font-bold text-sm uppercase mb-1">{faq.q}</h3>
-                                <p className="text-gray-600 text-sm">{faq.a}</p>
+                            <div key={i} className="py-4 first:pt-0 last:pb-0">
+                                <h3 className="font-bold text-sm mb-1">{faq.q}</h3>
+                                <p className="text-gray-600 text-sm leading-relaxed">{faq.a}</p>
                             </div>
                         ))}
                     </div>
-                </div>
+                </Card>
 
                 {/* Contact */}
-                <div className="bg-white border-2 border-black rounded-2xl p-6">
-                    <h2 className="text-xl font-black uppercase mb-4">Contato</h2>
+                <Card as="section" aria-labelledby="contact-title">
+                    <h2 id="contact-title" className="text-lg font-bold mb-2">Contato</h2>
                     <p className="text-gray-600 text-sm mb-4">
                         Não encontrou o que procurava? Entre em contato com nosso suporte.
                     </p>
-                    <div className="space-y-3">
-                        <a
-                            href="mailto:suporte@worki.com.br"
-                            className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors"
-                        >
-                            <Mail size={20} className="text-gray-600" />
-                            <div>
-                                <p className="font-bold text-sm">Email</p>
-                                <p className="text-gray-500 text-xs">suporte@worki.com.br</p>
-                            </div>
-                        </a>
-                    </div>
-                </div>
+                    <a
+                        href="mailto:suporte@worki.com.br"
+                        className="flex items-center gap-3 min-h-11 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                    >
+                        <Mail size={20} className="text-gray-600" aria-hidden="true" />
+                        <div>
+                            <p className="font-bold text-sm">Email</p>
+                            <p className="text-gray-600 text-xs">suporte@worki.com.br</p>
+                        </div>
+                    </a>
+                </Card>
             </div>
         </div>
     );

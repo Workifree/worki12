@@ -20,13 +20,13 @@ export default function MainLayout() {
             <Sidebar />
 
             {/* Mobile Header (Optional, for Logo) */}
-            <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-glass-surface/90 backdrop-blur-md z-40 border-b border-glass-border">
-                <h1 className="text-xl font-black text-primary tracking-tighter">Worki.</h1>
+            <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-glass-surface/90 backdrop-blur-md z-40 border-b-2 border-black">
+                <p className="text-xl font-bold text-primary tracking-tight">Worki.</p>
                 <NotificationBell />
             </header>
 
             {/* Main Content Area */}
-            <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto">
+            <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24 md:pb-8 overflow-y-auto">
                 <Outlet />
             </main>
 

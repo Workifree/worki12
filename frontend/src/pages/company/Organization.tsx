@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Network, Users, Briefcase, Mail, UserMinus, Loader2, Send, Copy, Check } from 'lucide-react';
+import { Users, Briefcase, Mail, UserMinus, Send, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
@@ -28,6 +28,7 @@ import { getMyCompanies } from '../../services/companyScopeService';
 import { inviteManager, listCompanyManagers, revokeManager } from '../../services/organizationService';
 import type { MyCompany, CompanyMember } from '../../types';
 import PageMeta from '../../components/PageMeta';
+import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
 
 interface UnitSummary {
   company: MyCompany;
@@ -156,73 +157,65 @@ export default function Organization() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <PageMeta title="Organização" description="Unidades da sua organização no Worki." />
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-black uppercase tracking-tighter flex items-center gap-3 text-gray-900">
-          <Network className="w-8 h-8" />
-          Organização
-        </h1>
-        <p className="text-gray-500 font-medium mt-2">
-          Visão das unidades da sua rede — turnos abertos, elenco e gerentes de cada loja.
-        </p>
-      </div>
+      <PageHeader
+        title="Organização"
+        subtitle="Visão das unidades da sua rede — turnos abertos, elenco e gerentes de cada loja."
+      />
 
       {units.length === 0 && (
-        <div className="bg-white border-2 border-black rounded-2xl p-8 text-center text-gray-500 font-bold">
+        <Card padding="lg" className="text-center text-sm text-gray-600">
           Nenhuma unidade encontrada.
-        </div>
+        </Card>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {units.map(({ company, openJobs, teamSize, managers }) => (
-          <div
-            key={company.company_id}
-            className="bg-white border-2 border-black rounded-2xl p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-          >
+          <Card as="section" key={company.company_id}>
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-xl font-black uppercase tracking-tight text-gray-900">
+                <h2 className="text-lg font-bold text-gray-900">
                   {company.company_name || 'Unidade sem nome'}
                 </h2>
-                <span className="inline-block mt-1 px-3 py-1 rounded-pill bg-blue-50 text-blue-700 font-black uppercase text-[10px]">
+                <span className="inline-block mt-1 px-3 py-1 rounded-pill bg-blue-50 text-blue-700 font-semibold text-xs">
                   {company.role === 'owner' ? 'Dono' : company.role === 'operator' ? 'Operador' : 'Gerente'}
                 </span>
               </div>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2">
-                  <Briefcase size={18} className="text-gray-400" />
-                  <span className="font-black text-gray-900">{openJobs ?? '—'}</span>
-                  <span className="text-xs font-bold text-gray-500 uppercase">Turnos abertos</span>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2">
+                  <Briefcase size={18} className="text-gray-500" />
+                  <span className="font-bold tabular-nums text-gray-900">{openJobs ?? '—'}</span>
+                  <span className="text-xs text-gray-600">Turnos abertos</span>
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2">
-                  <Users size={18} className="text-gray-400" />
-                  <span className="font-black text-gray-900">{teamSize ?? '—'}</span>
-                  <span className="text-xs font-bold text-gray-500 uppercase">No elenco</span>
+                <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2">
+                  <Users size={18} className="text-gray-500" />
+                  <span className="font-bold tabular-nums text-gray-900">{teamSize ?? '—'}</span>
+                  <span className="text-xs text-gray-600">No elenco</span>
                 </div>
               </div>
             </div>
 
-            <div className="border-t-2 border-gray-100 pt-4">
-              <h3 className="text-sm font-black uppercase text-gray-700 mb-3 flex items-center gap-2">
+            <div className="border-t-2 border-gray-200 pt-4">
+              <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
                 <Mail size={16} /> Gerentes da unidade
               </h3>
 
               {managers.length === 0 && (
-                <p className="text-sm text-gray-400 font-medium mb-4">Nenhum gerente convidado ainda.</p>
+                <p className="text-sm text-gray-600 mb-4">Nenhum gerente convidado ainda.</p>
               )}
 
               <ul className="space-y-2 mb-4">
                 {managers.map((m) => (
                   <li
                     key={m.id}
-                    className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2"
                   >
                     <div>
                       <span className="font-bold text-gray-900 text-sm">{m.invited_email}</span>
                       <span
-                        className={`ml-2 px-2 py-0.5 rounded-pill text-[10px] font-black uppercase ${
+                        className={`ml-2 px-2 py-0.5 rounded-pill text-xs font-semibold ${
                           m.status === 'active' ? 'bg-primary-light text-primary' : 'bg-yellow-50 text-yellow-700'
                         }`}
                       >
@@ -231,30 +224,27 @@ export default function Organization() {
                     </div>
                     <div className="flex items-center gap-2">
                       {m.status === 'invited' && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleCopyInviteLink(m.id, m.invite_token)}
                           aria-label={`Copiar link de convite de ${m.invited_email}`}
-                          className="flex items-center gap-1 text-xs font-black uppercase text-gray-500 hover:text-black transition-colors"
+                          iconLeft={copiedToken === m.id ? <Check size={14} /> : <Copy size={14} />}
                         >
-                          {copiedToken === m.id ? <Check size={14} /> : <Copy size={14} />}
                           Copiar link
-                        </button>
+                        </Button>
                       )}
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleRevoke(company.company_id, m.user_id)}
-                        disabled={revokingId === (m.user_id ?? company.company_id)}
+                        loading={revokingId === (m.user_id ?? company.company_id)}
                         aria-label={`Remover ${m.invited_email}`}
-                        className="flex items-center gap-1 text-xs font-black uppercase text-red-600 hover:text-red-800 transition-colors disabled:opacity-50"
+                        iconLeft={<UserMinus size={14} />}
+                        className="text-red-600 enabled:hover:bg-red-50"
                       >
-                        {revokingId === (m.user_id ?? company.company_id) ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <UserMinus size={14} />
-                        )}
                         Remover
-                      </button>
+                      </Button>
                     </div>
                   </li>
                 ))}
@@ -270,24 +260,19 @@ export default function Organization() {
                   value={inviteEmail[company.company_id] || ''}
                   onChange={(e) => setInviteEmail((prev) => ({ ...prev, [company.company_id]: e.target.value }))}
                   placeholder="email@gerente.com"
-                  className="flex-1 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none font-medium"
+                  className={`${FIELD_CONTROL_CLASS} flex-1`}
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="dark"
                   onClick={() => handleInvite(company.company_id)}
-                  disabled={invitingFor === company.company_id}
-                  className="bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  loading={invitingFor === company.company_id}
+                  iconLeft={<Send size={18} />}
                 >
-                  {invitingFor === company.company_id ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Send size={18} />
-                  )}
                   Convidar
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

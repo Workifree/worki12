@@ -2,10 +2,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Loader2, ArrowRight, ArrowLeft, User, Briefcase, Star, Clock, Target } from 'lucide-react';
+import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import PageMeta from '../../components/PageMeta';
+import { Button, Card, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
 import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
 
@@ -321,14 +322,22 @@ export default function WorkerOnboarding() {
     };
 
     const stepLabels = ['Dados', 'Profissão', 'Objetivos'];
+    const pendencias = camposFaltantes();
+
+    const chipClass = (selected: boolean) =>
+        `min-h-11 px-4 py-2 rounded-full border-2 font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+            selected
+                ? 'bg-primary-dark text-white border-black'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-black'
+        }`;
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center p-6 font-sans text-accent">
+        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
                 {/* Exit button */}
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-end mb-2">
                     <button
                         onClick={async () => {
                             if (!saidaArmada) {
@@ -339,143 +348,123 @@ export default function WorkerOnboarding() {
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
-                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold transition-colors gap-1 ${
-                            saidaArmada ? 'text-red-600' : 'text-gray-400 hover:text-black'
+                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-semibold transition-colors gap-1 ${
+                            saidaArmada ? 'text-red-600' : 'text-gray-600 hover:text-black'
                         }`}
                     >
                         <ArrowLeft size={14} /> {saidaArmada ? 'O que você digitou será perdido — toque de novo' : 'Sair e voltar'}
                     </button>
+                    <span role="status" aria-live="polite" className="sr-only">
+                        {saidaArmada ? 'Toque de novo em sair para confirmar. O que você digitou será perdido.' : ''}
+                    </span>
                 </div>
 
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Bem-vindo ao Worki</h1>
-                    <p className="text-gray-500 font-medium">Vamos criar seu perfil pra empresas te chamarem pros turnos.</p>
-                </div>
+                <PageHeader
+                    title="Bem-vindo ao Worki"
+                    subtitle="Vamos criar seu perfil pra empresas te chamarem pros turnos."
+                />
 
-                {/* Progress Bar */}
-                <div className="flex items-center justify-center mb-12 gap-2">
-                    {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
-                        <div key={s} className="flex items-center gap-1">
-                            <div className={`
-                                w-8 h-8 rounded-full flex items-center justify-center font-black border-2 transition-colors text-sm
-                                ${step >= s ? 'bg-black text-white border-black' : 'bg-transparent text-gray-300 border-gray-300'}
-                            `}>
-                                {s}
-                            </div>
-                            <span className={`font-bold uppercase text-[10px] hidden md:inline ${step >= s ? 'text-black' : 'text-gray-300'}`}>
-                                {stepLabels[s - 1]}
-                            </span>
-                            {s < TOTAL_STEPS && <div className={`h-0.5 w-4 md:w-6 ${step > s ? 'bg-black' : 'bg-gray-300'}`} />}
-                        </div>
-                    ))}
+                {/* Progresso: uma linha de texto + barra segmentada (substitui os círculos numerados) */}
+                <div className="mb-4">
+                    <p className="text-xs text-gray-600 mb-2">
+                        Passo {step} de {TOTAL_STEPS} · <span className="font-bold text-black">{stepLabels[step - 1]}</span>
+                    </p>
+                    <div className="flex gap-2" aria-hidden="true">
+                        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
+                            <div key={s} className={`h-1.5 flex-1 rounded-full ${step >= s ? 'bg-black' : 'bg-gray-300'}`} />
+                        ))}
+                    </div>
                 </div>
 
                 {/* Form Card */}
-                <div className="bg-white border-2 border-black rounded-2xl p-8 shadow-[8px_8px_0px_0px_rgba(0,166,81,1)] relative overflow-hidden">
+                <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
 
-                    <form onSubmit={handleNext} className="space-y-6 relative z-10">
+                    <form onSubmit={handleNext} className="space-y-6">
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                                <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <User className="text-primary" /> Quem é você?
-                                </h2>
+                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                                <h2 className="text-lg font-bold">Quem é você?</h2>
 
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-1">Nome Completo *</label>
+                                    <Field label="Nome completo" required>
                                         <input
                                             type="text"
                                             required
                                             value={formData.fullName}
                                             onChange={e => setFormData({ ...formData, fullName: e.target.value })}
                                             aria-label="Nome completo"
-                                            className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             placeholder="Seu nome completo"
                                         />
-                                    </div>
+                                    </Field>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">CPF *</label>
+                                        <Field label="CPF" required>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.cpf}
                                                 onChange={e => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
                                                 aria-label="CPF"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="000.000.000-00"
                                             />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Data de Nascimento *</label>
+                                        </Field>
+                                        <Field label="Data de nascimento" required>
                                             <input
                                                 type="date"
                                                 required
                                                 value={formData.birthDate}
                                                 onChange={e => setFormData({ ...formData, birthDate: e.target.value })}
                                                 aria-label="Data de nascimento"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             />
-                                        </div>
+                                        </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Celular / WhatsApp *</label>
+                                        <Field label="Celular / WhatsApp" required>
                                             <input
                                                 type="tel"
                                                 required
                                                 value={formData.phone}
                                                 onChange={e => setFormData({ ...formData, phone: formatPhone(e.target.value) })}
                                                 aria-label="Celular ou WhatsApp"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="(00) 00000-0000"
                                             />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Cidade *</label>
+                                        </Field>
+                                        <Field label="Cidade" required>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData({ ...formData, city: e.target.value })}
                                                 aria-label="Cidade"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="Ex: São Paulo"
                                             />
-                                        </div>
+                                        </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Tipo de Chave PIX *</label>
+                                        <Field label="Tipo de chave PIX" required>
                                             <select
                                                 required
                                                 value={formData.pixKeyType}
                                                 onChange={e => setFormData({ ...formData, pixKeyType: e.target.value as PixKeyType, pixKey: '' })}
                                                 aria-label="Tipo de chave PIX"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             >
                                                 {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
                                                     <option key={type} value={type}>{PIX_KEY_LABELS[type]}</option>
                                                 ))}
                                             </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Chave PIX *</label>
+                                        </Field>
+                                        <Field label="Chave PIX" required>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.pixKey}
                                                 onChange={e => setFormData({ ...formData, pixKey: formatPixKey(formData.pixKeyType, e.target.value) })}
                                                 aria-label="Chave PIX"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder={PIX_KEY_PLACEHOLDERS[formData.pixKeyType]}
                                             />
-                                        </div>
+                                        </Field>
                                     </div>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-gray-600">
                                         É assim que a empresa vai te pagar por fora do Worki (PIX). Escolha o tipo e informe a chave correspondente.
                                     </p>
                                 </div>
@@ -484,41 +473,36 @@ export default function WorkerOnboarding() {
 
                         {/* Step 2: Professional */}
                         {step === 2 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                                <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <Briefcase className="text-blue-500" /> Profissão
-                                </h2>
+                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                                <h2 className="text-lg font-bold">Profissão</h2>
 
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-2">Quais suas especialidades? *</label>
+                                    <fieldset>
+                                        <legend className="text-sm font-bold mb-2">
+                                            Quais suas especialidades?
+                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
+                                        </legend>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                             {rolesList.map(role => (
                                                 <button
                                                     key={role}
                                                     type="button"
+                                                    aria-pressed={formData.roles.includes(role)}
                                                     onClick={() => handleRoleToggle(role)}
-                                                    className={`
-                                                        p-3 rounded-xl border-2 font-bold text-sm text-center transition-all
-                                                        ${formData.roles.includes(role)
-                                                            ? 'bg-black text-white border-black'
-                                                            : 'bg-white border-gray-200 hover:border-black text-gray-600'}
-                                                    `}
+                                                    className={chipClass(formData.roles.includes(role))}
                                                 >
                                                     {role}
                                                 </button>
                                             ))}
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-1">Tempo de Experiência *</label>
+                                    <Field label="Tempo de experiência" required>
                                         <select
                                             required
                                             value={formData.experienceYears}
                                             onChange={e => setFormData({ ...formData, experienceYears: e.target.value })}
                                             aria-label="Tempo de experiencia"
-                                            className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                         >
                                             <option value="">Selecione...</option>
                                             <option value="Sem experiência">Sem experiência (Estou começando)</option>
@@ -526,35 +510,32 @@ export default function WorkerOnboarding() {
                                             <option value="3-5 anos">3 a 5 anos</option>
                                             <option value="+5 anos">+5 anos (Expert)</option>
                                         </select>
-                                    </div>
+                                    </Field>
 
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-1">Bio Curta (Opcional)</label>
+                                    <Field label="Bio curta (opcional)">
                                         <textarea
                                             value={formData.bio}
                                             onChange={e => setFormData({ ...formData, bio: e.target.value })}
                                             aria-label="Bio curta"
-                                            className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all resize-none h-20"
+                                            className="h-24 py-3 resize-none"
                                             placeholder="Conte um pouco sobre você..."
                                         />
-                                    </div>
+                                    </Field>
                                 </div>
                             </div>
                         )}
 
                         {/* Step 3: Goals & Availability */}
                         {step === 3 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                                <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <Target className="text-red-500" /> Objetivos
-                                </h2>
+                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                                <h2 className="text-lg font-bold">Objetivos</h2>
 
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">O que você procura como freela?</label>
-                                        <div className="grid grid-cols-1 gap-3">
+                                <div className="space-y-5">
+                                    <fieldset>
+                                        <legend className="text-sm font-bold mb-2">O que você procura como freela?</legend>
+                                        <div className="grid grid-cols-1 gap-2">
                                             {['Renda extra com quem já confio', 'Mais turnos / mais trabalho', 'Construir minha reputação e histórico'].map(opt => (
-                                                <label key={opt} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex items-center gap-3 font-bold ${formData.goal === opt ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 hover:border-black'}`}>
+                                                <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input
                                                         type="radio"
                                                         name="goal"
@@ -562,38 +543,35 @@ export default function WorkerOnboarding() {
                                                         aria-label={opt}
                                                         checked={formData.goal === opt}
                                                         onChange={e => setFormData({ ...formData, goal: e.target.value })}
-                                                        className="accent-black w-5 h-5"
+                                                        className="accent-primary w-5 h-5"
                                                     />
                                                     {opt}
                                                 </label>
                                             ))}
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-3 flex items-center gap-2">
-                                            <Clock size={16} /> Disponibilidade *
-                                        </label>
+                                    <fieldset>
+                                        <legend className="text-sm font-bold mb-2">
+                                            Disponibilidade
+                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
+                                        </legend>
                                         <div className="flex flex-wrap gap-2">
                                             {availabilityOptions.map(opt => (
                                                 <button
                                                     key={opt}
                                                     type="button"
+                                                    aria-pressed={formData.availability.includes(opt)}
                                                     onClick={() => handleAvailabilityToggle(opt)}
-                                                    className={`
-                                                        min-h-11 px-4 py-2 rounded-full border-2 font-bold text-sm transition-all
-                                                        ${formData.availability.includes(opt)
-                                                            ? 'bg-black text-white border-black'
-                                                            : 'bg-white border-gray-200 hover:border-black text-gray-500'}
-                                                    `}
+                                                    className={chipClass(formData.availability.includes(opt))}
                                                 >
                                                     {opt}
                                                 </button>
                                             ))}
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div className="flex items-start gap-3 mt-6">
+                                    <div className="flex items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
@@ -603,9 +581,9 @@ export default function WorkerOnboarding() {
                                         />
                                         <label htmlFor="tos" className="text-sm text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
                                         </label>
                                     </div>
                                 </div>
@@ -614,49 +592,42 @@ export default function WorkerOnboarding() {
 
                         {/* Diz o que falta, em vez de deixar o botão morto sem explicação. Só
                             aparece quando há pendência — não polui quem preencheu tudo. */}
-                        {camposFaltantes().length > 0 && (
+                        {pendencias.length > 0 && (
                             <p
                                 role="status"
                                 aria-live="polite"
-                                className="mt-6 text-sm font-bold text-gray-500 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                                className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
                             >
-                                Falta preencher: {camposFaltantes().join(', ')}.
+                                Falta preencher: {pendencias.join(', ')}.
                             </p>
                         )}
 
-                        <div className="pt-6 flex justify-between items-center border-t-2 border-gray-100 mt-8">
+                        <div className="pt-5 flex justify-between items-center border-t-2 border-gray-100">
                             {step > 1 ? (
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
                                     onClick={() => setStep(step - 1)}
-                                    className="font-bold flex items-center gap-1 text-gray-600 hover:text-black transition-colors min-h-11 px-2"
+                                    iconLeft={<ArrowLeft size={18} />}
                                 >
-                                    <ArrowLeft size={18} /> Voltar
-                                </button>
+                                    Voltar
+                                </Button>
                             ) : (
                                 <div /> /* Spacer */
                             )}
 
-                            <button
+                            <Button
                                 type="submit"
-                                disabled={loading || !canProceed()}
-                                className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                size="lg"
+                                loading={loading}
+                                disabled={!canProceed()}
+                                iconRight={<ArrowRight size={18} />}
                             >
-                                {loading ? (
-                                    <Loader2 className="animate-spin" />
-                                ) : (
-                                    <>
-                                        {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'} <ArrowRight size={20} />
-                                    </>
-                                )}
-                            </button>
+                                {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
+                            </Button>
                         </div>
 
                     </form>
-
-                    {/* Decorative Watermark */}
-                    <Star className="absolute -bottom-10 -right-10 text-gray-50 opacity-50 rotate-[-15deg]" size={200} />
-                </div>
+                </Card>
             </div>
         </div>
     );

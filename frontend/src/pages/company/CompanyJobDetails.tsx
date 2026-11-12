@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Calendar, Users, Briefcase, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -11,6 +11,9 @@ import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { formatDateOnly } from '../../lib/dateUtils';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { Button, Card } from '../../components/ui';
+
+const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -43,6 +46,16 @@ export default function CompanyJobDetails() {
     const [activeWorkersCount, setActiveWorkersCount] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
     const { addToast } = useToast();
+
+    // Esc fecha o menu de ações (o clique fora é a camada transparente z-10 abaixo do menu).
+    useEffect(() => {
+        if (!openMenu) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpenMenu(false);
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [openMenu]);
 
     useEffect(() => {
         if (id) fetchJobDetails();
@@ -165,15 +178,23 @@ export default function CompanyJobDetails() {
         </div>
     );
     if (erroCarga && !job) return (
-        <div className="max-w-4xl mx-auto p-8">
-            <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6">
-                <ArrowLeft size={16} strokeWidth={3} /> Voltar aos turnos
-            </button>
+        <div className="max-w-4xl mx-auto p-4 sm:p-8">
+            <Button
+                variant="ghost"
+                onClick={() => navigate('/company/jobs')}
+                iconLeft={<ArrowLeft size={16} strokeWidth={3} />}
+                className="-ml-3 mb-4"
+            >
+                Voltar aos turnos
+            </Button>
             <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
         </div>
     );
 
     if (!job) return null;
+
+    const unidadePreco = job.budget_type === 'hourly' ? '/ hora' : job.budget_type === 'daily' ? '/ dia' : 'total';
+    const statusLabel = job.status === 'open' ? 'Turno ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado';
 
     return (
         <>
@@ -183,51 +204,67 @@ export default function CompanyJobDetails() {
         />
         {showDeleteConfirm && (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                    <h3 className="text-xl font-black uppercase mb-2">Excluir Turno</h3>
-                    <p className="text-sm text-gray-600 mb-6">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
+                <Card
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="excluir-turno-titulo"
+                    className="w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                >
+                    <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
+                    <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
                     <div className="flex gap-3">
-                        <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-3 rounded-xl border-2 border-black font-bold uppercase text-sm hover:bg-gray-50">Cancelar</button>
-                        <button onClick={handleDelete} className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white font-bold uppercase text-sm hover:bg-red-700">Excluir</button>
+                        <Button variant="secondary" fullWidth onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
+                        <Button variant="danger" fullWidth onClick={handleDelete}>Excluir</Button>
                     </div>
-                </div>
+                </Card>
             </div>
         )}
         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-                <button onClick={() => navigate('/company/jobs')} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors">
-                    <ArrowLeft size={20} /> Voltar
-                </button>
+            {/* Barra superior: voltar + menu de ações do turno */}
+            <div className="mb-4 flex items-center justify-between">
+                <Button
+                    variant="ghost"
+                    onClick={() => navigate('/company/jobs')}
+                    iconLeft={<ArrowLeft size={18} />}
+                    className="-ml-3"
+                >
+                    Voltar
+                </Button>
 
                 <div className="relative">
-                    <button
+                    <Button
+                        variant="ghost"
                         onClick={() => setOpenMenu(!openMenu)}
                         aria-label="Mais opções do turno"
-                        className="min-h-11 min-w-11 inline-flex items-center justify-center border-2 border-transparent hover:border-black rounded-xl transition-all"
+                        aria-haspopup="menu"
+                        aria-expanded={openMenu}
+                        className="w-11 !px-0"
                     >
                         <MoreHorizontal size={20} />
-                    </button>
+                    </Button>
                     {openMenu && (
                         <>
-                        <div className="fixed inset-0 z-0" onClick={() => setOpenMenu(false)} aria-hidden="true" />
-                        <div className="absolute right-0 top-full mt-2 w-48 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden">
+                        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(false)} aria-hidden="true" />
+                        <div role="menu" aria-label="Ações do turno" className="absolute right-0 top-full z-20 mt-2 w-52 divide-y divide-gray-100 overflow-hidden rounded-xl border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <button
+                                role="menuitem"
                                 onClick={() => navigate(`/company/jobs/${id}/edit`)}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2"
+                                className={MENU_ITEM}
                             >
                                 <Edit2 size={16} /> Editar
                             </button>
                             <button
+                                role="menuitem"
                                 onClick={() => handleStatusChange(job.status === 'open' ? 'paused' : 'open')}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                className={MENU_ITEM}
                             >
                                 {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
                                 {job.status === 'open' ? 'Pausar' : 'Reativar'}
                             </button>
                             <button
+                                role="menuitem"
                                 onClick={() => { setOpenMenu(false); setShowDeleteConfirm(true); }}
-                                className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold text-sm flex items-center gap-2 border-t border-gray-100"
+                                className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
                             >
                                 <Trash2 size={16} /> Excluir
                             </button>
@@ -237,102 +274,94 @@ export default function CompanyJobDetails() {
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]">
-                {/* Banner / Status */}
-                <div className={`h-2 w-full ${job.status === 'open' ? 'bg-green-500' : 'bg-gray-300'}`} aria-hidden="true" />
-
-                <div className="p-8">
-                    <div className="flex justify-between items-start mb-6">
-                        <div>
-                            <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase mb-3 border border-black ${job.status === 'open' ? 'bg-green-400' : 'bg-gray-200'}`}>
-                                {job.status === 'open' ? 'Turno Ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
+            <Card padding="lg">
+                {/* Cabeçalho do turno: status, título, meta e valor */}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <span className={`mb-3 inline-block rounded-full border border-black px-3 py-1 text-xs font-semibold ${job.status === 'open' ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
+                            {statusLabel}
+                        </span>
+                        <h1 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                            <span className="flex items-center gap-1.5"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
+                            <span className="flex items-center gap-1.5 font-semibold capitalize text-black">
+                                <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
                             </span>
-                            <h1 className="text-3xl font-black uppercase tracking-tight mb-2">{job.title}</h1>
-                            <div className="flex items-center gap-4 text-sm font-bold text-gray-500 flex-wrap">
-                                <span className="flex items-center gap-1"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
-                                <span className="flex items-center gap-1 capitalize text-black">
-                                    <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
-                                </span>
-                                <span className="flex items-center gap-1"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-2xl font-black">R$ {job.budget}</div>
-                            <div className="text-xs font-bold uppercase text-gray-400">{job.budget_type === 'hourly' ? '/ hora' : job.budget_type === 'daily' ? '/ dia' : 'total'}</div>
+                            <span className="flex items-center gap-1.5"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-t-2 border-gray-100">
-                        <div className="md:col-span-2 space-y-8">
-                            {job.description && (
-                                <section>
-                                    <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Briefcase size={20} /> Descrição</h3>
-                                    <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.description}</p>
-                                </section>
-                            )}
-
-                            {job.requirements && (
-                                <section>
-                                    <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Check size={20} /> Requisitos</h3>
-                                    <p className="whitespace-pre-wrap text-gray-600 font-medium leading-relaxed">{job.requirements}</p>
-                                </section>
-                            )}
-
-                            {(job.work_start_time || job.work_end_time) && (
-                                <section>
-                                    <h3 className="text-lg font-black uppercase mb-3 flex items-center gap-2"><Clock size={20} /> Horário</h3>
-                                    <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-100 inline-block">
-                                        <p className="font-bold">
-                                            {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
-                                            {job.has_lunch && <span className="text-gray-400 ml-2">(1h almoço)</span>}
-                                        </p>
-                                    </div>
-                                </section>
-                            )}
-                        </div>
-
-                        {/* Stats Sidebar */}
-                        <div className="space-y-4">
-                            <div className="bg-blue-50 border-2 border-blue-100 rounded-xl p-6">
-                                <h3 className="font-black uppercase text-blue-800 mb-4">Resumo do Turno</h3>
-                                <div className="space-y-4">
-                                    {(job.candidates_count || 0) > 0 ? (
-                                        <button
-                                            onClick={() => navigate(`/company/jobs/${id}/candidates`)}
-                                            className="w-full flex items-center justify-between hover:bg-white p-2 rounded-lg transition-all cursor-pointer group"
-                                        >
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2"><Users size={16} /> Candidatos</span>
-                                            <span className="text-2xl font-black text-blue-900 group-hover:scale-110 transition-transform">{job.candidates_count}</span>
-                                        </button>
-                                    ) : (
-                                        <div className="p-2">
-                                            <span className="text-sm font-bold text-blue-600 flex items-center gap-2 mb-2"><Users size={16} /> Candidatos</span>
-                                            <p className="text-sm text-gray-500 font-medium mb-3">Ninguém convidado para este turno ainda.</p>
-                                            <button
-                                                onClick={() => navigate('/company/team')}
-                                                className="w-full bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors"
-                                            >
-                                                Convidar freelas do elenco
-                                            </button>
-                                        </div>
-                                    )}
-                                    <div
-                                        role={activeWorkersCount > 0 ? 'button' : undefined}
-                                        tabIndex={activeWorkersCount > 0 ? 0 : undefined}
-                                        onKeyDown={(e) => { if (activeWorkersCount > 0 && e.key === 'Enter') navigate(`/company/jobs/${id}/candidates`); }}
-                                        className={`flex justify-between items-center rounded-lg p-2 -mx-2 transition-colors ${activeWorkersCount > 0 ? 'cursor-pointer hover:bg-white' : ''}`}
-                                        onClick={() => activeWorkersCount > 0 && navigate(`/company/jobs/${id}/candidates`)}
-                                    >
-                                        <span className="text-sm font-bold text-blue-600">Em andamento</span>
-                                        <span className="font-black text-blue-600">{activeWorkersCount}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div className="shrink-0 sm:text-right">
+                        <div className="text-2xl font-bold tabular-nums">R$ {job.budget}</div>
+                        <div className="text-xs text-gray-600">{unidadePreco}</div>
                     </div>
                 </div>
-            </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-8 border-t-2 border-gray-100 pt-6 md:grid-cols-3">
+                    <div className="space-y-6 md:col-span-2">
+                        {job.description && (
+                            <section>
+                                <h2 className="mb-2 text-lg font-bold">Descrição</h2>
+                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.description}</p>
+                            </section>
+                        )}
+
+                        {job.requirements && (
+                            <section>
+                                <h2 className="mb-2 text-lg font-bold">Requisitos</h2>
+                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.requirements}</p>
+                            </section>
+                        )}
+
+                        {(job.work_start_time || job.work_end_time) && (
+                            <section>
+                                <h2 className="mb-2 text-lg font-bold">Horário</h2>
+                                <p className="inline-block rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold tabular-nums">
+                                    {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
+                                    {job.has_lunch && <span className="ml-2 font-normal text-gray-600">(1h almoço)</span>}
+                                </p>
+                            </section>
+                        )}
+                    </div>
+
+                    {/* Resumo + a ação principal do turno */}
+                    <aside className="h-fit rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
+                        <h2 className="mb-3 text-lg font-bold">Resumo do turno</h2>
+                        <div className="space-y-2">
+                            {(job.candidates_count || 0) > 0 ? (
+                                <button
+                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
+                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
+                                >
+                                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
+                                    <span className="text-xl font-bold tabular-nums">{job.candidates_count}</span>
+                                </button>
+                            ) : (
+                                <div>
+                                    <span className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
+                                    <p className="mb-3 text-sm text-gray-600">Ninguém convidado para este turno ainda.</p>
+                                    <Button variant="dark" fullWidth onClick={() => navigate('/company/team')}>
+                                        Convidar freelas do elenco
+                                    </Button>
+                                </div>
+                            )}
+                            {activeWorkersCount > 0 ? (
+                                <button
+                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
+                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
+                                >
+                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
+                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
+                                </button>
+                            ) : (
+                                <div className="flex min-h-11 items-center justify-between">
+                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
+                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
+                                </div>
+                            )}
+                        </div>
+                    </aside>
+                </div>
+            </Card>
         </div>
         </>
     );

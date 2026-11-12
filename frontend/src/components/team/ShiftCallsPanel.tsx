@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Megaphone, Siren, Loader2, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
+import { Megaphone, Siren, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
 import { formatDurationShort } from '../../lib/dateUtils';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
 import type { ShiftCall, ShiftCallTarget } from '../../types';
+import { Button, Card } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Painel de chamados do turno (visão da empresa).
@@ -28,7 +29,7 @@ function targetVisual(target: ShiftCallTarget, callStatus?: ShiftCall['status'])
     case 'accepted':
       return { icon: CheckCircle2, className: 'text-primary', label: 'Aceitou' };
     case 'declined':
-      return { icon: XCircle, className: 'text-gray-400', label: 'Recusou' };
+      return { icon: XCircle, className: 'text-gray-500', label: 'Recusou' };
     case 'closed': {
       // `closed` só diz "esta tentativa terminou sem resposta desta pessoa" -- e isso acontece
       // por motivos diferentes. O rótulo fixo "Vaga preenchida" mentia quando a EMPRESA cancelava
@@ -41,7 +42,7 @@ function targetVisual(target: ShiftCallTarget, callStatus?: ShiftCall['status'])
         callStatus === 'cancelled' ? 'Chamado cancelado'
         : callStatus === 'expired' ? 'Expirou sem resposta'
         : 'Vaga preenchida';
-      return { icon: MinusCircle, className: 'text-gray-300', label };
+      return { icon: MinusCircle, className: 'text-gray-400', label };
     }
     default:
       return { icon: Clock, className: 'text-yellow-600', label: 'Aguardando' };
@@ -74,7 +75,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
   if (calls.length === 0) return null;
 
   return (
-    <div className="space-y-3 mb-8">
+    <div className="space-y-4 mb-8">
       {calls.map((call) => {
         const isSos = call.origin === 'sos';
         const rawTargets = call.targets ?? [];
@@ -96,15 +97,14 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
         const notifiedCount = isSos ? call.targets_count : targets.length;
 
         return (
-          <div
+          <Card
             key={call.id}
-            className={`rounded-2xl border-2 p-4 ${
-              isOpen ? 'border-black bg-yellow-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'border-gray-200 bg-white'
-            }`}
+            padding="sm"
+            className={isOpen ? 'bg-yellow-50' : 'border-gray-200'}
           >
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="min-w-0">
-                <p className="font-black uppercase text-sm flex items-center gap-2">
+                <p className="font-bold text-sm flex items-center gap-2 flex-wrap">
                   {isSos ? <Siren size={16} /> : <Megaphone size={16} />}
                   {isSos
                     ? isOpen
@@ -115,16 +115,16 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
                       : jaVenceu && call.status === 'open'
                         ? 'Chamado expirou'
                         : 'Chamado encerrado'}
-                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-black text-white">
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-black text-white">
                     {SHIFT_CALL_REASON_LABELS[call.reason]}
                   </span>
                   {isSos && (
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white border-2 border-black">
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-white border-2 border-black">
                       Fora do Elenco
                     </span>
                   )}
                 </p>
-                <p className="text-xs font-bold text-gray-500 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   {isSos
                     ? `${notifiedCount ?? 0} avisado${(notifiedCount ?? 0) !== 1 ? 's' : ''} fora do Elenco · ${accepted} aceite${accepted !== 1 ? 's' : ''}`
                     : `${notifiedCount} chamado${notifiedCount !== 1 ? 's' : ''} · ${accepted} aceite${accepted !== 1 ? 's' : ''}${isOpen && pending > 0 ? ` · ${pending} sem responder` : ''}`}
@@ -132,27 +132,28 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
               </div>
 
               {isOpen && (
-                <button
+                <Button
+                  variant="secondary"
                   onClick={() => onCancel(call.id)}
                   disabled={cancellingId === call.id}
-                  className="px-3 py-2 rounded-xl border-2 border-black font-black uppercase text-xs hover:bg-black hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                  loading={cancellingId === call.id}
+                  className="flex-shrink-0"
                 >
-                  {cancellingId === call.id ? <Loader2 className="animate-spin" size={12} /> : null}
                   Cancelar
-                </button>
+                </Button>
               )}
             </div>
 
             {/* A métrica que prova o valor do produto. */}
             {call.first_claim_at && (
-              <p className="flex items-center gap-1.5 text-xs font-black text-primary bg-primary-light border border-green-200 rounded-xl px-3 py-2 mb-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-primary bg-primary-light rounded-xl px-3 py-2 mb-3">
                 <Timer size={14} />
                 Primeira vaga preenchida em {formatDurationShort(call.created_at, call.first_claim_at)}
               </p>
             )}
 
             {!call.first_claim_at && (isOpen || (jaVenceu && call.status === 'open')) && (
-              <p className="flex items-center gap-1.5 text-xs font-bold text-gray-600 mb-3">
+              <p className="flex items-center gap-1.5 text-xs text-gray-700 mb-3">
                 <Clock size={14} />
                 {isOpen
                   ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
@@ -167,18 +168,18 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
                 return (
                   <span
                     key={target.id}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold bg-white border border-gray-200 rounded-xl px-2.5 py-1.5"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-200 rounded-pill px-2.5 py-1.5"
                   >
                     <Icon size={12} className={visual.className} />
                     <span className="truncate max-w-[140px]">
                       {target.worker?.full_name ?? 'Freela'}
                     </span>
-                    <span className="text-gray-400">· {visual.label}</span>
+                    <span className="font-normal text-gray-600">· {visual.label}</span>
                   </span>
                 );
               })}
             </div>
-          </div>
+          </Card>
         );
       })}
     </div>

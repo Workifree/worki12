@@ -86,7 +86,7 @@ export function QrScannerPane({ onDecoded, processing }: QrScannerPaneProps) {
     return (
       <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center flex flex-col items-center gap-2">
         <CameraOff className="text-red-500" size={28} />
-        <p className="text-sm font-bold text-red-600">{cameraError}</p>
+        <p role="alert" className="text-sm font-semibold text-red-600">{cameraError}</p>
       </div>
     );
   }

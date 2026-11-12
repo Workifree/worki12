@@ -151,9 +151,7 @@ describe('CompanyJobDetails — pausar/reativar (alto risco)', () => {
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.querySelector('.lucide-ellipsis') || b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Pausar')).toBeInTheDocument()
@@ -182,9 +180,7 @@ describe('CompanyJobDetails — pausar/reativar (alto risco)', () => {
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Pausar')).toBeInTheDocument()
@@ -209,9 +205,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
@@ -246,9 +240,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
@@ -281,9 +273,7 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
@@ -330,9 +320,7 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
       expect(screen.getByText('Garcom para Evento')).toBeInTheDocument()
     })
 
-    const menuButtons = screen.getAllByRole('button')
-    const moreButton = menuButtons.find(b => b.className.includes('border-transparent'))
-    fireEvent.click(moreButton!)
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()

@@ -148,6 +148,16 @@ roles:
     effort: low
     rationale: "Updates incrementais ao memory-bank pós-feature. Edição cirúrgica, nunca overwrite."
 
+  harness-tester:
+    cli: claude
+    model: sonnet
+    effort: medium
+    max_turns: 150
+    rationale: "Simulador de usuario: dirige o Chrome local (9222=empresa, 9223=freela) via chrome-devtools-mcp e caca falha pela superficie. Nunca edita codigo."
+    trigger: "3.8 com efeito visual ou fluxo novo; modo dirigido (fluxos do diff + defeitos anteriores). Varredura so sob pedido."
+    tools_only: "mcp__chrome__*, mcp__chrome2__*, Read, Grep, Glob, TodoWrite, ToolSearch, Write (so relatorio)"
+    safety: "So contas e2e-*@worki.test; nunca digita senha; nunca toca dado real; sem git/build."
+
 # ============================================================
 # FALLBACK CHAINS — só o frontend-builder tem fallback (Gemini → Claude)
 # ============================================================

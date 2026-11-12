@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -12,6 +12,7 @@ import WorkerCertificationsPanel from '../../components/company/WorkerCertificat
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { Button, Card } from '../../components/ui';
 
 export default function WorkerPublicProfile() {
     const { id } = useParams();
@@ -250,12 +251,12 @@ export default function WorkerPublicProfile() {
     );
     if (!profile) return (
         <div className="max-w-4xl mx-auto p-8">
-            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6">
-                <ArrowLeft size={16} strokeWidth={3} /> Voltar
-            </button>
-            <div className="text-center text-gray-500 font-bold border-2 border-dashed border-gray-200 rounded-2xl py-16">
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
+                Voltar
+            </Button>
+            <div className="text-center text-gray-700 font-semibold border-2 border-dashed border-gray-300 rounded-2xl py-16 px-4">
                 Não foi possível abrir este perfil agora.<br />
-                <span className="font-medium text-sm">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
+                <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
             </div>
         </div>
     );
@@ -268,87 +269,88 @@ export default function WorkerPublicProfile() {
               ogTitle={profile ? `${profile.full_name} — Worki` : undefined}
             />
             {/* Header / Nav */}
-            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 font-bold hover:text-black transition-colors mb-6">
-                <ArrowLeft size={16} strokeWidth={3} /> Voltar
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
+                Voltar
+            </Button>
 
             {/* Profile Card */}
-            <div className="bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] mb-8">
+            <Card padding="none" className="overflow-hidden mb-6">
                 {/* Banner */}
-                <div className="h-32 bg-gradient-to-r from-blue-600 to-purple-600"></div>
+                <div className="h-28 sm:h-32 bg-black"></div>
 
-                <div className="px-8 pb-8 relative">
+                <div className="px-5 sm:px-8 pb-6 sm:pb-8 relative">
                     {/* Avatar */}
-                    <div className="absolute -top-16 left-8">
-                        <div className="w-32 h-32 rounded-full border-4 border-white bg-black shadow-lg overflow-hidden flex items-center justify-center">
+                    <div className="absolute -top-14 left-5 sm:-top-16 sm:left-8">
+                        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex items-center justify-center">
                             {profile.photo_url ? (
                                 <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
                             ) : (
-                                <span className="text-4xl text-white font-black">{profile.full_name?.[0]}</span>
+                                <span className="text-4xl text-white font-bold">{profile.full_name?.[0]}</span>
                             )}
                         </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end pt-4 gap-4">
+                    <div className="flex justify-end pt-4">
                         <div className="flex flex-col items-end gap-1">
-                            <button
+                            <Button
+                                variant="secondary"
                                 onClick={() => void handleChat()}
-                                disabled={!applicationId || chatLoading}
-                                className="px-6 py-2 border-2 border-black rounded-xl font-bold uppercase hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white min-h-11"
+                                disabled={!applicationId}
+                                loading={chatLoading}
+                                iconLeft={<MessageSquare size={18} />}
                             >
-                                {chatLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageSquare size={18} />} Mensagem
-                            </button>
+                                Mensagem
+                            </Button>
                             {!applicationId && (
-                                <span className="text-xs font-bold text-gray-400 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
+                                <span className="text-xs text-gray-600 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
                             )}
                         </div>
-
                     </div>
 
                     {/* Basic Info */}
                     <div className="mt-4">
-                        <h1 className="text-4xl font-black uppercase tracking-tight">{profile.full_name}</h1>
-                        <p className="text-xl font-medium text-gray-500 mt-1">{profile.bio || 'Profissional Worki'}</p>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{profile.full_name}</h1>
+                        <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Worki'}</p>
 
-                        <div className="flex items-center gap-6 mt-4 text-sm font-bold text-gray-600">
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
                             <span className="flex items-center gap-2"><MapPin size={18} /> {profile.location || 'Localização não definida'}</span>
                             <span className="flex items-center gap-2"><Calendar size={18} /> Desde {profile.joined_at ? format(new Date(profile.joined_at), 'MMMM yyyy', { locale: ptBR }) : 'N/A'}</span>
                         </div>
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Zap size={14} /> Nível</div>
-                            <div className="text-2xl font-black">{profile.level}</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Zap size={14} /> Nível</div>
+                            <div className="text-2xl font-bold tabular-nums">{profile.level}</div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Briefcase size={14} /> Turnos</div>
-                            <div className="text-2xl font-black">{profile.completed_jobs} <span className="text-xs text-gray-400">concluídos</span></div>
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Briefcase size={14} /> Turnos</div>
+                            <div className="text-2xl font-bold tabular-nums">{profile.completed_jobs} <span className="text-xs font-normal text-gray-600">concluídos</span></div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Star size={14} /> Avaliação</div>
-                            <div className="text-2xl font-black text-yellow-500">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Star size={14} /> Avaliação</div>
+                            <div className="text-2xl font-bold tabular-nums text-yellow-500">
                                 {(profile.reviews_count ?? 0) > 0 && (profile.rating_average ?? 0) > 0
                                     ? Number(profile.rating_average).toFixed(1)
                                     : '—'}
                             </div>
-                            <p className="text-xs text-gray-500">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
+                            <p className="text-xs text-gray-600">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-400 font-bold mb-1 text-xs uppercase"><Award size={14} /> XP Total</div>
-                            <div className="text-2xl font-black">{profile.xp}</div>
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP Total</div>
+                            <div className="text-2xl font-bold tabular-nums">{profile.xp}</div>
                         </div>
                     </div>
 
                     {/* Tags */}
                     {profile.tags && (
-                        <div className="mt-8">
-                            <h3 className="font-bold uppercase text-gray-400 text-sm mb-3">Especialidades</h3>
+                        <div className="mt-6">
+                            <h3 className="font-bold text-gray-800 text-sm mb-3">Especialidades</h3>
                             <div className="flex gap-2 flex-wrap">
                                 {profile.tags.map((tag: string) => (
-                                    <span key={tag} className="px-3 py-1 bg-black text-white rounded-lg text-xs font-bold uppercase">{tag}</span>
+                                    <span key={tag} className="px-3 py-1 bg-black text-white rounded-pill text-xs font-semibold">{tag}</span>
                                 ))}
                             </div>
                         </div>
@@ -358,82 +360,86 @@ export default function WorkerPublicProfile() {
                         registrado no Worki), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
-                    <div className="mt-8 bg-gray-50 p-4 rounded-xl border-2 border-gray-100">
-                        <h3 className="font-bold uppercase text-gray-400 text-sm mb-3">Contato e pagamento</h3>
+                    <div className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                        <h3 className="font-bold text-gray-800 text-sm mb-3">Contato e pagamento</h3>
                         {hasTeamConnection ? (
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
-                                        <Phone size={16} className="flex-shrink-0 text-gray-400" />
+                                        <Phone size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.phone || 'Telefone não informado'}</span>
                                     </span>
                                     {profile.phone && (
-                                        <button
+                                        <Button
+                                            variant="ghost"
                                             onClick={() => handleCopy(profile.phone as string, 'phone')}
                                             aria-label="Copiar telefone"
-                                            className="p-3 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                            className="w-11 !px-0 flex-shrink-0"
                                         >
                                             {phoneCopied ? <Check size={16} /> : <Copy size={16} />}
-                                        </button>
+                                        </Button>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
-                                        <Wallet size={16} className="flex-shrink-0 text-gray-400" />
+                                        <Wallet size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.pix_key || 'Chave PIX não informada'}</span>
                                     </span>
                                     {profile.pix_key && (
-                                        <button
+                                        <Button
+                                            variant="ghost"
                                             onClick={() => handleCopy(profile.pix_key as string, 'pix')}
                                             aria-label="Copiar chave PIX"
-                                            className="p-3 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors flex-shrink-0"
+                                            className="w-11 !px-0 flex-shrink-0"
                                         >
                                             {pixCopied ? <Check size={16} /> : <Copy size={16} />}
-                                        </button>
+                                        </Button>
                                     )}
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-sm font-bold text-gray-500 bg-white p-3 rounded-lg border border-gray-200">
-                                {connectionStatus === 'pending'
-                                    ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
-                                    : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                            <div className="text-sm text-gray-700 bg-white p-3 rounded-xl border-2 border-gray-200 flex flex-col items-start gap-2">
+                                <p>
+                                    {connectionStatus === 'pending'
+                                        ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
+                                        : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                                </p>
                                 {connectionStatus !== 'pending' && (
-                                    <button onClick={() => navigate('/company/team')} className="block mt-2 text-primary underline font-black uppercase text-xs">
+                                    <Button variant="secondary" size="sm" onClick={() => navigate('/company/team')}>
                                         Ir para Meu Elenco
-                                    </button>
+                                    </Button>
                                 )}
-                            </p>
+                            </div>
                         )}
                     </div>
                 </div>
-            </div>
+            </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* History */}
                 <div>
-                    <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico Recente</h3>
-                    <div className="space-y-4">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico Recente</h3>
+                    <div className="space-y-3">
                         {history.length > 0 ? history.map((h) => (
-                            <div key={h.id} className="bg-white p-4 rounded-xl border-2 border-gray-100 flex justify-between items-center bg-gray-50/50">
-                                <div>
-                                    <h4 className="font-bold">{h.job?.title}</h4>
-                                    <p className="text-xs text-gray-500 font-bold uppercase">{h.job?.company?.name || 'Empresa'}</p>
+                            <div key={h.id} className="p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
+                                <div className="min-w-0">
+                                    <h4 className="font-bold text-sm">{h.job?.title}</h4>
+                                    <p className="text-xs text-gray-600">{h.job?.company?.name || 'Empresa'}</p>
                                 </div>
-                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${h.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{h.status === 'completed' ? 'Concluído' : 'Contratado'}</span>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-pill flex-shrink-0 ${h.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{h.status === 'completed' ? 'Concluído' : 'Contratado'}</span>
                             </div>
                         )) : (
-                            <p className="text-gray-400 italic font-medium">Nenhum histórico visível.</p>
+                            <p className="text-sm text-gray-600">Nenhum histórico visível.</p>
                         )}
                     </div>
                 </div>
 
                 {/* Reviews */}
                 <div>
-                    <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2"><MessageSquare size={20} /> Comentários</h3>
-                    <div className="space-y-4">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare size={20} /> Comentários</h3>
+                    <div className="space-y-3">
                         {reviews.length > 0 ? reviews.map((r) => (
-                            <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-100">
+                            <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-200">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="font-bold text-sm">{r.company?.name || 'Empresa'}</span>
                                     <div className="flex text-yellow-400">
@@ -442,13 +448,13 @@ export default function WorkerPublicProfile() {
                                         ))}
                                     </div>
                                 </div>
-                                <p className="text-sm text-gray-600 font-medium">"{r.comment || 'Sem comentário'}"</p>
-                                <p className="text-xs text-gray-400 mt-1">
+                                <p className="text-sm text-gray-700">"{r.comment || 'Sem comentário'}"</p>
+                                <p className="text-xs text-gray-600 mt-1">
                                     {format(new Date(r.created_at), "d 'de' MMM. 'de' yyyy", { locale: ptBR })}
                                 </p>
                             </div>
                         )) : (
-                            <p className="text-sm text-gray-400 italic text-center py-4">Este freela ainda não recebeu avaliações. Elas aparecem aqui após turnos concluídos.</p>
+                            <p className="text-sm text-gray-600 text-center py-4">Este freela ainda não recebeu avaliações. Elas aparecem aqui após turnos concluídos.</p>
                         )}
                     </div>
                 </div>

@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, CheckCircle2, CheckCircle, Loader2, ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react';
+import { FileText, CheckCircle2, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react';
 import { ServiceTermService } from '../services/serviceTermService';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
+import { Button } from './ui';
 import type { ServiceTerm, ServiceTermAcceptOutcome } from '../types';
 
 interface ServiceTermSectionProps {
@@ -192,7 +193,7 @@ export default function ServiceTermSection({
                 este bloco não renderiza. A9/A8: nada a exibir, sem quebrar o recibo. */}
             {term && (
                 <div className="border-t-2 border-black pt-6 mb-6 print:border-t-2 print:border-black">
-                    <span className="flex items-center gap-2 text-xs font-black uppercase text-gray-400 mb-3">
+                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
                         <FileText size={14} /> Termo de Prestação de Serviço
                     </span>
 
@@ -207,29 +208,29 @@ export default function ServiceTermSection({
                         documento impresso tem que sair inteiro, aberto ou não na tela. */}
                     <div className="bg-gray-50 border-2 border-black rounded-xl p-4 md:p-5 mb-4">
                         <p
-                            className={`whitespace-pre-wrap font-medium text-sm leading-relaxed text-gray-800 print:max-h-none ${
+                            className={`whitespace-pre-wrap text-sm leading-relaxed text-gray-800 print:max-h-none ${
                                 !showFullText && !isAccepted ? 'max-h-72 overflow-hidden' : ''
                             }`}
                         >
                             {term.term_text}
                         </p>
                         {!isAccepted && (
-                            <button
-                                type="button"
+                            <Button
+                                variant="ghost"
                                 onClick={() => setShowFullText((v) => !v)}
-                                className="print:hidden flex items-center gap-1 text-xs font-black uppercase text-primary mt-3 min-h-11"
+                                className="print:hidden mt-2 -ml-3"
                             >
                                 {showFullText ? (
                                     <>Recolher <ChevronUp size={14} /></>
                                 ) : (
                                     <>Ler o termo inteiro <ChevronDown size={14} /></>
                                 )}
-                            </button>
+                            </Button>
                         )}
                     </div>
 
                     {isAccepted ? (
-                        <div className="flex items-center gap-2 bg-primary-light text-primary font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
+                        <div className="flex items-center gap-2 bg-primary-light text-primary-dark font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
                             <CheckCircle2 size={18} />
                             Termo aceito em{' '}
                             {format(new Date(term.accepted_at as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
@@ -240,7 +241,7 @@ export default function ServiceTermSection({
                                 consentimento AFIRMATIVO — soma-se ao gate de leitura
                                 (`showFullText`), nunca o substitui. Ler o termo e concordar com
                                 ele são coisas diferentes; R7/R8 do spec pedem os dois. */}
-                            <label className="flex items-start gap-3 font-bold text-sm cursor-pointer select-none">
+                            <label className="flex items-start gap-3 font-semibold text-sm cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={agreedToTerm}
@@ -257,27 +258,22 @@ export default function ServiceTermSection({
                                 "Confirmar Recebimento", abaixo) e o termo segue pendente. */}
                             {workerConfirmedAt && (
                                 <>
-                                    <button
-                                        type="button"
+                                    <Button
+                                        size="lg"
                                         onClick={handleAcceptOnly}
-                                        disabled={accepting || !showFullText || !agreedToTerm}
+                                        loading={accepting}
+                                        disabled={!showFullText || !agreedToTerm}
                                         aria-label="Aceitar o termo de prestação de serviço"
-                                        className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center gap-2 min-h-[44px]"
+                                        className="w-full sm:w-auto"
                                     >
-                                        {accepting ? (
-                                            <>
-                                                <Loader2 size={16} className="animate-spin" /> Registrando aceite...
-                                            </>
-                                        ) : (
-                                            'Aceitar Termo'
-                                        )}
-                                    </button>
+                                        {accepting ? 'Registrando aceite...' : 'Aceitar termo'}
+                                    </Button>
                                     {!showFullText ? (
-                                        <p className="text-xs font-bold text-gray-400">
+                                        <p className="text-xs text-gray-600">
                                             Abra "Ler o termo inteiro" acima para poder aceitar.
                                         </p>
                                     ) : !agreedToTerm ? (
-                                        <p className="text-xs font-bold text-gray-400">
+                                        <p className="text-xs text-gray-600">
                                             Marque "Li e concordo com os termos acima" para poder aceitar.
                                         </p>
                                     ) : null}
@@ -299,7 +295,7 @@ export default function ServiceTermSection({
                                         </p>
                                         <p className="text-yellow-800 text-xs font-medium mt-1">
                                             Cadastre o seu em{' '}
-                                            <Link to="/profile" className="underline font-black">
+                                            <Link to="/profile" className="underline font-bold">
                                                 Perfil
                                             </Link>{' '}
                                             e volte aqui para assinar.
@@ -309,7 +305,7 @@ export default function ServiceTermSection({
                             )}
                         </div>
                     ) : isCompanyViewer ? (
-                        <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
+                        <p className="text-sm font-semibold text-gray-600 bg-gray-100 px-4 py-3 rounded-xl w-fit">
                             Aguardando aceite do termo pelo freela
                         </p>
                     ) : (
@@ -320,14 +316,14 @@ export default function ServiceTermSection({
                         // autorizou alguém do lado da empresa (ainda que `isCompanyViewer`, ancorada
                         // só em `companies.owner_id`, não reconheça essa pessoa). Mostrar a mesma
                         // mensagem, sem depender da checagem simples.
-                        <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
+                        <p className="text-sm font-semibold text-gray-600 bg-gray-100 px-4 py-3 rounded-xl w-fit">
                             Aguardando aceite do termo pelo freela
                         </p>
                     )}
 
                     {/* Indícios best-effort do aceite — NUNCA "verificado"/"comprovado" (falsificáveis, ver ADR). */}
                     {isAccepted && (term.accepted_ip || term.accepted_user_agent) && (
-                        <p className="text-[11px] font-medium text-gray-400 mt-3 print:hidden">
+                        <p className="text-xs text-gray-600 mt-3 print:hidden">
                             Indícios do aceite (não são prova): {term.accepted_ip ? `IP ${term.accepted_ip}` : ''}
                             {term.accepted_ip && term.accepted_user_agent ? ' · ' : ''}
                             {term.accepted_user_agent ? `Dispositivo: ${term.accepted_user_agent}` : ''}
@@ -360,13 +356,13 @@ export default function ServiceTermSection({
                                 Por segurança, a confirmação de recebimento fica bloqueada até
                                 conseguirmos checar.
                             </p>
-                            <button
-                                type="button"
+                            <Button
+                                variant="secondary"
                                 onClick={handleRetryFetch}
-                                className="flex items-center gap-2 text-xs font-black uppercase text-red-800 underline min-h-[44px]"
+                                iconLeft={<RefreshCw size={14} />}
                             >
-                                <RefreshCw size={14} /> Tentar de novo
-                            </button>
+                                Tentar de novo
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -377,9 +373,9 @@ export default function ServiceTermSection({
                 para dentro deste componente (era irmã, embaixo do termo, na página — ordem
                 que deixava o botão de confirmar disponível e desacoplado do termo). */}
             <div className="border-t-2 border-black pt-6 mb-6">
-                <span className="block text-xs font-black uppercase text-gray-400 mb-3">Confirmação de recebimento</span>
+                <span className="block text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">Confirmação de recebimento</span>
                 {workerConfirmedAt ? (
-                    <div className="flex items-center gap-2 bg-primary-light text-primary font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
+                    <div className="flex items-center gap-2 bg-primary-light text-primary-dark font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
                         <CheckCircle size={18} />
                         Recebimento confirmado em {format(new Date(workerConfirmedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </div>
@@ -393,44 +389,40 @@ export default function ServiceTermSection({
                                     onChange={(e) => setConfirmoRecebimento(e.target.checked)}
                                     className="mt-1 h-4 w-4 accent-primary"
                                 />
-                                <span className="text-sm font-bold text-gray-700">
+                                <span className="text-sm font-semibold text-gray-700">
                                     Confirmo que recebi este valor. Esta confirmação não pode ser desfeita.
                                 </span>
                             </label>
                         )}
-                        <button
-                            type="button"
+                        <Button
+                            size="lg"
                             onClick={handleConfirmReceipt}
+                            loading={confirming}
                             disabled={
-                                confirming ||
                                 fetchFailed ||
                                 (mustReadTerm && (!showFullText || !agreedToTerm)) ||
                                 (!mustReadTerm && !confirmoRecebimento)
                             }
-                            className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center gap-2 min-h-[44px]"
+                            className="w-full sm:w-auto"
                         >
-                            {confirming ? (
-                                <>
-                                    <Loader2 size={16} className="animate-spin" /> Confirmando...
-                                </>
-                            ) : mustReadTerm ? (
-                                'Aceitar termo e confirmar recebimento'
-                            ) : (
-                                'Confirmar Recebimento'
-                            )}
-                        </button>
+                            {confirming
+                                ? 'Confirmando...'
+                                : mustReadTerm
+                                    ? 'Aceitar termo e confirmar recebimento'
+                                    : 'Confirmar Recebimento'}
+                        </Button>
                         {mustReadTerm && !showFullText ? (
-                            <p className="text-xs font-bold text-gray-400">
+                            <p className="text-xs text-gray-600">
                                 Abra "Ler o termo inteiro" acima antes de confirmar o recebimento.
                             </p>
                         ) : mustReadTerm && !agreedToTerm ? (
-                            <p className="text-xs font-bold text-gray-400">
+                            <p className="text-xs text-gray-600">
                                 Marque "Li e concordo com os termos acima" antes de confirmar o recebimento.
                             </p>
                         ) : null}
                     </div>
                 ) : isCompanyViewer ? (
-                    <p className="text-sm font-bold text-gray-500 bg-gray-100 px-4 py-3 rounded-xl w-fit">
+                    <p className="text-sm font-semibold text-gray-600 bg-gray-100 px-4 py-3 rounded-xl w-fit">
                         Aguardando confirmação do freela
                     </p>
                 ) : null}

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Siren, Loader2, X, AlertTriangle } from 'lucide-react';
+import { Siren, AlertTriangle } from 'lucide-react';
 import { SosService } from '../../services/sosService';
 import { useToast } from '../../contexts/ToastContext';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
 import type { ShiftCallReason } from '../../types';
+import { Button, Field } from '../ui';
+import { ModalShell } from './ModalShell';
 
 // ---------------------------------------------------------------------------
 // Botão + modal "Chamar fora do Elenco" (F11 — SOS: descoberta em urgência).
@@ -107,101 +109,107 @@ export function SosCallButton({ jobId, refreshKey, onDispatched }: SosCallButton
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="secondary"
         onClick={handleOpen}
         disabled={checking || !eligible}
         title={!checking && !eligible ? eligibilityMessage(reasonBlocked) : undefined}
-        className="bg-white hover:bg-black text-black hover:text-white border-2 border-black px-5 py-3 rounded-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-black"
+        iconLeft={<Siren size={16} />}
+        className="flex-shrink-0"
       >
-        <Siren size={16} /> SOS: fora do Elenco
-      </button>
+        SOS: fora do Elenco
+      </Button>
 
       {!checking && !eligible && (
         <p className="sr-only">{eligibilityMessage(reasonBlocked)}</p>
       )}
 
       {modalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !dispatching) setModalOpen(false);
-          }}
-        >
-          <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
-                <Siren size={20} /> Chamar fora do Elenco
-              </h2>
-              <button
-                onClick={() => setModalOpen(false)}
-                disabled={dispatching}
-                aria-label="Fechar"
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="text-xs font-bold text-gray-500 mb-4">
-              Seu Elenco esgotou e o turno começa em breve. Avisamos profissionais da sua cidade
-              que ativaram a descoberta em urgência.
-            </p>
-
-            {/* A membrana da feature — nunca escondida em texto pequeno. */}
-            <div className="flex items-start gap-2 text-xs font-bold text-black bg-yellow-50 border-2 border-black rounded-xl p-3 mb-4">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-              <span>
-                Você não vai ver quem foi chamado — só quantos foram avisados, e depois quem
-                aceitar. É assim que a descoberta em urgência funciona.
-              </span>
-            </div>
-
-            <div className="mb-4">
-              <label htmlFor="sos-reason" className="block text-xs font-black uppercase text-gray-500 mb-1">
-                Motivo
-              </label>
-              <select
-                id="sos-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value as ShiftCallReason)}
-                disabled={dispatching}
-                className="w-full border-2 border-black rounded-xl px-3 py-2 font-bold text-sm bg-white disabled:opacity-50"
-              >
-                {(Object.keys(SHIFT_CALL_REASON_LABELS) as ShiftCallReason[]).map((key) => (
-                  <option key={key} value={key}>
-                    {SHIFT_CALL_REASON_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mb-5">
-              <label htmlFor="sos-message" className="block text-xs font-black uppercase text-gray-500 mb-1">
-                Recado (opcional)
-              </label>
-              <textarea
-                id="sos-message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                disabled={dispatching}
-                rows={2}
-                className="w-full border-2 border-black rounded-xl px-3 py-2 font-bold text-sm disabled:opacity-50"
-                placeholder="Ex.: precisamos de alguém agora até o fechamento"
-              />
-            </div>
-
-            <button
-              onClick={() => void handleConfirm()}
-              disabled={dispatching}
-              className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {dispatching ? <Loader2 className="animate-spin" size={18} /> : <Siren size={18} />}
-              {dispatching ? 'Enviando...' : 'Chamar fora do Elenco'}
-            </button>
-          </div>
-        </div>
+        <SosModal
+          reason={reason}
+          message={message}
+          dispatching={dispatching}
+          onReasonChange={setReason}
+          onMessageChange={setMessage}
+          onClose={() => setModalOpen(false)}
+          onConfirm={() => void handleConfirm()}
+        />
       )}
     </>
+  );
+}
+
+interface SosModalProps {
+  reason: ShiftCallReason;
+  message: string;
+  dispatching: boolean;
+  onReasonChange: (reason: ShiftCallReason) => void;
+  onMessageChange: (message: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+function SosModal({ reason, message, dispatching, onReasonChange, onMessageChange, onClose, onConfirm }: SosModalProps) {
+  return (
+    <ModalShell
+      title={
+        <>
+          <Siren size={20} /> Chamar fora do Elenco
+        </>
+      }
+      subtitle="Seu Elenco esgotou e o turno começa em breve. Avisamos profissionais da sua cidade que ativaram a descoberta em urgência."
+      onClose={onClose}
+      locked={dispatching}
+      footer={
+        <Button
+          variant="dark"
+          size="lg"
+          fullWidth
+          onClick={onConfirm}
+          loading={dispatching}
+          iconLeft={<Siren size={18} />}
+        >
+          {dispatching ? 'Enviando...' : 'Chamar fora do Elenco'}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        {/* A membrana da feature — nunca escondida em texto pequeno. */}
+        <div className="flex items-start gap-2 text-sm text-black bg-yellow-50 border-2 border-black rounded-xl p-3">
+          <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+          <span>
+            Você não vai ver quem foi chamado — só quantos foram avisados, e depois quem
+            aceitar. É assim que a descoberta em urgência funciona.
+          </span>
+        </div>
+
+        <Field label="Motivo">
+          <select
+            id="sos-reason"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value as ShiftCallReason)}
+            disabled={dispatching}
+          >
+            {(Object.keys(SHIFT_CALL_REASON_LABELS) as ShiftCallReason[]).map((key) => (
+              <option key={key} value={key}>
+                {SHIFT_CALL_REASON_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Recado (opcional)">
+          <textarea
+            id="sos-message"
+            value={message}
+            onChange={(e) => onMessageChange(e.target.value)}
+            disabled={dispatching}
+            rows={2}
+            className="!h-auto py-3"
+            placeholder="Ex.: precisamos de alguém agora até o fechamento"
+          />
+        </Field>
+      </div>
+    </ModalShell>
   );
 }

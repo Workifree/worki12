@@ -68,6 +68,11 @@ const mockFrom = vi.fn((table: string) => {
 });
 
 const mockRpc = vi.fn();
+const mockLogError = vi.fn();
+
+vi.mock('../lib/logger', () => ({
+  logError: (message: string, error?: unknown) => mockLogError(message, error),
+}));
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
@@ -444,6 +449,67 @@ describe('TeamConnectionService', () => {
       expect(mockSelect).toHaveBeenCalled();
       const selectArg = mockSelect.mock.calls[0][0] as string;
       expect(selectArg).toContain('availability_days');
+    });
+  });
+
+  describe('generateInviteToken (link do elenco)', () => {
+    const COMPANY = 'comp-12345678-1234-1234-1234-123456789012';
+    const TOKEN = 'a'.repeat(48);
+
+    it('linha existe: devolve o token e NÃO chama a RPC', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: { token: TOKEN }, error: null });
+
+      const result = await TeamConnectionService.generateInviteToken(COMPANY);
+
+      expect(result).toEqual({ token: TOKEN, url: `${window.location.origin}/convite/${TOKEN}` });
+      expect(mockRpc).not.toHaveBeenCalledWith('get_company_invite_token', expect.anything());
+    });
+
+    it('sem linha: chama get_company_invite_token com a unidade selecionada e usa o token', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockRpc.mockResolvedValueOnce({ data: TOKEN, error: null });
+
+      const result = await TeamConnectionService.generateInviteToken(COMPANY);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_company_invite_token', { p_company_id: COMPANY });
+      expect(result).toEqual({ token: TOKEN, url: `${window.location.origin}/convite/${TOKEN}` });
+    });
+
+    it('sem linha e RPC nega com 42501 (freela sem permissao de criar): null SEM logError', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'not_a_company', code: '42501' } });
+
+      const result = await TeamConnectionService.generateInviteToken(COMPANY);
+
+      expect(result).toBeNull();
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
+
+    it('sem linha e RPC falha com erro inesperado: null E logError', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'boom', code: 'XX000' } });
+
+      const result = await TeamConnectionService.generateInviteToken(COMPANY);
+
+      expect(result).toBeNull();
+      expect(mockLogError).toHaveBeenCalledWith(
+        'teamConnection.generateInviteToken.rpc',
+        expect.objectContaining({ code: 'XX000' }),
+      );
+    });
+
+    it('sem linha e RPC devolve vazio: retorna null', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockRpc.mockResolvedValueOnce({ data: null, error: null });
+
+      expect(await TeamConnectionService.generateInviteToken(COMPANY)).toBeNull();
+    });
+
+    it('erro no SELECT: retorna null sem chamar a RPC', async () => {
+      mockFetchMaybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+
+      expect(await TeamConnectionService.generateInviteToken(COMPANY)).toBeNull();
+      expect(mockRpc).not.toHaveBeenCalledWith('get_company_invite_token', expect.anything());
     });
   });
 

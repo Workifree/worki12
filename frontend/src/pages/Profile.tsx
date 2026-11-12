@@ -3,13 +3,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, Briefcase, Star, ShieldCheck, Phone, Edit2, Loader2, Award, Save, X, Camera, CreditCard, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock } from 'lucide-react';
+import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, Share2, HelpCircle } from 'lucide-react';
+import { Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
 import CompanyBadges from '../components/CompanyBadges';
 import ReferralOptOutSection from '../components/ReferralOptOutSection';
 import SosDiscoverySection from '../components/SosDiscoverySection';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength, validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../lib/validation';
@@ -610,17 +611,11 @@ export default function Profile() {
     };
 
     if (loading) return (
-        <div className="flex flex-col gap-8 pb-12 max-w-4xl mx-auto animate-pulse">
-            <div className="flex items-center gap-6">
-                <div className="w-24 h-24 bg-gray-200 rounded-full" />
-                <div className="flex-1 space-y-3">
-                    <div className="h-8 bg-gray-200 rounded w-1/3" />
-                    <div className="h-4 bg-gray-200 rounded w-1/2" />
-                </div>
-            </div>
+        <div className="mx-auto max-w-3xl animate-pulse space-y-6 pb-12" aria-busy="true">
+            <div className="h-28 rounded-2xl bg-gray-200" />
             <div className="space-y-4">
                 {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-14 bg-gray-200 rounded-xl" />
+                    <div key={i} className="h-24 rounded-2xl bg-gray-200" />
                 ))}
             </div>
         </div>
@@ -628,38 +623,83 @@ export default function Profile() {
 
     if (!profile) return <div className="text-center p-8">Erro ao carregar perfil.</div>;
 
+    // Pares Cancelar/Salvar: UMA definição, renderizada no hero (desktop) e na barra fixa (mobile).
+    // CTA único de salvar — mesmo texto, mesma variante, mesmo estado de loading nos dois lugares.
+    const editActions = (
+        <>
+            <Button variant="secondary" onClick={handleCancelEdit} iconLeft={<X size={16} />}>
+                Cancelar
+            </Button>
+            <Button variant="primary" onClick={handleSave} loading={salvando} iconLeft={<Save size={16} />}>
+                Salvar
+            </Button>
+        </>
+    );
+
+    const nivel = levelProgress(profile.xp || 0);
+    const gradeDeclarada = Object.keys(profile.availability_days ?? {}).length > 0;
+
     return (
         <>
-        <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-4xl mx-auto">
-            {isEditing && (
-                /* Barra de acao fixa no mobile: os campos editaveis longos (especialidades, bio,
-                   grade de disponibilidade) ficam muito abaixo do par Salvar/Cancelar do topo —
-                   no celular a pessoa terminava a edicao e nao tinha como salvar dali (KLM/Fitts).
-                   So mobile: no desktop o par do topo ja fica visivel. */
-                <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-black p-3 flex gap-3">
-                    <button onClick={handleCancelEdit} className="flex-1 bg-white text-black min-h-11 rounded-xl font-black uppercase text-sm border-2 border-black">
-                        Cancelar
-                    </button>
-                    <button onClick={handleSave} disabled={salvando} className="flex-1 bg-primary text-white min-h-11 rounded-xl font-black uppercase text-sm border-2 border-black disabled:opacity-50">
-                        {salvando ? 'Salvando...' : 'Salvar'}
-                    </button>
-                </div>
+        <div className="mx-auto max-w-3xl space-y-6 pb-12 font-sans text-accent">
+            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
+                do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
+            {!isEditing && (
+                <Card
+                    as="section"
+                    aria-label="Compartilhar meu perfil com empresas"
+                    className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
+                >
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+                            <Link2 size={20} />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
+                            <p className="mt-1 text-sm text-gray-600">
+                                Link: a empresa abre e te adiciona. Worki ID: ela digita no app.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                            variant="primary"
+                            onClick={handleCopyMyLink}
+                            disabled={!workerId}
+                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleCopyWorkiId}
+                            disabled={!workerId}
+                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                        </Button>
+                    </div>
+                </Card>
             )}
 
-            {/* Header / Cover */}
-            <div className="relative mb-32 sm:mb-12 group">
-                <div className="h-48 bg-gray-900 rounded-3xl border-2 border-black overflow-hidden relative">
+            {/* Identidade: capa + avatar + nome. Em edicao, nome/cidade viram campos na secao "Dados". */}
+            <Card as="section" padding="none" aria-label="Identidade" className="overflow-hidden">
+                <div className="relative h-28 bg-gray-900 sm:h-36">
                     {profile.cover_url ? (
-                        <img src={profile.cover_url} alt="Foto de capa do perfil" className="w-full h-full object-cover" />
+                        <img src={profile.cover_url} alt="Foto de capa do perfil" className="h-full w-full object-cover" />
                     ) : (
-                        <div className="w-full h-full bg-gradient-to-r from-gray-900 to-black"></div>
+                        <div className="h-full w-full bg-gradient-to-r from-gray-900 to-black" />
                     )}
-
-                    {/* Cover Upload Button */}
-                    <div className="absolute top-4 right-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => coverInputRef.current?.click()} aria-label="Trocar foto de capa" className="bg-black/50 text-white min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg backdrop-blur-sm hover:bg-black transition-colors">
-                            <Camera size={20} />
-                        </button>
+                    <div className="absolute right-3 top-3">
+                        <Button
+                            variant="secondary"
+                            onClick={() => coverInputRef.current?.click()}
+                            disabled={uploading}
+                            aria-label="Trocar foto de capa"
+                            iconLeft={<Camera size={18} />}
+                        />
                     </div>
                 </div>
                 <input
@@ -672,620 +712,619 @@ export default function Profile() {
                     disabled={uploading}
                 />
 
-                {/* Profile Card Overlay */}
-                <div className="absolute -bottom-12 left-6 right-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="flex items-end gap-4 min-w-0">
-                        <div className="w-28 h-28 sm:w-32 sm:h-32 shrink-0 aspect-square bg-white rounded-full border-4 border-black p-1 relative shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] group">
-                            {/* Avatar Placeholder or Image */}
-                            <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center overflow-hidden relative">
-                                {profile.avatar_url ? (
-                                    <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <User size={64} className="text-gray-400" />
-                                )}
-
-                                {/* Camera Overlay for Upload */}
-                                <div className="absolute inset-0 bg-black/50 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                    <Camera className="text-white" size={24} />
-                                </div>
-                                {/* No touch nao existe hover: badge de camera sempre visivel no mobile */}
-                                <button
-                                    type="button"
-                                    aria-label="Trocar foto de perfil"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="sm:hidden absolute bottom-1 right-1 bg-black text-white rounded-full min-h-11 min-w-11 inline-flex items-center justify-center border-2 border-white shadow-md"
-                                >
-                                    <Camera size={16} />
-                                </button>
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept="image/*"
-                                    aria-label="Upload foto de perfil"
-                                    onChange={(e) => handleUpload(e, 'avatar')}
-                                    disabled={uploading}
-                                />
-                            </div>
-                            {profile.verified_identity && (
-                                <div className="absolute bottom-0 right-0 bg-blue-500 text-white p-1 rounded-full border-2 border-white" title="Identidade Verificada">
-                                    <ShieldCheck size={16} strokeWidth={3} />
-                                </div>
+                <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+                    <div className="relative -mt-12 h-24 w-24 shrink-0 rounded-full border-2 border-black bg-white p-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:-mt-14 sm:h-28 sm:w-28">
+                        <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gray-200">
+                            {profile.avatar_url ? (
+                                <img src={profile.avatar_url} alt={profile.full_name} className="h-full w-full object-cover" />
+                            ) : (
+                                <User size={48} className="text-gray-400" />
                             )}
                         </div>
-                        <div className="mb-2">
-                            {isEditing ? (
-                                <input
-                                    type="text"
-                                    value={formData.full_name}
-                                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                    aria-label="Nome completo"
-                                    className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white [text-shadow:_0_1px_3px_rgba(0,0,0,0.9)] bg-transparent border-b border-white mb-2 w-full outline-none"
-                                />
-                            ) : (
-                                <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white [text-shadow:_0_1px_3px_rgba(0,0,0,0.9)] break-words">{profile.full_name}</h1>
-                            )}
+                        {/* Um unico gatilho de troca de foto, sempre visivel (no touch nao existe hover). */}
+                        <button
+                            type="button"
+                            aria-label="Trocar foto de perfil"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                            className="absolute -bottom-1 -right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                        >
+                            <Camera size={16} />
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            aria-label="Upload foto de perfil"
+                            onChange={(e) => handleUpload(e, 'avatar')}
+                            disabled={uploading}
+                        />
+                    </div>
 
-                            <div className="flex items-center gap-2 text-white/80 font-bold text-sm bg-black/50 px-2 py-1 rounded-lg backdrop-blur-sm w-fit">
-                                <MapPin size={14} />
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        value={formData.city}
-                                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                                        aria-label="Cidade"
-                                        className="bg-transparent border-b border-white/50 text-white w-24 outline-none"
-                                    />
-                                ) : (
-                                    profile.city
-                                )}
-                            </div>
+                    <div className="mt-3 min-w-0">
+                        <h1 className="break-words text-2xl font-bold tracking-tight text-black sm:text-3xl">{profile.full_name}</h1>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600">
+                            {profile.city && (
+                                <span className="inline-flex items-center gap-1">
+                                    <MapPin size={14} />
+                                    {profile.city}
+                                </span>
+                            )}
+                            {profile.verified_identity && (
+                                <span
+                                    title="Identidade Verificada"
+                                    className="inline-flex items-center gap-1 rounded-pill bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700"
+                                >
+                                    <ShieldCheck size={14} />
+                                    Identidade verificada
+                                </span>
+                            )}
                         </div>
                     </div>
 
-                    <div className="flex gap-2 mb-2">
+                    <div className={isEditing ? 'mt-4 hidden gap-2 sm:flex' : 'mt-4 flex gap-2'}>
                         {isEditing ? (
-                            <>
-                                <button onClick={handleCancelEdit} className="bg-white text-black px-4 py-2 rounded-xl font-bold uppercase text-sm border-2 border-black hover:bg-gray-100 transition-all">
-                                    <X size={16} className="inline mr-1" /> Cancelar
-                                </button>
-                                <button onClick={handleSave} disabled={salvando} className="bg-primary text-white px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-green-600 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                    <Save size={16} className="inline mr-1" /> Salvar
-                                </button>
-                            </>
+                            editActions
                         ) : (
                             <>
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => setIsEditing(true)}
+                                    iconLeft={<Edit2 size={16} />}
+                                    className="flex-1 sm:flex-none"
+                                >
+                                    Editar perfil
+                                </Button>
+                                <Button
+                                    variant="secondary"
                                     onClick={() => setQrModalOpen(true)}
                                     aria-label="Ver meu QR de identidade"
-                                    className="bg-white text-black min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border-2 border-black hover:bg-gray-100 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                    iconLeft={<QrCode size={18} />}
                                 >
-                                    <QrCode size={18} />
-                                </button>
-                                <button onClick={() => setIsEditing(true)} className="bg-white text-black min-h-11 px-6 py-2 rounded-xl font-black uppercase text-sm border-2 border-black hover:bg-primary hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                    <Edit2 size={16} className="inline mr-2" /> Editar Perfil
-                                </button>
+                                    QR
+                                </Button>
                             </>
                         )}
                     </div>
                 </div>
-            </div>
+            </Card>
 
-            {/* Main Info Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-4">
-
-                {/* Left Column: Stats & Skills */}
-                <div className="space-y-6">
-
-                    {/* Level Card */}
-                    <div className="bg-black text-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <span className="text-xs font-bold uppercase text-primary tracking-widest">Nível</span>
-                                <h2 className="text-5xl font-black italic">LVL {profile.level || 1}</h2>
-                            </div>
-                            <Award className="text-primary" size={32} />
+            {/* Resumo: nivel + numeros que importam + atalho dos recebimentos */}
+            <Card as="section" aria-label="Resumo">
+                <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary">
+                        <Award size={24} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-3">
+                            <p className="text-lg font-bold">Nível {profile.level || 1}</p>
+                            <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
                         </div>
-                        <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                            <div className="bg-primary h-full" style={{ width: `${levelProgress(profile.xp || 0).percent}%` }}></div>
-                        </div>
-                        <p className="text-xs font-bold text-gray-400 mt-2">{profile.xp || 0} XP Total</p>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <h3 className="text-lg font-black uppercase mb-4">Estatísticas</h3>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                                <span className="text-sm font-bold text-gray-500">Turnos Realizados</span>
-                                <span className="text-lg font-black">{stats.completedJobs}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                                <span className="text-sm font-bold text-gray-500">Horas Totais</span>
-                                <span className="text-lg font-black">{stats.hoursWorked}h</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-bold text-gray-500">Avaliação</span>
-                                <span className="flex items-center gap-1 text-lg font-black text-yellow-500">
-                                    <Star size={18} fill="currentColor" /> {profile.rating_average || '-'}
-                                </span>
-                            </div>
+                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
                         </div>
                     </div>
+                </div>
 
-                    {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
-                    <button
-                        type="button"
+                <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+                        <dd className="text-xl font-bold tabular-nums">{stats.completedJobs}</dd>
+                        <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked}h</dd>
+                        <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+                        <dd className="flex items-center justify-center gap-1 text-xl font-bold tabular-nums">
+                            <Star size={16} className="text-yellow-500" fill="currentColor" />
+                            {profile.rating_average || '-'}
+                        </dd>
+                        <dt className="mt-0.5 text-xs text-gray-600">Avaliação</dt>
+                    </div>
+                </dl>
+
+                {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                <div className="mt-5 border-t-2 border-gray-100 pt-5">
+                    <Button
+                        variant="secondary"
+                        fullWidth
                         onClick={() => navigate('/recebimentos')}
-                        className="w-full bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-1 transition-all flex items-center justify-between gap-3 text-left"
+                        iconLeft={<Receipt size={18} />}
+                        iconRight={<ChevronRight size={18} />}
                     >
-                        <span className="flex items-center gap-3">
-                            <Receipt size={22} className="text-primary flex-shrink-0" />
-                            <span>
-                                <span className="block text-sm font-black uppercase">Meus Recebimentos</span>
-                                <span className="block text-xs font-bold text-gray-400">Pagamentos registrados pelas empresas</span>
-                            </span>
-                        </span>
-                        <ChevronRight size={20} className="text-gray-300 flex-shrink-0" />
-                    </button>
+                        Meus recebimentos
+                    </Button>
+                    <p className="mt-2 text-center text-xs text-gray-600">Pagamentos registrados pelas empresas</p>
+                </div>
+            </Card>
 
-                    {/* Contact Info */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <h3 className="text-lg font-black uppercase mb-4">Contato</h3>
-                        <div className="space-y-4 text-sm font-bold text-gray-600">
-                            <div className="flex items-center gap-2">
-                                <Phone size={16} />
-                                {isEditing ? (
-                                    <input
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        aria-label="Telefone"
-                                        className="border-b border-gray-300 w-full outline-none focus:border-black"
-                                        placeholder="(00) 00000-0000"
-                                    />
-                                ) : (
-                                    profile.phone || "Não informado"
-                                )}
-                            </div>
-                        </div>
-                    </div>
+            {/* DADOS — contato, documento, PIX e apresentação profissional num só bloco. */}
+            <Card as="section" aria-labelledby="perfil-dados">
+                <h2 id="perfil-dados" className="text-lg font-bold">Dados</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                    {isEditing
+                        ? 'Edite o que precisar e salve no fim.'
+                        : 'É o que as empresas veem quando você entra no elenco delas.'}
+                </p>
 
-                    {/* CPF — exigido pelo termo de prestação (F6). Editável só enquanto vazio. */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <h3 className="text-lg font-black uppercase mb-4">CPF</h3>
+                {isEditing ? (
+                    <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <Field label="Nome completo">
+                            <input
+                                type="text"
+                                value={formData.full_name}
+                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                autoComplete="name"
+                            />
+                        </Field>
+                        <Field label="Cidade">
+                            <input
+                                type="text"
+                                value={formData.city}
+                                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                autoComplete="address-level2"
+                            />
+                        </Field>
+                        <Field label="Telefone">
+                            <input
+                                type="tel"
+                                value={formData.phone}
+                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                placeholder="(00) 00000-0000"
+                                autoComplete="tel"
+                            />
+                        </Field>
+
+                        {/* CPF — exigido pelo termo de prestação (F6). Editável só enquanto vazio. */}
                         {cpfJaCadastrado ? (
-                            <>
-                                <p className="text-sm font-bold text-gray-600">{formatCpfCnpj(String(profile.cpf))}</p>
-                                <p className="text-xs text-gray-400 mt-2">
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-sm font-bold text-black">CPF</span>
+                                <p className="flex h-11 items-center rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
+                                    {formatCpfCnpj(String(profile.cpf))}
+                                </p>
+                                <p className="text-xs text-gray-600">
                                     Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
                                     termos que já assinou.
                                 </p>
-                            </>
-                        ) : isEditing ? (
-                            <div className="space-y-2">
+                            </div>
+                        ) : (
+                            <Field
+                                label="CPF"
+                                error={formData.cpf.trim() && !cpfValido ? 'CPF inválido.' : undefined}
+                                hint="Necessário para assinar o termo de prestação e receber o recibo do turno. Depois de salvo, só o suporte consegue alterar."
+                            >
                                 <input
                                     type="text"
                                     inputMode="numeric"
                                     value={formData.cpf}
                                     onChange={(e) => setFormData({ ...formData, cpf: formatCpfCnpj(e.target.value) })}
-                                    aria-label="CPF"
-                                    className={`w-full bg-gray-50 border-2 focus:border-black rounded-xl p-3 font-bold outline-none transition-all ${formData.cpf.trim() && !cpfValido ? 'border-red-400' : 'border-transparent'}`}
                                     placeholder="000.000.000-00"
                                 />
-                                {formData.cpf.trim() && !cpfValido && (
-                                    <p className="text-xs text-red-500 font-bold">CPF inválido.</p>
-                                )}
-                                <p className="text-xs text-gray-400">
-                                    Necessário para assinar o termo de prestação e receber o recibo do turno.
-                                    Depois de salvo, só o suporte consegue alterar.
-                                </p>
-                            </div>
-                        ) : (
-                            <>
-                                <p className="text-sm font-bold text-gray-600">Não informado</p>
-                                <p className="text-xs text-gray-400 mt-2">
-                                    Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
-                                </p>
-                                {!isEditing && (
-                                    <button
-                                        onClick={() => setIsEditing(true)}
-                                        className="mt-3 bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors"
-                                    >
-                                        Cadastrar CPF
-                                    </button>
-                                )}
-                            </>
+                            </Field>
                         )}
-                    </div>
 
-                    {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
-                    <div className="bg-white p-6 rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)]">
-                        <h3 className="text-lg font-black uppercase mb-4 flex items-center gap-2">
-                            <CreditCard size={20} /> Chave PIX
-                        </h3>
-                        {isEditing ? (
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="block text-xs font-bold uppercase mb-1 text-gray-400">Tipo de Chave</label>
-                                    <select
-                                        value={pixKeyType}
-                                        onChange={(e) => {
-                                            const nextType = e.target.value as PixKeyType;
-                                            setPixKeyType(nextType);
-                                            // Preserva o valor digitado — é o gesto de correção (ex.: CPF errado -> Telefone
-                                            // com o número já digitado), só reaplica a máscara do tipo novo.
-                                            setFormData({ ...formData, pix_key: formatPixKey(nextType, formData.pix_key) });
-                                        }}
-                                        aria-label="Tipo de chave PIX"
-                                        className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
-                                    >
-                                        {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
-                                            <option key={type} value={type}>{PIX_KEY_LABELS[type]}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold uppercase mb-1 text-gray-400">Chave</label>
-                                    <input
-                                        type="text"
-                                        value={formData.pix_key}
-                                        onChange={(e) => setFormData({ ...formData, pix_key: formatPixKey(pixKeyType, e.target.value) })}
-                                        aria-label="Chave PIX"
-                                        className={`w-full bg-gray-50 border-2 focus:border-black rounded-xl p-3 font-bold outline-none transition-all ${formData.pix_key.trim() && !isValidPixKey() ? 'border-red-400' : 'border-transparent'}`}
-                                        placeholder={PIX_KEY_PLACEHOLDERS[pixKeyType]}
-                                    />
-                                    {formData.pix_key.trim() && !isValidPixKey() && (
-                                        <p className="text-xs text-red-500 font-bold mt-1">Chave inválida para o tipo selecionado.</p>
-                                    )}
-                                </div>
-                                <p className="text-xs text-gray-400">
-                                    É assim que as empresas vão te pagar por fora do Worki (PIX).
-                                </p>
-                            </div>
-                        ) : (
-                            <p className="text-sm font-bold text-gray-600">{profile.pix_key || 'Não informada'}</p>
-                        )}
-                    </div>
-
-                </div>
-
-                {/* Right Column: Roles, Bio, Reviews */}
-                <div className="md:col-span-2 space-y-8">
-
-                    {/* Roles & Bio */}
-                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
-                        <div className="mb-6">
-                            <h3 className="text-xl font-black uppercase mb-3 flex items-center gap-2">
-                                <Briefcase size={20} /> Especialidades
-                            </h3>
-
-                            {isEditing ? (
-                                <div className="space-y-2">
-                                    {/* Função principal é ESCOLHIDA, não digitada.
-                                        Era `<input type="text"` livre, e em 22/08/2026 a produção
-                                        tinha um freela com o próprio E-MAIL gravado como função, e
-                                        "Garcom" convivendo com "Garçom" — a busca por função do
-                                        ShiftCallModal compara texto, então quem digitou sem cedilha
-                                        não era encontrado por quem buscava com.
-                                        A lista é a mesma de SHIFT_CATEGORIES (função do turno), para
-                                        o que o freela declara e o que a empresa pede falarem a mesma
-                                        língua.
-                                        O valor atual entra como opção mesmo se estiver fora da lista:
-                                        um `<select>` estrito APAGARIA a função de quem já tem uma
-                                        legada assim que salvasse qualquer outra coisa no perfil. */}
-                                    <select
-                                        value={formData.primary_role}
-                                        onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
-                                        aria-label="Função principal"
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none font-bold"
-                                    >
-                                        <option value="">Selecione sua função principal...</option>
-                                        {SHIFT_CATEGORIES.map(cat => (
-                                            <option key={cat.slug} value={cat.name}>{cat.name}</option>
-                                        ))}
-                                        {formData.primary_role
-                                            && !SHIFT_CATEGORIES.some(c => c.name === formData.primary_role) && (
-                                            <option value={formData.primary_role}>
-                                                {formData.primary_role} (atual)
-                                            </option>
-                                        )}
-                                    </select>
-                                    <textarea
-                                        value={formData.roles}
-                                        onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
-                                        placeholder="Outras habilidades (ex: Atendente, Barista, Caixa, Cumim)"
-                                        aria-label="Especialidades"
-                                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-20"
-                                    />
-                                    <p className="text-xs text-gray-400">Separe as especialidades por vírgula.</p>
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap gap-2">
-                                    {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
-                                        <span key={i} className="bg-black text-white px-4 py-2 rounded-lg font-bold uppercase text-sm border-2 border-black hover:bg-white hover:text-black transition-colors">
-                                            {role}
-                                        </span>
-                                    ))}
-                                    {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
-                                        <span className="text-gray-400 italic font-medium">Nenhuma especialidade listada.</span>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mb-6">
-                            <h3 className="text-xl font-black uppercase mb-3">Sobre</h3>
-                            {isEditing ? (
-                                <textarea
-                                    value={formData.bio}
-                                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                                    aria-label="Sobre voce"
-                                    className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none h-32"
-                                    placeholder="Conte um pouco sobre sua experiência em salão, bar, cafeteria ou cozinha..."
-                                />
-                            ) : (
-                                <p className="text-gray-600 font-medium leading-relaxed">
-                                    {profile.bio || "Este profissional ainda não adicionou uma biografia."}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <span className="block text-xs font-bold uppercase text-gray-400 mb-1">Experiência</span>
-                                <span className="block text-lg font-black">{profile.experience_years || "Iniciante"}</span>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <span className="block text-xs font-bold uppercase text-gray-400 mb-1">Regime</span>
-                                <span className="block text-lg font-black truncate" title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
-                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || "N/A")}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* F7 — Disponibilidade declarada: grade dia × período. É SINAL, NUNCA TRAVA
-                        (DDL §1): só ordena quem a empresa vê primeiro no Chamado de Turno, nunca
-                        filtra nem bloqueia ninguém. Distinta do campo legado "Disponibilidade"
-                        acima (sem dia da semana, write-once do onboarding) — só esta grade
-                        responde "disponível nesta terça de manhã?". */}
-                    <div className="bg-white p-8 rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
-                        <h3 className="text-xl font-black uppercase mb-1 flex items-center gap-2">
-                            <CalendarClock size={20} /> Disponibilidade da Semana
-                        </h3>
-                        <p className="text-sm text-gray-500 font-medium mb-4">
-                            Marque os dias e períodos em que você topa trabalhar. As empresas do seu
-                            elenco te veem primeiro nos chamados de turno que casam com sua grade.
-                        </p>
-
-                        {isEditing ? (
-                            <div className="space-y-2">
-                                {AVAILABILITY_WEEKDAYS.map((day) => (
-                                    <div
-                                        key={day}
-                                        className="flex items-center gap-2"
-                                        role="group"
-                                        aria-label={`Disponibilidade de ${AVAILABILITY_WEEKDAY_LABELS[day]}`}
-                                    >
-                                        <span className="w-10 shrink-0 text-xs font-black uppercase text-gray-500">
-                                            {AVAILABILITY_WEEKDAY_LABELS[day]}
-                                        </span>
-                                        <div className="flex gap-2 flex-1">
-                                            {AVAILABILITY_PERIODS.map((period) => {
-                                                const active = (availabilityGrade[day] ?? []).includes(period);
-                                                return (
-                                                    <button
-                                                        key={period}
-                                                        type="button"
-                                                        onClick={() => toggleAvailabilitySlot(day, period)}
-                                                        aria-pressed={active}
-                                                        aria-label={`${AVAILABILITY_WEEKDAY_LABELS[day]} — ${AVAILABILITY_PERIOD_LABELS[period]}`}
-                                                        className={`min-h-11 flex-1 rounded-xl border-2 border-black font-black uppercase text-[11px] transition-colors ${
-                                                            active
-                                                                ? 'bg-primary text-white'
-                                                                : 'bg-white text-gray-500 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {AVAILABILITY_PERIOD_LABELS[period]}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+                        {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
+                        <Field label="Tipo de chave PIX">
+                            <select
+                                value={pixKeyType}
+                                onChange={(e) => {
+                                    const nextType = e.target.value as PixKeyType;
+                                    setPixKeyType(nextType);
+                                    // Preserva o valor digitado — é o gesto de correção (ex.: CPF errado -> Telefone
+                                    // com o número já digitado), só reaplica a máscara do tipo novo.
+                                    setFormData({ ...formData, pix_key: formatPixKey(nextType, formData.pix_key) });
+                                }}
+                            >
+                                {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
+                                    <option key={type} value={type}>{PIX_KEY_LABELS[type]}</option>
                                 ))}
-                                <p className="text-xs text-gray-400 pt-2">
-                                    Deixe um dia sem nenhum período marcado se você não sabe ainda — isso é
-                                    diferente de "indisponível".
-                                </p>
-                            </div>
-                        ) : Object.keys(profile.availability_days ?? {}).length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
-                                    <span
-                                        key={day}
-                                        className="bg-primary-light text-primary px-3 py-2 rounded-pill font-bold text-xs uppercase border border-primary/30"
-                                    >
-                                        {AVAILABILITY_WEEKDAY_LABELS[day]}: {(profile.availability_days?.[day] ?? [])
-                                            .map((p) => AVAILABILITY_PERIOD_LABELS[p])
-                                            .join(', ')}
+                            </select>
+                        </Field>
+                        <Field
+                            label="Chave PIX"
+                            error={formData.pix_key.trim() && !isValidPixKey() ? 'Chave inválida para o tipo selecionado.' : undefined}
+                            hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
+                        >
+                            <input
+                                type="text"
+                                value={formData.pix_key}
+                                onChange={(e) => setFormData({ ...formData, pix_key: formatPixKey(pixKeyType, e.target.value) })}
+                                placeholder={PIX_KEY_PLACEHOLDERS[pixKeyType]}
+                            />
+                        </Field>
+
+                        {/* Função principal é ESCOLHIDA, não digitada.
+                            Era `<input type="text"` livre, e em 22/08/2026 a produção
+                            tinha um freela com o próprio E-MAIL gravado como função, e
+                            "Garcom" convivendo com "Garçom" — a busca por função do
+                            ShiftCallModal compara texto, então quem digitou sem cedilha
+                            não era encontrado por quem buscava com.
+                            A lista é a mesma de SHIFT_CATEGORIES (função do turno), para
+                            o que o freela declara e o que a empresa pede falarem a mesma
+                            língua.
+                            O valor atual entra como opção mesmo se estiver fora da lista:
+                            um `<select>` estrito APAGARIA a função de quem já tem uma
+                            legada assim que salvasse qualquer outra coisa no perfil. */}
+                        <Field label="Função principal" className="sm:col-span-2">
+                            <select
+                                value={formData.primary_role}
+                                onChange={(e) => setFormData({ ...formData, primary_role: e.target.value })}
+                            >
+                                <option value="">Selecione sua função principal...</option>
+                                {SHIFT_CATEGORIES.map(cat => (
+                                    <option key={cat.slug} value={cat.name}>{cat.name}</option>
+                                ))}
+                                {formData.primary_role
+                                    && !SHIFT_CATEGORIES.some(c => c.name === formData.primary_role) && (
+                                    <option value={formData.primary_role}>
+                                        {formData.primary_role} (atual)
+                                    </option>
+                                )}
+                            </select>
+                        </Field>
+                        <Field
+                            label="Especialidades"
+                            hint="Separe as especialidades por vírgula."
+                            className="sm:col-span-2"
+                        >
+                            <textarea
+                                value={formData.roles}
+                                onChange={(e) => setFormData({ ...formData, roles: e.target.value })}
+                                placeholder="Outras habilidades (ex: Atendente, Barista, Caixa, Cumim)"
+                                className="h-24 py-3"
+                            />
+                        </Field>
+                        <Field label="Sobre você" className="sm:col-span-2">
+                            <textarea
+                                value={formData.bio}
+                                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                                placeholder="Conte um pouco sobre sua experiência em salão, bar, cafeteria ou cozinha..."
+                                className="h-32 py-3"
+                            />
+                        </Field>
+                    </div>
+                ) : (
+                    <div className="mt-5 space-y-6">
+                        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DataRow label="Telefone">{profile.phone || 'Não informado'}</DataRow>
+                            <DataRow label="Chave PIX">{profile.pix_key || 'Não informada'}</DataRow>
+                            <DataRow label="CPF">
+                                {cpfJaCadastrado ? (
+                                    <>
+                                        {formatCpfCnpj(String(profile.cpf))}
+                                        <span className="mt-1 block text-xs font-normal text-gray-600">
+                                            Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
+                                            termos que já assinou.
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        Não informado
+                                        <span className="mt-1 block text-xs font-normal text-gray-600">
+                                            Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
+                                        </span>
+                                        <Button
+                                            variant="secondary"
+                                            onClick={() => setIsEditing(true)}
+                                            className="mt-3"
+                                        >
+                                            Cadastrar CPF
+                                        </Button>
+                                    </>
+                                )}
+                            </DataRow>
+                            <DataRow label="Experiência">{profile.experience_years || 'Iniciante'}</DataRow>
+                            <DataRow label="Regime">
+                                <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
+                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || 'N/A')}
+                                </span>
+                            </DataRow>
+                        </dl>
+
+                        <div>
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Especialidades</h3>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
+                                    <span key={i} className="inline-flex h-8 items-center rounded-pill border-2 border-black bg-white px-3 text-sm font-semibold">
+                                        {role}
                                     </span>
                                 ))}
+                                {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
+                                    <span className="text-sm italic text-gray-600">Nenhuma especialidade listada.</span>
+                                )}
                             </div>
-                        ) : (
-                            <div className="flex flex-col items-start gap-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4">
-                                <p className="text-sm font-bold text-gray-500">
-                                    Você ainda não declarou sua disponibilidade. Declare para aparecer
-                                    primeiro nos chamados de turno do seu elenco.
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsEditing(true)}
-                                    className="bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase text-sm transition-colors min-h-11"
-                                >
-                                    Declarar disponibilidade
-                                </button>
-                            </div>
-                        )}
+                        </div>
+
+                        <div>
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Sobre</h3>
+                            <p className="mt-2 text-sm leading-relaxed text-gray-700 sm:text-base">
+                                {profile.bio || 'Este profissional ainda não adicionou uma biografia.'}
+                            </p>
+                        </div>
                     </div>
+                )}
+            </Card>
 
-                    {/* F8 — Repositório de certificações: o freela cadastra/edita/remove a própria
-                        certificação externa. v1 SEM ARQUIVO (ADR-20260821) — só metadado +
-                        número de registro. */}
-                    <MyCertificationsSection />
+            {/* DISPONIBILIDADE — F7: grade dia × período. É SINAL, NUNCA TRAVA
+                (DDL §1): só ordena quem a empresa vê primeiro no Chamado de Turno, nunca
+                filtra nem bloqueia ninguém. Distinta do campo legado "Regime" em Dados
+                (sem dia da semana, write-once do onboarding) — só esta grade
+                responde "disponível nesta terça de manhã?". */}
+            <Card as="section" aria-labelledby="perfil-disponibilidade">
+                <h2 id="perfil-disponibilidade" className="flex items-center gap-2 text-lg font-bold">
+                    <CalendarClock size={20} /> Disponibilidade da semana
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                    Marque os dias e períodos em que você topa trabalhar. As empresas do seu
+                    elenco te veem primeiro nos chamados de turno que casam com sua grade.
+                </p>
 
-                    {/* F10 — opt-out de indicação entre empresas (workers.accepts_referrals). */}
-                    <ReferralOptOutSection />
+                {isEditing ? (
+                    <div className="mt-5 space-y-2">
+                        {AVAILABILITY_WEEKDAYS.map((day) => (
+                            <div
+                                key={day}
+                                className="flex items-center gap-3"
+                                role="group"
+                                aria-label={`Disponibilidade de ${AVAILABILITY_WEEKDAY_LABELS[day]}`}
+                            >
+                                <span className="w-10 shrink-0 text-sm font-bold text-gray-700">
+                                    {AVAILABILITY_WEEKDAY_LABELS[day]}
+                                </span>
+                                <div className="flex flex-1 gap-2">
+                                    {AVAILABILITY_PERIODS.map((period) => {
+                                        const active = (availabilityGrade[day] ?? []).includes(period);
+                                        return (
+                                            <button
+                                                key={period}
+                                                type="button"
+                                                onClick={() => toggleAvailabilitySlot(day, period)}
+                                                aria-pressed={active}
+                                                aria-label={`${AVAILABILITY_WEEKDAY_LABELS[day]} — ${AVAILABILITY_PERIOD_LABELS[period]}`}
+                                                className={`h-11 flex-1 rounded-xl border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                                                    active
+                                                        ? 'border-black bg-primary text-white'
+                                                        : 'border-gray-300 bg-white text-gray-700 hover:border-black'
+                                                }`}
+                                            >
+                                                {AVAILABILITY_PERIOD_LABELS[period]}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                        <p className="pt-2 text-xs text-gray-600">
+                            Deixe um dia sem nenhum período marcado se você não sabe ainda — isso é
+                            diferente de "indisponível".
+                        </p>
+                    </div>
+                ) : gradeDeclarada ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                        {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
+                            <span
+                                key={day}
+                                className="inline-flex h-8 items-center rounded-pill bg-primary-light px-3 text-sm font-semibold text-primary"
+                            >
+                                {AVAILABILITY_WEEKDAY_LABELS[day]}: {(profile.availability_days?.[day] ?? [])
+                                    .map((p) => AVAILABILITY_PERIOD_LABELS[p])
+                                    .join(', ')}
+                            </span>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4">
+                        <p className="text-sm text-gray-700">
+                            Você ainda não declarou sua disponibilidade. Declare para aparecer
+                            primeiro nos chamados de turno do seu elenco.
+                        </p>
+                        <Button variant="secondary" onClick={() => setIsEditing(true)}>
+                            Declarar disponibilidade
+                        </Button>
+                    </div>
+                )}
+            </Card>
 
-                    {/* F11 — opt-in de descoberta em urgência (workers.discoverable_for_sos).
-                        Adjacente à Disponibilidade (F7): só aparece com availability_days
-                        declarado — ver ddl-aprovado.md §5. */}
-                    <SosDiscoverySection />
+            {/* CERTIFICAÇÕES — F8: o freela cadastra/edita/remove a própria certificação externa.
+                v1 SEM ARQUIVO (ADR-20260821) — só metadado + número de registro. */}
+            <MyCertificationsSection />
 
-                    {/* F12 — selos das empresas onde já trabalhou (o dono gerencia visibilidade). */}
-                    {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
+            {/* Avaliações recebidas de empresas */}
+            {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
 
-                    {/* Avaliações recebidas de empresas */}
-                    {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
-
+            {/* PREFERÊNCIAS — como você aparece e como pode ser encontrado. Cada bloco é um
+                opt-in/opt-out independente (F10 indicação, F11 SOS, F12 selos). */}
+            <section aria-labelledby="perfil-preferencias" className="space-y-6">
+                <div className="mt-2">
+                    <h2 id="perfil-preferencias" className="text-lg font-bold">Preferências</h2>
+                    <p className="mt-1 text-sm text-gray-600">
+                        Você decide como aparece para as empresas e quando pode ser chamado.
+                    </p>
                 </div>
 
-            </div>
+                {/* F10 — opt-out de indicação entre empresas (workers.accepts_referrals). */}
+                <ReferralOptOutSection />
 
-            {/* Meu link de perfil — seção top-level (G2). Espelha a seção equivalente
-                do CompanyProfile.tsx. O botão dentro do modal QR foi mantido também. */}
-            <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                    <Link2 size={20} /> Meu Link de Perfil
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                    Compartilhe este link com uma empresa (WhatsApp, etc.) para ela te adicionar ao elenco
-                    sem precisar de QR ou Worki ID.
-                </p>
-                <button
-                    onClick={handleCopyMyLink}
-                    disabled={!workerId}
-                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                    {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                </button>
-            </div>
+                {/* F11 — opt-in de descoberta em urgência (workers.discoverable_for_sos).
+                    Adjacente à Disponibilidade (F7): só aparece com availability_days
+                    declarado — ver ddl-aprovado.md §5. */}
+                <SosDiscoverySection />
 
-            {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}
-            <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                <button
+                {/* F12 — selos das empresas onde já trabalhou (o dono gerencia visibilidade). */}
+                {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
+            </section>
+
+            {/* ATALHOS — paridade de navegacao mobile (R6): destinos que o BottomNav nao comporta. */}
+            <nav aria-labelledby="perfil-atalhos" className="border-t-2 border-gray-200 pt-6">
+                <h2 id="perfil-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h2>
+                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
+                    {[
+                        { to: '/indicacoes', label: 'Quem te indicou', icon: <Share2 size={18} /> },
+                        { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} /> },
+                    ].map(item => (
+                        <li key={item.to}>
+                            <Link
+                                to={item.to}
+                                className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2 text-sm font-bold transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                            >
+                                <span className="inline-flex items-center gap-2">{item.icon}{item.label}</span>
+                                <ChevronRight size={18} aria-hidden="true" />
+                            </Link>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
+
+            {/* CONTA — recolhida por padrão: Segurança, Sessão e exclusão ficam fora do caminho. */}
+            <section aria-labelledby="perfil-conta" className="border-t-2 border-gray-200 pt-6">
+                <h2 id="perfil-conta" className="text-lg font-bold">Conta</h2>
+                <p className="mt-1 text-sm text-gray-600">Senha, sessão e exclusão da conta.</p>
+                <Button
+                    variant="secondary"
                     onClick={() => setShowAccountSettings(prev => !prev)}
                     aria-expanded={showAccountSettings}
-                    className="flex items-center justify-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-black hover:text-white transition-colors"
+                    iconLeft={<Settings size={18} />}
+                    className="mt-4"
                 >
-                    <Settings size={18} />
-                    {showAccountSettings ? 'Ocultar Configurações da Conta' : 'Configurações da Conta'}
-                </button>
-            </div>
+                    {showAccountSettings ? 'Ocultar configurações da conta' : 'Configurações da conta'}
+                </Button>
 
-            {showAccountSettings && (
-                <>
-                    {/* Secao Seguranca */}
-                    <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                            <Lock size={20} /> Segurança
-                        </h3>
+                {showAccountSettings && (
+                    <div className="mt-6 space-y-6">
+                        {/* Segurança */}
+                        <Card as="section" aria-labelledby="perfil-seguranca">
+                            <h3 id="perfil-seguranca" className="flex items-center gap-2 text-base font-bold">
+                                <Lock size={18} /> Segurança
+                            </h3>
+                            <div className="mt-4 space-y-4">
+                                <div>
+                                    <Field label="Nova senha">
+                                        <input
+                                            id="new-password"
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
+                                            autoComplete="new-password"
+                                        />
+                                    </Field>
+                                    {newPassword && (() => {
+                                        const strength = getPasswordStrength(newPassword);
+                                        return (
+                                            <div className="mt-2">
+                                                <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
+                                                    <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
+                                                </div>
+                                                <p className="mt-1 text-xs text-gray-600">Força: {strength.label}</p>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
 
-                        <div className="mb-4">
-                            <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
-                            <input
-                                id="new-password"
-                                type="password"
-                                value={newPassword}
-                                onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                            />
-                            {newPassword && (() => {
-                                const strength = getPasswordStrength(newPassword);
-                                return (
-                                    <div className="mt-1">
-                                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                            <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-1">Força: {strength.label}</p>
-                                    </div>
-                                );
-                            })()}
+                                <Field label="Confirmar nova senha">
+                                    <input
+                                        id="confirm-password"
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
+                                        autoComplete="new-password"
+                                    />
+                                </Field>
+
+                                {passwordError && (
+                                    <p role="alert" className="text-xs font-bold text-red-600">{passwordError}</p>
+                                )}
+
+                                <Button
+                                    variant="secondary"
+                                    onClick={handleChangePassword}
+                                    disabled={!newPassword || !confirmPassword}
+                                    loading={passwordLoading}
+                                >
+                                    Alterar senha
+                                </Button>
+                            </div>
+                        </Card>
+
+                        {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
+                        <Card as="section" aria-labelledby="perfil-sessao">
+                            <h3 id="perfil-sessao" className="flex items-center gap-2 text-base font-bold">
+                                <LogOut size={18} /> Sessão
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-600">Sair da sua conta neste dispositivo.</p>
+                            <Button
+                                variant="secondary"
+                                onClick={handleLogout}
+                                loading={loggingOut}
+                                iconLeft={<LogOut size={18} />}
+                                className="mt-4"
+                            >
+                                {loggingOut ? 'Saindo...' : 'Sair da conta'}
+                            </Button>
+                        </Card>
+
+                        {/* Zona de perigo — discreta de propósito: sem moldura, só texto vermelho.
+                            O peso fica no modal de confirmação, não no atalho. */}
+                        <div className="flex flex-col gap-1 border-t-2 border-red-100 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                                <h3 className="text-sm font-bold text-red-600">Zona de perigo</h3>
+                                <p className="mt-1 text-xs text-gray-600">
+                                    A exclusão da sua conta é irreversível. Todos os seus dados pessoais serão anonimizados.
+                                </p>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDeleteModalOpen(true)}
+                                className="shrink-0 self-start text-red-600 sm:self-auto"
+                            >
+                                Excluir minha conta
+                            </Button>
                         </div>
-
-                        <div className="mb-2">
-                            <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
-                            <input
-                                id="confirm-password"
-                                type="password"
-                                value={confirmPassword}
-                                onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                            />
-                        </div>
-
-                        {passwordError && (
-                            <p className="text-red-600 text-sm font-bold mb-4">{passwordError}</p>
-                        )}
-
-                        <button
-                            onClick={handleChangePassword}
-                            disabled={!newPassword || !confirmPassword || passwordLoading}
-                            className="bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                            Alterar Senha
-                        </button>
                     </div>
-
-                    {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
-                    <div className="border-t-2 border-gray-200 pt-8 mt-8">
-                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
-                            <LogOut size={20} /> Sessão
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
-                        <button
-                            onClick={handleLogout}
-                            disabled={loggingOut}
-                            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
-                            {loggingOut ? 'Saindo...' : 'Sair da conta'}
-                        </button>
-                    </div>
-
-                    {/* Zona de Perigo */}
-                    <div className="border-t-2 border-red-200 pt-8 mt-8">
-                        <h3 className="text-red-600 font-black uppercase text-lg mb-4">Zona de Perigo</h3>
-                        <p className="text-sm text-gray-600 mb-4">A exclusão da sua conta é irreversível. Todos os seus dados pessoais serão anonimizados.</p>
-                        <button
-                            onClick={() => setDeleteModalOpen(true)}
-                            className="border-2 border-red-500 text-red-500 bg-white hover:bg-red-50 font-bold uppercase px-4 py-2 rounded-xl transition-colors"
-                        >
-                            Excluir minha conta
-                        </button>
-                    </div>
-                </>
-            )}
+                )}
+            </section>
 
         </div>
 
+        {isEditing && (
+            /* Barra de acao fixa no mobile: os campos editaveis longos (especialidades, bio,
+               grade de disponibilidade) ficam muito abaixo do par Salvar/Cancelar do hero —
+               no celular a pessoa terminava a edicao e nao tinha como salvar dali (KLM/Fitts).
+               z-[60] fica ACIMA do BottomNav (z-50); com z-40 a barra nascia escondida atras dele.
+               So mobile: no desktop o par do hero ja fica visivel. */
+            <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[60] flex gap-3 border-t-2 border-black bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] [&>*]:flex-1">
+                {editActions}
+            </div>
+        )}
+
         {/* Modal QR de identidade */}
         {qrModalOpen && workerId && (
-            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharQrPeloFundo}>
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,166,81,1)]">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-black uppercase tracking-tight">Meu QR de Identidade</h2>
-                        <button onClick={() => setQrModalOpen(false)} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+            <div
+                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
+                onClick={fecharQrPeloFundo}
+            >
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="perfil-qr-titulo"
+                    className="w-full max-w-sm rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <h2 id="perfil-qr-titulo" className="text-lg font-bold">Meu QR de identidade</h2>
+                        <button
+                            onClick={() => setQrModalOpen(false)}
+                            aria-label="Fechar"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl transition-colors hover:bg-gray-100"
+                        >
                             <X size={20} />
                         </button>
                     </div>
-                    <p className="text-sm font-bold text-gray-600 mb-5 text-center">
+                    <p className="mb-5 text-sm text-gray-600">
                         Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu Worki ID.
                     </p>
-                    <div className="flex justify-center mb-5">
-                        <div className="p-4 border-2 border-black rounded-2xl bg-white shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                    <div className="mb-5 flex justify-center">
+                        <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <QRCodeSVG
                                 value={workerId}
                                 size={200}
@@ -1294,26 +1333,30 @@ export default function Profile() {
                             />
                         </div>
                     </div>
-                    <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 text-center">
-                        <p className="text-xs font-bold uppercase text-gray-400 mb-1">Worki ID</p>
-                        <p className="font-mono text-xs font-bold text-gray-700 break-all">{workerId}</p>
+                    <div className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Worki ID</p>
+                        <p className="break-all font-mono text-xs font-bold text-gray-700">{workerId}</p>
                     </div>
-                    <button
-                        onClick={handleCopyWorkiId}
-                        className="w-full mt-3 bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
-                    >
-                        {idCopied ? <Check size={18} /> : <Copy size={18} />}
-                        {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
-                    </button>
-                    <button
-                        onClick={handleCopyMyLink}
-                        className="w-full mt-2 bg-white hover:bg-gray-50 text-black border-2 border-black px-6 py-3 rounded-xl font-black uppercase text-sm flex items-center justify-center gap-2 transition-colors"
-                    >
-                        {linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                        {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                    </button>
-                    <p className="text-xs text-gray-400 text-center mt-3 font-bold">
-                        Cole o <span className="font-black">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
+                    <div className="mt-4 flex flex-col gap-2">
+                        <Button
+                            variant="primary"
+                            fullWidth
+                            onClick={handleCopyWorkiId}
+                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
+                        >
+                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            fullWidth
+                            onClick={handleCopyMyLink}
+                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                        >
+                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
+                        </Button>
+                    </div>
+                    <p className="mt-3 text-center text-xs text-gray-600">
+                        Cole o <span className="font-bold">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
                     </p>
                 </div>
             </div>
@@ -1321,48 +1364,64 @@ export default function Profile() {
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={fecharExclusaoPeloFundo}>
-                <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                    <h2 className="text-xl font-black uppercase tracking-tight mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
-                    <ul className="space-y-2 mb-6 text-sm text-gray-700">
+            <div
+                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
+                onClick={fecharExclusaoPeloFundo}
+            >
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="perfil-exclusao-titulo"
+                    className="w-full max-w-md rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                >
+                    <h2 id="perfil-exclusao-titulo" className="mb-4 text-lg font-bold text-red-600">Tem certeza? Esta ação é irreversível.</h2>
+                    <ul className="mb-6 space-y-2 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">•</span>
+                            <span className="mt-0.5 font-bold text-red-500">•</span>
                             Seu perfil e dados pessoais serão anonimizados
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">•</span>
+                            <span className="mt-0.5 font-bold text-red-500">•</span>
                             Turnos e convites ativos serão cancelados
                         </li>
                     </ul>
-                    <label className="block text-sm font-bold mb-2">
-                        Digite <span className="font-black">EXCLUIR</span> para confirmar:
-                    </label>
-                    <input
-                        type="text"
-                        value={deleteConfirmText}
-                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-2 mb-6 font-bold focus:border-red-500 outline-none"
-                        placeholder="EXCLUIR"
-                        aria-label="Confirmar exclusão"
-                    />
-                    <div className="flex gap-3">
-                        <button
+                    <Field label="Digite EXCLUIR para confirmar">
+                        <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder="EXCLUIR"
+                            autoComplete="off"
+                        />
+                    </Field>
+                    <div className="mt-6 flex gap-3 [&>*]:flex-1">
+                        <Button
+                            variant="secondary"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
-                            className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
                         >
                             Cancelar
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="danger"
                             onClick={handleDeleteAccount}
                             disabled={deleteConfirmText !== 'EXCLUIR' || deleting}
-                            className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
         )}
         </>
+    );
+}
+
+/** Linha de leitura (rótulo em micro-caixa-alta + valor) usada no resumo de "Dados". */
+function DataRow({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</dt>
+            <dd className="mt-1 break-words text-sm font-medium text-black">{children}</dd>
+        </div>
     );
 }

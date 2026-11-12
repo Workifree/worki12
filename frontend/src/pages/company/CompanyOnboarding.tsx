@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Loader2, ArrowRight, ArrowLeft, Building2, Briefcase, Target } from 'lucide-react';
+import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import { validateCPF, validateCNPJ, formatCpfCnpj } from '../../lib/validation';
 import PageMeta from '../../components/PageMeta';
+import { Button, Card, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
 
 export default function CompanyOnboarding() {
@@ -155,71 +156,74 @@ export default function CompanyOnboarding() {
     };
 
     const stepLabels = ['Dados', 'Objetivos'];
+    const pendenciasStep2 = [
+        !formData.hiringGoal && 'o objetivo',
+        !formData.hiringVolume && 'o volume de contratação',
+        !tosAccepted && 'o aceite dos Termos',
+    ].filter(Boolean);
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center p-6 font-sans">
+        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
                 {/* Exit button */}
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-end mb-2">
                     <button
                         onClick={async () => {
                             if (!saidaArmada) { setSaidaArmada(true); setTimeout(() => setSaidaArmada(false), 4000); return; }
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
-                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-bold transition-colors gap-1 ${saidaArmada ? 'text-red-600' : 'text-gray-400 hover:text-black'}`}
+                        className={`min-h-11 px-2 -mx-2 inline-flex items-center justify-center text-sm font-semibold transition-colors gap-1 ${saidaArmada ? 'text-red-600' : 'text-gray-600 hover:text-black'}`}
                     >
                         <ArrowLeft size={14} /> {saidaArmada ? 'Sair descarta o cadastro — toque de novo' : 'Sair e voltar'}
                     </button>
+                    <span role="status" aria-live="polite" className="sr-only">
+                        {saidaArmada ? 'Toque de novo em sair para confirmar. O cadastro será descartado.' : ''}
+                    </span>
                 </div>
 
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Primeiro Acesso</h1>
-                    <p className="text-gray-500 font-medium">Vamos configurar sua empresa para montar seu elenco e organizar os turnos.</p>
-                </div>
+                <PageHeader
+                    title="Primeiro acesso"
+                    subtitle="Vamos configurar sua empresa para montar seu elenco e organizar os turnos."
+                />
 
-                {/* Progress Bar */}
-                <div className="flex items-center justify-center mb-12 gap-4">
-                    {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
-                        <div key={s} className="flex items-center gap-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black border-2 ${step >= s ? 'bg-black text-white border-black' : 'bg-transparent border-gray-300'}`}>{s}</div>
-                            <span className={`font-bold uppercase text-sm ${step >= s ? 'text-black' : 'text-gray-300'}`}>{stepLabels[s - 1]}</span>
-                            {s < TOTAL_STEPS && <div className={`h-1 w-16 ${step > s ? 'bg-black' : 'bg-gray-300'}`} />}
-                        </div>
-                    ))}
+                {/* Progresso: uma linha de texto + barra segmentada (substitui os círculos numerados) */}
+                <div className="mb-4">
+                    <p className="text-xs text-gray-600 mb-2">
+                        Passo {step} de {TOTAL_STEPS} · <span className="font-bold text-black">{stepLabels[step - 1]}</span>
+                    </p>
+                    <div className="flex gap-2" aria-hidden="true">
+                        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
+                            <div key={s} className={`h-1.5 flex-1 rounded-full ${step >= s ? 'bg-black' : 'bg-gray-300'}`} />
+                        ))}
+                    </div>
                 </div>
 
                 {/* Form Card */}
-                <div className="bg-white border-2 border-black rounded-2xl p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+                <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
 
-                    <form onSubmit={handleNext} className="space-y-6 relative z-10">
+                    <form onSubmit={handleNext} className="space-y-6">
 
                         {/* Step 1: Company Data */}
                         {step === 1 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                                <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <Building2 className="text-blue-600" /> Sobre a Empresa
-                                </h2>
+                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                                <h2 className="text-lg font-bold">Sobre a empresa</h2>
 
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-1">Nome da Empresa *</label>
+                                    <Field label="Nome da empresa" required>
                                         <input
                                             type="text"
                                             required
                                             value={formData.name}
                                             onChange={e => setFormData({ ...formData, name: e.target.value })}
                                             aria-label="Nome da empresa"
-                                            className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             placeholder="Ex: Tech Solutions Ltda"
                                         />
-                                    </div>
+                                    </Field>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">CNPJ ou CPF *</label>
+                                        <Field label="CNPJ ou CPF" required error={cnpjError || undefined}>
                                             <input
                                                 type="text"
                                                 required
@@ -229,55 +233,47 @@ export default function CompanyOnboarding() {
                                                     if (cnpjError) setCnpjError('');
                                                 }}
                                                 aria-label="CNPJ ou CPF"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="00.000.000/0001-00 ou 000.000.000-00"
                                             />
-                                            {cnpjError && <p className="text-red-600 text-xs font-bold mt-1">{cnpjError}</p>}
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Tipo de Empresa *</label>
+                                        </Field>
+                                        <Field label="Tipo de empresa" required>
                                             <select
                                                 required
                                                 value={formData.companyType}
                                                 onChange={e => setFormData({ ...formData, companyType: e.target.value })}
                                                 aria-label="Tipo de empresa"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             >
                                                 <option value="">Selecione...</option>
                                                 {companyTypes.map(ct => (
                                                     <option key={ct.value} value={ct.value}>{ct.label}</option>
                                                 ))}
                                             </select>
-                                        </div>
+                                        </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Setor *</label>
+                                        <Field label="Setor" required>
                                             <select
                                                 required
                                                 value={formData.industry}
                                                 onChange={e => setFormData({ ...formData, industry: e.target.value })}
                                                 aria-label="Setor"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                             >
                                                 <option value="">Selecione...</option>
                                                 {categories.map(cat => (
                                                     <option key={cat.slug} value={cat.name}>{cat.name}</option>
                                                 ))}
                                             </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase mb-1">Cidade *</label>
+                                        </Field>
+                                        <Field label="Cidade" required>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData({ ...formData, city: e.target.value })}
                                                 aria-label="Cidade"
-                                                className="w-full bg-gray-50 border-2 border-transparent focus:border-black rounded-xl p-3 font-bold outline-none transition-all"
                                                 placeholder="Ex: São Paulo"
                                             />
-                                        </div>
+                                        </Field>
                                     </div>
                                 </div>
                             </div>
@@ -285,17 +281,15 @@ export default function CompanyOnboarding() {
 
                         {/* Step 2: Goals */}
                         {step === 2 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                                <h2 className="text-2xl font-black uppercase flex items-center gap-2">
-                                    <Target className="text-green-600" /> Como você usa freelas
-                                </h2>
+                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                                <h2 className="text-lg font-bold">Como você usa freelas</h2>
 
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">Como você monta seus turnos?</label>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-5">
+                                    <fieldset>
+                                        <legend className="text-sm font-bold mb-2">Como você monta seus turnos?</legend>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                             {['Turnos pontuais (eventos/picos)', 'Escala recorrente (mesma equipe)', 'Reforço de fim de semana', 'Cobertura de faltas'].map(opt => (
-                                                <label key={opt} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex items-center gap-3 font-bold ${formData.hiringGoal === opt ? 'border-black bg-black/5' : 'border-gray-200 hover:border-black'}`}>
+                                                <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.hiringGoal === opt ? 'border-black bg-gray-100 text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input
                                                         type="radio"
                                                         name="goal"
@@ -309,22 +303,22 @@ export default function CompanyOnboarding() {
                                                 </label>
                                             ))}
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase mb-3">Turnos por mês (estimativa)</label>
-                                        <div className="flex gap-4">
+                                    <fieldset>
+                                        <legend className="text-sm font-bold mb-2">Turnos por mês (estimativa)</legend>
+                                        <div className="flex gap-2">
                                             {['1-5', '6-20', '20+'].map(opt => (
-                                                <label key={opt} className={`flex-1 border-2 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-center justify-center font-bold text-center ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-black'}`}>
-                                                    <input type="radio" name="volume" value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="hidden" />
-                                                    <span className="text-lg">{opt}</span>
-                                                    <span className="text-[10px] uppercase font-normal opacity-70">Turnos</span>
+                                                <label key={opt} className={`flex-1 border-2 rounded-xl min-h-11 px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                    <input type="radio" name="volume" value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="sr-only" />
+                                                    <span className="text-lg font-bold">{opt}</span>
+                                                    <span className="text-[10px] uppercase tracking-wide opacity-70">Turnos</span>
                                                 </label>
                                             ))}
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div className="flex items-start gap-3 mt-6">
+                                    <div className="flex items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
@@ -334,61 +328,52 @@ export default function CompanyOnboarding() {
                                         />
                                         <label htmlFor="tos" className="text-sm text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold inline-block py-2">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
                                         </label>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        <div className="pt-6 flex justify-between items-center border-t-2 border-gray-100 mt-8">
+                        {step === 2 && pendenciasStep2.length > 0 && (
+                            <p
+                                role="status"
+                                aria-live="polite"
+                                className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                            >
+                                Falta: {pendenciasStep2.join(', ')}.
+                            </p>
+                        )}
+
+                        <div className="pt-5 flex justify-between items-center border-t-2 border-gray-100">
                             {step > 1 ? (
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
                                     onClick={() => setStep(step - 1)}
-                                    className="font-bold flex items-center gap-1 text-gray-600 hover:text-black transition-colors"
+                                    iconLeft={<ArrowLeft size={18} />}
                                 >
-                                    <ArrowLeft size={18} /> Voltar
-                                </button>
+                                    Voltar
+                                </Button>
                             ) : (
                                 <div />
                             )}
 
-                            <div className="flex flex-col items-end gap-1">
-                                <button
-                                    type="submit"
-                                    disabled={loading || !canProceed()}
-                                    className="bg-black text-white px-8 py-3 rounded-xl font-black uppercase flex items-center gap-2 hover:bg-primary hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? (
-                                        <Loader2 className="animate-spin" />
-                                    ) : (
-                                        <>
-                                            {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'} <ArrowRight size={20} />
-                                        </>
-                                    )}
-                                </button>
-                                {step === 2 && !canProceed() && (
-                                    <p className="text-xs text-red-500 font-medium">
-                                        {[
-                                            !formData.hiringGoal && 'o objetivo',
-                                            !formData.hiringVolume && 'o volume de contratação',
-                                            !tosAccepted && 'o aceite dos Termos',
-                                        ].filter(Boolean).length > 0
-                                            ? `Falta: ${[!formData.hiringGoal && 'o objetivo', !formData.hiringVolume && 'o volume de contratação', !tosAccepted && 'o aceite dos Termos'].filter(Boolean).join(', ')}.`
-                                            : ''}
-                                    </p>
-                                )}
-                            </div>
+                            <Button
+                                type="submit"
+                                variant="dark"
+                                size="lg"
+                                loading={loading}
+                                disabled={!canProceed()}
+                                iconRight={<ArrowRight size={18} />}
+                            >
+                                {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
+                            </Button>
                         </div>
 
                     </form>
-
-                    {/* Decorative Watermark */}
-                    <Briefcase className="absolute -bottom-10 -right-10 text-gray-50 opacity-50 rotate-[-15deg]" size={200} />
-                </div>
+                </Card>
             </div>
         </div>
     );

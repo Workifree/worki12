@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useNavigate, Link } from 'react-router-dom';
-import { Share2, Loader2, Building2, Check, X } from 'lucide-react';
+import { Building2, Check, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
 import type { WorkerReferral } from '../types';
+import { Button, Card, PageHeader } from '../components/ui';
 
 // ---------------------------------------------------------------------------
 // "Quem te indicou" (F10) — o freela decide sobre indicações que empresas do seu
@@ -148,80 +149,83 @@ export default function QuemTeIndicou() {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
-      <h1 className="text-4xl font-black uppercase tracking-tighter flex items-center gap-3 mb-2">
-        <Share2 size={32} /> Quem te indicou
-      </h1>
-      <p className="text-gray-500 font-bold mb-8">
-        Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita.
-      </p>
+      <PageHeader
+        title="Quem te indicou"
+        subtitle="Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita."
+      />
 
       {erroCarga && !loading && <ErroDeCarga onRetry={load} />}
 
       {items.length === 0 && !erroCarga && (
-        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
-          <p className="text-sm font-bold text-gray-500">Nenhuma indicação pendente no momento.</p>
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+          <p className="text-sm font-semibold text-gray-600">Nenhuma indicação pendente no momento.</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4">
-        {items.map((item) => (
-          <div key={item.id} className="bg-white border-2 border-black rounded-2xl p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
-                {item.referringCompanyLogo ? (
-                  <img
-                    src={item.referringCompanyLogo}
-                    alt={item.referringCompanyName ?? 'Empresa'}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Building2 size={24} />
-                )}
+        {items.map((item) => {
+          const busy = respondingId === item.id;
+          return (
+            <Card key={item.id} as="article" className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
+                  {item.referringCompanyLogo ? (
+                    <img
+                      src={item.referringCompanyLogo}
+                      alt={item.referringCompanyName ?? 'Empresa'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Building2 size={24} />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-base truncate">{item.referringCompanyName ?? 'Uma empresa do seu elenco'}</p>
+                  <p className="text-sm text-gray-600">
+                    indicou você para{' '}
+                    <Link
+                      to={`/empresa/${item.requestingCompanyId}`}
+                      className="font-semibold text-black underline decoration-primary decoration-2 underline-offset-2 hover:text-primary"
+                    >
+                      {item.requestingCompanyName ?? 'outra empresa'}
+                    </Link>
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-black uppercase">{item.referringCompanyName ?? 'Uma empresa do seu elenco'}</p>
-                <p className="text-xs text-gray-500 font-bold uppercase">
-                  indicou você para{' '}
-                  <Link
-                    to={`/empresa/${item.requestingCompanyId}`}
-                    className="text-black underline decoration-primary decoration-2 underline-offset-2 hover:text-primary"
-                  >
-                    {item.requestingCompanyName ?? 'outra empresa'}
-                  </Link>
-                </p>
+
+              {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+
+              <div className="bg-primary-light text-primary rounded-xl p-4 text-sm font-semibold leading-relaxed">
+                Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
+                pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
+                recusar, nada muda: você continua no elenco de quem te indicou normalmente.
               </div>
-            </div>
 
-            {item.message && <p className="text-sm text-gray-600 italic mt-4">"{item.message}"</p>}
-
-            <div className="bg-primary-light text-primary rounded-xl p-4 mt-4 text-sm font-bold">
-              Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
-              pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
-              recusar, nada muda: você continua no elenco de quem te indicou normalmente.
-            </div>
-
-            <div className="flex gap-3 mt-4">
-              <button
-                type="button"
-                onClick={() => void handleDecline(item.id)}
-                disabled={respondingId === item.id}
-                className="flex-1 px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-gray-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
-              >
-                {respondingId === item.id && respondingAction === 'decline' ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
-                Recusar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleAccept(item.id)}
-                disabled={respondingId === item.id}
-                className="flex-1 bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors disabled:opacity-50 flex items-center justify-center gap-2 min-h-11"
-              >
-                {respondingId === item.id && respondingAction === 'accept' ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-                Aceitar
-              </button>
-            </div>
-          </div>
-        ))}
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => void handleDecline(item.id)}
+                  disabled={busy}
+                  loading={busy && respondingAction === 'decline'}
+                  iconLeft={<X size={18} />}
+                >
+                  Recusar
+                </Button>
+                <Button
+                  variant="primary"
+                  fullWidth
+                  onClick={() => void handleAccept(item.id)}
+                  disabled={busy}
+                  loading={busy && respondingAction === 'accept'}
+                  iconLeft={<Check size={18} />}
+                >
+                  Aceitar
+                </Button>
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

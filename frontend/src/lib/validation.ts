@@ -97,7 +97,7 @@ export function getPasswordStrength(pw: string): PasswordStrength {
     if (/[^a-zA-Z0-9]/.test(pw)) score++;
 
     if (score <= 1) return { label: 'Fraca', color: 'bg-red-500', width: 'w-1/4', score };
-    if (score <= 2) return { label: 'Razoavel', color: 'bg-yellow-500', width: 'w-1/2', score };
-    if (score <= 3) return { label: 'Media', color: 'bg-blue-500', width: 'w-3/4', score };
+    if (score <= 2) return { label: 'Razoável', color: 'bg-yellow-500', width: 'w-1/2', score };
+    if (score <= 3) return { label: 'Média', color: 'bg-blue-500', width: 'w-3/4', score };
     return { label: 'Forte', color: 'bg-green-500', width: 'w-full', score };
 }

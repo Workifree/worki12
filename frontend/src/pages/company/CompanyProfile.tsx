@@ -1,15 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, LayoutDashboard, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert, Share2, Network, HelpCircle, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, canSeeOrganization } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
+import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+
+/** Linha de leitura (modo visualização): rótulo discreto + valor. */
+function ReadField({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div>
+            <p className="text-xs font-semibold text-gray-600 mb-1">{label}</p>
+            {children}
+        </div>
+    );
+}
 
 interface Company {
     name: string;
@@ -38,6 +49,8 @@ export default function CompanyProfile() {
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [companyId, setCompanyId] = useState<string | null>(null);
+    // R16: mesma regra do Sidebar (canSeeOrganization) — só sócio/operador vê Organização.
+    const [showOrganizationShortcut, setShowOrganizationShortcut] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -107,6 +120,7 @@ export default function CompanyProfile() {
                     return;
                 }
                 setCompanyId(current.company_id);
+                setShowOrganizationShortcut(canSeeOrganization(current));
 
                 const { data } = await supabase
                     .from('companies')
@@ -345,7 +359,7 @@ export default function CompanyProfile() {
 
     if (loading) {
         return (
-            <div className="max-w-6xl mx-auto px-4 py-8 animate-pulse">
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-pulse">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div className="h-10 bg-gray-200 rounded w-1/3" />
                     <div className="h-10 bg-gray-200 rounded w-32" />
@@ -367,29 +381,21 @@ export default function CompanyProfile() {
 
     return (
         <>
-        <div className="max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Page Header */}
-            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter flex items-center gap-3 text-gray-900">
-                        <LayoutDashboard className="w-8 h-8" />
-                        Perfil da Empresa
-                    </h1>
-                    <p className="text-gray-500 font-medium mt-2">Gerencie as informações públicas da sua organização.</p>
-                </div>
+        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Page Header — a única ação primária da tela é "Editar Perfil" */}
+            <PageHeader
+                title="Perfil da Empresa"
+                subtitle="Gerencie as informações públicas da sua organização."
+                action={
+                    !isEditing ? (
+                        <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />}>
+                            Editar Perfil
+                        </Button>
+                    ) : undefined
+                }
+            />
 
-                {!isEditing && (
-                    <button
-                        onClick={() => setIsEditing(true)}
-                        className="bg-black text-white px-6 py-2.5 rounded-xl font-bold uppercase flex items-center gap-2 hover:bg-gray-800 transition-colors shadow-lg active:scale-95 duration-200"
-                    >
-                        <Pencil size={18} />
-                        Editar Perfil
-                    </button>
-                )}
-            </div>
-
-            <div className="bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+            <Card padding="none" className="overflow-hidden">
                 {/* Cover Image */}
                 <div className="h-32 sm:h-48 bg-black relative group">
                     {company.cover_url && (
@@ -403,12 +409,12 @@ export default function CompanyProfile() {
                                 accept="image/*"
                                 id="cover-upload"
                                 aria-label="Upload foto de capa"
-                                className="hidden"
+                                className="peer sr-only"
                                 onChange={(e) => handleImageUpload(e, 'cover')}
                             />
                             <label
                                 htmlFor="cover-upload"
-                                className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-white hover:scale-105 transition-all shadow-sm cursor-pointer"
+                                className="absolute bottom-3 right-3 bg-white border-2 border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
                             >
                                 <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar Capa'}
                             </label>
@@ -416,12 +422,12 @@ export default function CompanyProfile() {
                     )}
                 </div>
 
-                <div className="px-6 md:px-12 pb-12 relative">
-                    {/* Header Section with Logo and Actions logic */}
-                    <div className="flex flex-col md:flex-row gap-6 relative -top-12 mb-8 items-start">
+                <div className="px-5 sm:px-8 md:px-12 pb-8 relative">
+                    {/* Logo + título (o logo sobrepõe a capa) */}
+                    <div className="flex flex-col md:flex-row gap-4 md:gap-6 -mt-12 mb-6 items-start">
                         {/* Logo Container */}
                         <div className="relative shrink-0">
-                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex items-center justify-center relative group overflow-hidden z-10">
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center relative group overflow-hidden z-10">
                                 {company.logo_url ? (
                                     <img src={company.logo_url} alt="Logo" className="w-full h-full object-cover" />
                                 ) : (
@@ -434,18 +440,22 @@ export default function CompanyProfile() {
                                             accept="image/*"
                                             id="logo-upload"
                                             aria-label="Upload logo da empresa"
-                                            className="hidden"
+                                            className="peer sr-only"
                                             onChange={(e) => handleImageUpload(e, 'logo')}
                                         />
+                                        {/* Gatilho sempre visivel (no toque nao existe hover) e alcancavel por teclado
+                                            via input sr-only + peer-focus-visible. */}
                                         <label
                                             htmlFor="logo-upload"
-                                            className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                                            title="Trocar logo"
+                                            className="absolute bottom-1 right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary sm:h-9 sm:w-9"
                                         >
                                             {uploading === 'logo' ? (
-                                                <Loader2 className="animate-spin text-white" size={24} />
+                                                <Loader2 className="animate-spin" size={16} />
                                             ) : (
-                                                <Camera className="text-white" size={24} />
+                                                <Camera size={16} />
                                             )}
+                                            <span className="sr-only">Trocar logo da empresa</span>
                                         </label>
                                     </>
                                 )}
@@ -453,236 +463,178 @@ export default function CompanyProfile() {
                         </div>
 
                         {/* Title & Stats */}
-                        <div className="flex-1 pt-14 md:pt-16 md:pl-2">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div>
-                                    <h2 className="text-3xl font-black uppercase tracking-tight text-gray-900 leading-none mb-2">
+                        <div className="flex-1 w-full md:pt-14">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                <div className="min-w-0">
+                                    <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">
                                         {company.name || 'Nome da Empresa'}
                                     </h2>
-                                    <p className="text-lg font-medium text-gray-500 flex items-center gap-2">
+                                    <p className="text-sm sm:text-base text-gray-600">
                                         {company.industry || 'Setor não definido'}
                                     </p>
                                 </div>
 
                                 {/* Review Stats Badge */}
-                                <div className="flex items-center gap-2 bg-yellow-50 px-4 py-2 rounded-xl border border-yellow-100 shadow-sm">
+                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-xl border-2 border-yellow-200">
                                     {/* `|| 5.0` mostrava nota cheia para empresa sem nenhuma avaliação --
                                         e este selo e a prova social que o freela le antes de aceitar convite. */}
                                     <div className="flex items-center gap-1">
                                         <Star size={18} className={(company.reviews_count || 0) > 0 ? 'text-yellow-500 fill-yellow-500' : 'text-yellow-500/40'} />
-                                        <span className="font-black text-yellow-700 text-lg">
+                                        <span className="font-bold tabular-nums text-yellow-700 text-lg">
                                             {(company.reviews_count || 0) > 0 ? Number(company.rating_average).toFixed(1) : '—'}
                                         </span>
                                     </div>
-                                    <div className="w-px h-6 bg-yellow-200 mx-1"></div>
-                                    <span className="text-xs font-bold uppercase text-yellow-800/70 tracking-wide">{company.reviews_count === 1 ? '1 avaliação' : `${company.reviews_count || 0} avaliações`}</span>
+                                    <div className="w-px h-5 bg-yellow-300 mx-1"></div>
+                                    <span className="text-xs font-semibold text-yellow-800">{company.reviews_count === 1 ? '1 avaliação' : `${company.reviews_count || 0} avaliações`}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Edit Actions Bar (Sticky or prominent when editing) */}
+                    {/* Barra de edição: só Cancelar (secundário) e Salvar (primário) */}
                     {isEditing && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 animate-in fade-in slide-in-from-top-2">
-                            <div className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                                <Pencil size={16} /> Mode de Edição Ativo
-                            </div>
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <button
-                                    onClick={() => {
-                                        setIsEditing(false);
-                                        // Ideally revert changes here by refetching or keeping previous state
-                                    }}
-                                    className="flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold uppercase text-xs border-2 border-transparent hover:bg-gray-200 transition-colors text-gray-600"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="flex-1 md:flex-none bg-black text-white px-8 py-2.5 rounded-xl font-bold uppercase text-xs flex items-center justify-center gap-2 hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                                >
-                                    {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                                    {saving ? 'Salvando...' : 'Salvar Alterações'}
-                                </button>
-                            </div>
+                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 animate-in fade-in slide-in-from-top-2">
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    setIsEditing(false);
+                                    // Ideally revert changes here by refetching or keeping previous state
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="dark"
+                                onClick={handleSave}
+                                loading={saving}
+                                iconLeft={<Save size={16} />}
+                            >
+                                {saving ? 'Salvando...' : 'Salvar Alterações'}
+                            </Button>
                         </div>
                     )}
 
                     {/* Content Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                         {/* Left Column */}
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-3 border-b-2 border-gray-100 pb-4">
-                                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
-                                    <Building2 size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="font-black uppercase tracking-wider text-gray-900 text-sm">Sobre a Empresa</h3>
-                                    <p className="text-xs text-gray-400 font-medium mt-0.5">Informações principais</p>
-                                </div>
+                        <div className="space-y-5">
+                            <div className="border-b-2 border-gray-200 pb-3">
+                                <h3 className="text-lg font-bold text-gray-900">Sobre a Empresa</h3>
+                                <p className="text-sm text-gray-600">Informações principais</p>
                             </div>
 
-                            <div className="space-y-6">
-                                {/* Name Field */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Razão Social / Fantasia</label>
-                                    {isEditing ? (
+                            {isEditing ? (
+                                <div className="space-y-5">
+                                    <Field label="Razão Social / Fantasia">
                                         <input
                                             name="name"
                                             value={company.name || ''}
                                             onChange={handleChange}
-                                            aria-label="Razao social ou nome fantasia"
-                                            className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
                                             placeholder="Nome da Empresa"
                                         />
-                                    ) : (
-                                        <p className="text-xl font-bold text-gray-900">{company.name || '—'}</p>
-                                    )}
-                                </div>
-
-                                {/* Industry Field */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Setor</label>
-                                    {isEditing ? (
+                                    </Field>
+                                    <Field label="Setor">
                                         <input
                                             name="industry"
                                             value={company.industry || ''}
                                             onChange={handleChange}
-                                            aria-label="Setor"
-                                            className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
                                             placeholder="Ex: Bar & Restaurante, Cafeteria, Eventos, Hotelaria"
                                         />
-                                    ) : (
-                                        <p className="text-lg font-medium text-gray-700">{company.industry || '—'}</p>
-                                    )}
-                                </div>
-
-                                {/* Description Field */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Descrição</label>
-                                    {isEditing ? (
+                                    </Field>
+                                    <Field label="Descrição">
                                         <textarea
                                             name="description"
                                             value={company.description || ''}
                                             onChange={handleChange}
-                                            aria-label="Descricao da empresa"
-                                            className="w-full font-medium text-gray-700 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all min-h-[140px] resize-none"
+                                            className="min-h-[140px] py-3 leading-relaxed resize-none"
                                             placeholder="Conte sobre sua operação, ambiente e estilo de atendimento..."
                                         />
-                                    ) : (
-                                        <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap">{company.description || 'Nenhuma descrição informada.'}</p>
-                                    )}
+                                    </Field>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="space-y-5">
+                                    <ReadField label="Razão Social / Fantasia">
+                                        <p className="text-lg font-bold text-gray-900">{company.name || '—'}</p>
+                                    </ReadField>
+                                    <ReadField label="Setor">
+                                        <p className="text-base text-gray-700">{company.industry || '—'}</p>
+                                    </ReadField>
+                                    <ReadField label="Descrição">
+                                        <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap">{company.description || 'Nenhuma descrição informada.'}</p>
+                                    </ReadField>
+                                </div>
+                            )}
                         </div>
 
                         {/* Right Column */}
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-3 border-b-2 border-gray-100 pb-4">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
-                                    <MapPin size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="font-black uppercase tracking-wider text-gray-900 text-sm">Contato & Endereço</h3>
-                                    <p className="text-xs text-gray-400 font-medium mt-0.5">Canais de comunicação</p>
-                                </div>
+                        <div className="space-y-5">
+                            <div className="border-b-2 border-gray-200 pb-3">
+                                <h3 className="text-lg font-bold text-gray-900">Contato & Endereço</h3>
+                                <p className="text-sm text-gray-600">Canais de comunicação</p>
                             </div>
 
-                            <div className="space-y-6">
-                                {/* Website */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Website</label>
-                                    {isEditing ? (
-                                        <div className="relative">
-                                            <Globe size={18} className="absolute top-1/2 -translate-y-1/2 left-4 text-gray-400" />
-                                            <input
-                                                name="website"
-                                                value={company.website || ''}
-                                                onChange={handleChange}
-                                                aria-label="Website"
-                                                className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
-                                                placeholder="https://..."
-                                            />
-                                        </div>
-                                    ) : (
-                                        company.website ? (
-                                            <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-bold hover:underline">
+                            {isEditing ? (
+                                <div className="space-y-5">
+                                    <Field label="Website">
+                                        <input
+                                            name="website"
+                                            value={company.website || ''}
+                                            onChange={handleChange}
+                                            placeholder="https://..."
+                                        />
+                                    </Field>
+                                    <Field label="Email Corporativo">
+                                        <input
+                                            name="email"
+                                            value={company.email || ''}
+                                            onChange={handleChange}
+                                            placeholder="email@empresa.com"
+                                        />
+                                    </Field>
+                                    <Field label="Localização">
+                                        <input
+                                            name="address"
+                                            value={company.address || ''}
+                                            onChange={handleChange}
+                                            placeholder="Endereço completo"
+                                        />
+                                    </Field>
+                                </div>
+                            ) : (
+                                <div className="space-y-5">
+                                    <ReadField label="Website">
+                                        {company.website ? (
+                                            <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">
                                                 <Globe size={16} /> {company.website.replace(/^https?:\/\//, '')}
                                             </a>
-                                        ) : <p className="text-gray-400 font-medium">—</p>
-                                    )}
-                                </div>
-
-                                {/* Email */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Email Corporativo</label>
-                                    {isEditing ? (
-                                        <div className="relative">
-                                            <Mail size={18} className="absolute top-1/2 -translate-y-1/2 left-4 text-gray-400" />
-                                            <input
-                                                name="email"
-                                                value={company.email || ''}
-                                                onChange={handleChange}
-                                                aria-label="Email corporativo"
-                                                className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
-                                                placeholder="email@empresa.com"
-                                            />
-                                        </div>
-                                    ) : (
-                                        company.email ? (
-                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex items-center gap-2 text-gray-900 font-bold hover:text-blue-600 transition-colors">
-                                                <Mail size={16} className="text-gray-400" /> {company.email}
+                                        ) : <p className="text-gray-600">—</p>}
+                                    </ReadField>
+                                    <ReadField label="Email Corporativo">
+                                        {company.email ? (
+                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
+                                                <Mail size={16} className="text-gray-500" /> {company.email}
                                             </a>
-                                        ) : <p className="text-gray-400 font-medium">—</p>
-                                    )}
-                                </div>
-
-                                {/* Address */}
-                                <div className="group">
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Localização</label>
-                                    {isEditing ? (
-                                        <div className="relative">
-                                            <MapPin size={18} className="absolute top-1/2 -translate-y-1/2 left-4 text-gray-400" />
-                                            <input
-                                                name="address"
-                                                value={company.address || ''}
-                                                onChange={handleChange}
-                                                aria-label="Localizacao"
-                                                className="w-full font-bold text-gray-900 border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3 focus:border-black focus:ring-0 outline-none transition-all"
-                                                placeholder="Endereço completo"
-                                            />
-                                        </div>
-                                    ) : (
+                                        ) : <p className="text-gray-600">—</p>}
+                                    </ReadField>
+                                    <ReadField label="Localização">
                                         <div className="flex items-start gap-2">
-                                            <MapPin size={18} className="text-gray-400 mt-1 shrink-0" />
-                                            <p className="font-medium text-gray-700">{company.address || '—'}</p>
+                                            <MapPin size={18} className="text-gray-500 mt-0.5 shrink-0" />
+                                            <p className="text-gray-700">{company.address || '—'}</p>
                                         </div>
-                                    )}
+                                    </ReadField>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
-            </div>
-
+            </Card>
 
             {/* Briefing padrão do negócio — pré-preenchido ao criar um turno */}
-            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                    <h3 className="text-xl font-black uppercase flex items-center gap-2">
-                        <ClipboardList size={20} /> Briefing Padrão
-                    </h3>
-                    {!isEditing && (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="min-h-11 px-2 -mx-2 text-xs font-black uppercase text-gray-400 hover:text-black inline-flex items-center gap-1 transition-colors flex-shrink-0"
-                        >
-                            <Pencil size={14} /> Editar
-                        </button>
-                    )}
-                </div>
-                <p className="text-sm text-gray-500 mb-4">
+            <Card className="mt-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
+                    <ClipboardList size={20} /> Briefing Padrão
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
                     Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
                 </p>
                 {isEditing ? (
@@ -692,37 +644,27 @@ export default function CompanyProfile() {
                             value={company.default_briefing || ''}
                             onChange={handleChange}
                             aria-label="Briefing padrão do negócio"
-                            className="w-full font-medium text-gray-700 border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all min-h-[120px] resize-none"
+                            className={`${FIELD_CONTROL_CLASS} min-h-[120px] py-3 leading-relaxed resize-none`}
                             placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
                         />
-                        <p className="text-xs font-bold text-yellow-700 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                        <p className="text-xs font-semibold text-yellow-800 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
                             Visível para qualquer freela que abrir o perfil da sua empresa — não inclua senhas nem dados internos.
                         </p>
                     </>
                 ) : (
-                    <p className="text-base leading-relaxed text-gray-600 whitespace-pre-wrap bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
+                    <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
                     </p>
                 )}
-            </div>
+            </Card>
 
             {/* F5 — Guarda de risco de vínculo trabalhista: aviso configurável, nunca bloqueia
                 (decisão do owner). Mesmo padrão de tela/card do Briefing Padrão acima. */}
-            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                    <h3 className="text-xl font-black uppercase flex items-center gap-2">
-                        <ShieldAlert size={20} /> Preferências
-                    </h3>
-                    {!isEditing && (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="min-h-11 px-2 -mx-2 text-xs font-black uppercase text-gray-400 hover:text-black inline-flex items-center gap-1 transition-colors flex-shrink-0"
-                        >
-                            <Pencil size={14} /> Editar
-                        </button>
-                    )}
-                </div>
-                <p className="text-sm text-gray-500 mb-4">
+            <Card className="mt-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
+                    <ShieldAlert size={20} /> Preferências
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
                     O Worki nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
                     chamar continua sua; consulte seu contador/jurídico se tiver dúvida.
                 </p>
@@ -731,200 +673,222 @@ export default function CompanyProfile() {
                     <>
                         <label className="flex items-center justify-between gap-4 min-h-[44px] py-2 cursor-pointer">
                             <span>
-                                <span className="block font-black text-sm uppercase">
+                                <span className="block font-bold text-sm">
                                     Avisar sobre frequência do mesmo freela
                                 </span>
-                                <span className="block text-xs font-bold text-gray-500 mt-0.5">
+                                <span className="block text-xs text-gray-600 mt-0.5">
                                     Mostra um selo (não bloqueia) quando um freela do elenco passaria do
                                     limite de vezes na mesma semana (dom–sáb).
                                 </span>
                             </span>
-                            <span
-                                className={`relative inline-flex items-center h-7 w-12 rounded-pill border-2 border-black flex-shrink-0 transition-colors ${
-                                    company.link_risk_alert_enabled !== false ? 'bg-primary' : 'bg-gray-200'
-                                }`}
-                            >
+                            <span className="relative inline-flex flex-shrink-0">
                                 <input
                                     type="checkbox"
+                                    role="switch"
                                     checked={company.link_risk_alert_enabled !== false}
                                     onChange={(e) =>
                                         setCompany(prev => ({ ...prev, link_risk_alert_enabled: e.target.checked }))
                                     }
                                     aria-label="Avisar sobre frequência do mesmo freela"
-                                    className="sr-only"
+                                    className="peer sr-only"
                                 />
                                 <span
-                                    className={`inline-block w-5 h-5 bg-white border-2 border-black rounded-full transform transition-transform ${
-                                        company.link_risk_alert_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
+                                    aria-hidden="true"
+                                    className={`inline-flex items-center h-7 w-12 rounded-pill border-2 border-black transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
+                                        company.link_risk_alert_enabled !== false ? 'bg-primary' : 'bg-gray-200'
                                     }`}
-                                />
+                                >
+                                    <span
+                                        className={`inline-block w-5 h-5 bg-white border-2 border-black rounded-full transform transition-transform ${
+                                            company.link_risk_alert_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
+                                        }`}
+                                    />
+                                </span>
                             </span>
                         </label>
 
-                        <div className={`mt-2 ${company.link_risk_alert_enabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
-                            <label htmlFor="link-risk-threshold" className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">
-                                Avisar quando passar de quantas vezes por semana
-                            </label>
-                            <input
-                                id="link-risk-threshold"
-                                name="link_risk_alert_threshold"
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                max={7}
-                                step={1}
-                                value={company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}
-                                onChange={(e) => {
-                                    const raw = Number(e.target.value);
-                                    const clamped = Number.isFinite(raw) ? Math.min(7, Math.max(1, Math.round(raw))) : 1;
-                                    setCompany(prev => ({ ...prev, link_risk_alert_threshold: clamped }));
-                                }}
-                                disabled={company.link_risk_alert_enabled === false}
-                                className="w-24 font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-black focus:ring-0 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50"
-                            />
-                            <p className="text-xs text-gray-500 mt-2">
-                                Padrão: {DEFAULT_LINK_RISK_THRESHOLD} — o selo aparece a partir da {DEFAULT_LINK_RISK_THRESHOLD + 1}ª vez. Mínimo 1, máximo 7 (dom–sáb).
-                            </p>
+                        <div className={`mt-3 ${company.link_risk_alert_enabled === false ? 'opacity-40 pointer-events-none' : ''}`}>
+                            <Field
+                                label="Avisar quando passar de quantas vezes por semana"
+                                hint={`Padrão: ${DEFAULT_LINK_RISK_THRESHOLD} — o selo aparece a partir da ${DEFAULT_LINK_RISK_THRESHOLD + 1}ª vez. Mínimo 1, máximo 7 (dom–sáb).`}
+                            >
+                                <input
+                                    id="link-risk-threshold"
+                                    name="link_risk_alert_threshold"
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={1}
+                                    max={7}
+                                    step={1}
+                                    value={company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}
+                                    onChange={(e) => {
+                                        const raw = Number(e.target.value);
+                                        const clamped = Number.isFinite(raw) ? Math.min(7, Math.max(1, Math.round(raw))) : 1;
+                                        setCompany(prev => ({ ...prev, link_risk_alert_threshold: clamped }));
+                                    }}
+                                    disabled={company.link_risk_alert_enabled === false}
+                                    className="max-w-[7rem] tabular-nums"
+                                />
+                            </Field>
                         </div>
                     </>
                 ) : (
-                    <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
+                    <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
                         <div>
-                            <p className="font-black text-sm uppercase">Avisar sobre frequência do mesmo freela</p>
-                            <p className="text-xs font-bold text-gray-500 mt-0.5">
+                            <p className="font-bold text-sm">Avisar sobre frequência do mesmo freela</p>
+                            <p className="text-xs text-gray-600 mt-0.5">
                                 {company.link_risk_alert_enabled !== false
                                     ? `Avisando quando passar de ${company.link_risk_alert_threshold ?? DEFAULT_LINK_RISK_THRESHOLD}x na mesma semana (dom–sáb), contando só turnos da sua empresa.`
                                     : 'Aviso desligado.'}
                             </p>
                         </div>
                         <span
-                            className={`px-3 py-1.5 rounded-pill border-2 border-black font-black uppercase text-xs flex-shrink-0 ${
-                                company.link_risk_alert_enabled !== false ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-500'
+                            className={`px-3 py-1 rounded-pill border-2 border-black font-semibold text-xs flex-shrink-0 ${
+                                company.link_risk_alert_enabled !== false ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-600'
                             }`}
                         >
                             {company.link_risk_alert_enabled !== false ? 'Ligado' : 'Desligado'}
                         </span>
                     </div>
                 )}
-            </div>
+            </Card>
 
             {/* Avaliações recebidas de freelas */}
             {companyId && <ProfileReviews reviewedId={companyId} reviewerRole="worker" />}
 
             {/* Meu link de perfil — a empresa compartilha o PRÓPRIO link para ser
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
-            <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+            <Card className="mt-6">
+                <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
                     <Link2 size={20} /> Meu Link de Elenco
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
                     para o seu elenco sem precisar de QR ou Worki ID.
                 </p>
-                <button
+                <Button
+                    variant="secondary"
                     onClick={handleCopyMyLink}
                     disabled={!companyId}
-                    className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
                 >
-                    {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                     {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                </button>
-            </div>
+                </Button>
+            </Card>
+
+            {/* Atalhos — paridade de navegacao mobile (R6): o BottomNav nao comporta estes destinos. */}
+            <nav aria-labelledby="empresa-atalhos" className="mt-6">
+                <h3 id="empresa-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h3>
+                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
+                    {[
+                        { to: '/company/indicacoes', label: 'Indicações', icon: <Share2 size={18} />, show: true },
+                        { to: '/company/organization', label: 'Organização', icon: <Network size={18} />, show: showOrganizationShortcut },
+                        { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} />, show: true },
+                    ].filter(item => item.show).map(item => (
+                        <li key={item.to}>
+                            <Link
+                                to={item.to}
+                                className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2 text-sm font-bold transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                            >
+                                <span className="inline-flex items-center gap-2">{item.icon}{item.label}</span>
+                                <ChevronRight size={18} aria-hidden="true" />
+                            </Link>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
 
             {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}
-            <div className="mt-8">
-                <button
+            <div className="mt-6">
+                <Button
+                    variant="secondary"
                     onClick={() => setShowAccountSettings(prev => !prev)}
                     aria-expanded={showAccountSettings}
-                    className="flex items-center justify-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-black uppercase border-2 border-black hover:bg-black hover:text-white transition-colors"
+                    iconLeft={<Settings size={18} />}
                 >
-                    <Settings size={18} />
                     {showAccountSettings ? 'Ocultar Configurações da Conta' : 'Configurações da Conta'}
-                </button>
+                </Button>
             </div>
 
             {showAccountSettings && (
                 <>
                     {/* Secao Seguranca */}
-                    <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <Card className="mt-6">
+                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                             <Lock size={20} /> Seguranca
                         </h3>
 
-                        <div className="mb-4">
-                            <label htmlFor="new-password" className="block text-sm font-bold uppercase mb-1">Nova Senha</label>
-                            <input
-                                id="new-password"
-                                type="password"
-                                value={newPassword}
-                                onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                            />
-                            {newPassword && (() => {
-                                const strength = getPasswordStrength(newPassword);
-                                return (
-                                    <div className="mt-1">
-                                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                            <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
+                        <div className="space-y-4">
+                            <div>
+                                <Field label="Nova Senha">
+                                    <input
+                                        id="new-password"
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
+                                    />
+                                </Field>
+                                {newPassword && (() => {
+                                    const strength = getPasswordStrength(newPassword);
+                                    return (
+                                        <div className="mt-2">
+                                            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                <div className={`h-full ${strength.color} rounded-full ${strength.width}`} />
+                                            </div>
+                                            <p className="text-xs text-gray-600 mt-1">Força: {strength.label}</p>
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-1">Forca: {strength.label}</p>
-                                    </div>
-                                );
-                            })()}
+                                    );
+                                })()}
+                            </div>
+
+                            <Field label="Confirmar Nova Senha">
+                                <input
+                                    id="confirm-password"
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
+                                />
+                            </Field>
+
+                            {passwordError && (
+                                <p role="alert" className="text-xs font-bold text-red-600">{passwordError}</p>
+                            )}
+
+                            <Button
+                                variant="dark"
+                                onClick={handleChangePassword}
+                                disabled={!newPassword || !confirmPassword}
+                                loading={passwordLoading}
+                            >
+                                Alterar Senha
+                            </Button>
                         </div>
-
-                        <div className="mb-2">
-                            <label htmlFor="confirm-password" className="block text-sm font-bold uppercase mb-1">Confirmar Nova Senha</label>
-                            <input
-                                id="confirm-password"
-                                type="password"
-                                value={confirmPassword}
-                                onChange={e => { setConfirmPassword(e.target.value); setPasswordError(null); }}
-                                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-black outline-none font-medium"
-                            />
-                        </div>
-
-                        {passwordError && (
-                            <p className="text-red-600 text-sm font-bold mb-4">{passwordError}</p>
-                        )}
-
-                        <button
-                            onClick={handleChangePassword}
-                            disabled={!newPassword || !confirmPassword || passwordLoading}
-                            className="bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            {passwordLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                            Alterar Senha
-                        </button>
-                    </div>
+                    </Card>
 
                     {/* Sessão — logout avulso, acessível no mobile via item "Perfil" do BottomNav (R3) */}
-                    <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                        <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2">
+                    <Card className="mt-6">
+                        <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
                             <LogOut size={20} /> Sessão
                         </h3>
                         <p className="text-sm text-gray-600 mb-4">Sair da sua conta neste dispositivo.</p>
-                        <button
+                        <Button
+                            variant="secondary"
                             onClick={handleLogout}
-                            disabled={loggingOut}
-                            className="flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-black uppercase hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            loading={loggingOut}
+                            iconLeft={<LogOut size={18} />}
                         >
-                            {loggingOut ? <Loader2 size={18} className="animate-spin" /> : <LogOut size={18} />}
                             {loggingOut ? 'Saindo...' : 'Sair da conta'}
-                        </button>
-                    </div>
+                        </Button>
+                    </Card>
 
                     {/* Zona de Perigo */}
-                    <div className="mt-8 bg-white border-2 border-red-500 rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(239,68,68,1)]">
-                        <h3 className="text-red-600 font-black uppercase text-lg mb-4">Zona de Perigo</h3>
+                    <Card className="mt-6 !border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]">
+                        <h3 className="text-red-600 font-bold text-lg mb-1">Zona de Perigo</h3>
                         <p className="text-sm text-gray-600 mb-4">A exclusão da sua empresa é irreversível. Todos os dados da empresa serão anonimizados.</p>
-                        <button
-                            onClick={() => setDeleteModalOpen(true)}
-                            className="border-2 border-red-500 text-red-500 bg-white hover:bg-red-50 font-bold uppercase px-4 py-2 rounded-xl transition-colors"
-                        >
+                        <Button variant="danger" onClick={() => setDeleteModalOpen(true)}>
                             Excluir minha empresa
-                        </button>
-                    </div>
+                        </Button>
+                    </Card>
                 </>
             )}
 
@@ -932,48 +896,53 @@ export default function CompanyProfile() {
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="delete-company-title"
+            >
                 <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                    <h2 className="text-xl font-black uppercase tracking-tight mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
+                    <h2 id="delete-company-title" className="text-lg font-bold mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="space-y-2 mb-6 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">&#8226;</span>
+                            <span className="font-bold text-red-500 mt-0.5">&#8226;</span>
                             Dados da empresa serão anonimizados
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">&#8226;</span>
+                            <span className="font-bold text-red-500 mt-0.5">&#8226;</span>
                             Todos os turnos e convites serão cancelados
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="font-black text-red-500 mt-0.5">&#8226;</span>
+                            <span className="font-bold text-red-500 mt-0.5">&#8226;</span>
                             Pagamentos pendentes bloqueiam a exclusão
                         </li>
                     </ul>
-                    <label className="block text-sm font-bold mb-2">
-                        Digite <span className="font-black">EXCLUIR</span> para confirmar:
-                    </label>
-                    <input
-                        type="text"
-                        value={deleteConfirmText}
-                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-2 mb-6 font-bold focus:border-red-500 outline-none"
-                        placeholder="EXCLUIR"
-                        aria-label="Confirmar exclusao"
-                    />
+                    <Field label="Digite EXCLUIR para confirmar" className="mb-6">
+                        <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder="EXCLUIR"
+                        />
+                    </Field>
                     <div className="flex gap-3">
-                        <button
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
-                            className="flex-1 py-3 border-2 border-black font-bold rounded-xl hover:bg-gray-50 transition-colors"
                         >
                             Cancelar
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="danger"
+                            className="flex-1"
                             onClick={handleDeleteAccount}
-                            disabled={deleteConfirmText !== 'EXCLUIR' || deleting}
-                            className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={deleteConfirmText !== 'EXCLUIR'}
+                            loading={deleting}
                         >
                             {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

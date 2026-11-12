@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import PwaPrompts from './components/PwaPrompts';
 
 import { Suspense, lazy } from 'react';
 
@@ -122,6 +123,7 @@ function App() {
         <NotificationProvider>
           <ToastProvider>
             <BrowserRouter>
+              <PwaPrompts />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public Routes */}

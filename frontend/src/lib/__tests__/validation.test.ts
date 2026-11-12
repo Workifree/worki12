@@ -216,21 +216,21 @@ describe('getPasswordStrength', () => {
         expect(result.score).toBe(1)
     })
 
-    it('senha com 8+ chars e numeros retorna Razoavel (score 2)', () => {
+    it('senha com 8+ chars e numeros retorna Razoável (score 2)', () => {
         const result = getPasswordStrength('abcdefg1')
-        expect(result.label).toBe('Razoavel')
+        expect(result.label).toBe('Razoável')
         expect(result.score).toBe(2)
     })
 
-    it('senha com 8+ chars, maiusculas e minusculas retorna Razoavel (score 2)', () => {
+    it('senha com 8+ chars, maiusculas e minusculas retorna Razoável (score 2)', () => {
         const result = getPasswordStrength('Abcdefgh')
-        expect(result.label).toBe('Razoavel')
+        expect(result.label).toBe('Razoável')
         expect(result.score).toBe(2)
     })
 
     it('senha com 8+ chars, maiusculas, minusculas e numeros retorna Media (score 3)', () => {
         const result = getPasswordStrength('Abcdefg1')
-        expect(result.label).toBe('Media')
+        expect(result.label).toBe('Média')
         expect(result.score).toBe(3)
     })
 

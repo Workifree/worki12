@@ -1,0 +1,36 @@
+{
+  "id": "/",
+  "name": "Worki",
+  "short_name": "Worki",
+  "description": "Trabalho freela com confiança: empresa convida quem já conhece, registra cada turno e o freela guarda histórico e comprovante.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#00A651",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Meus turnos",
+      "short_name": "Turnos",
+      "description": "Ver seus turnos e convites",
+      "url": "/my-jobs",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Mensagens",
+      "short_name": "Mensagens",
+      "description": "Conversar com empresas e freelas",
+      "url": "/messages",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

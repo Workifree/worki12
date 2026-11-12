@@ -17,9 +17,9 @@ describe('BottomNav', () => {
 
     expect(screen.getByLabelText('Início')).toBeInTheDocument()
     expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Clientes')).toBeInTheDocument()
-    expect(screen.getByLabelText('Receb.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Msgs')).toBeInTheDocument()
+    expect(screen.getByLabelText('Empresas')).toBeInTheDocument()
+    expect(screen.getByLabelText('Recebimentos')).toBeInTheDocument()
+    expect(screen.getByLabelText('Mensagens')).toBeInTheDocument()
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
 
@@ -30,7 +30,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Elenco')).toBeInTheDocument()
     expect(screen.getByLabelText('Criar')).toBeInTheDocument()
     expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Msgs')).toBeInTheDocument()
+    expect(screen.getByLabelText('Mensagens')).toBeInTheDocument()
     expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
   })
 
@@ -42,7 +42,7 @@ describe('BottomNav', () => {
     expect(links).toHaveLength(6)
   })
 
-  it('company tem 6 itens de navegacao (Msgs acessivel no mobile)', () => {
+  it('company tem 6 itens de navegacao (Mensagens acessivel no mobile)', () => {
     renderBottomNav('company', '/company/dashboard')
 
     const nav = screen.getByLabelText('Menu de navegacao')
@@ -55,8 +55,8 @@ describe('BottomNav', () => {
 
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/dashboard')
     expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/my-jobs')
-    expect(screen.getByLabelText('Clientes')).toHaveAttribute('href', '/carteira')
-    expect(screen.getByLabelText('Receb.')).toHaveAttribute('href', '/recebimentos')
+    expect(screen.getByLabelText('Empresas')).toHaveAttribute('href', '/carteira')
+    expect(screen.getByLabelText('Recebimentos')).toHaveAttribute('href', '/recebimentos')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/profile')
   })
 
@@ -67,7 +67,7 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Elenco')).toHaveAttribute('href', '/company/team')
     expect(screen.getByLabelText('Criar')).toHaveAttribute('href', '/company/create')
     expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/company/jobs')
-    expect(screen.getByLabelText('Msgs')).toHaveAttribute('href', '/company/messages')
+    expect(screen.getByLabelText('Mensagens')).toHaveAttribute('href', '/company/messages')
     expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/company/profile')
   })
 
@@ -84,7 +84,7 @@ describe('BottomNav', () => {
     expect(activeLink.className).toContain('text-primary')
 
     const inactiveLink = screen.getByLabelText('Início')
-    expect(inactiveLink.className).toContain('text-gray-400')
+    expect(inactiveLink.className).toContain('text-gray-500')
   })
 
   it('destaca rota ativa para company', () => {
@@ -94,6 +94,6 @@ describe('BottomNav', () => {
     expect(activeLink.className).toContain('text-blue-600')
 
     const inactiveLink = screen.getByLabelText('Início')
-    expect(inactiveLink.className).toContain('text-gray-400')
+    expect(inactiveLink.className).toContain('text-gray-500')
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Share2, Inbox, Send, Star, X, Loader2, Building2 } from 'lucide-react';
+import { Inbox, Send, Star, X, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,6 +8,7 @@ import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { ReferralService } from '../../services/referralService';
 import type { WorkerReferral, WorkerReferralCard } from '../../types';
 import CreateReferralModal from '../../components/company/CreateReferralModal';
+import { Button, Card, PageHeader } from '../../components/ui';
 
 // ---------------------------------------------------------------------------
 // "Indicações" (F10) — lado da empresa. Duas caixas:
@@ -49,7 +50,7 @@ const STATUS_CLASSES: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_CLASSES[status] ?? 'bg-gray-100 text-gray-700';
   return (
-    <span className={`px-3 py-1 rounded-pill font-black uppercase text-[10px] ${cls}`}>
+    <span className={`px-3 py-1 rounded-pill font-semibold text-xs whitespace-nowrap ${cls}`}>
       {STATUS_LABELS[status] ?? status}
     </span>
   );
@@ -59,25 +60,25 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
   // A regra que NÃO pode quebrar: enquanto pendente, `item.worker_id` é `null` — este
   // componente jamais deve construir link/ação que dependa dele antes do aceite.
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-6 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all">
+    <Card as="article" className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
+          <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
             {item.card.avatar_url ? (
               <img src={item.card.avatar_url} alt={item.card.full_name} className="w-full h-full object-cover" />
             ) : (
-              <span className="font-black text-lg">{item.card.full_name.charAt(0)}</span>
+              <span className="font-bold text-lg">{item.card.full_name.charAt(0)}</span>
             )}
           </div>
           <div>
-            <p className="font-black uppercase">{item.card.full_name}</p>
+            <p className="font-bold text-base">{item.card.full_name}</p>
             {item.card.primary_role && (
-              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-pill text-xs font-bold uppercase inline-block mt-1">
+              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-pill text-xs font-semibold inline-block mt-1">
                 {item.card.primary_role}
               </span>
             )}
             {typeof item.card.rating_average === 'number' && (
-              <p className="text-xs text-gray-500 font-bold mt-1 flex items-center gap-1">
+              <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
                 <Star size={12} className="fill-yellow-400 text-yellow-400" />
                 {item.card.rating_average.toFixed(1)} ({item.card.reviews_count ?? 0})
               </p>
@@ -87,16 +88,18 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
         <StatusBadge status={item.status} />
       </div>
 
-      <p className="text-sm text-gray-600 font-bold mt-4">
-        Indicado por <span className="font-black">{item.referring_company.name}</span>
-      </p>
-      {item.message && <p className="text-sm text-gray-500 mt-2 italic">"{item.message}"</p>}
-      {item.status === 'awaiting_worker' && (
-        <p className="text-xs text-gray-400 font-bold mt-3">
-          Aguardando o freela decidir. Você será avisado se ele aceitar.
+      <div className="space-y-2">
+        <p className="text-sm text-gray-600">
+          Indicado por <span className="font-bold text-black">{item.referring_company.name}</span>
         </p>
-      )}
-    </div>
+        {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+        {item.status === 'awaiting_worker' && (
+          <p className="text-xs text-gray-600">
+            Aguardando o freela decidir. Você será avisado se ele aceitar.
+          </p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -176,43 +179,33 @@ export default function CompanyReferrals() {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter flex items-center gap-3">
-            <Share2 size={32} /> Indicações
-          </h1>
-          <p className="text-gray-500 font-bold mt-1">
-            Apresente freelas de confiança a outras empresas, ou veja quem te indicaram.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          className="bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center gap-2 transition-colors shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
-        >
-          <Send size={20} /> Indicar Freela
-        </button>
-      </div>
+      <PageHeader
+        title="Indicações"
+        subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."
+        action={
+          <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)}>
+            Indicar Freela
+          </Button>
+        }
+      />
 
-      <div className="flex gap-2 mb-6 border-b-2 border-black">
-        <button
-          type="button"
-          onClick={() => setTab('received')}
-          className={`px-6 py-3 font-black uppercase text-sm border-2 border-b-0 rounded-t-xl flex items-center gap-2 min-h-11 ${
-            tab === 'received' ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-transparent hover:text-black'
-          }`}
-        >
-          <Inbox size={16} /> Recebidas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('sent')}
-          className={`px-6 py-3 font-black uppercase text-sm border-2 border-b-0 rounded-t-xl flex items-center gap-2 min-h-11 ${
-            tab === 'sent' ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-transparent hover:text-black'
-          }`}
-        >
-          <Send size={16} /> Enviadas
-        </button>
+      <div className="flex gap-6 mb-6 border-b-2 border-black">
+        {([
+          { key: 'received', label: 'Recebidas', icon: <Inbox size={16} /> },
+          { key: 'sent', label: 'Enviadas', icon: <Send size={16} /> },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            aria-pressed={tab === t.key}
+            className={`-mb-0.5 min-h-11 px-1 flex items-center gap-2 text-sm font-bold border-b-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 rounded-t-md ${
+              tab === t.key ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'
+            }`}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
       </div>
 
       {tab === 'received' && (
@@ -225,10 +218,8 @@ export default function CompanyReferrals() {
             </div>
           )}
           {!loadingReceived && received.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
-              <p className="text-sm font-bold text-gray-500">
-                Nenhuma indicação recebida ainda.
-              </p>
+            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+              <p className="text-sm font-semibold text-gray-600">Nenhuma indicação recebida ainda.</p>
             </div>
           )}
           <div className="grid grid-cols-1 gap-4">
@@ -249,43 +240,46 @@ export default function CompanyReferrals() {
             </div>
           )}
           {!loadingSent && erroSent && (
-            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
-              <p className="text-sm font-bold text-red-600 mb-3">Não foi possível carregar suas indicações.</p>
-              <button onClick={() => void loadSent()} className="bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors">Tentar de novo</button>
+            <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
+              <p className="text-sm font-semibold text-red-600 mb-3">Não foi possível carregar suas indicações.</p>
+              <Button variant="dark" onClick={() => void loadSent()}>
+                Tentar de novo
+              </Button>
             </div>
           )}
           {!loadingSent && !erroSent && sent.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
-              <p className="text-sm font-bold text-gray-500">Você ainda não indicou nenhum freela.</p>
+            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+              <p className="text-sm font-semibold text-gray-600">Você ainda não indicou nenhum freela.</p>
             </div>
           )}
           <div className="grid grid-cols-1 gap-4">
             {sent.map((r) => (
-              <div key={r.id} className="bg-white border-2 border-black rounded-2xl p-6 flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="font-black uppercase flex items-center gap-2 flex-wrap">
+              <Card key={r.id} as="article" className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="min-w-0">
+                  <p className="font-bold flex items-center gap-2 flex-wrap">
                     <span>{r.workerName ?? 'Freela'}</span>
-                    <span className="text-gray-400 font-bold normal-case">→</span>
+                    <span className="text-gray-400 font-normal">→</span>
                     <Building2 size={16} />
                     <span>{r.requestingCompanyName ?? 'Empresa'}</span>
                   </p>
-                  {r.message && <p className="text-sm text-gray-500 mt-2 italic">"{r.message}"</p>}
+                  {r.message && <p className="text-sm text-gray-600 mt-2 italic">"{r.message}"</p>}
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={r.status} />
                   {r.status === 'awaiting_worker' && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      aria-label="Cancelar indicação"
                       onClick={() => void handleCancel(r.id)}
                       disabled={cancellingId === r.id}
-                      aria-label="Cancelar indicação"
-                      className="min-h-11 min-w-11 flex items-center justify-center rounded-xl border-2 border-black hover:bg-gray-100 disabled:opacity-50"
+                      loading={cancellingId === r.id}
+                      className="w-11 !px-0"
                     >
-                      {cancellingId === r.id ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
-                    </button>
+                      {cancellingId !== r.id && <X size={16} />}
+                    </Button>
                   )}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         </section>

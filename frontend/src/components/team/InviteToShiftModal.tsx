@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
-import { X, Loader2, Send, CalendarX2, PlusCircle } from 'lucide-react';
+import { Send, CalendarX2, PlusCircle } from 'lucide-react';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
@@ -9,6 +9,8 @@ import { todayLocalDate } from '../../lib/dateUtils';
 import type { TeamMember } from '../../types';
 import { formatHistoryDate } from './utils';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { ModalShell } from './ModalShell';
+import { Button } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
@@ -123,81 +125,83 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
   useModalDismiss(() => { if (!isInviting) onClose(); });
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget && !isInviting) onClose(); }}
+    <ModalShell
+      title="Convidar para turno"
+      subtitle={
+        <>
+          Escolha um turno para convidar <span className="font-bold text-black">{member.worker.full_name}</span>.
+        </>
+      }
+      onClose={onClose}
+      locked={isInviting}
+      footer={
+        !loadingJobs && jobs.length > 0 ? (
+          <Button
+            variant="dark"
+            size="lg"
+            fullWidth
+            onClick={() => { void handleConfirmInvite(); }}
+            disabled={!selectedJobId}
+            loading={isInviting}
+            iconLeft={<Send size={18} />}
+          >
+            {isInviting ? 'Enviando convite...' : 'Confirmar convite'}
+          </Button>
+        ) : undefined
+      }
     >
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xl font-black uppercase tracking-tight">Convidar para turno</h2>
-          <button onClick={onClose} aria-label="Fechar" className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-            <X size={20} />
-          </button>
+      {loadingJobs && (
+        <div className="space-y-3 animate-pulse">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
         </div>
-        <p className="text-sm font-bold text-gray-500 mb-5">
-          Escolha um turno para convidar <span className="font-black text-black">{member.worker.full_name}</span>.
-        </p>
+      )}
 
-        {loadingJobs && (
-          <div className="space-y-3 animate-pulse">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
-          </div>
-        )}
+      {!loadingJobs && jobs.length === 0 && (
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+          <CalendarX2 size={32} className="mx-auto mb-2 text-gray-400" />
+          <p className="font-semibold text-sm">Nenhum turno elegível para convidar agora.</p>
+          <p className="text-xs mt-1">Crie um turno aberto (sem esse freela atrelado e com data futura) para poder convidar.</p>
+          <Button
+            variant="dark"
+            className="mt-4"
+            onClick={() => { onClose(); navigate('/company/create'); }}
+            iconLeft={<PlusCircle size={16} />}
+          >
+            Criar turno
+          </Button>
+        </div>
+      )}
 
-        {!loadingJobs && jobs.length === 0 && (
-          <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-            <CalendarX2 size={32} className="mx-auto mb-2 opacity-30" />
-            <p className="font-bold text-sm">Nenhum turno elegível para convidar agora.</p>
-            <p className="text-xs mt-1">Crie um turno aberto (sem esse freela atrelado e com data futura) para poder convidar.</p>
-            <button
-              onClick={() => { onClose(); navigate('/company/create'); }}
-              className="mt-4 bg-black hover:bg-blue-600 text-white px-4 py-2 rounded-xl font-black uppercase text-xs transition-colors inline-flex items-center gap-2"
-            >
-              <PlusCircle size={16} /> Criar turno
-            </button>
-          </div>
-        )}
-
-        {!loadingJobs && jobs.length > 0 && (
-          <>
-            <div className="space-y-2 max-h-72 overflow-y-auto mb-5">
-              {jobs.map((job) => {
-                const selected = selectedJobId === job.id;
-                return (
-                  <button
-                    key={job.id}
-                    type="button"
-                    onClick={() => setSelectedJobId(job.id)}
-                    disabled={isInviting}
-                    className={`w-full text-left p-3 rounded-xl border-2 transition-all disabled:opacity-50 ${
-                      selected ? 'border-black bg-primary-light' : 'border-gray-100 hover:border-black'
-                    }`}
-                  >
-                    <p className="font-black uppercase text-sm truncate">{job.title}</p>
-                    <div className="flex flex-wrap gap-2 mt-1 text-xs font-bold text-gray-500">
-                      {job.start_date ? (
-                        <span>{formatHistoryDate(job.start_date)}</span>
-                      ) : (
-                        <span>Sem data definida</span>
-                      )}
-                      {job.work_start_time && <span>· {job.work_start_time.slice(0, 5)}{job.work_end_time ? `–${job.work_end_time.slice(0, 5)}` : ''}</span>}
-                      {typeof job.budget === 'number' && <span>· R$ {job.budget.toFixed(2).replace('.', ',')}</span>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => { void handleConfirmInvite(); }}
-              disabled={!selectedJobId || isInviting}
-              className="w-full bg-black hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isInviting ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-              {isInviting ? 'Enviando convite...' : 'Confirmar convite'}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+      {!loadingJobs && jobs.length > 0 && (
+        <div className="space-y-2" role="group" aria-label="Turnos elegíveis">
+          {jobs.map((job) => {
+            const selected = selectedJobId === job.id;
+            return (
+              <button
+                key={job.id}
+                type="button"
+                onClick={() => setSelectedJobId(job.id)}
+                disabled={isInviting}
+                aria-pressed={selected}
+                className={`w-full text-left min-h-11 p-3 rounded-xl border-2 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                  selected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
+                }`}
+              >
+                <p className="font-bold text-sm truncate">{job.title}</p>
+                <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-gray-600">
+                  {job.start_date ? (
+                    <span>{formatHistoryDate(job.start_date)}</span>
+                  ) : (
+                    <span>Sem data definida</span>
+                  )}
+                  {job.work_start_time && <span>· {job.work_start_time.slice(0, 5)}{job.work_end_time ? `–${job.work_end_time.slice(0, 5)}` : ''}</span>}
+                  {typeof job.budget === 'number' && <span>· R$ {job.budget.toFixed(2).replace('.', ',')}</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </ModalShell>
   );
 }

@@ -38,6 +38,8 @@ This project uses a **spec-driven development harness** (`.harness/`; Claude for
       tocou migration/funcs/escrow/auth/admin → Agent(harness-security-reviewer)
 [3.6] Agent(harness-evaluator) — integra findings, rubrica por artefato (nunca self-eval)
 [3.7] Agent(harness-memory-updater) — atualiza memory-bank
+[3.8] Agent(harness-tester) — SIMULADOR DE USUÁRIO: usa o app de verdade (2 Chromes: empresa 9222 + freela 9223),
+      modo dirigido; obrigatório se o diff tem efeito visual/fluxo novo. Reporta defeitos em reprodução mínima.
 [4]  Commit (PT, sem Co-Authored-By) → Agent(harness-doc-writer) se mudança visível → push
 [5]  gh pr create --base main → URL ao humano
 ```
@@ -57,6 +59,7 @@ This project uses a **spec-driven development harness** (`.harness/`; Claude for
 | `harness-evaluator` | opus | QA cético após implementação — **nunca self-eval** |
 | `harness-doc-writer` | haiku | Docs de usuário + CHANGELOG (Phase 4) |
 | `harness-memory-updater` | haiku | Atualiza memory-bank pós-feature (Phase 3.7) |
+| `harness-tester` | sonnet | Simulador de usuário no Chrome local (Phase 3.8): usa a UI como empresa e freela e caça falha. Abrir com `scripts/chrome-teste.sh`; o dono loga uma vez; o tester nunca digita senha |
 
 ### Triggers automáticos (Phase 3.5)
 

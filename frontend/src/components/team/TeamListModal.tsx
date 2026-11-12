@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { X, Loader2, ListChecks, Search, Check } from 'lucide-react';
+import { ListChecks, Search, Check } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
 import type { TeamMember, TeamListWithMembers } from '../../types';
+import { ModalShell } from './ModalShell';
+import { Button, Field } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Modal "Nova lista" / "Editar lista" (F2 — Listas salvas do elenco).
@@ -104,140 +106,117 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
 
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !saving) onClose();
-      }}
+    <ModalShell
+      title={
+        <>
+          <ListChecks size={20} /> {isEditing ? 'Editar Lista' : 'Nova Lista'}
+        </>
+      }
+      subtitle="Agrupe freelas do elenco para chamar todos de uma vez em um turno."
+      onClose={onClose}
+      locked={saving}
+      size="lg"
+      footer={
+        <Button
+          variant="dark"
+          size="lg"
+          fullWidth
+          onClick={() => void handleSave()}
+          disabled={!canSave}
+          loading={saving}
+          iconLeft={<Check size={18} />}
+        >
+          {saving
+            ? 'Salvando...'
+            : `Salvar${selected.size > 0 ? ` (${selected.size} membro${selected.size !== 1 ? 's' : ''})` : ''}`}
+        </Button>
+      }
     >
-      <div className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg max-h-[92vh] flex flex-col">
-        {/* Cabeçalho */}
-        <div className="p-6 pb-4 border-b-2 border-black">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
-              <ListChecks size={20} /> {isEditing ? 'Editar Lista' : 'Nova Lista'}
-            </h2>
-            <button
-              onClick={onClose}
-              disabled={saving}
-              aria-label="Fechar"
-              className="p-2 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <p className="text-sm font-bold text-gray-500">
-            Agrupe freelas do elenco para chamar todos de uma vez em um turno.
-          </p>
-        </div>
+      {/* Nome da lista */}
+      <Field label="Nome da lista" className="mb-5">
+        <input
+          id="list-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: Cozinha, Salão, Chapa"
+          disabled={saving}
+          maxLength={60}
+        />
+      </Field>
 
-        {/* Corpo */}
-        <div className="p-6 overflow-y-auto flex-1">
-          {/* Nome da lista */}
-          <div className="mb-5">
-            <label htmlFor="list-name" className="block text-xs font-black uppercase text-gray-500 mb-1">
-              Nome da lista
-            </label>
-            <input
-              id="list-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Cozinha, Salão, Chapa"
-              disabled={saving}
-              maxLength={60}
-              className="w-full border-2 border-black rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-primary outline-none disabled:opacity-50"
-            />
-          </div>
-
-          {/* Busca */}
-          <div className="relative mb-3">
-            <label htmlFor="team-list-search" className="sr-only">
-              Buscar por nome ou função
-            </label>
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              id="team-list-search"
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome ou função"
-              disabled={saving}
-              className="w-full border-2 border-gray-200 focus:border-black rounded-xl pl-9 pr-3 py-2 font-bold text-sm outline-none transition-colors disabled:opacity-50"
-            />
-          </div>
-
-          {/* Checklist do elenco */}
-          {teamMembers.length === 0 && (
-            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
-              <ListChecks size={32} className="mx-auto mb-2 opacity-30" />
-              <p className="font-bold text-sm">Nenhum freela aceito no elenco ainda.</p>
-              <p className="text-xs mt-1">Você pode salvar a lista vazia e adicionar membros depois.</p>
-            </div>
-          )}
-
-          {teamMembers.length > 0 && visible.length === 0 && (
-            <p className="text-center py-6 text-sm font-bold text-gray-400">
-              Nenhum freela encontrado para "{search}".
-            </p>
-          )}
-
-          {visible.map((member) => {
-            const isSelected = selected.has(member.worker.id);
-            return (
-              <label
-                key={member.worker.id}
-                className={`flex items-center gap-3 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-all ${
-                  isSelected ? 'border-black bg-primary-light' : 'border-gray-100 hover:border-black'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggle(member.worker.id)}
-                  disabled={saving}
-                  className="w-5 h-5 accent-black flex-shrink-0"
-                />
-                <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-                  {member.worker.avatar_url ? (
-                    <img
-                      src={member.worker.avatar_url}
-                      alt={member.worker.full_name ?? ''}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-400">
-                      {(member.worker.full_name ?? '?').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-black text-sm truncate">{member.worker.full_name}</p>
-                  {member.worker.primary_role && (
-                    <p className="text-xs font-bold text-gray-500 truncate">
-                      {member.worker.primary_role}
-                    </p>
-                  )}
-                </div>
-              </label>
-            );
-          })}
-        </div>
-
-        {/* Rodapé */}
-        <div className="p-6 pt-4 border-t-2 border-black">
-          <button
-            onClick={() => void handleSave()}
-            disabled={!canSave}
-            className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-            {saving
-              ? 'Salvando...'
-              : `Salvar${selected.size > 0 ? ` (${selected.size} membro${selected.size !== 1 ? 's' : ''})` : ''}`}
-          </button>
-        </div>
+      {/* Busca */}
+      <div className="relative mb-3">
+        <label htmlFor="team-list-search" className="sr-only">
+          Buscar por nome ou função
+        </label>
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          id="team-list-search"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nome ou função"
+          disabled={saving}
+          className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+        />
       </div>
-    </div>
+
+      {/* Checklist do elenco */}
+      {teamMembers.length === 0 && (
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+          <ListChecks size={32} className="mx-auto mb-2 text-gray-400" />
+          <p className="font-semibold text-sm">Nenhum freela aceito no elenco ainda.</p>
+          <p className="text-xs mt-1">Você pode salvar a lista vazia e adicionar membros depois.</p>
+        </div>
+      )}
+
+      {teamMembers.length > 0 && visible.length === 0 && (
+        <p className="text-center py-6 text-sm text-gray-600">
+          Nenhum freela encontrado para "{search}".
+        </p>
+      )}
+
+      {visible.map((member) => {
+        const isSelected = selected.has(member.worker.id);
+        return (
+          <label
+            key={member.worker.id}
+            className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
+              isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggle(member.worker.id)}
+              disabled={saving}
+              className="w-5 h-5 accent-black flex-shrink-0"
+            />
+            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+              {member.worker.avatar_url ? (
+                <img
+                  src={member.worker.avatar_url}
+                  alt={member.worker.full_name ?? ''}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-500">
+                  {(member.worker.full_name ?? '?').charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+              {member.worker.primary_role && (
+                <p className="text-xs text-gray-600 truncate">
+                  {member.worker.primary_role}
+                </p>
+              )}
+            </div>
+          </label>
+        );
+      })}
+    </ModalShell>
   );
 }

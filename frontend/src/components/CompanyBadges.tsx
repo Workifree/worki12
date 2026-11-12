@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 import type { CompanyBadge } from '../types';
+import { Button, Card } from './ui';
 
 // -----------------------------------------------------------------------------------------------
 // CompanyBadges (F12) — "Já trabalhou com" (selos de empresas onde o freela concluiu turno).
@@ -55,13 +56,13 @@ function BadgeRating({ avgRating, reviewsCount }: { avgRating: number | null; re
   // (inventaria uma nota ruim que ninguém deu). Distinção visual: badge cinza "sem avaliação".
   if (avgRating === null || reviewsCount === 0) {
     return (
-      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-2 py-0.5 rounded-pill text-[11px] font-bold uppercase">
+      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-pill text-xs font-semibold">
         Sem avaliação
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-pill text-[11px] font-bold tabular-nums">
+    <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-pill text-xs font-semibold tabular-nums">
       <Star size={12} className="fill-yellow-500 text-yellow-500" />
       {avgRating.toFixed(1)}
       <span className="text-yellow-600/70">({reviewsCount})</span>
@@ -174,20 +175,18 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
   }
 
   return (
-    <div className="mt-8 bg-white border-2 border-black rounded-2xl p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <h3 className="text-xl font-black uppercase flex items-center gap-2">
-          <Building2 size={20} /> Já trabalhou com
-        </h3>
-      </div>
+    <Card as="section" className="mt-6">
+      <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
+        <Building2 size={20} /> Já trabalhou com
+      </h3>
 
       {mode === 'manage' && (
-        <div className="flex items-start justify-between gap-4 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 mb-5">
+        <div className="flex items-start justify-between gap-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 mb-5">
           <div className="flex items-start gap-2 min-w-0">
-            <ShieldOff size={18} className="mt-0.5 flex-shrink-0 text-gray-500" />
+            <ShieldOff size={18} className="mt-0.5 flex-shrink-0 text-gray-600" />
             <div className="min-w-0">
-              <p className="text-sm font-black uppercase text-gray-800">Não exibir onde já trabalhei</p>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
+              <p className="text-sm font-bold text-gray-900">Não exibir onde já trabalhei</p>
+              <p className="text-xs text-gray-600 mt-0.5">
                 Chave-mestra: liga e nenhuma empresa vê seus selos (nem esta seção), mesmo com vínculo
                 ativo. Você continua vendo tudo aqui para poder desligar de novo quando quiser.
               </p>
@@ -220,14 +219,14 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
           ))}
         </div>
       ) : failed ? (
-        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
-          <p className="text-sm font-bold text-gray-400 mb-3">Não foi possível carregar os selos agora.</p>
-          <button onClick={() => void load()} className="bg-black text-white font-black uppercase text-xs px-4 min-h-11 rounded-xl hover:bg-primary transition-colors">
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+          <p className="text-sm text-gray-600 mb-3">Não foi possível carregar os selos agora.</p>
+          <Button variant="dark" onClick={() => void load()}>
             Tentar de novo
-          </button>
+          </Button>
         </div>
       ) : badges.length === 0 ? (
-        <p className="text-sm font-bold text-gray-400 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+        <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
           Ainda sem selos. Eles aparecem aqui depois do primeiro turno concluído em uma empresa.
         </p>
       ) : (
@@ -244,7 +243,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                   navigate(`${profileBase}/${badge.company_id}`);
                 }
               }}
-              className={`text-left border-2 border-black rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] hover:-translate-y-0.5 min-h-11 ${
+              className={`text-left border-2 border-black rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 min-h-11 ${
                 badge.hidden ? 'opacity-60 bg-gray-50' : 'bg-white'
               }`}
             >
@@ -256,7 +255,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                 />
               ) : (
                 <div
-                  className="w-11 h-11 rounded-xl border-2 border-black bg-black text-white flex items-center justify-center font-black text-sm flex-shrink-0"
+                  className="w-11 h-11 rounded-xl border-2 border-black bg-black text-white flex items-center justify-center font-bold text-sm flex-shrink-0"
                   aria-hidden="true"
                 >
                   {initialsFrom(badge.company_name)}
@@ -264,14 +263,14 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="font-black uppercase text-sm truncate">{badge.company_name}</p>
+                <p className="font-bold text-sm truncate">{badge.company_name}</p>
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                  <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-pill text-[11px] font-bold uppercase">
+                  <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-pill text-xs font-semibold">
                     {formatShiftsLabel(badge.shifts_count)}
                   </span>
                   <BadgeRating avgRating={badge.avg_rating} reviewsCount={badge.reviews_count} />
                   {mode === 'manage' && badge.hidden && (
-                    <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded-pill text-[11px] font-bold uppercase">
+                    <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded-pill text-xs font-semibold">
                       Oculto
                     </span>
                   )}
@@ -298,6 +297,6 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

@@ -24,11 +24,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, User, ArrowRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
+import { Button, Card } from '../components/ui';
 
 type PageState = 'loading' | 'success' | 'already_exists' | 'blocked' | 'error';
 type InviteDirection = 'company' | 'worker';
@@ -36,6 +38,27 @@ type InviteDirection = 'company' | 'worker';
 interface PageData {
   state: PageState;
   errorMsg?: string;
+}
+
+interface StatusCardProps {
+  icon: ReactNode;
+  iconClassName: string;
+  shadowClassName?: string;
+  title: string;
+  children?: ReactNode;
+}
+
+/** Moldura única dos estados da página (ícone, título, corpo e UMA ação). */
+function StatusCard({ icon, iconClassName, shadowClassName, title, children }: StatusCardProps) {
+  return (
+    <Card padding="lg" className={`text-center ${shadowClassName ?? 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}>
+      <div className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${iconClassName}`}>
+        {icon}
+      </div>
+      <h1 className="text-2xl font-bold tracking-tight mb-2">{title}</h1>
+      {children}
+    </Card>
+  );
 }
 
 export default function InviteAccept() {
@@ -125,6 +148,8 @@ export default function InviteAccept() {
     ? 'Esse freela já tem uma conexão com a sua empresa. Não é necessário repetir.'
     : 'Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.';
 
+  const GREEN_SHADOW = 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]';
+
   return (
     <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
       <PageMeta
@@ -135,119 +160,109 @@ export default function InviteAccept() {
       <div className="w-full max-w-md">
         {/* Loading */}
         {page.state === 'loading' && (
-          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 text-center">
-            <div className="w-16 h-16 bg-primary-light border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
-              {direction === 'worker' ? (
-                <User size={32} className="text-primary" />
-              ) : (
-                <Building2 size={32} className="text-primary" />
-              )}
+          <StatusCard
+            iconClassName="bg-primary-light"
+            icon={direction === 'worker'
+              ? <User size={28} className="text-primary" />
+              : <Building2 size={28} className="text-primary" />}
+            title="Convite de Elenco"
+          >
+            <div className="flex items-center justify-center gap-3 text-gray-600 mt-5" role="status">
+              <Loader2 className="animate-spin text-primary" size={22} />
+              <span className="text-sm font-semibold">Processando convite...</span>
             </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Convite de Elenco
-            </h1>
-            <div className="flex items-center justify-center gap-3 text-gray-500 mt-6">
-              <Loader2 className="animate-spin text-primary" size={24} />
-              <span className="font-bold">Processando convite...</span>
-            </div>
-            <div className="mt-6 space-y-3 animate-pulse">
-              <div className="h-4 bg-gray-200 rounded-xl w-3/4 mx-auto" />
-              <div className="h-4 bg-gray-200 rounded-xl w-1/2 mx-auto" />
-            </div>
-          </div>
+          </StatusCard>
         )}
 
         {/* Sucesso */}
         {page.state === 'success' && (
-          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,166,81,1)] p-8 text-center">
-            <div className="w-16 h-16 bg-primary border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 size={32} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              {successTitle}
-            </h1>
-            <p className="text-gray-600 font-bold mb-8">
-              {successBody}
-            </p>
-            <button
+          <StatusCard
+            iconClassName="bg-primary"
+            shadowClassName={GREEN_SHADOW}
+            icon={<CheckCircle2 size={28} className="text-white" />}
+            title={successTitle}
+          >
+            <p className="text-sm sm:text-base text-gray-600 mb-6">{successBody}</p>
+            <Button
+              variant={direction === 'worker' ? 'dark' : 'primary'}
+              size="lg"
+              fullWidth
               onClick={() => navigate(redirectTo)}
-              className="w-full bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+              iconRight={<ArrowRight size={18} />}
             >
               {redirectLabel}
-              <ArrowRight size={18} />
-            </button>
-          </div>
+            </Button>
+          </StatusCard>
         )}
 
         {/* Já existe (idempotência) */}
         {page.state === 'already_exists' && (
-          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,166,81,1)] p-8 text-center">
-            <div className="w-16 h-16 bg-primary-light border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 size={32} className="text-primary" />
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              {alreadyTitle}
-            </h1>
-            <p className="text-gray-600 font-bold mb-8">
-              {alreadyBody}
-            </p>
-            <button
+          <StatusCard
+            iconClassName="bg-primary-light"
+            shadowClassName={GREEN_SHADOW}
+            icon={<CheckCircle2 size={28} className="text-primary" />}
+            title={alreadyTitle}
+          >
+            <p className="text-sm sm:text-base text-gray-600 mb-6">{alreadyBody}</p>
+            <Button
+              variant={direction === 'worker' ? 'dark' : 'primary'}
+              size="lg"
+              fullWidth
               onClick={() => navigate(redirectTo)}
-              className="w-full bg-primary hover:bg-black text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+              iconRight={<ArrowRight size={18} />}
             >
               {redirectLabel}
-              <ArrowRight size={18} />
-            </button>
-          </div>
+            </Button>
+          </StatusCard>
         )}
 
         {/* Bloqueado — não afirma sucesso, mas também não revela que houve veto do freela */}
         {page.state === 'blocked' && (
-          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 text-center">
-            <div className="w-16 h-16 bg-gray-50 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <XCircle size={32} className="text-gray-400" />
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Não Foi Possível Concluir
-            </h1>
-            <p className="text-gray-600 font-bold mb-8">
+          <StatusCard
+            iconClassName="bg-gray-50"
+            icon={<XCircle size={28} className="text-gray-500" />}
+            title="Não Foi Possível Concluir"
+          >
+            <p className="text-sm sm:text-base text-gray-600 mb-6">
               Não é possível adicionar este freela agora.
             </p>
-            <button
+            <Button
+              variant="dark"
+              size="lg"
+              fullWidth
               onClick={() => navigate(redirectTo)}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+              iconRight={<ArrowRight size={18} />}
             >
               {redirectLabel}
-              <ArrowRight size={18} />
-            </button>
-          </div>
+            </Button>
+          </StatusCard>
         )}
 
         {/* Erro */}
         {page.state === 'error' && (
-          <div className="bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 text-center">
-            <div className="w-16 h-16 bg-red-50 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <XCircle size={32} className="text-red-500" />
-            </div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter mb-2">
-              Não foi possível abrir o convite
-            </h1>
-            <p className="text-gray-600 font-bold mb-2">
+          <StatusCard
+            iconClassName="bg-red-50"
+            icon={<XCircle size={28} className="text-red-500" />}
+            title="Não foi possível abrir o convite"
+          >
+            <p className="text-sm sm:text-base text-gray-600 mb-1" role="alert">
               {page.errorMsg ?? 'Não foi possível processar este convite.'}
             </p>
-            <p className="text-sm text-gray-400 font-medium mb-8">
+            <p className="text-xs sm:text-sm text-gray-600 mb-6">
               {direction === 'worker'
                 ? 'Este link só pode ser aberto por uma conta de empresa.'
                 : 'Peça à empresa um novo link de convite.'}
             </p>
-            <button
+            <Button
+              variant="dark"
+              size="lg"
+              fullWidth
               onClick={() => navigate('/')}
-              className="w-full bg-black hover:bg-primary text-white px-6 py-3 rounded-xl font-black uppercase transition-colors flex items-center justify-center gap-2"
+              iconRight={<ArrowRight size={18} />}
             >
               Voltar ao início
-              <ArrowRight size={18} />
-            </button>
-          </div>
+            </Button>
+          </StatusCard>
         )}
       </div>
     </div>
