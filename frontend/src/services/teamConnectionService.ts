@@ -168,13 +168,11 @@ export const TeamConnectionService = {
   },
 
   /**
-   * Gera um token de convite de link estável para a empresa.
+   * Obtém o token de convite de link (estável) da empresa/unidade `companyId`.
    *
-   * Estratégia: o token é derivado APENAS do `company_id` (base64url),
-   * portanto é estável entre renders — o link enviado ao freela não muda.
-   * Segurança real vem do RLS; o token só identifica a empresa do link.
-   * A UI monta a URL: `https://app.worki.com/convite/{token}`.
-   * O resolver do link chama `resolveInviteToken(token)` para descobrir a empresa.
+   * O token é um segredo opaco em `company_invite_links` (lido via RLS por quem opera a
+   * empresa). Se ainda não existir linha, a RPC `get_company_invite_token(p_company_id)` a cria.
+   * A UI monta a URL: `https://app.worki.com/convite/{token}`. Retorna null em qualquer falha.
    */
   async generateInviteToken(companyId: string): Promise<ConnectionInviteToken | null> {
     // Era `btoa(companyId)` -- ou seja, o "token" era o id PUBLICO da empresa em base64, e
@@ -192,8 +190,32 @@ export const TeamConnectionService = {
       logError('teamConnection.generateInviteToken', error);
       return null;
     }
-    const token = data?.token as string | undefined;
-    if (!token) return null;
+    let token = data?.token as string | undefined;
+
+    if (!token) {
+      // Sem linha: o backfill de 20260824000400 rodou UMA vez, então empresa criada depois dele
+      // nunca teve token (bug: "Não foi possível obter o link do seu elenco agora"). A RPC cria
+      // sob demanda. `p_company_id` amarra a UNIDADE selecionada (multi-unidade/F13); sem ele a
+      // RPC escolheria a primeira empresa que o chamador opera. Requer a migration que adiciona
+      // o parâmetro (20260902000300) -- aplicar ANTES de subir este frontend.
+      const { data: rpcToken, error: rpcError } = await supabase.rpc('get_company_invite_token', {
+        p_company_id: companyId,
+      });
+      if (rpcError) {
+        // 42501 (not_a_company) e caminho ESPERADO: o freela que ve o link de uma empresa em
+        // "Carteira de Clientes" le a linha pela RLS, mas nao OPERA a empresa, entao nao pode
+        // cria-la. Rebaixa para null sem ruido; qualquer outro erro continua logado.
+        if (rpcError.code !== '42501') {
+          logError('teamConnection.generateInviteToken.rpc', rpcError);
+        }
+        return null;
+      }
+      token = typeof rpcToken === 'string' && rpcToken.length > 0 ? rpcToken : undefined;
+      if (!token) {
+        logError('teamConnection.generateInviteToken.rpcEmpty', new Error('RPC devolveu token vazio'));
+        return null;
+      }
+    }
 
     return { token, url: `${window.location.origin}/convite/${token}` };
   },
