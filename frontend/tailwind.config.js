@@ -1,6 +1,10 @@
 
 /** @type {import('tailwindcss').Config} */
 export default {
+    future: {
+        // :hover só em dispositivos com hover real — evita estado "grudado" após toque no mobile.
+        hoverOnlyWhenSupported: true,
+    },
     content: [
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
@@ -13,7 +17,7 @@ export default {
             colors: {
                 primary: {
                     DEFAULT: '#00A651', // Strong Professional Green
-                    dark: '#008a42',
+                    dark: '#008840', // texto branco = 4,57:1 (AA); #008a42 dava 4,45:1
                     light: '#e6f6ec',
                 },
                 accent: '#111111', // Brutalist Black

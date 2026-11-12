@@ -9,7 +9,7 @@ Worki é **neo-brutalista**: bordas pretas grossas (2px), sombras "offset" sóli
 pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de marca por papel.
 
 - **Verde `#00A651`** (`primary`) — cor do **trabalhador (worker)**: CTAs primários, sucesso, destaque positivo.
-  Escuras: `primary-dark #008a42`; clara: `primary-light #e6f6ec`.
+  Escuras: `primary-dark #008840` (texto branco 4,57:1 — AA); clara: `primary-light #e6f6ec`.
 - **Preto `#111111`** (`accent`) — linguagem estrutural brutalista: bordas, sombras, e CTAs do papel **empresa**.
 - **Azul `#2563EB`** — cor de marca da **empresa (company)**; hoje aparece como acento (ex.: tags de
   localização). Os botões de empresa usam preto brutalista (`bg-black hover:bg-primary`) — ver regra 5.
@@ -77,6 +77,40 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 10. **Animações (em `index.css`):** `slideIn` (opacity 0→1, translateY 10px→0, 0.3s ease-out) via `animate-slide-in`;
     utilitários `animate-in fade-in slide-in-from-*` (tailwindcss-animate).
 
+## Escala refinada (11/2026)
+
+> Decisão do dono (11/11/2026, spec `ui-fundacao-botoes-copy`): **Article 13 intacto** — borda preta 2px e sombra
+> offset sólida continuam —, mas com acabamento mais fino: mais respiro, tipografia contida, sombra menor,
+> menos caixa-alta gritante. A gramática acima (seções 1-5) descreve o legado; **UI nova e telas migradas usam
+> a escala abaixo via `components/ui/*`**.
+
+**Regra:** não escreva `<button className="...">`, card, header de página ou input com classes soltas em tela
+nova ou migrada. Importe de `components/ui` (`Button`, `Card`, `PageHeader`, `Field`). Tela legada migra na
+auditoria tela a tela, sem pressa.
+
+| Item | Escala refinada |
+|---|---|
+| Botão — tamanhos | `sm` h-9 (só densidade, ex.: linha de tabela) · **`md` h-11 (padrão, alvo de toque 44px)** · `lg` h-12 (CTA de tela/rodapé de modal) |
+| Botão — tipografia | `font-bold text-sm`, **sem uppercase** (prop `uppercase` é opt-in raro). Não usar `font-black` em botões |
+| Botão — raio / moldura | `rounded-xl`, `border-2 border-black`, sombra `shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]` |
+| Botão — interação | hover: `-translate-x-px -translate-y-px` + sombra 4px · active: desloca 3px e some a sombra · foco: `focus-visible:ring-2 ring-black ring-offset-2` |
+| Botão — variantes | `primary` verde (worker) · `dark` preto (empresa) · `secondary` branco com borda · `ghost` sem moldura · `danger` vermelho (destrutivo) |
+| Botão — contraste do `primary` | fundo **`bg-primary-dark`** (`#008840`, hover `bg-black`), NÃO `bg-primary`: branco sobre `#00A651` dá só 3,19:1 (reprova AA para `text-sm`); sobre `primary-dark` dá 4,57:1. O verde de marca puro segue valendo como cor de destaque/badge/ícone, não como fundo de texto branco pequeno |
+| Botão — movimento | `motion-reduce:transition-none motion-reduce:transform-none` (respeita `prefers-reduced-motion`). Tailwind com `future.hoverOnlyWhenSupported`: `hover:` só em dispositivo com hover real (sem hover "grudado" no toque) |
+| `IconButton` | botão **só de ícone**: quadrado 44px (`h-11 w-11`), `aria-label` **obrigatório na tipagem**, `type="button"`, foco `ring-2 ring-black`; variantes `ghost` (padrão) · `secondary` (borda preta) · `danger` (borda/ícone vermelhos). Use no lugar de `Button` com `px-0`/`w-11` improvisado (fechar modal, editar, remover) |
+| Botão — estados | `disabled`: `opacity-50 cursor-not-allowed`, sem sombra · `loading`: spinner, `disabled` + `aria-busy`, clique bloqueado |
+| Card | `bg-white border-2 border-black rounded-2xl`; padding `sm` p-4 · `md` p-5 sm:p-6 (padrão) · `lg` p-6 sm:p-8; `interactive` = `hover:-translate-y-0.5` + sombra preta 4px (a sombra verde 6px do `JobCard` segue válida para o feed); **`onActivate`** = card clicável acessível (`role="button"`, `tabIndex=0`, Enter/Espaço, foco visível; não dispara quando o evento vem de botão/link interno) e já implica `interactive` |
+| Título de página | `PageHeader` (prop `flush` = sem margem inferior, no lugar de `!mb-0`): `text-2xl sm:text-3xl font-bold tracking-tight`, sem uppercase; subtítulo `text-sm sm:text-base text-gray-600`; **uma** ação primária à direita no desktop, empilhada e full-width no mobile |
+| Título de seção | `text-lg font-bold` (no lugar de `text-xl font-black uppercase`) |
+| Corpo / meta | corpo `text-sm` (`text-base` a partir de md quando for leitura longa) · meta `text-xs text-gray-600` |
+| Input (`Field`) | `border-2 border-black rounded-xl h-11 px-4 text-sm focus:ring-2 focus:ring-primary`; label `text-sm font-bold` sempre associado; `placeholder:text-gray-500` (gray-400 reprova contraste); **hint e erro aparecem JUNTOS** — o hint `text-xs text-gray-600` nunca some quando há erro; erro `text-xs font-bold text-red-600` com `role="alert"` e `aria-invalid`. `<textarea>` não usa `h-11`: ganha `min-h-24 py-3` (`FIELD_TEXTAREA_CLASS`) |
+| Sobrescrever classe dos primitivos | `className` do chamador **vence** o padrão: `cx` usa `tailwind-merge` (`h-24` troca `h-11`, `px-0` troca `px-5`). **Não usar `!` (important)** para vencer o primitivo |
+| Espaçamento | ritmo de 4px: gap interno de grupo `gap-2`/`gap-3`, entre cards `gap-4`, entre seções `space-y-6`/`space-y-8`; margem do header `mb-6 sm:mb-8` |
+| Alvo de toque | todo elemento clicável ≥ 44px no mobile (390px) — `md`/`lg` cumprem; `sm` só fora de áreas de polegar |
+
+**Cor por papel continua valendo:** tela worker usa `variant="primary"`; tela empresa usa `variant="dark"`.
+CTA único por tela/bloco — o resto é `secondary`/`ghost`.
+
 ## Cor por papel — regra semântica
 
 | Papel | Cor de marca | CTA real no código | Uso |
@@ -87,6 +121,16 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 
 > Ao implementar UI nova: tela de **worker** → verde primário; tela de **empresa** → seguir o padrão
 > preto-brutalista existente das telas `pages/company/*` (e azul só como acento), salvo direção contrária.
+
+## Camadas (z-index)
+
+| Camada | z-index | Observação |
+|---|---|---|
+| Navegação (`BottomNav`, `Sidebar`, headers fixos) | `z-50` | |
+| Modal / overlay (`ModalShell`) | `z-[70]` | antes empatava com a BottomNav (z-50) e perdia na ordem do DOM |
+| Toast (`ToastContext`) | `z-[80]` | acima do modal; no mobile sobe acima da BottomNav (`bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4`) |
+
+Toast: borda preta 2px + sombra offset sólida `shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]` (sem `shadow-lg`); container `role="status" aria-live="polite"`, toast de erro `role="alert"`; botão fechar com área de 44px.
 
 ## Mobile-first (obrigatório)
 
@@ -111,6 +155,11 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
 
 | Componente | Path | Para quê |
 |---|---|---|
+| `IconButton` | `frontend/src/components/ui/IconButton.tsx` | **botão só de ícone** 44px (`aria-label` obrigatório; ghost/secondary/danger) |
+| `Button` | `frontend/src/components/ui/Button.tsx` | **botão canônico** (variantes primary/dark/secondary/ghost/danger; sm/md/lg; loading, fullWidth, iconLeft/Right) |
+| `Card` | `frontend/src/components/ui/Card.tsx` | **card canônico** (padding sm/md/lg, `interactive`, `as`) |
+| `PageHeader` | `frontend/src/components/ui/PageHeader.tsx` | **cabeçalho de página** (título + subtítulo + `action` única) |
+| `Field` | `frontend/src/components/ui/Field.tsx` | **campo de formulário** (label associado + hint + erro acessíveis; `FIELD_CONTROL_CLASS`) |
 | `JobCard` | `frontend/src/components/JobCard.tsx` | card brutalista (variantes feed/search), referência de hover/sombra |
 | Modal "Registrar Pagamento" | `frontend/src/pages/company/CompanyJobCandidates.tsx` (linhas ~1048-1190) | padrão de modal neo-brutalista com formulário |
 | `Sidebar` | `frontend/src/components/Sidebar.tsx` | navegação desktop + badge de verificação |
