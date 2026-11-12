@@ -3,6 +3,48 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=vrklakcbkcsonarmhqhp&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
+    },
+    "chrome": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y", "chrome-devtools-mcp@latest",
+        "--browser-url", "http://127.0.0.1:9222",
+        "--viewport", "390x844",
+        "--screenshotFormat", "webp",
+        "--screenshotMaxWidth", "1200",
+        "--redactNetworkHeaders",
+        "--allowedUrlPattern", "http://localhost:*/*",
+        "--allowedUrlPattern", "http://127.0.0.1:*/*",
+        "--allowedUrlPattern", "https://worki-opal.vercel.app/*",
+        "--allowedUrlPattern", "https://*.vercel.app/*",
+        "--allowedUrlPattern", "https://*.supabase.co/*",
+        "--allowedUrlPattern", "https://fonts.googleapis.com/*",
+        "--allowedUrlPattern", "https://fonts.gstatic.com/*"
+      ],
+      "timeout": 180000
+    },
+    "chrome2": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y", "chrome-devtools-mcp@latest",
+        "--browser-url", "http://127.0.0.1:9223",
+        "--viewport", "390x844",
+        "--screenshotFormat", "webp",
+        "--screenshotMaxWidth", "1200",
+        "--redactNetworkHeaders",
+        "--allowedUrlPattern", "http://localhost:*/*",
+        "--allowedUrlPattern", "http://127.0.0.1:*/*",
+        "--allowedUrlPattern", "https://worki-opal.vercel.app/*",
+        "--allowedUrlPattern", "https://*.vercel.app/*",
+        "--allowedUrlPattern", "https://*.supabase.co/*",
+        "--allowedUrlPattern", "https://fonts.googleapis.com/*",
+        "--allowedUrlPattern", "https://fonts.gstatic.com/*"
+      ],
+      "timeout": 180000
     }
-  }
+  },
+  "//chrome": "Simulador de usuario (harness-tester): dirige o Chrome LOCAL pela porta de depuracao. `chrome` = porta 9222 = sessao da EMPRESA (e2e-empresa@worki.test). `chrome2` = porta 9223 = sessao do FREELA (e2e-worker@worki.test). Dois perfis separados porque a sessao do Supabase vive no localStorage da origem: um perfil so segura um papel. Abrir com scripts/chrome-teste.sh (ou .ps1). O dono faz o login uma vez em cada janela; o tester nunca digita senha.",
+  "//seguranca": "allowedUrlPattern limita o tester ao app, ao Supabase e a fontes. Sem producao de terceiros."
 }
