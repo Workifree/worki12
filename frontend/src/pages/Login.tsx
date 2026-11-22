@@ -213,30 +213,31 @@ export default function Login() {
     };
 
     return (
-        <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
+        <div className={`min-h-dvh flex flex-col items-center [justify-content:safe_center] px-3 py-3 sm:p-4 transition-colors duration-500
                     ${isHire ? 'bg-accent' : 'bg-[#F4F4F0]'}`}>
             <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
 
             {/* Back Button */}
-            <Button
-                variant="secondary"
-                size="md"
-                onClick={() => navigate('/')}
-                iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
-                className="absolute top-4 left-4 sm:top-6 sm:left-6"
-            >
-                Voltar
-            </Button>
+            <div className="w-full max-w-md mb-3">
+                <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => navigate('/')}
+                    iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
+                >
+                    Voltar
+                </Button>
+            </div>
 
             {/* Main Card */}
             <Card
                 padding="lg"
-                className={`w-full max-w-md ${isHire
+                className={`w-full max-w-md p-3 sm:p-8 ${isHire
                     ? 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]'
                     : 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}
             >
                 <div className="text-center mb-6">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
+                    <h1 className="text-[clamp(1.375rem,1rem+2vw,1.875rem)] hyphens-auto font-bold tracking-tight mb-2 break-words">
                         {isSignUp
                             ? 'Criar Conta'
                             : (isHire ? 'Contratar Talentos' : 'Começar a Trabalhar')}

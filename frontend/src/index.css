@@ -11,6 +11,66 @@
       radial-gradient(at 0% 0%, rgba(0, 166, 81, 0.03) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(33, 150, 243, 0.03) 0px, transparent 50%);
     background-attachment: fixed;
+    /* Barras fixas (header mobile h-14 + BottomNav h-16 + safe-area) nao podem cobrir o foco (WCAG 2.4.11).
+       NAO definir font-size aqui: o meta text-scale precisa da escala do usuario. */
+  }
+
+  @media (max-width: 767px) {
+    html {
+      scroll-padding-top: 4rem;
+      scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  body {
+    overflow-wrap: break-word;
+  }
+
+  h1, h2, h3, h4, h5, h6, p, li, td {
+    overflow-wrap: break-word;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p, li {
+    text-wrap: pretty;
+  }
+
+  a[href^="http"], code {
+    overflow-wrap: anywhere;
+  }
+
+  img, video {
+    max-inline-size: 100%;
+    block-size: auto;
+  }
+
+  /* Alvo de toque: 24px sempre, 44px em ponteiro grosso. :where() = especificidade 0 (utilitarios vencem). */
+  :root {
+    --target-size: 24px;
+  }
+
+  @media (pointer: coarse) {
+    :root {
+      --target-size: 44px;
+    }
+  }
+
+  :where(button, select, textarea, input:not([type=checkbox], [type=radio]), [role=button], nav a, label:has(input[type=checkbox], input[type=radio])) {
+    min-block-size: var(--target-size);
+    min-inline-size: var(--target-size);
+  }
+
+  /* Rede de seguranca de foco (contraste >= 3:1 sobre claro e escuro). */
+  :focus-visible {
+    /* Anel duplo: outline preto (18:1 sobre branco) + halo branco de 4px (21:1 sobre preto), entao o foco
+       fecha >=3:1 em fundo claro e escuro. Elementos com focus-visible:ring-* (primitivos ui/*) trocam o
+       box-shadow pelo ring e usam focus-visible:outline-none, sem brigar com este bloco. */
+    outline: 2px solid #111111;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px #ffffff;
   }
 }
 
@@ -34,8 +94,35 @@
   }
 }
 
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out forwards;
+@keyframes busyPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Entrada decorativa so com movimento permitido; sem preferencia o elemento ja nasce no estado final. */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out forwards;
+  }
+}
+
+/* Sob reduce: bounce/ping (movimento espacial) viram estaticos; ping fica em opacidade fixa. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-bounce {
+    animation: none;
+  }
+
+  .animate-ping {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* Spinner sob reduce: troca rotacao por pulso lento de opacidade (continua dizendo "ocupado"). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: busyPulse 1.6s ease-in-out infinite;
+  }
 }
 
 /* Safe-area (PWA standalone + iPhone com notch): `pb-safe` era usada no BottomNav mas nao existia.
@@ -46,8 +133,13 @@
   }
 }
 
-/* Em paisagem (viewport-fit=cover) o conteudo nao pode ficar sob o notch lateral. */
-body {
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+/* Notch lateral em paisagem: aplicado so nas barras fixas/sticky (BottomNav, headers), nao no body (preserva full-bleed). */
+@layer utilities {
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
 }

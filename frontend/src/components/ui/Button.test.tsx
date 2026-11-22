@@ -32,18 +32,24 @@ describe('Button', () => {
     expect(btn.className).toContain('shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]')
   })
 
-  it('tamanho md (padrão) tem h-11 = alvo de toque 44px', () => {
+  it('tamanho md (padrão) tem min-h-11 = alvo de toque 44px', () => {
     render(<Button>Ok</Button>)
-    expect(screen.getByRole('button')).toHaveClass('h-11')
+    expect(screen.getByRole('button')).toHaveClass('min-h-11')
   })
 
   it.each([
-    ['sm', 'h-9'],
-    ['md', 'h-11'],
-    ['lg', 'h-12'],
+    ['sm', 'min-h-9'],
+    ['md', 'min-h-11'],
+    ['lg', 'min-h-12'],
   ] as const)('tamanho %s aplica %s', (size, cls) => {
     render(<Button size={size}>Ok</Button>)
     expect(screen.getByRole('button')).toHaveClass(cls)
+  })
+
+  it('sm sobe para 44px em ponteiro grosso e nenhum tamanho usa altura fixa', () => {
+    render(<Button size="sm">Ok</Button>)
+    expect(screen.getByRole('button').className).toContain('[@media(pointer:coarse)]:min-h-11')
+    expect(screen.getByRole('button').className).not.toMatch(/(^|\s)h-\d/)
   })
 
   it('não usa caixa-alta por padrão; uppercase é opt-in', () => {
@@ -141,11 +147,19 @@ describe('Button — contraste e movimento', () => {
     expect(screen.getByRole('button')).toHaveClass('motion-reduce:transition-none', 'motion-reduce:transform-none')
   })
 
+  it('reduced-motion neutraliza o deslocamento de hover/active com a mesma especificidade', () => {
+    render(<Button variant="dark">Ok</Button>)
+    const cls = screen.getByRole('button').className
+    expect(cls).toContain('motion-reduce:enabled:hover:translate-x-0')
+    expect(cls).toContain('motion-reduce:enabled:active:translate-y-0')
+    expect(cls).toContain('motion-reduce:enabled:active:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]')
+  })
+
   it('className do chamador sobrescreve o padrão sem "!" (cx resolve conflito)', () => {
-    render(<Button className="h-14 px-0">Ok</Button>)
+    render(<Button className="min-h-14 px-0">Ok</Button>)
     const btn = screen.getByRole('button')
-    expect(btn).toHaveClass('h-14', 'px-0')
-    expect(btn).not.toHaveClass('h-11')
+    expect(btn).toHaveClass('min-h-14', 'px-0')
+    expect(btn).not.toHaveClass('min-h-11')
     expect(btn).not.toHaveClass('px-5')
   })
 })

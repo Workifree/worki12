@@ -145,7 +145,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         : 'bg-primary text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
 
     return (
-        <aside aria-label="Menu lateral" className="hidden md:flex flex-col w-72 h-[calc(100vh-32px)] m-4 sticky top-4
+        <aside aria-label="Menu lateral" className="hidden md:flex flex-col w-72 h-[calc(100dvh-32px)] m-4 sticky top-4
                       bg-white border-2 border-black rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
                       overflow-hidden z-50">
 
@@ -174,7 +174,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             id="sidebar-company-switch"
                             value={currentCompanyId ?? ''}
                             onChange={(e) => handleSwitchCompany(e.target.value)}
-                            className="w-full h-11 appearance-none bg-gray-50 border-2 border-black rounded-xl pl-3 pr-9 text-sm font-semibold text-gray-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="w-full h-11 appearance-none bg-gray-50 border-2 border-black rounded-xl pl-3 pr-9 text-sm font-semibold text-gray-900 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
                         >
                             {myCompanies.map((c) => (
                                 <option key={c.company_id} value={c.company_id}>

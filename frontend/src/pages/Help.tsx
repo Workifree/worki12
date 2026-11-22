@@ -33,7 +33,7 @@ export default function Help() {
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+        <div className="min-h-dvh bg-gray-50 px-4 py-6 sm:p-8">
             <div className="max-w-3xl mx-auto">
                 <Button
                     variant="ghost"
@@ -79,7 +79,7 @@ export default function Help() {
                         <Mail size={20} className="text-gray-600" aria-hidden="true" />
                         <div>
                             <p className="font-bold text-sm">Email</p>
-                            <p className="text-gray-600 text-xs">suporte@worki.com.br</p>
+                            <p className="text-gray-600 text-xs break-all">suporte@worki.com.br</p>
                         </div>
                     </a>
                 </Card>

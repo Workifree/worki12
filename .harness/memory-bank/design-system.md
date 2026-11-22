@@ -68,7 +68,7 @@ pesada em caixa-alta, cantos arredondados generosos. Limpo e branco, com cor de 
    `rounded-3xl` (32px) para superfícies grandes, `rounded-pill` (999px) para tags/pílulas. Evitar `rounded-md`
    (genérico) em superfícies visíveis.
 
-8. **Inputs / formulários:** `border-2 border-black rounded-xl px-4 py-3` + `focus:ring-2 focus:ring-primary`.
+8. **Inputs / formulários:** `border-2 border-black rounded-xl px-4 py-3` + `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark` (`primary` #00A651 dá só 3,19:1; `primary-dark` #008840 dá ≈4,6:1).
    Sempre `<label>` associado (não usar só placeholder).
 
 9. **Loading / skeleton:** `animate-pulse` com blocos `bg-gray-200 rounded-xl` (`space-y-4`). Páginas lazy
@@ -103,7 +103,7 @@ auditoria tela a tela, sem pressa.
 | Título de página | `PageHeader` (prop `flush` = sem margem inferior, no lugar de `!mb-0`): `text-2xl sm:text-3xl font-bold tracking-tight`, sem uppercase; subtítulo `text-sm sm:text-base text-gray-600`; **uma** ação primária à direita no desktop, empilhada e full-width no mobile |
 | Título de seção | `text-lg font-bold` (no lugar de `text-xl font-black uppercase`) |
 | Corpo / meta | corpo `text-sm` (`text-base` a partir de md quando for leitura longa) · meta `text-xs text-gray-600` |
-| Input (`Field`) | `border-2 border-black rounded-xl h-11 px-4 text-sm focus:ring-2 focus:ring-primary`; label `text-sm font-bold` sempre associado; `placeholder:text-gray-500` (gray-400 reprova contraste); **hint e erro aparecem JUNTOS** — o hint `text-xs text-gray-600` nunca some quando há erro; erro `text-xs font-bold text-red-600` com `role="alert"` e `aria-invalid`. `<textarea>` não usa `h-11`: ganha `min-h-24 py-3` (`FIELD_TEXTAREA_CLASS`) |
+| Input (`Field`) | `border-2 border-black rounded-xl h-11 px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark`; label `text-sm font-bold` sempre associado; `placeholder:text-gray-500` (gray-400 reprova contraste); **hint e erro aparecem JUNTOS** — o hint `text-xs text-gray-600` nunca some quando há erro; erro `text-xs font-bold text-red-600` com `role="alert"` e `aria-invalid`. `<textarea>` não usa `h-11`: ganha `min-h-24 py-3` (`FIELD_TEXTAREA_CLASS`) |
 | Sobrescrever classe dos primitivos | `className` do chamador **vence** o padrão: `cx` usa `tailwind-merge` (`h-24` troca `h-11`, `px-0` troca `px-5`). **Não usar `!` (important)** para vencer o primitivo |
 | Espaçamento | ritmo de 4px: gap interno de grupo `gap-2`/`gap-3`, entre cards `gap-4`, entre seções `space-y-6`/`space-y-8`; margem do header `mb-6 sm:mb-8` |
 | Alvo de toque | todo elemento clicável ≥ 44px no mobile (390px) — `md`/`lg` cumprem; `sm` só fora de áreas de polegar |
@@ -171,3 +171,19 @@ Toast: borda preta 2px + sombra offset sólida `shadow-[3px_3px_0px_0px_rgba(0,0
 | `WorkerCertificationsPanel` | `frontend/src/components/company/WorkerCertificationsPanel.tsx` | painel da empresa com certificações da equipe (F8) |
 | `ProfileReviews` | `frontend/src/components/ProfileReviews.tsx` | lista de avaliações recebidas (estrelas + comentário, reutilizável) |
 | `CompanyBadges` | `frontend/src/components/CompanyBadges.tsx` | cards "Já trabalhou com" com toggle ocultar/reexibir (F12) |
+
+## Fundação responsiva e de movimento (PR 1 — 20/11/2026)
+
+Regras vindas da skill modern-web-guidance (`form-factor-adaptation`, `motion`, `respect-os-text-scale`, `responsive-design`). Valem para todo código novo.
+
+- **Alvo de toque:** `--target-size` = 24px (44px em `@media (pointer: coarse)`), aplicado em `index.css` via `:where(button, select, textarea, input, [role=button], nav a, label:has(checkbox/radio))` como `min-block-size`/`min-inline-size`. Especificidade 0: utilitários vencem, mas prefira não reduzir. `Button` `sm` = `min-h-9`, sobe a `min-h-11` em toque; `md` = `min-h-11`; `lg` = `min-h-12`. `IconButton` é 44px e estende a área por `::after` (`-inset-[10px]`) e exige `aria-label`.
+- **Altura:** em elemento com texto use `min-h-*`, nunca `h-*` fixa. Altura de página ou de viewport: `dvh` (`min-h-dvh`, `h-dvh`, `max-h-[90dvh]` em modais), nunca `vh`/`h-screen`/`min-h-screen`: a barra de endereço do celular faz `vh` passar do que cabe na tela.
+- **Text-scale:** `<meta name="text-scale" content="scale">` em `index.html`; NÃO definir `font-size` em `:root`/`html`. Evitar `text-[Npx]` em texto novo (use a escala do Tailwind, em rem).
+- **Tipografia:** `text-wrap: balance` em h1–h3, `pretty` em p/li (global em `index.css`); nunca em `*`.
+- **Scroll:** `scroll-padding-top` 4rem e `scroll-padding-bottom` 5rem + safe-area, para barras fixas não cobrirem o foco.
+- **Foco:** `:focus-visible` global em anel duplo (`outline: 2px solid #111; outline-offset: 2px; box-shadow: 0 0 0 4px #fff` — 18:1 sobre branco, 21:1 sobre preto) como rede de segurança. Controles com `focus-visible:ring-*` usam `focus-visible:outline-none` junto (o ring substitui o box-shadow). Nunca `focus:outline-none` solto; campos de formulário usam `focus-visible:ring-primary-dark` (#008840, ≈4,6:1).
+- **Safe-area lateral:** `.pl-safe`/`.pr-safe` só nas barras (BottomNav; headers sticky usam `pl-[max(1rem,env(safe-area-inset-left))]`). NÃO usar padding de safe-area no `body` (quebra full-bleed e não cobre `fixed`).
+- **Scroll-padding:** `scroll-padding-top/bottom` do `html` só em `@media (max-width: 767px)` (barras fixas só existem no mobile).
+- **Movimento:** tokens `duration-fast|base|slow` (150/200/300ms) e `animate-fade-in|slide-up|scale-in` no `tailwind.config.js` — usar com `motion-safe:`. Só `opacity`/`transform`. `animate-slide-in` só roda em `no-preference`. Sob `reduce`, `animate-spin` vira pulso de opacidade (`busyPulse`). Proibido `animation-duration: 0.01ms` global. Transições de cor permanecem.
+- **Ticker/letreiro automático:** a animação só existe dentro de `@media (prefers-reduced-motion: no-preference)` (sob `reduce` a faixa fica parada, texto visível) e vem com botão nativo "Pausar"/"Reproduzir" (rótulo alterna, SEM `aria-pressed`; `motion-reduce:hidden`). O alvo de 44px do botão vem da regra global `:where(button…)` do `index.css`: não remova essa regra sem dar `min-h-11` ao botão. Padrão: `Onboarding.tsx`.
+- **Alinhamento e hifenização com fallback seguro:** `[justify-content:safe_center]` (sem suporte a declaração cai para `flex-start`: topo alcançável, sem corte) e `hyphens-auto` (sem suporte só não hifeniza; a quebra segue garantida por `overflow-wrap: break-word`). Em grid de página use `grid-cols-[minmax(0,1fr)] md:grid-cols-2` e `min-w-0` nos filhos: coluna `auto` cresce até o conteúdo e estoura 320px. Nunca esconda vazamento com `overflow-x:hidden|clip`.

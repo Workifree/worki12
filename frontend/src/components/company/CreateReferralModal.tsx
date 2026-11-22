@@ -181,7 +181,7 @@ export default function CreateReferralModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-referral-title"
-        className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90dvh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id="create-referral-title" className="text-lg font-bold tracking-tight">Indicar Freela</h2>

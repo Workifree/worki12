@@ -142,7 +142,7 @@ export default function ProtectedRoute() {
 
     if (loading || (user && !onboardingChecked) || (user && tosAccepted === null)) {
         return (
-            <div className="flex h-screen w-full items-center justify-center bg-gray-50">
+            <div className="flex h-dvh w-full items-center justify-center bg-gray-50">
                 <Loader2 className="animate-spin text-primary" size={48} />
             </div>
         );

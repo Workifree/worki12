@@ -124,7 +124,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                         )}
                     </div>
 
-                    <div className="max-h-[70vh] overflow-y-auto">
+                    <div className="max-h-[70dvh] overflow-y-auto">
                         {notifications.length === 0 ? (
                             <div className="p-8 text-center text-gray-600">
                                 <Bell size={32} className="mx-auto mb-2 opacity-20" />

@@ -16,7 +16,13 @@ describe('IconButton', () => {
 
   it('alvo de toque 44px quadrado', () => {
     render(<IconButton aria-label="Editar">x</IconButton>)
-    expect(screen.getByRole('button')).toHaveClass('h-11', 'w-11')
+    expect(screen.getByRole('button')).toHaveClass('min-h-11', 'min-w-11')
+  })
+
+  it('estende a área de toque por pseudo-elemento', () => {
+    render(<IconButton aria-label="Editar">x</IconButton>)
+    expect(screen.getByRole('button').className).toContain('after:-inset-1')
+    expect(screen.getByRole('button').className).toContain('after:pointer-events-none')
   })
 
   it('esconde o ícone de leitores de tela', () => {

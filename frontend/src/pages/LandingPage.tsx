@@ -75,7 +75,7 @@ export default function LandingPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0]">
+    <div className="min-h-dvh bg-[#F4F4F0]">
       <PageMeta
         title="Confiança e registro para o trabalho freela"
         description="Empresa organiza e registra sua equipe de freelas de confiança. Freela constrói uma carreira que é sua — histórico, avaliação e comprovante de renda. Sem vínculo, sem bagunça."
@@ -83,14 +83,14 @@ export default function LandingPage() {
 
       {/* Navigation Bar */}
       <nav className="sticky top-0 z-50 bg-[#F4F4F0]/95 backdrop-blur-sm border-b-2 border-black/10 px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
           <button
             onClick={() => navigate('/')}
             className="inline-flex items-center min-h-11 pr-3 text-2xl font-black tracking-tighter hover:text-primary transition-colors"
           >
             Worki
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" size="md" className="px-3 sm:px-5" onClick={() => navigate('/login?type=work')}>
               <span className="hidden sm:inline">Quero </span>Trabalhar
             </Button>
@@ -104,7 +104,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden px-4 py-16 md:py-28">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6">
+          <h1 className="text-[clamp(1.75rem,1rem+5vw,3.75rem)] hyphens-auto [text-wrap:balance] font-bold tracking-tight mb-6">
             O trabalho freela, com a segurança que faltava
           </h1>
           <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10">

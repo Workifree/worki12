@@ -169,7 +169,7 @@ export default function InviteTakeover() {
       aria-modal="true"
       aria-labelledby="invite-takeover-title"
     >
-      <div className="relative bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-5 sm:p-6 max-h-[90dvh] overflow-y-auto">
         <Button
           variant="ghost"
           onClick={dismiss}

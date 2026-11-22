@@ -340,7 +340,7 @@ export default function MyCertificationsSection() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="cert-form-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 sm:p-6"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 id="cert-form-title" className="text-lg font-bold">

@@ -254,13 +254,13 @@ export default function Admin() {
     }, [tab, authorized, users.length, escrows.length, loadUsers, loadEscrows]);
 
     if (loading) return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-dvh flex items-center justify-center">
             <Loader2 className="animate-spin" size={32} />
         </div>
     );
 
     if (needsLogin && !authorized) return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="min-h-dvh bg-gray-50 flex items-center justify-center p-6">
             <div className="w-full max-w-sm">
                 <div className="bg-white border-2 border-black rounded-2xl p-8">
                     <div className="flex items-center gap-3 mb-6">
@@ -274,7 +274,7 @@ export default function Admin() {
                                 type="email"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"
+                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                                 placeholder="admin@email.com"
                                 required
                             />
@@ -285,7 +285,7 @@ export default function Admin() {
                                 type="password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"
+                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                                 placeholder="••••••••"
                                 required
                             />
@@ -308,7 +308,7 @@ export default function Admin() {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+        <div className="min-h-dvh bg-gray-50 p-4 md:p-6">
             <div className="max-w-7xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
@@ -525,7 +525,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                     <select
                         value={filterType}
                         onChange={e => setFilterType(e.target.value)}
-                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus:outline-none"
+                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                     >
                         <option value="all">Todos</option>
                         <option value="credit">Credito</option>
@@ -605,7 +605,7 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                     <select
                         value={filter}
                         onChange={e => setFilter(e.target.value)}
-                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus:outline-none"
+                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                     >
                         <option value="all">Todos</option>
                         <option value="worker">Workers</option>
@@ -696,7 +696,7 @@ function EscrowsTab({ escrows }: { escrows: RichEscrow[] }) {
                     <select
                         value={filterStatus}
                         onChange={e => setFilterStatus(e.target.value)}
-                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus:outline-none"
+                        className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                     >
                         <option value="all">Todos</option>
                         <option value="reserved">Reservados</option>

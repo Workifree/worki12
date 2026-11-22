@@ -15,10 +15,13 @@ export interface IconButtonProps
 }
 
 const BASE =
-  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 select-none ' +
+  'relative inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl border-2 select-none ' +
   'transition-colors duration-150 motion-reduce:transition-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black ' +
-  'disabled:cursor-not-allowed disabled:opacity-50'
+  'disabled:cursor-not-allowed disabled:opacity-50 ' +
+  // Area de toque estendida (>=44px mesmo se o chamador reduzir o botao visual via className).
+  "after:pointer-events-none after:absolute after:-inset-1 after:content-['']"
+
 
 const VARIANTS: Record<IconButtonVariant, string> = {
   ghost: 'border-transparent bg-transparent text-black enabled:hover:bg-gray-100',

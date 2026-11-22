@@ -905,7 +905,7 @@ export default function CompanyCreateJob() {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="convidar-freela-titulo"
-                        className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                        className="w-full max-w-md max-h-[90dvh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                     >
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>

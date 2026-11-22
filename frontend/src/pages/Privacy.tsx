@@ -6,7 +6,7 @@ export default function Privacy() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
+    <div className="min-h-dvh bg-gray-50 px-4 py-6 sm:py-10">
       <div className="max-w-3xl mx-auto">
         <Button
           variant="ghost"

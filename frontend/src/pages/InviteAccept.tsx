@@ -151,7 +151,7 @@ export default function InviteAccept() {
   const GREEN_SHADOW = 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]';
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+    <div className="min-h-dvh bg-[#F4F4F0] flex items-center justify-center p-4">
       <PageMeta
         title="Convite de Elenco"
         description="Aceite o convite para entrar no elenco de uma empresa no Worki."

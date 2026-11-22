@@ -357,7 +357,7 @@ export default function CompanyMessages() {
 
     if (loading) {
         return (
-            <div className="flex flex-col h-[calc(100vh-140px)] max-w-6xl mx-auto animate-pulse">
+            <div className="flex flex-col h-[calc(100dvh-140px-env(safe-area-inset-bottom,0px))] md:h-[calc(100dvh-140px)] max-w-6xl mx-auto animate-pulse">
                 <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-4" />
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
                     <div className="space-y-3">
@@ -372,7 +372,7 @@ export default function CompanyMessages() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] font-sans text-accent max-w-6xl mx-auto">
+        <div className="flex flex-col h-[calc(100dvh-140px-env(safe-area-inset-bottom,0px))] md:h-[calc(100dvh-140px)] font-sans text-accent max-w-6xl mx-auto">
             <PageHeader
                 title="Mensagens"
                 subtitle="Converse com os freelas dos seus turnos."

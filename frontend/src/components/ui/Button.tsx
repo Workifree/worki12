@@ -8,7 +8,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg'
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary = verde (worker) · dark = preto (empresa) · secondary = borda · ghost = sem moldura · danger = destrutivo */
   variant?: ButtonVariant
-  /** sm h-9 · md h-11 (alvo de toque 44px) · lg h-12 */
+  /** sm min-h-9 (min-h-11 em toque) · md min-h-11 · lg min-h-12 — min-h, nunca h fixa: texto pode quebrar sem clipar */
   size?: ButtonSize
   loading?: boolean
   fullWidth?: boolean
@@ -19,7 +19,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm leading-none select-none ' +
+  'inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm leading-tight text-center select-none ' +
   'transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
   'focus-visible:ring-black disabled:cursor-not-allowed disabled:opacity-50'
@@ -29,7 +29,10 @@ const FRAME =
   'border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ' +
   'enabled:hover:-translate-x-px enabled:hover:-translate-y-px enabled:hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ' +
   'enabled:active:translate-x-[3px] enabled:active:translate-y-[3px] enabled:active:shadow-none ' +
-  'disabled:shadow-none'
+  'disabled:shadow-none ' +
+  'motion-reduce:enabled:hover:translate-x-0 motion-reduce:enabled:hover:translate-y-0 ' +
+  'motion-reduce:enabled:active:translate-x-0 motion-reduce:enabled:active:translate-y-0 ' +
+  'motion-reduce:enabled:hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] motion-reduce:enabled:active:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   // primary-dark (#008840) → texto branco 4,57:1 (AA); o verde de marca #00A651 dá só 3,19:1.
@@ -41,9 +44,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
 }
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-9 px-3',
-  md: 'h-11 px-5',
-  lg: 'h-12 px-6',
+  sm: 'min-h-9 px-3 py-2 [@media(pointer:coarse)]:min-h-11',
+  md: 'min-h-11 px-5 py-2.5',
+  lg: 'min-h-12 px-6 py-3',
 }
 
 function Spinner() {
