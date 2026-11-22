@@ -362,7 +362,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="training-form-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 id="training-form-title" className="text-lg font-bold">Registrar Treinamento</h3>
@@ -428,7 +428,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="revoke-training-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6 max-h-[90dvh] overflow-y-auto"
           >
             <h3 id="revoke-training-title" className="text-lg font-bold mb-2">Revogar Treinamento?</h3>
             <p className="text-sm text-gray-600 mb-4">

@@ -39,7 +39,7 @@ function IconBadge({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary"
+      className="hidden h-10 w-10 shrink-0 items-center min-[400px]:flex justify-center rounded-xl border-2 border-black bg-primary-light text-primary"
     >
       {children}
     </span>
@@ -104,7 +104,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
       )}
 
       {(showUpdate || showInstall) && (
-        <div className="fixed inset-x-3 bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))] z-40 md:inset-x-auto md:bottom-6 md:right-6 md:w-96">
+        <div className="fixed inset-x-[max(0.75rem,env(safe-area-inset-left))] max-w-full min-w-0 bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))] z-40 md:inset-x-auto md:bottom-6 md:right-6 md:w-96">
           {showUpdate && (
             <Card
               padding="sm"
@@ -112,14 +112,14 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
               aria-live="polite"
               className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-slide-in"
             >
-              <div className="flex items-start gap-3">
+              <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                 <IconBadge>
                   <RefreshCw className="h-5 w-5" />
                 </IconBadge>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-black">Nova versão disponível</p>
                   <p className="mt-0.5 text-sm text-gray-600">Atualize para ter as últimas melhorias do Worki.</p>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 [&>button]:w-full min-[400px]:[&>button]:w-auto">
                     <Button size="md" onClick={applyPwaUpdate}>
                       Atualizar
                     </Button>
@@ -137,22 +137,22 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
               as="aside"
               padding="sm"
               aria-label="Instalar o Worki"
-              className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-slide-in"
+              className="relative shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-slide-in"
             >
-              <div className="flex items-start gap-3">
+              <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                 <IconBadge>
                   <Download className="h-5 w-5" />
                 </IconBadge>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-black">
+                  <p className="pr-12 text-sm font-bold text-black break-words">
                     {pwa.installAvailable ? 'Instale o Worki' : 'Instale o Worki no iPhone'}
                   </p>
                   {pwa.installAvailable ? (
                     <>
-                      <p className="mt-0.5 text-sm text-gray-600">
+                      <p className="mt-0.5 text-sm text-gray-600 break-words">
                         Abra seus turnos direto da tela inicial, como um aplicativo.
                       </p>
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap gap-2 [&>button]:w-full min-[400px]:[&>button]:w-auto">
                         <Button size="md" iconLeft={<Download aria-hidden="true" className="h-4 w-4" />} onClick={handleInstall}>
                           Instalar
                         </Button>
@@ -160,20 +160,20 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
                     </>
                   ) : (
                     <>
-                      <p className="mt-0.5 text-sm text-gray-600">
+                      <p className="mt-0.5 text-sm text-gray-600 break-words">
                         Toque em{' '}
-                        <span className="inline-flex items-center gap-1 font-bold text-black">
+                        <span className="inline-flex flex-wrap items-center gap-1 font-bold text-black">
                           Compartilhar
                           <Share aria-hidden="true" className="h-4 w-4" />
                         </span>{' '}
                         e depois em{' '}
-                        <span className="inline-flex items-center gap-1 font-bold text-black">
+                        <span className="inline-flex flex-wrap items-center gap-1 font-bold text-black">
                           Adicionar à Tela de Início
                           <SquarePlus aria-hidden="true" className="h-4 w-4" />
                         </span>
                         .
                       </p>
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap gap-2 [&>button]:w-full min-[400px]:[&>button]:w-auto">
                         <Button size="md" variant="secondary" onClick={dismissInstall}>
                           Entendi
                         </Button>
@@ -185,7 +185,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
                   type="button"
                   onClick={dismissInstall}
                   aria-label="Dispensar convite de instalação"
-                  className="-mr-1 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                  className="absolute right-2 top-2 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                 >
                   <X aria-hidden="true" className="h-4 w-4" />
                 </button>

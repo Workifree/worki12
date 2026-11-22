@@ -12,7 +12,7 @@ export default function MainLayout() {
     // Auditoria de rede de 01/09: toda tela do freela pagava 2x a mesma consulta de onboarding.
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto">
+        <div className="min-h-dvh flex flex-col md:flex-row max-w-7xl mx-auto">
             {/* Aviso em tela cheia de convite de turno (worker only) */}
             <InviteTakeover />
 
@@ -20,7 +20,7 @@ export default function MainLayout() {
             <Sidebar />
 
             {/* Mobile Header (Optional, for Logo) */}
-            <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-glass-surface/90 backdrop-blur-md z-40 border-b-2 border-black">
+            <header className="md:hidden flex items-center justify-between pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] h-14 sticky top-0 bg-glass-surface/90 backdrop-blur-md z-40 border-b-2 border-black">
                 <p className="text-xl font-bold text-primary tracking-tight">Worki.</p>
                 <NotificationBell />
             </header>

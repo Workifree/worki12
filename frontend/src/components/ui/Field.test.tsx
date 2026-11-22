@@ -48,8 +48,8 @@ describe('Field', () => {
     )
     const input = screen.getByLabelText('Nome')
     expect(input).toHaveClass('border-2', 'border-black', 'rounded-xl', 'h-11', 'px-4', 'uppercase')
-    expect(input.className).toContain('focus:ring-2')
-    expect(input.className).toContain('focus:ring-primary')
+    expect(input.className).toContain('focus-visible:ring-2')
+    expect(input.className).toContain('focus-visible:ring-primary-dark')
   })
 
   it('hint fica ligado via aria-describedby', () => {

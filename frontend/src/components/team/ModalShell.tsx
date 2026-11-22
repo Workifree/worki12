@@ -55,7 +55,7 @@ export function ModalShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full ${SIZE_CLASS[size]} max-h-[92vh] flex flex-col`}
+        className={`bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full ${SIZE_CLASS[size]} max-h-[92dvh] flex flex-col`}
       >
         <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">

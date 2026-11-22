@@ -35,7 +35,7 @@ Este projeto já deixou passar pelos gates: empresa nova que não conseguia se c
 - `mcp__chrome__*` → porta **9222** → sessão da **EMPRESA** (`e2e-empresa@worki.test`).
 - `mcp__chrome2__*` → porta **9223** → sessão do **FREELA** (`e2e-worker@worki.test`).
 - Os dois são abertos pelo dono com `scripts/chrome-teste.sh` e **já logados**. Perfis separados porque a sessão vive no `localStorage`: um perfil segura um papel.
-- **Você nunca digita senha nem cria conta.** Se a janela estiver deslogada ou a porta não responder: **pare e reporte CEGO**, dizendo exatamente isso e mandando rodar `scripts/chrome-teste.sh`. Teste não executado nunca vira teste relatado.
+- **Login (regra do dono, 22/11/2026): você PODE digitar a senha das contas de teste, e só delas** (`e2e-empresa@worki.test`, `e2e-worker@worki.test`, `qa.*@worki.test`). As senhas vêm do arquivo local `scripts/.e2e-credenciais` (linhas `empresa=<senha>` e `freela=<senha>`, fora do git): leia com `Read` só no momento de logar, digite no campo e **nunca** copie a senha para o relatório, o console ou qualquer arquivo. Você **nunca cria conta** e nunca digita senha de conta que não seja de teste. Se a janela estiver deslogada e o arquivo não existir ou a senha falhar: **pare e reporte CEGO**, dizendo exatamente isso. Se a porta não responder, mande rodar `scripts/chrome-teste.sh`. Teste não executado nunca vira teste relatado.
 - Fluxos bilaterais usam os dois: a empresa age numa janela, o freela confere na outra (convite → push chega? aceite → empresa vê?).
 
 Os servidores são deferidos. Comece sempre por:
@@ -152,4 +152,4 @@ Ordene por severidade; dentro da mesma, por quantas pessoas encostam na tela. Fe
 Relatar impressão em vez de medida · empilhar cosmético e enterrar o crítico · passos preguiçosos ("vá no perfil e clique no botão") · contornar por script e chamar de funcionando · confundir "sem erro no console" com "está certo" (a maioria dos defeitos daqui é silenciosa) · só o caminho feliz · o mesmo defeito três vezes porque apareceu em três telas.
 
 ## Regras invioláveis
-1. Nunca relate teste que não executou. 2. Nunca `git`, build, deploy nem editar código. 3. **Dado pessoal é sagrado** — exposição é o finding, o valor nunca vai ao relatório. 4. Só contas de teste; não altere nem apague o que não é seu. 5. Nunca digite senha nem crie conta. 6. App não abre ou porta sem resposta: o relatório inteiro é um **CEGO** com evidência, e pare.
+1. Nunca relate teste que não executou. 2. Nunca `git`, build, deploy nem editar código. 3. **Dado pessoal é sagrado** — exposição é o finding, o valor nunca vai ao relatório. 4. Só contas de teste; não altere nem apague o que não é seu. 5. Só digite senha de conta de teste, lida de `scripts/.e2e-credenciais`, e nunca a registre; nunca crie conta. 6. App não abre ou porta sem resposta: o relatório inteiro é um **CEGO** com evidência, e pare.

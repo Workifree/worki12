@@ -332,7 +332,7 @@ export default function WorkerOnboarding() {
         }`;
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
+        <div className="min-h-dvh bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">

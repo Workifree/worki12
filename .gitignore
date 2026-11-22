@@ -24,3 +24,6 @@ frontend/playwright-report/
 scripts/.gemini-key
 .env*
 frontend/dist-teste
+
+# Credenciais das contas de teste do simulador (harness-tester le daqui; nunca versionar)
+scripts/.e2e-credenciais

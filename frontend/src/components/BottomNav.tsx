@@ -30,7 +30,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     const isCompany = type === 'company';
 
     return (
-        <nav aria-label="Menu de navegacao" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
+        <nav aria-label="Menu de navegacao" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe pl-safe pr-safe z-50">
             <div className="flex justify-around items-stretch h-16 px-1">
                 {navItems.map((item) => (
                     <NavLink

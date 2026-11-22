@@ -5,8 +5,8 @@ import { cx } from './cx'
 /** Classes canônicas de controle (input/textarea/select) — reutilizáveis fora do Field. */
 const FIELD_CONTROL_BASE =
   'w-full border-2 border-black rounded-xl bg-white px-4 text-base sm:text-sm text-black placeholder:text-gray-500 ' +
-  'focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ' +
-  'aria-[invalid=true]:border-red-600 aria-[invalid=true]:focus:ring-red-500'
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'aria-[invalid=true]:border-red-600 aria-[invalid=true]:focus-visible:ring-red-500'
 
 /** input/select: altura fixa de 44px. */
 export const FIELD_CONTROL_CLASS = `${FIELD_CONTROL_BASE} h-11`

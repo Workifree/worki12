@@ -57,8 +57,8 @@ const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
-  <div className="h-screen w-full bg-[#F4F4F0] animate-pulse">
-    <div className="flex flex-col md:flex-row max-w-7xl mx-auto min-h-screen">
+  <div className="h-dvh w-full bg-[#F4F4F0] animate-pulse">
+    <div className="flex flex-col md:flex-row max-w-7xl mx-auto min-h-dvh">
       <div className="hidden md:block w-64 p-6 space-y-4">
         <div className="h-8 w-24 bg-gray-200 rounded-lg" />
         <div className="space-y-3 mt-8">
@@ -97,7 +97,7 @@ function HomeRedirect() {
     });
   }, [navigate]);
 
-  if (checking) return <div className="h-screen flex items-center justify-center bg-[#F4F4F0] animate-pulse"><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
+  if (checking) return <div className="h-dvh flex items-center justify-center bg-[#F4F4F0] animate-pulse"><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
 
   return <Onboarding />;
 }

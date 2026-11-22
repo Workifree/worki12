@@ -1218,7 +1218,7 @@ export default function MyJobs() {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="detalhe-turno-titulo"
-                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
+                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90dvh] overflow-y-auto"
                     >
                         <div className="flex items-start justify-between gap-3 mb-5">
                             <div className="flex items-center gap-3 min-w-0">
