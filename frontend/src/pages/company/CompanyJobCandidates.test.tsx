@@ -1255,7 +1255,11 @@ describe('CompanyJobCandidates — handleRecordPayment: status → completed ap�
       error: null,
     } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
 
-    const jobChain = buildChain({ single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }) })
+    // `getJobCompanyId` (paymentRecordService) lê jobs.company_id via maybeSingle.
+    const jobChain = buildChain({
+      single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { company_id: 'company-1' }, error: null }),
+    })
     const appChain = buildChain({
       order: vi.fn().mockResolvedValue({ data: APP_READY_FOR_PAYMENT, error: null }),
       // PaymentRecordService.recordExternalPayment valida o turno via

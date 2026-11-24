@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown, BadgeCheck, CircleDashed } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown, BadgeCheck, CircleDashed, UserCog, CalendarClock } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +7,7 @@ import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
 import { Button } from './ui';
 import { useEffect, useState } from 'react';
-import { getMyCompanies, pickCurrentCompany, setSelectedCompanyId, canSeeOrganization as podeVerOrganizacao } from '../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, setSelectedCompanyId, canSeeOrganization as podeVerOrganizacao, showTeamNav, hasTeamNav, readTeamNavHint, writeTeamNavHint, subscribeCompanyScope } from '../services/companyScopeService';
 import type { MyCompany } from '../types';
 
 interface SidebarProps {
@@ -52,6 +52,10 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         }
     };
 
+    // Convidar/confirmar/remover alguém muda `team_enabled`/papel: relê o seam sem recarregar a página.
+    const [scopeVersion, setScopeVersion] = useState(0);
+    useEffect(() => subscribeCompanyScope(() => setScopeVersion((v) => v + 1)), []);
+
     useEffect(() => {
         const fetchData = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -89,7 +93,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             }
         };
         fetchData();
-    }, [type]);
+    }, [type, scopeVersion]);
 
     // Nav push-first (pivô empresa-primeiro, jun/2026): worker não busca vagas —
     // recebe Convites e cuida das suas Empresas. "Buscar Vagas"/"Analytics"
@@ -112,9 +116,29 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização.
     const canSeeOrganization = podeVerOrganizacao(currentCompany);
 
+    // Encarregado confirmado opera turnos, mas não vê Elenco, pagamentos, operação nem indicações
+    // (a barreira real é o RLS; aqui é só para não oferecer o que ele não pode usar).
+    const isEncarregado = currentCompany?.role === 'encarregado';
+    const ocultoParaEncarregado = new Set([
+        '/company/team',
+        '/company/indicacoes',
+        '/company/relatorio',
+        '/company/operacao',
+    ]);
+
+    // Hoje só para quem tem equipe ou é encarregado (mesma regra do BottomNav; dono único não vê).
+    const comEquipe = currentCompany ? hasTeamNav(currentCompany) : readTeamNavHint();
+    useEffect(() => {
+        if (currentCompany) writeTeamNavHint(hasTeamNav(currentCompany));
+    }, [currentCompany]);
+
     const companyNavItems = [
         { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
+        ...(comEquipe ? [{ icon: CalendarClock, label: 'Hoje', path: '/company/hoje' }] : []),
         { icon: Users, label: 'Meu Elenco', path: '/company/team' },
+        // R23 (divulgação progressiva): "Equipe" só ganha destaque depois da primeira pessoa;
+        // antes disso o acesso é por Configurações (Perfil Empresa).
+        ...(showTeamNav(currentCompany) ? [{ icon: UserCog, label: 'Equipe', path: '/company/configuracoes/equipe' }] : []),
         { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: Share2, label: 'Indicações', path: '/company/indicacoes' },
@@ -125,7 +149,9 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
     ];
 
-    const navItems = type === 'company' ? companyNavItems : workerNavItems;
+    const navItems = type === 'company'
+        ? companyNavItems.filter((item) => !(isEncarregado && ocultoParaEncarregado.has(item.path)))
+        : workerNavItems;
     const isCompany = type === 'company';
 
     // F13 (R13) — troca de unidade: grava a seleção (companyScopeService, singleton + sessionStorage)

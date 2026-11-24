@@ -15,6 +15,8 @@ import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services/shiftOperationService';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
 import type { ReactNode } from 'react';
@@ -63,6 +65,23 @@ export default function CompanyCreateJob() {
 
     const startDateRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(false);
+
+    // Etiqueta (E5/R20, R26): opcional e só com equipe (divulgação progressiva). Não vale para série
+    // (cada ocorrência é um turno; a etiqueta se aplica turno a turno depois).
+    const currentCompany = useCurrentCompany();
+    const tagsEnabled = currentCompany?.team_enabled === true || currentCompany?.role === 'encarregado';
+    const [tagOptions, setTagOptions] = useState<CompanyTag[]>([]);
+    const [tagId, setTagId] = useState('');
+    const [initialTagId, setInitialTagId] = useState('');
+    useEffect(() => {
+        if (!tagsEnabled || !currentCompany) return;
+        let active = true;
+        void (async () => {
+            const list = await listTags(currentCompany.company_id, true);
+            if (active) setTagOptions(list);
+        })();
+        return () => { active = false; };
+    }, [tagsEnabled, currentCompany]);
     const [createdJobId, setCreatedJobId] = useState<string | null>(null);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
 
@@ -214,10 +233,13 @@ export default function CompanyCreateJob() {
         void (async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
+            // Briefing da empresa OPERADA (gerente/encarregado não são a linha de `companies`).
+            const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
+            if (!empresaOperada) return;
             const { data } = await supabase
                 .from('companies')
                 .select('default_briefing')
-                .eq('id', user.id)
+                .eq('id', empresaOperada)
                 .maybeSingle();
             if (!active || !data?.default_briefing) return;
             setFormData(prev => (prev.briefing ? prev : { ...prev, briefing: data.default_briefing as string }));
@@ -239,6 +261,10 @@ export default function CompanyCreateJob() {
 
             if (error) throw error;
             if (data) {
+                if (modo === 'editar') {
+                    setTagId(data.tag_id ?? '');
+                    setInitialTagId(data.tag_id ?? '');
+                }
                 setFormData({
                     title: data.title,
                     category: data.category,
@@ -477,6 +503,10 @@ export default function CompanyCreateJob() {
                 }
                 // Invalida o cache do React Query (staleTime 5min) para o dashboard não
                 // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
+                if (tagsEnabled && tagId !== initialTagId) {
+                    const tagResult = await setJobTag(id as string, tagId || null);
+                    if (tagResult.outcome !== 'ok') addToast(tagMessage(tagResult.outcome, 'assign'), 'info');
+                }
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
                 await queryClient.invalidateQueries({ queryKey: ['companyApplications'] });
                 addToast('Turno atualizado com sucesso!', 'success');
@@ -487,6 +517,11 @@ export default function CompanyCreateJob() {
                 // deliberadamente omitido, para a edição não reescrever o ciclo de vida.
                 const { data: newJob, error } = await supabase.from('jobs').insert({ ...payload, status: 'open' }).select().single();
                 if (error) throw error;
+
+                if (tagsEnabled && tagId) {
+                    const tagResult = await setJobTag(newJob.id, tagId);
+                    if (tagResult.outcome !== 'ok') addToast(`O turno foi criado, mas a etiqueta não foi aplicada. ${tagMessage(tagResult.outcome, 'assign')}`, 'info');
+                }
 
                 // Novo turno deve aparecer imediatamente no dashboard (invalida cache).
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
@@ -602,6 +637,18 @@ export default function CompanyCreateJob() {
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         />
                     </Field>
+
+                    {tagsEnabled && !(!isEditing && isRecurring) && (tagOptions.length > 0 || tagId) && (
+                        <Field label="Etiqueta (opcional)" hint="Agrupa turnos para filtrar na tela Hoje.">
+                            <select aria-label="Etiqueta" value={tagId} onChange={(e) => setTagId(e.target.value)}>
+                                <option value="">Sem etiqueta</option>
+                                {/* Arquivada some do seletor de turnos novos; fica só se já for a deste turno. */}
+                                {tagOptions.filter((t) => !t.archivedAt || t.id === tagId).map((t) => (
+                                    <option key={t.id} value={t.id}>{t.archivedAt ? `${t.name} (arquivada)` : t.name}</option>
+                                ))}
+                            </select>
+                        </Field>
+                    )}
                 </FormSection>
 
                 <FormSection title="Quando e onde">

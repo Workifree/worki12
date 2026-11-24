@@ -1,5 +1,8 @@
-import { Home, User, MessageSquare, PlusCircle, Users, Contact, Inbox, Briefcase, Receipt } from 'lucide-react';
+import { CalendarClock, Home, User, MessageSquare, PlusCircle, Users, Contact, Inbox, Briefcase, Receipt } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useCurrentCompany } from '../hooks/useCurrentCompany';
+import { hasTeamNav, readTeamNavHint, writeTeamNavHint } from '../services/companyScopeService';
 
 interface BottomNavProps {
     type?: 'worker' | 'company';
@@ -26,11 +29,26 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
         { icon: User, label: 'Perfil', path: '/company/profile' },
     ];
 
-    const navItems = type === 'company' ? companyNavItems : workerNavItems;
+    // Encarregado não vê o Elenco (a barreira real é o RLS; aqui é só não oferecer o que não usa).
+    const currentCompany = useCurrentCompany(type === 'company');
+    const isEncarregado = currentCompany?.role === 'encarregado';
+    // Com equipe (ou sendo encarregado), a Hoje vira o "Início" operacional: o nav ja foi medido
+    // a 320px com 6 itens, entao ela ocupa o lugar do Início em vez de ganhar um sétimo botão.
+    const comEquipe = currentCompany ? hasTeamNav(currentCompany) : type === 'company' && readTeamNavHint();
+    useEffect(() => {
+        if (currentCompany) writeTeamNavHint(hasTeamNav(currentCompany));
+    }, [currentCompany]);
+    const baseCompanyItems = comEquipe
+        ? companyNavItems.map((item) =>
+            item.path === '/company/dashboard' ? { icon: CalendarClock, label: 'Hoje', path: '/company/hoje' } : item)
+        : companyNavItems;
+    const navItems = type === 'company'
+        ? baseCompanyItems.filter((item) => !(isEncarregado && item.path === '/company/team'))
+        : workerNavItems;
     const isCompany = type === 'company';
 
     return (
-        <nav aria-label="Menu de navegacao" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
+        <nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
             <div className="flex justify-around items-stretch h-16 px-1">
                 {navItems.map((item) => (
                     <NavLink

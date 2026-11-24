@@ -33,6 +33,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getMyCompanies, pickCurrentCompany } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -61,6 +62,8 @@ interface WeekShiftCountRow {
 
 /** Shape jsonb devolvido por `my_link_risk_config()`. */
 interface LinkRiskConfigRpcResult {
+  /** `ok` quando há dado; `company_required`, `forbidden`, `no_company`... = usar o default. */
+  outcome?: string;
   enabled?: boolean;
   threshold?: number;
 }
@@ -85,13 +88,27 @@ function isMissingRpc(error: SupabaseErrorLike): boolean {
 
 export const LinkRiskService = {
   /**
-   * Config do aviso da empresa da sessão. RPC `my_link_risk_config()` SEMPRE devolve uma linha
-   * (fail-safe no banco) — o fallback aqui só cobre o caso de a chamada em si falhar
-   * (rede, RPC ausente/LM-5, sessão inválida).
+   * Config do aviso da empresa CORRENTE da sessão. Passa `p_company_id` à RPC `my_link_risk_config`
+   * (E5/R7b): sem a empresa, quem opera 2+ unidades recebe `company_required`. Qualquer `outcome`
+   * diferente de `ok` (`company_required`, `forbidden`, `no_company`, `unauthenticated`) e qualquer
+   * falha (rede, RPC ausente) cai no default LIGADO/2 — fail-safe na direção do aviso, nunca quebra
+   * a tela. `companyId` opcional: se omitido, usa a empresa corrente do seam.
    */
-  async getConfig(): Promise<LinkRiskConfig> {
+  async getConfig(companyId?: string): Promise<LinkRiskConfig> {
     try {
-      const { data, error } = await supabase.rpc('my_link_risk_config');
+      let resolved = companyId;
+      if (!resolved) {
+        try {
+          resolved = pickCurrentCompany(await getMyCompanies())?.company_id;
+        } catch (err) {
+          logError('linkRisk.getConfig.company', err);
+        }
+      }
+
+      const { data, error } = await supabase.rpc(
+        'my_link_risk_config',
+        resolved ? { p_company_id: resolved } : undefined,
+      );
 
       if (error) {
         if (!isMissingRpc(error as SupabaseErrorLike)) {
@@ -101,6 +118,10 @@ export const LinkRiskService = {
       }
 
       const result = (data ?? {}) as LinkRiskConfigRpcResult;
+      // Contrato antigo (sem `outcome`) continua valendo; com `outcome`, só `ok` traz dado.
+      if (result.outcome !== undefined && result.outcome !== 'ok') {
+        return { ...DEFAULT_LINK_RISK_CONFIG };
+      }
       return {
         enabled: result.enabled !== false,
         threshold:
@@ -139,7 +160,7 @@ export const LinkRiskService = {
         return new Map();
       }
 
-      const rows = (data ?? []) as WeekShiftCountRow[];
+      const rows = Array.isArray(data) ? (data as WeekShiftCountRow[]) : [];
       const result = new Map<string, number>();
       for (const row of rows) {
         result.set(row.worker_id, row.shift_count);
@@ -178,7 +199,7 @@ export const LinkRiskService = {
         return new Map();
       }
 
-      const rows = (data ?? []) as WeekShiftCountRow[];
+      const rows = Array.isArray(data) ? (data as WeekShiftCountRow[]) : [];
       const result = new Map<string, number>();
       for (const row of rows) {
         result.set(`${row.worker_id}|${row.week_start}`, row.shift_count);

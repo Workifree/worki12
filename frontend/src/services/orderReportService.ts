@@ -66,6 +66,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getAuthenticatedCompanyId } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -242,12 +243,16 @@ export const OrderReportService = {
       } = await supabase.auth.getUser();
       if (!user) return empty;
 
+      // Empresa OPERADA pela sessão (dono, gerente, encarregado) — nunca `user.id`, que só
+      // coincide com o company_id para o dono direto (Equipe e encarregados, gate G / seam).
+      const companyId = await getAuthenticatedCompanyId();
+
       // 1. Turnos da empresa (todos, exceto deletados) — filtragem por período é feita
       //    em JS pois precisamos do fallback start_date -> created_at.
       const { data: jobsData, error: jobsErr } = await supabase
         .from('jobs')
         .select('id, title, category, budget, start_date, created_at, status')
-        .eq('company_id', user.id)
+        .eq('company_id', companyId)
         .neq('status', 'deleted');
 
       if (jobsErr) {

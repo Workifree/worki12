@@ -40,7 +40,6 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import type { ShiftPayment, PaymentSource } from '../types';
-import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
 // Tipos de parâmetros e resultado
@@ -160,11 +159,24 @@ export interface ShiftPaymentReceipt {
 // Helpers internos
 // ---------------------------------------------------------------------------
 
-/** Obtém o company_id da sessão autenticada (empresa). Espelha shiftInviteService. */
-async function getAuthCompanyId(): Promise<string> {
-    // Delega ao seam: `owner_id` sozinho e a ancora ANTIGA -- nao cobre empresa cujo id e o do
-  // proprio usuario, nem gerente de unidade (company_members). Ver companyScopeService.
-  return resolverEmpresaDaSessao();
+/**
+ * `company_id` do turno (jobs.company_id). O marcador de pagamento ancora na empresa DONA DO TURNO,
+ * nunca na "empresa da sessao": quem opera o turno pode ser um encarregado (responsavel/cobertura)
+ * cuja empresa corrente nao e, por si, a do turno, e a RLS de `shift_payments` exige
+ * `company_id` = empresa do turno (E3 de equipe-encarregados). Retorna null se o turno nao existe
+ * ou nao e legivel.
+ */
+async function getJobCompanyId(jobId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('company_id')
+    .eq('id', jobId)
+    .maybeSingle();
+  if (error) {
+    logError('paymentRecord.getJobCompanyId', error);
+    return null;
+  }
+  return (data as { company_id?: string | null } | null)?.company_id ?? null;
 }
 
 /** Normaliza paidAt (string | Date | undefined) para ISO string. Default: agora. */
@@ -274,8 +286,11 @@ export const PaymentRecordService = {
         };
       }
 
-      // 2. Resolver a empresa dona (RLS exige company_id = empresa do auth.uid()).
-      const companyId = await getAuthCompanyId();
+      // 2. Empresa dona DO TURNO (RLS exige company_id = jobs.company_id), nao a da sessao.
+      const companyId = await getJobCompanyId(jobId);
+      if (!companyId) {
+        return { success: false, error: 'Não foi possível identificar a empresa do turno.' };
+      }
 
       // 3. INSERT — recorded_by é preenchido pelo DEFAULT auth.uid() no schema.
       const { data: payment, error: insertErr } = await supabase
@@ -360,8 +375,11 @@ export const PaymentRecordService = {
         };
       }
 
-      // 2. Resolver a empresa dona (RLS exige company_id = empresa do auth.uid()).
-      const companyId = await getAuthCompanyId();
+      // 2. Empresa dona DO TURNO (RLS exige company_id = jobs.company_id), nao a da sessao.
+      const companyId = await getJobCompanyId(jobId);
+      if (!companyId) {
+        return { success: false, error: 'Não foi possível identificar a empresa do turno.' };
+      }
 
       // 3. INSERT — nasce 'scheduled': sem paid_at, sem confirmação, sem void.
       const { data: payment, error: insertErr } = await supabase
@@ -582,7 +600,7 @@ export const PaymentRecordService = {
    * mais recentes primeiro — alimenta "Meus Recebimentos" (worker). Só-leitura sob RLS
    * (`sp_select_participants`: worker_id = auth.uid()), então não precisa filtrar por
    * worker_id explicitamente no client, mas fazemos assim mesmo por clareza/defesa (evita
-   * depender só do RLS se a policy mudar) — mesmo espírito de `getAuthCompanyId`.
+   * depender só do RLS se a policy mudar) — mesmo espírito de `getJobCompanyId`.
    */
   async listForWorker(workerId: string): Promise<WorkerShiftPaymentListItem[]> {
     if (!workerId) return [];

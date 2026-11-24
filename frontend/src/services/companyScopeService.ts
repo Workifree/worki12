@@ -19,7 +19,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
-import type { MyCompany } from '../types';
+import type { CompanyRole, MyCompany } from '../types';
 
 const SELECTED_COMPANY_STORAGE_KEY = 'worki_selected_company_id';
 
@@ -75,6 +75,27 @@ let companiesCache: { promise: Promise<MyCompany[]>; at: number } | null = null;
 /** Derruba o cache — chamar após aceite/revogação de gerente e em troca de sessão. */
 export function invalidateCompanyScope(): void {
   companiesCache = null;
+  listeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // um ouvinte quebrado não pode impedir os outros
+    }
+  });
+}
+
+const listeners = new Set<() => void>();
+
+/**
+ * Avisa quem mostra dado derivado do seam (Sidebar, atalhos) que o escopo mudou — ex.: convidar
+ * a primeira pessoa liga `team_enabled` e o menu "Equipe" aparece sem recarregar a página.
+ * Devolve a função de cancelamento.
+ */
+export function subscribeCompanyScope(callback: () => void): () => void {
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
+  };
 }
 
 // Troca de sessão invalida sozinha (login/logout/refresh de usuário). O try/catch existe porque
@@ -114,7 +135,70 @@ export async function getMyCompanies(): Promise<MyCompany[]> {
  */
 export function pickPrimaryCompany(companies: MyCompany[]): MyCompany | null {
   if (companies.length === 0) return null;
-  return companies.find((c) => c.role === 'owner') ?? companies[0];
+  // Ordem de poder (Equipe e encarregados): dono > operador > gerente > encarregado. Não dá para
+  // confiar na ordem da RPC (`ORDER BY role` é alfabético: 'encarregado' viria antes de 'owner').
+  // Empate de papel preserva a ordem original (sort estável) — o contrato antigo de "primeira da
+  // lista" para dois gerentes continua valendo.
+  return [...companies].sort((a, b) => ROLE_POWER[a.role] - ROLE_POWER[b.role])[0];
+}
+
+const ROLE_POWER: Record<CompanyRole, number> = {
+  owner: 0,
+  operator: 1,
+  manager: 2,
+  encarregado: 3,
+};
+
+/** Gestor = quem administra a empresa (dono, operador da organização, gerente). Encarregado não. */
+export function isGestor(company: MyCompany | null | undefined): boolean {
+  return company?.role === 'owner' || company?.role === 'operator' || company?.role === 'manager';
+}
+
+/**
+ * R22: Encarregado que entrou mas o Gestor ainda não confirmou ("é ele?"). Só este papel depende
+ * de confirmação; `confirmed` ausente (RPC antiga) conta como confirmado para não trancar ninguém.
+ */
+export function isUnconfirmedEncarregado(company: MyCompany | null | undefined): boolean {
+  return company?.role === 'encarregado' && company.confirmed === false;
+}
+
+/**
+ * R23 (divulgação progressiva): o destaque "Equipe" na navegação só aparece ao Gestor quando a
+ * empresa já tem ao menos uma pessoa. Dono único chega à tela por Configurações (Perfil Empresa).
+ */
+export function showTeamNav(company: MyCompany | null | undefined): boolean {
+  return isGestor(company) && company?.team_enabled === true;
+}
+
+/**
+ * A tela Hoje entra na navegação só para quem tem equipe (R23) ou é encarregado. Dono único
+ * mantém o "Início" de sempre. Regra única — Sidebar e BottomNav usam esta.
+ */
+export function hasTeamNav(company: MyCompany | null | undefined): boolean {
+  return company?.role === 'encarregado' || company?.team_enabled === true;
+}
+
+const TEAM_NAV_HINT_KEY = 'worki_team_nav_hint';
+
+/**
+ * Dica do último valor de `hasTeamNav` (sessionStorage), lida ENQUANTO a empresa ainda carrega:
+ * evita o "flash" de Início -> Hoje no primeiro render de quem tem equipe. É só aparência; a
+ * navegação real sempre usa a empresa resolvida.
+ */
+export function readTeamNavHint(): boolean {
+  try {
+    return sessionStorage.getItem(TEAM_NAV_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeTeamNavHint(value: boolean): void {
+  try {
+    sessionStorage.setItem(TEAM_NAV_HINT_KEY, value ? '1' : '0');
+  } catch {
+    // best-effort
+  }
 }
 
 /**

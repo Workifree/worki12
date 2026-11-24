@@ -18,6 +18,9 @@ import { getWeekdayIndex } from '../../lib/dateUtils';
 import { periodForTime, isWorkerAvailableFor } from '../../lib/availability';
 import { ModalShell } from './ModalShell';
 import { Button, Field } from '../ui';
+import { useBusyWorkers } from '../../hooks/useBusyWorkers';
+import { buildShiftWindow } from '../../services/shiftOperationService';
+import { BusyWorkerBadge } from './BusyWorkerBadge';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -66,6 +69,7 @@ import { Button, Field } from '../ui';
 
 export interface ShiftCallModalProps {
   job: Pick<Job, 'id' | 'title' | 'start_date' | 'work_start_time' | 'certification_requirement'> & {
+    work_end_time?: string | null;
     slots?: number;
   };
   /** Freelas que já estão no turno (contratados ou já chamados) — não aparecem para seleção. */
@@ -179,6 +183,20 @@ export function ShiftCallModal({
         Number(matchingAvailabilityIds.has(a.worker.id)),
     );
   }, [available, matchingAvailabilityIds]);
+
+  // E5/R14 — aviso de conflito: quem já está em outro turno da empresa nesse horário (de qualquer
+  // responsável). Só AVISA, nunca bloqueia nem some da lista; erro da RPC = sem selo + log. Estado
+  // próprio (dentro do hook), nunca segura `loadingTeam`.
+  const busyWindows = useMemo(
+    () => [buildShiftWindow(job.start_date, job.work_start_time, job.work_end_time)],
+    [job.start_date, job.work_start_time, job.work_end_time],
+  );
+  const busyWorkerIds = useBusyWorkers({
+    windows: busyWindows,
+    workerIds: available.map((member) => member.worker.id),
+    excludeJobId: job.id,
+    enabled: !loadingTeam,
+  });
 
   // F5 — LM-9/LM-10/LM-11: dispara SÓ depois que o elenco + a config chegaram (a lista já
   // renderizou nesse ponto; este efeito nunca segura `loadingTeam`), com `p_worker_ids` restrito
@@ -600,6 +618,7 @@ export function ShiftCallModal({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                  {busyWorkerIds.has(member.worker.id) && <BusyWorkerBadge />}
                   {showRiskBadge && (
                     <span className="inline-flex items-center gap-1 flex-shrink-0 text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5">
                       <AlertTriangle size={10} /> Já {prospectiveCount}x esta semana com você

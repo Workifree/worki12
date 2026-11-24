@@ -4,13 +4,16 @@ interface PageMetaProps {
   ogTitle?: string;
   ogDescription?: string;
   ogImage?: string;
+  /** Páginas com segredo na URL (convites) não devem ser indexadas. */
+  noindex?: boolean;
 }
 
-export default function PageMeta({ title, description, ogTitle, ogDescription, ogImage }: PageMetaProps) {
+export default function PageMeta({ title, description, ogTitle, ogDescription, ogImage, noindex }: PageMetaProps) {
   const fullTitle = title.includes('Worki') ? title : `${title} — Worki`
   return (
     <>
       <title>{fullTitle}</title>
+      {noindex && <meta name="robots" content="noindex, nofollow" />}
       {description && <meta name="description" content={description} />}
       {ogTitle && <meta property="og:title" content={ogTitle} />}
       {ogDescription && <meta property="og:description" content={ogDescription} />}

@@ -165,7 +165,7 @@ export interface CompanyProfile {
 // operationAnalyticsService.resolveCompanyScope() consomem esta RPC — nunca
 // `.eq('id', authUser.id).single()`).
 // =============================================
-export type CompanyRole = 'owner' | 'operator' | 'manager';
+export type CompanyRole = 'owner' | 'operator' | 'manager' | 'encarregado';
 
 export interface MyCompany {
   company_id: string;
@@ -175,6 +175,13 @@ export interface MyCompany {
   organization_name: string | null;
   onboarding_completed: boolean;
   accepted_tos: boolean;
+  /**
+   * Equipe e encarregados (E4): `false` só para Encarregado ainda não confirmado pelo Gestor (R22).
+   * Ausente (RPC antiga) = confirmado.
+   */
+  confirmed?: boolean;
+  /** R23: a empresa tem ao menos uma pessoa não removida na equipe (divulgação progressiva). */
+  team_enabled?: boolean;
 }
 
 /**
@@ -198,6 +205,148 @@ export interface CompanyMember {
   accepted_at: string | null;
   expires_at: string;
 }
+
+// =============================================
+// EQUIPE E ENCARREGADOS (E4) — supabase/migrations/20261123000500_equipe_e4_convites_e_papel.sql
+// "Equipe" = pessoas que operam a empresa; "Elenco" = freelas (nunca misturar rótulos).
+// =============================================
+/** Papel de uma pessoa da equipe. Gestor-por-link não existe (H1): só 'encarregado' é convidado aqui. */
+export type TeamMemberRole = 'manager' | 'encarregado';
+
+/** Estado derivado por `list_company_members` (nunca recomputar no client). */
+export type TeamMemberState =
+  | 'invited'
+  | 'invite_expired'
+  | 'awaiting_confirmation'
+  | 'active'
+  | 'removed';
+
+export interface TeamMemberItem {
+  memberId: string;
+  userId: string | null;
+  displayName: string | null;
+  role: TeamMemberRole;
+  status: CompanyMemberStatus;
+  state: TeamMemberState;
+  confirmed: boolean;
+  /** E-mail verificado no aceite — só o Gestor vê (R22: "Fulano entrou, é ele?"). */
+  acceptedEmail: string | null;
+  invitedAt: string | null;
+  expiresAt: string | null;
+  acceptedAt: string | null;
+  confirmedAt: string | null;
+  removedAt: string | null;
+}
+
+/** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
+export type InvitePreviewOutcome = 'ok' | 'expired' | 'not_found' | 'error';
+export interface InvitePreviewResult {
+  outcome: InvitePreviewOutcome;
+  companyName?: string;
+  role?: TeamMemberRole;
+}
+
+export type InviteMemberOutcome =
+  | 'invited'
+  | 'reinvited'
+  | 'already_invited'
+  | 'invalid_input'
+  | 'not_found'
+  | 'forbidden'
+  | 'unauthenticated'
+  | 'error';
+
+export type ResendInviteOutcome =
+  | 'resent'
+  | 'not_pending'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RevokeInviteOutcome =
+  | 'revoked'
+  | 'not_pending'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+/** Resultado de convidar/reenviar: o token só sai daqui, para quem convidou. */
+export interface InviteTokenResult<O extends string> {
+  outcome: O;
+  memberId?: string;
+  inviteToken?: string;
+  expiresAt?: string;
+}
+
+export type AcceptMemberInviteOutcome =
+  | 'accepted'
+  | 'already_accepted'
+  | 'already_operator'
+  | 'token_already_used'
+  | 'revoked'
+  | 'expired'
+  | 'not_found'
+  | 'use_manager_invite'
+  | 'tos_required'
+  | 'worker_cannot_be_manager'
+  | 'email_not_verified'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export interface AcceptMemberInviteResult {
+  outcome: AcceptMemberInviteOutcome;
+  companyId?: string;
+  memberId?: string;
+  role?: TeamMemberRole;
+  confirmed?: boolean;
+}
+
+export type ConfirmMemberOutcome =
+  | 'confirmed'
+  | 'already_confirmed'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RejectMemberOutcome =
+  | 'rejected'
+  | 'not_pending_confirmation'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RemoveMemberOutcome =
+  | 'removed'
+  | 'would_remove'
+  | 'cannot_remove_self'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export interface RemoveMemberResult {
+  outcome: RemoveMemberOutcome;
+  memberId?: string;
+  displayName?: string | null;
+  role?: TeamMemberRole;
+  /** Turnos abertos e futuros dele que ficam com o Gestor (informativo; nunca bloqueia). */
+  openJobs: number;
+  /** A pessoa era Gestor ou confirmada: aconselha rotacionar o link do Elenco. */
+  elencoLinkRotationAdvised: boolean;
+  alreadyRemoved: boolean;
+}
+
+export type ListMembersOutcome = 'ok' | 'forbidden' | 'unauthenticated' | 'error';
 
 // =============================================
 // JOB

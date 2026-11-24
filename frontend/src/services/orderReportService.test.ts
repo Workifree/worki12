@@ -32,6 +32,11 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
+// A empresa vem do seam (get_my_companies), nunca de `user.id`: o duble fixa a empresa operada.
+vi.mock('./companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+}))
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function routeFrom(handlers: Record<string, any>) {
   mockFrom.mockImplementation((table: string) => {

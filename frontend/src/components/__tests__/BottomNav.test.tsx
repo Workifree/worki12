@@ -37,7 +37,7 @@ describe('BottomNav', () => {
   it('worker tem 6 itens de navegacao (push-first, sem busca de vagas + Meus Recebimentos)', () => {
     renderBottomNav('worker')
 
-    const nav = screen.getByLabelText('Menu de navegacao')
+    const nav = screen.getByLabelText('Menu de navegação')
     const links = nav.querySelectorAll('a')
     expect(links).toHaveLength(6)
   })
@@ -45,7 +45,7 @@ describe('BottomNav', () => {
   it('company tem 6 itens de navegacao (Mensagens acessivel no mobile)', () => {
     renderBottomNav('company', '/company/dashboard')
 
-    const nav = screen.getByLabelText('Menu de navegacao')
+    const nav = screen.getByLabelText('Menu de navegação')
     const links = nav.querySelectorAll('a')
     expect(links).toHaveLength(6)
   })
@@ -74,7 +74,7 @@ describe('BottomNav', () => {
   it('possui aria-label no elemento nav', () => {
     renderBottomNav('worker')
 
-    expect(screen.getByLabelText('Menu de navegacao')).toBeInTheDocument()
+    expect(screen.getByLabelText('Menu de navegação')).toBeInTheDocument()
   })
 
   it('destaca rota ativa para worker', () => {

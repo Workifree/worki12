@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { Send, CalendarX2, PlusCircle } from 'lucide-react';
@@ -11,6 +11,9 @@ import { formatHistoryDate } from './utils';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { ModalShell } from './ModalShell';
 import { Button } from '../ui';
+import { useBusyWorkers } from '../../hooks/useBusyWorkers';
+import { buildShiftWindow } from '../../services/shiftOperationService';
+import { BusyWorkerBadge } from './BusyWorkerBadge';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
@@ -120,6 +123,21 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
     }
   };
 
+  // E5/R14 — aviso (nunca bloqueio): o freela já está em outro turno da empresa no horário do turno
+  // escolhido? Não diz qual turno. Erro da RPC = sem aviso.
+  const selectedJob = useMemo(() => jobs.find((j) => j.id === selectedJobId) ?? null, [jobs, selectedJobId]);
+  const busyWindows = useMemo(
+    () => [selectedJob ? buildShiftWindow(selectedJob.start_date, selectedJob.work_start_time, selectedJob.work_end_time) : null],
+    [selectedJob],
+  );
+  const busyIds = useBusyWorkers({
+    windows: busyWindows,
+    workerIds: [member.worker.id],
+    excludeJobId: selectedJobId,
+    enabled: selectedJob !== null,
+  });
+  const memberIsBusy = busyIds.has(member.worker.id);
+
   const isInviting = invitingWorkerId === member.worker.id;
   // ESC com a mesma guarda do clique no fundo: nao fechar no meio do convite.
   useModalDismiss(() => { if (!isInviting) onClose(); });
@@ -136,6 +154,13 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
       locked={isInviting}
       footer={
         !loadingJobs && jobs.length > 0 ? (
+          <>
+          {memberIsBusy && (
+            <div className="mb-3" role="status">
+              <BusyWorkerBadge />
+              <p className="mt-1 text-xs text-gray-600">É só um aviso: você pode convidar mesmo assim.</p>
+            </div>
+          )}
           <Button
             variant="dark"
             size="lg"
@@ -147,6 +172,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
           >
             {isInviting ? 'Enviando convite...' : 'Confirmar convite'}
           </Button>
+          </>
         ) : undefined
       }
     >

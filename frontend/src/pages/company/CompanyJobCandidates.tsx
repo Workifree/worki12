@@ -418,9 +418,12 @@ export default function CompanyJobCandidates() {
             setJobStartTime(job.work_start_time ?? null);
             setJobEndTime(job.work_end_time ?? null);
 
-            // Nome da empresa (companies.id === owner_id === auth.uid(), 1:1) — só para
-            // montar a mensagem do WhatsApp (onda 3), best-effort.
-            const { data: companyRow } = await supabase.from('companies').select('name').eq('id', user.id).maybeSingle();
+            // Nome da empresa OPERADA pela sessão (não `user.id`: gerente/encarregado não são a
+            // linha de `companies`) — só para montar a mensagem do WhatsApp, best-effort.
+            const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
+            const { data: companyRow } = empresaOperada
+                ? await supabase.from('companies').select('name').eq('id', empresaOperada).maybeSingle()
+                : { data: null };
             setCompanyName(companyRow?.name ?? '');
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
@@ -2332,6 +2335,7 @@ export default function CompanyJobCandidates() {
                         title: jobTitle,
                         start_date: jobStartDate,
                         work_start_time: jobStartTime ?? undefined,
+                        work_end_time: jobEndTime ?? undefined,
                         certification_requirement: jobCertificationRequirement,
                         slots: jobSlots,
                     }}

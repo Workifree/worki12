@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert, Share2, Network, HelpCircle, ChevronRight } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert, Share2, Network, HelpCircle, ChevronRight, UserCog } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { getMyCompanies, pickCurrentCompany, canSeeOrganization } from '../../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, canSeeOrganization, isGestor } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
 import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
@@ -51,6 +51,8 @@ export default function CompanyProfile() {
     const [companyId, setCompanyId] = useState<string | null>(null);
     // R16: mesma regra do Sidebar (canSeeOrganization) — só sócio/operador vê Organização.
     const [showOrganizationShortcut, setShowOrganizationShortcut] = useState(false);
+    // Equipe e encarregados: o acesso fica sempre óbvio ao Gestor em Configurações, mesmo sem equipe.
+    const [showTeamShortcut, setShowTeamShortcut] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -121,6 +123,7 @@ export default function CompanyProfile() {
                 }
                 setCompanyId(current.company_id);
                 setShowOrganizationShortcut(canSeeOrganization(current));
+                setShowTeamShortcut(isGestor(current));
 
                 const { data } = await supabase
                     .from('companies')
@@ -781,6 +784,7 @@ export default function CompanyProfile() {
                 <h3 id="empresa-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h3>
                 <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
                     {[
+                        { to: '/company/configuracoes/equipe', label: 'Equipe', icon: <UserCog size={18} />, show: showTeamShortcut },
                         { to: '/company/indicacoes', label: 'Indicações', icon: <Share2 size={18} />, show: true },
                         { to: '/company/organization', label: 'Organização', icon: <Network size={18} />, show: showOrganizationShortcut },
                         { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} />, show: true },

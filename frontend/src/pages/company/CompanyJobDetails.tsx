@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,7 +10,9 @@ import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { formatDateOnly } from '../../lib/dateUtils';
-import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { getAuthenticatedCompanyId, isGestor } from '../../services/companyScopeService';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
+import CancelJobModal from '../../components/company/CancelJobModal';
 import { Button, Card } from '../../components/ui';
 
 const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
@@ -43,6 +45,8 @@ export default function CompanyJobDetails() {
     const [loading, setLoading] = useState(true);
     const [openMenu, setOpenMenu] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showCancelJob, setShowCancelJob] = useState(false);
+    const currentCompany = useCurrentCompany();
     const [activeWorkersCount, setActiveWorkersCount] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
     const { addToast } = useToast();
@@ -202,6 +206,20 @@ export default function CompanyJobDetails() {
           title={job ? job.title : 'Detalhes do Turno'}
           description={job ? (job.description?.slice(0, 160) ?? undefined) : undefined}
         />
+        {showCancelJob && id && (
+            <CancelJobModal
+                job={{ id, title: job.title }}
+                role={isGestor(currentCompany) || currentCompany === null ? 'gestor' : 'encarregado'}
+                onClose={() => setShowCancelJob(false)}
+                onCancelled={(result) => {
+                    setShowCancelJob(false);
+                    if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
+                        addToast('Turno cancelado.', 'success');
+                        navigate('/company/jobs');
+                    }
+                }}
+            />
+        )}
         {showDeleteConfirm && (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                 <Card
@@ -260,6 +278,13 @@ export default function CompanyJobDetails() {
                             >
                                 {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
                                 {job.status === 'open' ? 'Pausar' : 'Reativar'}
+                            </button>
+                            <button
+                                role="menuitem"
+                                onClick={() => { setOpenMenu(false); setShowCancelJob(true); }}
+                                className={MENU_ITEM}
+                            >
+                                <XCircle size={16} /> Cancelar turno
                             </button>
                             <button
                                 role="menuitem"

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { Button } from './ui';
+import { getAuthenticatedCompanyId } from '../services/companyScopeService';
 
 interface TosGateModalProps {
     userRole: 'worker' | 'company';
@@ -25,6 +26,20 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
             return;
         }
 
+        // Empresa: o aceite grava na linha da empresa OPERADA pela sessão (seam), não em `user.id`
+        // — gerente não é a linha de `companies`. (Encarregado aceita os Termos no convite,
+        // por pessoa, em `company_members.accepted_tos_at`; o gate nem o alcança.)
+        let alvoId = user.id;
+        if (userRole === 'company') {
+            try {
+                alvoId = await getAuthenticatedCompanyId();
+            } catch {
+                addToast('Não foi possível identificar a empresa. Tente novamente.', 'error');
+                setLoading(false);
+                return;
+            }
+        }
+
         const table = userRole === 'worker' ? 'workers' : 'companies';
         const { data, error } = await supabase
             .from(table)
@@ -33,7 +48,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                 tos_version: 'v1',
                 tos_accepted_at: new Date().toISOString()
             })
-            .eq('id', user.id)
+            .eq('id', alvoId)
             .select('id');
 
         if (error) {

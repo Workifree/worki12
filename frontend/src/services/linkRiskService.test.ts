@@ -17,8 +17,15 @@ vi.mock('../lib/logger', () => ({
   logError: vi.fn(),
 }));
 
+const mockGetMyCompanies = vi.fn();
+vi.mock('./companyScopeService', () => ({
+  getMyCompanies: () => mockGetMyCompanies(),
+  pickCurrentCompany: (list: Array<{ company_id: string }>) => list[0] ?? null,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetMyCompanies.mockResolvedValue([{ company_id: 'co-1' }]);
 });
 
 // ---------------------------------------------------------------------------
@@ -31,7 +38,7 @@ describe('LinkRiskService.getConfig', () => {
 
     const result = await LinkRiskService.getConfig();
 
-    expect(mockRpc).toHaveBeenCalledWith('my_link_risk_config', undefined);
+    expect(mockRpc).toHaveBeenCalledWith('my_link_risk_config', { p_company_id: 'co-1' });
     expect(result).toEqual({ enabled: false, threshold: 4 });
   });
 
@@ -60,6 +67,37 @@ describe('LinkRiskService.getConfig', () => {
 
     const result = await LinkRiskService.getConfig();
 
+    expect(result).toEqual(DEFAULT_LINK_RISK_CONFIG);
+  });
+
+  it('usa o companyId explícito sem consultar o seam', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'ok', enabled: false, threshold: 5 }, error: null });
+
+    const result = await LinkRiskService.getConfig('co-9');
+
+    expect(mockGetMyCompanies).not.toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledWith('my_link_risk_config', { p_company_id: 'co-9' });
+    expect(result).toEqual({ enabled: false, threshold: 5 });
+  });
+
+  it.each(['company_required', 'forbidden', 'no_company', 'unauthenticated'])(
+    'outcome %s cai no default LIGADO/2, mesmo que o payload traga outros valores',
+    async (outcome) => {
+      mockRpc.mockResolvedValueOnce({ data: { outcome, enabled: false, threshold: 7 }, error: null });
+
+      const result = await LinkRiskService.getConfig();
+
+      expect(result).toEqual(DEFAULT_LINK_RISK_CONFIG);
+    },
+  );
+
+  it('sem empresa resolvida pelo seam, ainda chama a RPC (sem parâmetro) e degrada', async () => {
+    mockGetMyCompanies.mockRejectedValueOnce(new Error('rede'));
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'company_required' }, error: null });
+
+    const result = await LinkRiskService.getConfig();
+
+    expect(mockRpc).toHaveBeenCalledWith('my_link_risk_config', undefined);
     expect(result).toEqual(DEFAULT_LINK_RISK_CONFIG);
   });
 

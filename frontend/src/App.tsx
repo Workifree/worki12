@@ -42,6 +42,9 @@ const CompanyOperationAnalytics = lazy(() => import('./pages/company/CompanyOper
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
 const Organization = lazy(() => import('./pages/company/Organization'));
+const CompanyTeamMembers = lazy(() => import('./pages/company/CompanyTeamMembers'));
+const CompanyToday = lazy(() => import('./pages/company/CompanyToday'));
+const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -153,6 +156,12 @@ function App() {
                   */}
                   <Route path="/convite-gerente/:token" element={<AcceptManagerInvite />} />
 
+                  {/*
+                    Convite de EQUIPE (Encarregado) — rota PÚBLICA pelo mesmo motivo: o convidado ainda
+                    não tem sessão (entra por código de e-mail, sem senha, dentro da própria página).
+                  */}
+                  <Route path="/convite-equipe/:token" element={<AcceptTeamInvite />} />
+
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
 
@@ -197,6 +206,10 @@ function App() {
                       <Route path="team" element={<CompanyTeam />} />
                       <Route path="indicacoes" element={<CompanyReferrals />} />
                       <Route path="organization" element={<Organization />} />
+                      <Route path="configuracoes/equipe" element={<CompanyTeamMembers />} />
+                      {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As
+                          notificações de passar/cobrir apontam para cá. */}
+                      <Route path="hoje" element={<CompanyToday />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="operacao" element={<CompanyOperationAnalytics />} />
                       <Route path="notifications" element={<Notifications />} />

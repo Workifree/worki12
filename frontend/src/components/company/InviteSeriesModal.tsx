@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { supabase } from '../../lib/supabase';
+import { useBusyWorkers } from '../../hooks/useBusyWorkers';
+import { buildShiftWindow } from '../../services/shiftOperationService';
+import type { BusyWindow } from '../../hooks/useBusyWorkers';
+import { BusyWorkerBadge } from '../team/BusyWorkerBadge';
 import { ShiftCallService } from '../../services/shiftCallService';
 import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
@@ -21,6 +26,9 @@ export type { InviteSeriesTarget } from './seriesWeekRisk';
 
 /** Quantas requisições de `createShiftCall` disparar em paralelo por vez (R10). */
 const INVITE_BATCH_SIZE = 10;
+
+/** Teto de ocorrências conferidas no aviso de conflito (as mais próximas). */
+const MAX_BUSY_WINDOWS = 30;
 
 interface InviteSeriesModalProps {
     /** Ocorrências futuras, abertas e ainda sem freela desta série (calculadas pelo pai). */
@@ -59,6 +67,47 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const [riskByWorker, setRiskByWorker] = useState<Map<string, Map<string, number>>>(new Map());
 
     const targetJobIds = useMemo(() => targets.map((t) => t.jobId), [targets]);
+
+    // E5/R14 — aviso de conflito por freela nas ocorrências da série. Os horários vêm dos próprios
+    // turnos (o alvo só traz a data). Só AVISA: erro em qualquer etapa = sem selo + log.
+    const [busyWindows, setBusyWindows] = useState<BusyWindow[]>([]);
+    const [busyTruncated, setBusyTruncated] = useState(false);
+    useEffect(() => {
+        if (targetJobIds.length === 0) return;
+        let active = true;
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('jobs')
+                    .select('id, start_date, work_start_time, work_end_time')
+                    .in('id', targetJobIds.slice(0, 100));
+                if (error) throw error;
+                // Uma janela por ocorrência, cada uma excluindo o PRÓPRIO turno (um chamado aberto
+                // nele mesmo não é conflito). Conflito com as outras ocorrências da série não existe:
+                // elas ainda não têm freela.
+                const all: BusyWindow[] = [];
+                ((data ?? []) as Array<{ id: string; start_date: string | null; work_start_time: string | null; work_end_time: string | null }>)
+                    .forEach((j) => {
+                        const w = buildShiftWindow(j.start_date, j.work_start_time, j.work_end_time);
+                        if (w) all.push({ ...w, excludeJobId: j.id });
+                    });
+                all.sort((a, b) => a.start.localeCompare(b.start));
+                if (active) {
+                    setBusyWindows(all.slice(0, MAX_BUSY_WINDOWS));
+                    setBusyTruncated(all.length > MAX_BUSY_WINDOWS || targetJobIds.length > 100);
+                }
+            } catch (error) {
+                logError('InviteSeriesModal.busyWindows', error);
+                if (active) { setBusyWindows([]); setBusyTruncated(false); }
+            }
+        })();
+        return () => { active = false; };
+    }, [targetJobIds]);
+    const busyWorkerIds = useBusyWorkers({
+        windows: busyWindows,
+        workerIds: teamMembers.map((m) => m.worker.id),
+        enabled: !teamLoading && busyWindows.length > 0,
+    });
 
     useEffect(() => {
         if (teamLoading || teamMembers.length === 0 || targets.length === 0) return;
@@ -207,6 +256,9 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                                                    {busyWorkerIds.has(member.worker.id) && (
+                                                        <div className="mt-1"><BusyWorkerBadge /></div>
+                                                    )}
                                                     {/* Linha do cargo — reservada para o selo verde de disponibilidade
                                                         da F7 (spec pronta, ainda não construída). O selo de risco de
                                                         vínculo (amarelo) NÃO entra aqui, de propósito. */}
@@ -245,6 +297,12 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                     );
                                 })}
                             </div>
+                        )}
+
+                        {teamMembers.length > 0 && busyTruncated && (
+                            <p className="text-xs text-gray-600 mt-3">
+                                O aviso de "já está em outro turno" confere só as primeiras {MAX_BUSY_WINDOWS} ocorrências da série.
+                            </p>
                         )}
 
                         {teamMembers.length > 0 && riskEnabled && (
