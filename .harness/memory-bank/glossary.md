@@ -198,3 +198,56 @@ Ao criar turno, pré-preenche a descrição; empresa ajusta/incrementa por turno
 **Badges das empresas (F12)** — "Já trabalhou com" (histórico visível, bisturi de privacidade). Derivado canonicamente de `applications.status='completed'` + `jobs` + `reviews`, NUNCA materializado (reputação materializada envelhece errado). Coluna `workers.badges_hidden` (chave-mestra, oculta seção inteira) + tabela `worker_company_badge_prefs` (bisturi por empresa). RPC `get_worker_company_badges(worker_id)` (DEFINER, 8 colunas fixas, nenhum PII, cronológico nunca por score). RPC `set_worker_badge_visibility(company_id, hidden)` (requer histórico com empresa, idempotente). Padrão: derivado canonicamente, prefs separadas para reexibição. ADR-20260821-badges-historico-de-empresas.md.
 
 **Segurança PII — uuid de freela deixa de ser credencial (DS-PII, 20260821000300)** — Três correções BLOQUEANTES: DS-PII-1) `can_view_worker_profile` perde ramo 'pending' (só self + accepted + vínculo operacional); DS-PII-2) RPC nova `list_team_connection_cards()` (projeção fechada de 6 campos, SEM parâmetro) para cartão de convite pending sem vazar nome; DS-PII-3) `get_profile_reviews` zera `reviewer_id` para freela avaliador quando caller não é dono do perfil. Princípio: identificador nunca é credencial de acesso; consentimento bilateral + explícito. ADR-20260821-uuid-de-freela-nao-e-credencial-de-pii.md.
+
+**Gestor** — Papel de equipe da company (`company_members.role = 'manager'`; rótulo de UI "Gestor"). Vê tudo da company,
+convida Encarregado, configura, transfere e vê relatórios. Dono único e operador de organização satisfazem
+`is_company_owner`. Equipe e encarregados, E0–E5 (`architecture.md`).
+
+**Encarregado** — Papel `'encarregado'`, existente só a partir da E4. Opera **só** os turnos de que é responsável ou que
+cobre, e traz freelas para o Elenco da company. **Nunca é dono.** Não opera nada antes de ser confirmado pelo Gestor.
+
+**Consulta** — Papel previsto para fase posterior. Ainda **não existe** no CHECK de `company_members.role`
+(sem valor dormente).
+
+**Responsável (`jobs.responsible_id`)** — Pessoa que opera o turno. Uuid de pessoa, **sem FK** para `company_members`.
+Por padrão, quem criou o turno. Nunca apagado nem reescrito na remoção de quem o criou.
+
+**Responsável efetivo** — `responsible_id` se for operador ativo; senão (NULL, removido ou revogado), o Gestor.
+Derivado no seam (`session_can_operate_job`), nunca gravado. Na UI aparece como rótulo derivado.
+
+**Confirmado (`confirmed_at`)** — Encarregado que o Gestor confirmou no aviso "{Nome} entrou. É ele?". Sem confirmação
+opera zero turnos e não lê PII de freela. Par técnico: `internal_company_confirmed_operator`.
+
+**Cobertura ("Cobrir")** — Janela por data em que um Encarregado opera os turnos de outro (`responsibility_coverages`:
+`from_user`, `to_user`, `starts_on`, `ends_on`, `revoked_at`). Sem cron: vale enquanto a data está na janela. Máximo de
+60 dias no client (`MAX_COVERAGE_DAYS`).
+
+**"Passar para..."** — Rótulo de UI de `reassign_job_responsible`: move de 1 a 100 turnos para outro operador, em
+transação única. Não muda o responsável do freela nem a cobertura.
+
+**Tag (`company_tags`)** — Dimensão de filtro e relatório do turno (ex.: Evento, Loja), criada pela company. Nunca apagada;
+é arquivada (`archive_company_tag`). Não é regra de visibilidade (ainda).
+
+**Elenco único (da company)** — A company tem um só Elenco (`team_connections.company_id`). O freela que o Encarregado
+traz entra nele, não no "elenco da pessoa". Sair o Encarregado não move nenhum freela.
+
+**Remover pessoa (corta acesso)** — `company_members.status = 'removed'` + `removed_at`. Não exige transferência nem migra
+nada: os turnos continuam, e o responsável efetivo passa a ser o Gestor. O nome de quem criou fica como rastro.
+
+**Ocupado (projeção de conflito)** — Ao Encarregado, o turno alheio aparece só como "freela ocupado neste horário"
+(`get_busy_workers`, devolve só `worker_id`). Não mostra título nem valor do turno alheio.
+
+**Convite de equipe (link + código)** — Convite por `/convite-equipe/:token`, sem e-mail prévio: o convidado informa o
+e-mail, recebe um código de 6 dígitos (OTP, sem senha) e aceita. Validade de 14 dias; reenvio rotaciona o token. Só o
+Gestor vê o link. Distinto do link de convite de elenco (`company_invite_links`, migration 20260824000400).
+
+**Trilha de bônus do operador** — Programa **especificado, não implementado**: marcos de uso pagos por PIX manual do
+dono, ao operador, com teto de R$300 por operador em até 12 semanas. Não é carteira, saldo, crédito nem assinatura.
+Não passa por Asaas nem toca `wallets`. Spec: `.harness/spec/trilha-bonus-operador/spec.md`.
+
+**Operador (da trilha)** — Pessoa inscrita na trilha de bônus (ex.: Sabrina, trilha de eventos). Identidade
+própria exigida (não login compartilhado). Diferente de Gestor e Encarregado, que são papéis de equipe.
+
+**Marco (da trilha)** — Uma das 20 conquistas (grupos A a D; o grupo E, "coleção completa", é prêmio-meta fora dos 20).
+Marco com `requires_actor` só conta se quem agiu é o operador inscrito, em sessão própria. Ação do concierge do Worki
+nunca paga marco.

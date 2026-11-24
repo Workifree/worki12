@@ -598,6 +598,13 @@ Ambas são **SECURITY INVOKER** (não DEFINER), **STABLE**, com `SET search_path
 
 **Padrão observável:** duplicação intencional quando: (a) corpo SQL como string (sem rastreamento de dependência), (b) conceitos paralelos (job vs. empresa), (c) mudança futura previsível que unifique. Não vale a pena "DRY" se o custo é quebra silenciosa de schema.
 
+**Atualização (Equipe e encarregados, E2):** o par deixou de ser "a mesma pergunta em duas granularidades".
+`is_job_owner(j)` passou a ser "posso operar ESTE turno" (Gestor, ou encarregado ativo e confirmado com responsável
+ou cobertura ativa). `is_company_owner(c)` segue "Gestor desta empresa" e foi reemitida com o mesmo corpo. Quem chama
+`is_job_owner` herda o escopo por pessoa. Quem pergunta "isto é da empresa?" (ex.: a guarda de vínculo) tem de chamar
+`is_company_owner` ou `is_company_member_confirmed`, nunca `is_job_owner`. Mudança no par continua na mesma migration
+(ADR-20261123-responsavel-efetivo-derivado-no-seam).
+
 ---
 
 ## Grafo acíclico de policies dispensa SECURITY DEFINER (F2 — `team_lists` ↔ `team_list_members`)
@@ -1433,3 +1440,84 @@ fallback, e só então procurar a string. Foi assim que os 13 itens fecharam —
 **Regra irmã, do mesmo dia:** procurar a string no chunk errado dá o mesmo falso negativo. O código
 é dividido por rota; `team_lists` não está no `index` nem na página do Elenco, está em
 `teamListService-*.js`. Varrer o grafo todo em vez de adivinhar onde a string mora.
+
+---
+
+## ✓ Asserção por palavra inteira: `[[:<:]]company_members[[:>:]]`, nunca `strpos` (Equipe E4)
+
+```sql
+AND pg_get_functiondef(p.oid) ~ '[[:<:]]company_members[[:>:]]'
+AND pg_get_functiondef(p.oid) !~ '[[:<:]]role[[:>:]]'
+```
+
+**Razão:** `strpos('company_members')` também casa `session_operates_company_membership`, porque `membership`
+começa com `members`. Esse falso positivo apareceu no dry-run de produção ao procurar leitores de `company_members`
+(E4, cabeçalho do bloco de auditoria). O gate-architect (`.harness/spec/equipe-encarregados/gate-architect.md`, linha 87)
+ainda usa `strpos` para a mesma busca; a referência é a asserção por palavra da E4. Usar limite de palavra POSIX,
+sem barra invertida: literal `\m`/`\y` com `standard_conforming_strings` OFF vira byte de controle (lição de 20260824000900).
+
+---
+
+## ✓ `apply_migration` roda em transação: asserção que falha desfaz a migration inteira (Equipe E0–E5)
+
+```sql
+DO $mig$
+BEGIN
+  IF position('cm.role = ''manager''' IN pg_get_functiondef('public.session_operates_company_membership(uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'ASSERCAO E4: session_operates_company_membership nao exige role = manager (E0). HALT.';
+  END IF;
+END $mig$;
+```
+
+**Razão:** cada migration é uma transação. Um `RAISE` no bloco de asserções reverte tudo, então aplicar a migration
+já é o dry-run: ou o estado final é o esperado, ou nada muda. As asserções do bloco 0 também impõem a **ordem**
+(E5 exige E4 aplicada). A aplicação de fato exige aprovação interativa do humano; por isso E2 a E5 ficaram prontas e
+não aplicadas. Complementa o padrão "simular contra produção com RAISE EXCEPTION no fim" (acima). Vale enquanto a
+migration não tiver `COMMIT` no meio.
+
+---
+
+## ✓ Sinal de transação (`set_config(..., true)`) entre RPC e trigger (Equipe E5)
+
+```sql
+-- na RPC, imediatamente antes do UPDATE de cada turno:
+PERFORM set_config('app.job_reassign', r.id::text, true);
+-- logo depois (sucesso ou CONTINUE):
+PERFORM set_config('app.job_reassign', '', true);
+-- no guard do encarregado:
+COALESCE(current_setting('app.job_reassign', true), '') <> NEW.id::text
+```
+
+**Razão:** dentro de `SECURITY DEFINER`, `auth.uid()` continua sendo o JWT de quem chamou. Logo, o guard não tem como
+distinguir "Passar para" legítimo de PATCH direto. A GUC `is_local = true` vale só para a transação; o valor é amarrado
+ao id do turno, então o sinal de um turno não libera outro; e zerar logo depois fecha a janela. Regra: nenhuma função
+pública pode chamar `set_config` com texto vindo do chamador (verificado no bloco 11 da E5). Custo: acoplamento por
+string entre RPC e trigger, documentado nos COMMENTs das duas (ADR-20261123-troca-de-responsavel-so-pela-rpc).
+
+---
+
+## ✓ "Avisar, nunca bloquear" para conflito e teto de freela (F5 e Equipe E5)
+
+**Casos:** guarda de vínculo (F5, `count_worker_shifts_by_week`) e conflito de freela (`get_busy_workers`, E5:
+"só avisa — nunca bloqueia").
+
+**Razão:** decidir bloquear é do operador, não do sistema: o sócio que fecha 10 unidades precisa fechar o turno. A RPC
+devolve o dado (contagem, ocupado, `worker_id`) e o client mostra o aviso. Falha de leitura degrada para "sem aviso" com
+log; a feature nunca quebra por causa do aviso. Exceção deliberada: quem não é membro confirmado recebe erro explícito
+(`not_confirmed`), nunca zero, porque zero seria "sem risco" falso.
+
+---
+
+## ⚠️ Antifraude invisível (trilha de bônus) — RASCUNHO, 1 uso, ainda não validado
+
+**Status:** só existe na spec `.harness/spec/trilha-bonus-operador/spec.md`. Promover a padrão validado quando houver
+o segundo uso implementado.
+
+**Forma proposta:** mitigar fraude **sem bloquear a operação**, sem formulário e sem upload. O caso normal libera sozinho
+após a janela de validação (`validation_hours`, 48h). Só o anômalo vira revisão de 1 clique do dono (`flag_state`).
+Motivos de exclusão e flags são internos: a RLS do operador não os lê, e a tela mostra só um agregado. Exclusão
+silenciosa = `counted=false` com motivo guardado no servidor. Limiares vêm de `params` congelados em
+`milestones_snapshot` na inscrição, nunca de constante no código.
+
+**Razão (da spec):** a regra não aparece para quem é avaliado (AF9), e o operador honesto não paga custo de burocracia
+(decisão 7, revisão 2).

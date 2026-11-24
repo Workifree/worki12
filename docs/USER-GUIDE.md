@@ -12,6 +12,7 @@ Gerencie sua equipe de freelancers, crie turnos e contrate com confiança.
 1. Leia [Guia da Empresa](./features-empresa.md) — passo a passo para usar a plataforma
 
 **Tópicos principais:**
+- Equipe e Encarregados — convide quem toca o dia a dia pelo WhatsApp, sem senha ([guia](./empresa-equipe-e-encarregados.md))
 - Minha Equipe (Elenco) — adicionar freelancers por link, QR ou Worki ID
 - Visualizar perfil de freelancer — veja especialidades, histórico e avaliações
 - Criar e convidar para turno — com campo Briefing pré-preenchido

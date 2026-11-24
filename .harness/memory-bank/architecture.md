@@ -789,6 +789,132 @@ lacunas declaradas.
 
 Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 
+## Equipe e encarregados (escopo por pessoa dentro da company — E0 a E5)
+
+> Spec: `.harness/spec/equipe-encarregados/spec.md`. Gate: `gate-architect.md`. Decisões do dono (23/11/2026) não
+> são relitigadas aqui. **Princípio de propriedade:** turnos, chamados e Elenco pertencem à **company**, nunca à
+> pessoa. Sair uma pessoa **só corta o acesso dela**.
+
+**Papéis (`company_members.role`):**
+- **Gestor** = `'manager'`. Dono único, Gestor e operador de organização satisfazem `is_company_owner`. Vê tudo da
+  company, convida, configura, transfere, vê relatórios. Rótulo de UI "Gestor"; o valor no banco segue `manager`.
+- **Encarregado** = `'encarregado'`. Existe só depois de E4 (último passo). Opera **só** os turnos de que é
+  responsável ou que cobre. Papel novo nasce **sem acesso** e ganha por policy explícita (fail-safe). Nunca
+  satisfaz `is_company_owner`.
+- **Consulta**: fase posterior. Não existe no CHECK (sem valor dormente).
+
+**Estreitar antes de alargar (E0).** `session_operates_company_membership` passou a exigir `cm.role = 'manager'`
+antes de o CHECK aceitar `'encarregado'`. Sem isso, todo encarregado viraria dono em ~15 policies sem que ninguém
+tocasse nelas (escalada silenciosa). A mesma restrição vale para `is_organization_member`, `get_my_companies` e as
+RPCs de convite de gerente da F13. `session_company_member_role(company)` é a leitura do papel, sempre sobre
+`auth.uid()`.
+
+**Seam de "posso operar ESTE turno" (E2, ADR-20261123-responsavel-efetivo-derivado-no-seam):**
+- `is_company_owner(c)` = "Gestor desta empresa" (reemitida com o mesmo corpo).
+- `is_job_owner(j)` = `session_can_operate_job(company, responsible, data_local_do_turno)`: Gestor **OU**
+  encarregado ativo **e confirmado** com `responsible_id = auth.uid()` **OU** cobertura ativa
+  (`responsibility_coverages`, data local dentro de `[starts_on, ends_on]`, ambos membros ativos).
+- Por depender de membership ativa, remover a pessoa corta o acesso no próximo request, sem reescrever linha.
+- Herdam o escopo sem reescrita: `applications`, `shift_payments`, `service_terms`, `shift_calls`,
+  `shift_call_targets`, `shift_attendance_confirmations`. Policies de `jobs` chamam `session_can_operate_job` com
+  os valores da própria linha, porque dentro de policy `is_job_owner(id)` não enxerga o `NEW` do UPDATE.
+- **Responsável efetivo** = `responsible_id` se for operador ativo; senão (NULL, removido, revogado) = Gestor.
+  Derivado no seam, sem backfill e sem escrita.
+- `jobs.responsible_id` é uuid de pessoa **sem FK** para `company_members`. Trigger BEFORE INSERT preenche com
+  `auth.uid()` quando quem cria é operador; valida operador ativo só quando o valor muda; sessão nula
+  (cron/service_role) passa.
+- `jobs_responsible_guard`: encarregado não troca `company_id`, `responsible_id` nem `series_id` por PATCH direto.
+  A única exceção é a RPC `reassign_job_responsible` (ver patterns, "Sinal de transação").
+- `notification_recipients_for_job(job)`: destinatários de aviso "à empresa" (responsável efetivo confirmado,
+  Gestores, operadores de organização e dono, deduplicados). Interna, sem EXECUTE para o client.
+- `count_worker_shifts_by_week` (E2, R7a) conta a **company inteira**, só para membro confirmado. Não confirmado
+  recebe erro `not_confirmed` (SQLSTATE 42501, DETAIL `outcome=not_confirmed`), nunca zero (zero seria "sem risco"
+  falso). **Divergência:** a spec pede `{outcome}` em jsonb; a troca de tipo de retorno ficou pendente (ver
+  `debitos-pre-piloto.md`, item 25.4).
+
+**Confirmação "é ele?" (E4, ADR-20261123-encarregado-confirmado-e-pii):**
+- O aceite deixa o membro `active` com `confirmed_at IS NULL`. Encarregado não confirmado **opera zero**: não cria
+  turno, não dispara SOS, não lê PII de freela.
+- `internal_company_active_operator` responde "está ativo" (usado em validação de cobertura). O par
+  `internal_company_confirmed_operator` responde "está confirmado" e é o que vale no seam de operação e na
+  validação de `responsible_id`.
+- O Gestor confirma ou rejeita com `confirm_company_member` / `reject_company_member`. O aviso "{Nome} entrou. É
+  ele?" sai por `internal_notify_member_event`.
+
+**PII do freela para o Encarregado:** `can_view_worker_profile` **não muda** (o ramo de vínculo operacional segue
+Gestor-only). O Encarregado lê PII só pela RPC projetada `get_shift_worker_payment_card`, para pagar quem trabalhou
+nos próprios turnos. Cartões do Elenco vêm de `list_team_connection_cards()`, que não tem PII.
+
+**Elenco único da company (E3, ADR-20261123-elenco-unico-da-company):**
+- `team_connections.company_id` é a company, nunca a pessoa. Quem traz o freela (Encarregado ou Gestor) não muda
+  o dono do vínculo.
+- `invited_by` é **só auditoria**: trigger BEFORE INSERT força `auth.uid()` (NULL para sessão nula); trigger BEFORE
+  UPDATE torna a coluna imutável. Fica **fora de qualquer predicado de autorização** (USING, WITH CHECK e funções
+  de seam).
+- Encarregado só insere vínculo `pending`. Remover ou bloquear é Gestor. Sair o Encarregado não move nem apaga freela.
+- Veto do freela segue indelével (regras de 20260816 inalteradas).
+
+**Convite por link, sem e-mail prévio, com OTP (E4, R11-R15):**
+- `invite_company_member(company, nome, papel)` gera token opaco via `generate_invite_token()`, validade de 14 dias,
+  sem e-mail. Gestor convida Encarregado. Encarregado convida ao Elenco, não à equipe. O link é exibido só ao Gestor.
+  Compartilhamento por `wa.me` (botão primário) ou copiar link.
+- Rota pública `/convite-equipe/:token` (`pages/AcceptTeamInvite.tsx`, fora do `ProtectedRoute`).
+  `get_member_invite_preview(token)` devolve `{outcome, company_name, role}`. É a **única** função de equipe com
+  `GRANT EXECUTE TO anon` (ADR-20261123-previa-publica-do-convite). Token inexistente, queimado, rotacionado,
+  revogado ou malformado colapsa em `not_found`.
+- Aceite: `signInWithOtp` → código de 6 dígitos por e-mail → `verifyOtp` (sem senha) → `accept_company_member_invite`.
+  Sem onboarding de CNPJ: o gate do `ProtectedRoute` resolve pela membership, não pela casca de `companies`.
+  Termos aceitos por pessoa (`accepted_tos_at`). Token queimado no uso, guardado só como hash SHA-256
+  (`invite_token_hash`). E-mail que já é de conta de freela → `worker_cannot_be_manager`.
+- `resend_member_invite` **rotaciona** o token: o link antigo morre.
+
+**Remover pessoa só corta acesso (E4, ADR-20261123-remover-pessoa-so-corta-acesso):** `remove_company_member`
+(com `p_dry_run`) grava `status='removed'` + `removed_at`. Não exige transferência e não migra turno nem freela.
+Turnos abertos que a pessoa criou passam a ter o Gestor como responsável efetivo; o `display_name` de quem criou
+fica como rastro. O `status='revoked'` do ADR virou `removed` porque o CHECK só aceita `invited|active|removed`.
+
+**Operação (E5):**
+- `reassign_job_responsible` ("Passar para...", 1 a 100 turnos, transação única). Passa pelo guard de
+  `responsible_id` sinalizando com a GUC local `app.job_reassign`.
+- `create_responsibility_coverage` / `end_responsibility_coverage` ("Cobrir", janela por data, **sem cron**; o
+  client limita a `MAX_COVERAGE_DAYS = 60`).
+- `cancel_job`: única porta para cancelar turno populado. Não-Gestor só remove turno **vazio**: o UPDATE cru para
+  `'deleted'` é aceito só para turno vazio pelo trigger BEFORE UPDATE OF status de `jobs` (feito na E3, R27).
+- `get_busy_workers` (R14): conflito de freela na company inteira, devolve só `worker_id`. Avisa, nunca bloqueia.
+- `list_jobs_by_responsible` (v1, Gestor-only); `list_company_operators` (destinos de Passar/Cobrir).
+- Tags: `create_company_tag`, `archive_company_tag`, `set_job_tag`. Tag nunca é apagada (`jobs.tag_id` com
+  `ON DELETE RESTRICT`). Tag é dimensão de filtro e relatório, não regra de visibilidade.
+- `my_link_risk_config(p_company_id uuid DEFAULT NULL)`: sem parâmetro e sessão com mais de uma company, devolve
+  `company_required` e nenhum dado. `LIMIT 1` por `c.id` é proibido.
+
+**Telas e services (frontend):** `pages/company/CompanyTeamMembers.tsx` (equipe e convites),
+`pages/company/CompanyToday.tsx` ("Hoje" do Encarregado), `pages/AcceptTeamInvite.tsx` (aceite por link),
+`services/teamMembersService.ts`, `services/shiftOperationService.ts` (Passar/Cobrir, cancelar, tags, ocupados),
+`services/companyScopeService.ts` (empresa corrente, `isGestor`, `isUnconfirmedEncarregado`,
+`getAuthenticatedCompanyId`). Nenhum resolvedor local de "quem é a empresa": usar o seam e `getAuthenticatedCompanyId`.
+
+**Migrations e estado de aplicação (verificado contra o repositório; o estado de produção é informado pelo
+orquestrador, não consultado no catálogo nesta atualização):**
+
+| Fase | Migration | Conteúdo | Estado |
+|---|---|---|---|
+| E0 | `20261123000100_equipe_e0_hardening_membership.sql` | Estreita leitores de `company_members` para `role='manager'`; `session_company_member_role`; corrige `can_review_for_job` | Aplicada em 24/11/2026 |
+| E1 | `20261123000200_equipe_e1_schema_aditivo.sql` | Schema aditivo: `company_tags`, `responsibility_coverages`, `jobs.responsible_id`, `jobs.tag_id`, `team_connections.invited_by`, colunas de `company_members`; LGPD cita as tabelas novas | Aplicada em 24/11/2026 |
+| E2 | `20261123000300_equipe_e2_seam_job_operator.sql` | Seam: `session_can_operate_job`, `is_job_owner` reescrita, `notification_recipients_for_job`, guard de `responsible_id`, `count_worker_shifts_by_week` pela company | Pronta e revisada; **não aplicada** |
+| E3 | `20261123000400_equipe_e3_policies_e_triggers.sql` | Policies e triggers migrados para o seam; `invited_by` travado; `get_shift_worker_payment_card` | Pronta e revisada; **não aplicada** |
+| E4 | `20261123000500_equipe_e4_convites_e_papel.sql` | Convites, OTP, confirmação, remoção; **último passo alarga `company_members_role_check` para `('manager','encarregado')`** | Pronta e revisada; **não aplicada** |
+| E5 | `20261123000600_equipe_e5_operacao.sql` | Passar/Cobrir, `cancel_job`, tags, busy, `my_link_risk_config` com parâmetro, avisos "à empresa" | Pronta e revisada; **não aplicada** |
+
+- **O papel `encarregado` só passa a existir com E4.** Até lá nenhum encarregado real pode existir no banco.
+- **E2 a E5 não foram aplicadas.** O `apply_migration` exige aprovação interativa do humano, e a aplicação ficou
+  pendente. **Ordem obrigatória:** E2, E3, E4, E5. E5 não pode ir antes de E4 (usa `internal_notify_member_event`,
+  `internal_company_gestor_ids` e `get_my_companies` de E4).
+- **E4 é ponto de não retorno.** Após o primeiro aceite real existe linha `role='encarregado'`, e o DOWN do CHECK
+  passa a exigir decisão humana.
+- Precondição de dados de E5: nenhum turno órfão (`jobs.company_id` sem linha em `companies`).
+- Segundo o cabeçalho da E0, `company_members` estava vazia em produção em 23/11/2026 (13 companies, todas com
+  `id = owner_id`). Portanto nenhuma pessoa real muda de comportamento com E0 e E1.
+
 ## Dependências externas
 
 | Dependência | Uso | Crítico? |
@@ -821,6 +947,8 @@ Próximas mudanças de schema/RLS/RPC exigem revisão deste estado.
 - Mudar o contrato das RPCs de escrow ou a constraint de idempotência de `wallet_transactions`.
 - Mover lógica privilegiada do Edge Function para o frontend.
 - Trocar o modelo de isolamento de papel (worker/company).
+- Alterar `session_operates_company_membership`, `is_job_owner`, `session_can_operate_job` ou o CHECK de
+  `company_members.role`. Mexer no seam sem ADR reabre a escalada silenciosa de encarregado (ver "Equipe e encarregados").
 - Mudar a direção postpago (Slice 1) para prepago — Slice 2 trata dessa migração.
 - Tornar o pagamento pelo Worki **obrigatório** de novo (reabrir postpago/hold como default), criar o marcador
   de pagamento externo, ou a RPC de distribuição PIX-único — ver ADR-20260630 (pagamento opcional no piloto)

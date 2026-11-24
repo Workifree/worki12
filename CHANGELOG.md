@@ -10,6 +10,23 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
 ### Adicionado
 
+#### Equipe e encarregados (2026-11-24)
+
+**Empresa (Gestor):**
+- Convide um encarregado pelo WhatsApp, sem e-mail nem senha
+- Confirme se a pessoa que entrou é a certa antes de liberar o acesso
+- Gere novo link ou cancele convite; o link antigo deixa de valer
+- Remova alguém: corta só o acesso; turnos e freelas continuam na empresa
+- Etiquetas para agrupar turnos (criar e arquivar; nada é apagado)
+- Tela Hoje com filtros por pessoa e por etiqueta
+- Passe turnos para outra pessoa e cubra alguém por um período
+- Cancele o turno inteiro, avisando quem está nele
+
+**Encarregado:**
+- Entra pelo convite com código por e-mail, sem criar senha
+- Vê e opera só os próprios turnos e os que cobre, na tela Hoje
+- Aviso de freela ocupado em outro turno, sem bloquear a escolha
+
 #### Analytics de Operação — Painel de Métricas da Empresa (2026-08-21)
 
 **Empresa:**

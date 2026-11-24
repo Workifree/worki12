@@ -851,3 +851,34 @@ mesmo método aplicado antes ao lado da empresa. Resultado bruto: 12 P1, 36 P2, 
 
 **Método a manter:** achado → verificar no código → citar a heurística → menor correção honesta →
 build+lint+testes (940) → commit PT → deploy com retry → verificar por conteúdo no bundle servido.
+
+---
+
+## 25. Equipe e encarregados + trilha de bônus — pendências antes do piloto (24/11/2026)
+
+**Origem:** feature `feat/equipe-encarregados` (sem commit no momento desta atualização). Itens abertos; nada
+aqui foi verificado contra o catálogo de produção nesta atualização.
+
+- **25.1 — Aplicar E2, E3, E4 e E5 em produção (aberto, dono).** `apply_migration` exige aprovação interativa.
+  Ordem obrigatória E2 → E3 → E4 → E5 (E5 usa helpers de E4). E4 é **ponto de não retorno**: alarga
+  `company_members_role_check` para `'encarregado'`, e a partir do primeiro aceite real o DOWN exige decisão humana.
+  Antes de E4, confirmar no catálogo que nenhuma linha tem `role <> 'manager'` (asserção C6 da própria migration).
+- **25.2 — Parte 3 dos testes em QA (aberto).** Relatada como pendente pelo orquestrador; não verificada nesta atualização.
+- **25.3 — Simulador de usuário (`harness-tester`) ainda não rodou sobre a feature de equipe (aberto).** Precisa
+  cobrir o aceite por link com OTP, a confirmação "é ele?" e o gesto de "Passar para".
+- **25.4 — `count_worker_shifts_by_week` sinaliza `not_confirmed` por SQLSTATE 42501, não por `{outcome}` em jsonb (aberto).**
+  A spec R7a pede `{outcome:'not_confirmed'}`. A E2 manteve o tipo de retorno e usou o erro 42501 com DETAIL
+  `outcome=not_confirmed`, que `linkRiskService` trata. Trocar o tipo implica DROP + CREATE + ajuste do cliente.
+  Não é zero silencioso (o comportamento de segurança está preservado); é desvio de contrato.
+- **25.5 — Auditar resolvedores com `LIMIT 1` (aberto).** R7b pede auditoria de qualquer RPC ou resolvedor que escolha
+  empresa por `LIMIT 1`. `my_link_risk_config` já foi reescrito na E5 (sem parâmetro e com mais de uma company →
+  `company_required`). Os demais não foram auditados.
+- **25.6 — `GEMINI_API_KEY` ausente no ambiente (aberto, ambiente).** O `harness-frontend-builder` cai no fallback
+  Claude/opus, conforme a constitution (Article 16).
+- **25.7 — Divergência de timestamp na spec (aberto, documental).** `.harness/spec/equipe-encarregados/spec.md`
+  cita `20261124000100` (e outros timestamps de 24/11) para as migrations. Os arquivos reais são `20261123000100` a
+  `20261123000600`. Corrigir a spec ou os nomes antes de aplicar.
+- **25.8 — Trilha de bônus: pré-requisitos (aberto).** (a) `equipe-encarregados` em produção; (b) gate do architect
+  (ADR de "bônus pago do caixa, fora do razão"); (c) security-reviewer sobre `admin-data` e a chave PIX do operador;
+  (d) nenhuma migration da trilha existe; (e) a inscrição real só com `bonus_program_settings.enabled = true`, que o
+  dono ativa depois dos gates.
