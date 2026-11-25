@@ -477,30 +477,34 @@ export default function CompanyMessages() {
                 <div className={`flex-1 min-w-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
-                            <div className="p-4 border-b-2 border-black flex items-center gap-3">
+                            <div className="p-3 sm:p-4 border-b-2 border-black flex items-center gap-2 sm:gap-3">
                                 <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
                                     className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shrink-0">
                                     {selectedConversation.worker_avatar ? (
                                         <img src={selectedConversation.worker_avatar} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                         <User size={20} className="text-gray-400" />
                                     )}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold truncate">{selectedConversation.worker_name}</h4>
-                                    <p className="text-xs text-gray-600 flex items-center gap-1">
-                                        <Briefcase size={10} className="shrink-0" />
-                                        <span className="truncate">{selectedConversation.job_title}</span>
-                                    </p>
+                                {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
+                                    ("Saída confirmada") esmagava o nome e o título do turno. */}
+                                <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+                                        <h4 className="font-bold truncate">{selectedConversation.worker_name}</h4>
+                                        <p className="text-xs text-gray-600 flex items-center gap-1">
+                                            <Briefcase size={10} className="shrink-0" />
+                                            <span className="truncate">{selectedConversation.job_title}</span>
+                                        </p>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 self-start sm:self-auto ${getStatusColor(selectedConversation.status)}`}>
+                                        {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
+                                    </span>
                                 </div>
-                                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
-                                </span>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">

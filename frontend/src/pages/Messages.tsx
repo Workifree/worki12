@@ -476,39 +476,43 @@ export default function Messages() {
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 border-b-2 border-black flex items-center gap-3">
+                            <div className="p-3 sm:p-4 border-b-2 border-black flex items-center gap-2 sm:gap-3">
                                 <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
                                     className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shrink-0">
                                     {selectedConversation.company_logo ? (
                                         <img src={selectedConversation.company_logo} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                         <Briefcase size={20} className="text-gray-400" />
                                     )}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    {selectedConversation.company_id ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
-                                            // `truncate` só corta em caixa de bloco com largura limitada; botão é inline-block.
-                                            className="block max-w-full font-bold hover:text-primary transition-colors truncate text-left"
-                                            aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
-                                        >
-                                            {selectedConversation.company_name}
-                                        </button>
-                                    ) : (
-                                        <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
-                                    )}
-                                    <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
+                                {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
+                                    ("Saída confirmada") esmagava o nome e o título do turno. */}
+                                <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+                                        {selectedConversation.company_id ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
+                                                // `truncate` só corta em caixa de bloco com largura limitada; botão é inline-block.
+                                                className="block w-full max-w-full min-h-11 font-bold hover:text-primary transition-colors truncate text-left"
+                                                aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
+                                            >
+                                                {selectedConversation.company_name}
+                                            </button>
+                                        ) : (
+                                            <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
+                                        )}
+                                        <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 self-start sm:self-auto ${getStatusColor(selectedConversation.status)}`}>
+                                        {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
+                                    </span>
                                 </div>
-                                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
-                                </span>
                             </div>
 
                             {/* Messages */}

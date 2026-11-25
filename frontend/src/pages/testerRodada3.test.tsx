@@ -114,7 +114,7 @@ describe('N-4 — nome da empresa no chat do freela trunca antes do selo', () =>
     const name = await screen.findByRole('button', { name: /ver perfil da empresa/i })
     // jsdom não mede layout: o que se trava é a combinação que faz o `truncate` funcionar.
     expect(name).toHaveClass('block', 'max-w-full', 'truncate')
-    expect(name.parentElement).toHaveClass('flex-1', 'min-w-0')
+    expect(name.parentElement).toHaveClass('w-full', 'min-w-0', 'sm:flex-1')
   })
 })
 
@@ -171,5 +171,38 @@ describe('B-1 — depois da saída, nada diz "Em Andamento"', () => {
     expect(screen.getByText('Aguardando confirmação')).toBeInTheDocument()
     expect(screen.queryByText('Cancelado')).not.toBeInTheDocument()
     expect(screen.getByText('Falar com a empresa')).toBeInTheDocument()
+  })
+})
+
+describe('N-5 — em tela estreita o selo fica abaixo do nome', () => {
+  const CONFIRMED = { worker_checkin_at: CHECKIN, company_checkout_confirmed_at: CHECKOUT }
+
+  it.each([
+    ['freela', <Messages key="w" />, 'Restaurante Teste'],
+    ['empresa', <CompanyMessages key="c" />, 'Worker Teste'],
+  ])('chat do lado %s empilha nome, título e selo abaixo de sm', async (_lado, tela, nome) => {
+    mockTables({ Conversation: () => ({ data: [conversation(CONFIRMED)], error: null }) })
+    render(<MemoryRouter initialEntries={['/chat?conversation=conv-1']}>{tela}</MemoryRouter>)
+
+    await screen.findByRole('button', { name: /voltar para a lista de conversas/i })
+    // O selo do cabeçalho (o outro "Saída confirmada" é o da lista).
+    const badge = screen.getAllByText('Saída confirmada').find((el) => el.classList.contains('self-start'))!
+    const column = badge.parentElement!
+    // jsdom não mede layout: trava as classes que empilham no celular e voltam à linha em `sm`.
+    expect(column).toHaveClass('flex-col', 'sm:flex-row', 'min-w-0')
+    const identity = column.firstElementChild as HTMLElement
+    expect(identity).toHaveClass('w-full', 'min-w-0')
+    expect(identity).toHaveTextContent(nome)
+    expect(identity).toHaveTextContent('Turno C')
+  })
+
+  it('o botão de perfil do freela tem alvo de 44px na largura da coluna', async () => {
+    mockTables({ Conversation: () => ({ data: [conversation(CONFIRMED)], error: null }) })
+    render(
+      <MemoryRouter initialEntries={['/messages?conversation=conv-1']}>
+        <Messages />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('button', { name: /ver perfil da empresa/i })).toHaveClass('w-full', 'min-h-11')
   })
 })
