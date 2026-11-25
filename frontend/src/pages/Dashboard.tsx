@@ -219,7 +219,7 @@ export default function Dashboard() {
     );
 
     if (loading) return (
-        <div className="flex flex-col gap-6 pb-12 font-sans text-accent animate-pulse">
+        <div className="flex flex-col gap-6 pb-12 font-sans text-accent animate-pulse" role="status"><span className="sr-only">Carregando</span>
             <div className="bg-gray-200 rounded-3xl h-24 w-full" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {[...Array(2)].map((_, i) => (
@@ -302,7 +302,7 @@ export default function Dashboard() {
                     {pendingReceipts.length > 0 && (
                         <Card padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="min-w-0">
-                                <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary text-xs font-bold px-3 py-1 rounded-pill mb-2">
+                                <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary-dark text-xs font-bold px-3 py-1 rounded-pill mb-2">
                                     <AlertCircle size={12} /> Pagamento para confirmar
                                 </span>
                                 <p className="text-2xl font-bold tabular-nums truncate">
@@ -367,7 +367,7 @@ export default function Dashboard() {
                                     )}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <span className="inline-block mb-1 bg-primary-light text-primary text-xs font-bold px-2.5 py-0.5 rounded-pill">
+                                    <span className="inline-block mb-1 bg-primary-light text-primary-dark text-xs font-bold px-2.5 py-0.5 rounded-pill">
                                         {isOnShift(nextJob) ? 'Em andamento' : 'Agendado'}
                                     </span>
                                     <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
@@ -391,7 +391,7 @@ export default function Dashboard() {
                             </Button>
                         </>
                     ) : carregandoNextJob ? (
-                        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+                        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
                     ) : erroNextJob ? (
                         <div className="text-center py-6 text-red-600 text-sm font-bold bg-red-50 rounded-xl border border-red-200">
                             Não foi possível carregar.
@@ -428,7 +428,7 @@ export default function Dashboard() {
                             <Building2 size={16} /> Minhas Empresas
                         </h2>
                         {storesLoading ? (
-                            <div className="h-9 bg-gray-100 rounded-xl animate-pulse" />
+                            <div className="h-9 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
                         ) : myStores.length > 0 ? (
                             <>
                                 <p className="text-3xl font-bold tabular-nums">{myStores.length}</p>
@@ -509,7 +509,7 @@ export default function Dashboard() {
                                     >
                                         <span className="text-sm font-semibold text-gray-800">{quest.title}</span>
                                         {quest.xp > 0 ? (
-                                            <span className="text-xs font-bold bg-primary-light text-primary px-2.5 py-1 rounded-pill flex-shrink-0">
+                                            <span className="text-xs font-bold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill flex-shrink-0">
                                                 +{quest.xp} XP
                                             </span>
                                         ) : (
@@ -547,7 +547,7 @@ export default function Dashboard() {
                             </span>
                         </button>
                     )) : carregandoHistory ? (
-                        <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+                        <div className="h-12 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
                     ) : erroHistory ? (
                         <p className="text-sm text-red-600 font-bold text-center py-4">Não foi possível carregar o histórico.</p>
                     ) : (

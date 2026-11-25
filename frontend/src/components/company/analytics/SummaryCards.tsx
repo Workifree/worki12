@@ -18,7 +18,7 @@ function DeltaBadge({ delta }: { delta: { current: number; previous: number | nu
   const { label, direction } = formatDelta(delta);
   const Icon = direction === 'up' ? ArrowUpRight : direction === 'down' ? ArrowDownRight : Minus;
   const colorClass =
-    direction === 'up' ? 'text-primary' : direction === 'down' ? 'text-red-600' : 'text-gray-400';
+    direction === 'up' ? 'text-primary' : direction === 'down' ? 'text-red-600' : 'text-gray-600';
   return (
     <p className={`flex items-center gap-1 text-xs font-bold ${colorClass}`}>
       <Icon size={14} strokeWidth={3} />
@@ -48,7 +48,7 @@ export function SpendCard({ block }: { block: SpendSummaryBlock }) {
             <p className="text-2xl font-black tabular-nums">{formatBRL(data.totalAmount)}</p>
             <DeltaBadge delta={data.delta} />
             {data.conflictingRowsCount > 0 && (
-              <p className="text-[11px] font-bold text-yellow-700">
+              <p className="text-xs font-bold text-yellow-700">
                 {data.conflictingRowsCount} registro(s) vieram de duas fontes — considerado só o pagamento
                 declarado (modo A).
               </p>
@@ -68,7 +68,7 @@ export function HiresCard({ block }: { block: HiresSummaryBlock }) {
           <div className="flex flex-col gap-1">
             <p className="text-2xl font-black tabular-nums">{data.count}</p>
             <DeltaBadge delta={data.delta} />
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               de {data.jobsCreatedCount} turno(s) no período
             </p>
           </div>
@@ -89,19 +89,19 @@ export function CostPerHourCard({ block }: { block: CostPerHourSummaryBlock }) {
             </p>
             <DeltaBadge delta={data.delta} />
             {data.estimatedHoursShiftsCount > 0 && (
-              <p className="text-[11px] font-bold text-yellow-700">
+              <p className="text-xs font-bold text-yellow-700">
                 {data.estimatedHoursShiftsCount} de {data.shiftsCount} turno(s) usaram a hora ESTIMADA
                 (sem checkout registrado).
               </p>
             )}
             {data.inconsistentDurationShiftsCount > 0 && (
-              <p className="text-[11px] font-bold text-red-600">
+              <p className="text-xs font-bold text-red-600">
                 {data.inconsistentDurationShiftsCount} turno(s) com marcação inconsistente foram descartados
                 do cálculo.
               </p>
             )}
             {data.noHoursSourceShiftsCount > 0 && (
-              <p className="text-[11px] font-bold text-red-600">
+              <p className="text-xs font-bold text-red-600">
                 {data.noHoursSourceShiftsCount} turno(s) concluído(s) sem marcação de ponto nem hora estimada
                 {data.costPerHour === null ? ' — por isso o "—" acima.' : ' (excluído(s) do cálculo).'}
               </p>
@@ -123,11 +123,11 @@ export function HoursRatioCard({ block }: { block: HoursRatioSummaryBlock }) {
               {data.ratio === null ? '—' : formatPercent(data.ratio)}
             </p>
             <DeltaBadge delta={data.delta} />
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               {formatHours(data.realizedHours)} realizadas de {formatHours(data.estimatedHours)} previstas
             </p>
             {(data.excludedNoEstimateCount > 0 || data.excludedNoAttendanceCount > 0) && (
-              <p className="text-[11px] font-bold text-yellow-700">
+              <p className="text-xs font-bold text-yellow-700">
                 {data.excludedNoEstimateCount} sem estimativa cadastrada · {data.excludedNoAttendanceCount} sem
                 marcação de ponto (excluídos do cálculo)
               </p>

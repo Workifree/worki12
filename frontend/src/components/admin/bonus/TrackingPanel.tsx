@@ -20,7 +20,7 @@ export default function TrackingPanel({ adapter }: Props) {
     const fetcher = useCallback(() => adapter.getTracking(), [adapter]);
     const { data, loading, error } = useLoad(fetcher, 'bonus: acompanhamento');
 
-    if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" /></div>;
+    if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div></div>;
     if (error || !data) return <p role="alert" className="font-bold text-red-700">{error || 'Sem dados.'}</p>;
 
     return (

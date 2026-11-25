@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PlusCircle } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
+import SkipLink, { MAIN_CONTENT_ID } from '../components/SkipLink';
 import NotificationBell from '../components/NotificationBell';
 import CompanySwitcher from '../components/company/CompanySwitcher';
 import GestorRouteGuard from '../components/company/GestorRouteGuard';
@@ -16,7 +17,8 @@ export default function CompanyLayout() {
     // rota (`[location.pathname]`). Auditoria de rede de 01/09. O guard e um so, no seam.
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto bg-[#F4F4F0]">
+        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto bg-[#F4F4F0]">
+            <SkipLink />
             {/* Desktop Sidebar - Company Mode */}
             <Sidebar type="company" />
 
@@ -27,7 +29,7 @@ export default function CompanyLayout() {
             </header>
 
             {/* Main Content Area — com o botão flutuante, folga extra para ele não cobrir o fim da lista */}
-            <main className={`flex-1 p-4 sm:p-6 md:p-8 md:pb-8 overflow-y-auto ${showCreateFab ? 'pb-40' : 'pb-24'}`}>
+            <main id={MAIN_CONTENT_ID} tabIndex={-1} className={`focus:outline-none flex-1 p-4 sm:p-6 md:p-8 md:pb-8 overflow-y-auto ${showCreateFab ? 'pb-40' : 'pb-24'}`}>
                 <CompanySwitcher className="md:hidden mb-4" />
                 <GestorRouteGuard>
                     <Outlet />
@@ -38,7 +40,7 @@ export default function CompanyLayout() {
             {showCreateFab && (
                 <Link
                     to={COMPANY_CREATE_ACTION.path}
-                    className="md:hidden fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 inline-flex h-12 items-center gap-2 rounded-pill border-2 border-black bg-black px-5 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,166,81,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    className="worki-fab md:hidden fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 inline-flex h-12 items-center gap-2 rounded-pill border-2 border-black bg-black px-5 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,166,81,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                 >
                     <PlusCircle size={20} aria-hidden="true" />
                     {COMPANY_CREATE_ACTION.label}

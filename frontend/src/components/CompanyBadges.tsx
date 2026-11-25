@@ -213,7 +213,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
       )}
 
       {loading ? (
-        <div className="space-y-3 animate-pulse">
+        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(2)].map((_, i) => (
             <div key={i} className="h-20 bg-gray-200 rounded-xl" />
           ))}

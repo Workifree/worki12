@@ -255,8 +255,9 @@ export default function Admin() {
     }, [tab, authorized, users.length, escrows.length, loadUsers, loadEscrows]);
 
     if (loading) return (
-        <div className="min-h-screen flex items-center justify-center">
-            <Loader2 className="animate-spin" size={32} />
+        <div className="min-h-screen flex items-center justify-center" role="status">
+            <span className="sr-only">Carregando</span>
+            <Loader2 aria-hidden="true" className="animate-spin" size={32} />
         </div>
     );
 
@@ -404,8 +405,8 @@ function UserBadge({ info }: { info: UserInfo | null }) {
     return (
         <div className="flex flex-col">
             <span className="text-xs font-bold">{info.name}</span>
-            <span className="text-[10px] text-gray-500 font-mono">{info.email}</span>
-            <span className={`text-[10px] font-bold w-fit px-1 rounded mt-0.5 ${
+            <span className="text-xs text-gray-500 font-mono">{info.email}</span>
+            <span className={`text-xs font-bold w-fit px-1 rounded mt-0.5 ${
                 info.user_type === 'worker' ? 'bg-green-100 text-green-700' :
                 info.user_type === 'company' ? 'bg-blue-100 text-blue-700' :
                 'bg-gray-100 text-gray-600'
@@ -459,22 +460,22 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                 ) : financialSummary ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div className="p-4 rounded-xl border-2 bg-purple-50 border-purple-200">
-                            <p className="text-[10px] font-bold uppercase text-purple-600 mb-1">Receita Total (taxas)</p>
+                            <p className="text-xs font-bold uppercase text-purple-600 mb-1">Receita Total (taxas)</p>
                             <p className="text-2xl font-black text-purple-800">{formatMoney(financialSummary.totalPlatformFees)}</p>
                         </div>
                         <div className="p-4 rounded-xl border-2 bg-red-50 border-red-200">
-                            <p className="text-[10px] font-bold uppercase text-red-600 mb-1">Custo Asaas estimado</p>
+                            <p className="text-xs font-bold uppercase text-red-600 mb-1">Custo Asaas estimado</p>
                             <p className="text-2xl font-black text-red-800">{formatMoney(financialSummary.estimatedAsaasCost)}</p>
-                            <p className="text-[10px] text-red-600 mt-1">{financialSummary.depositCount} depositos + {financialSummary.withdrawalCount} saques x R$ 1,99</p>
+                            <p className="text-xs text-red-600 mt-1">{financialSummary.depositCount} depositos + {financialSummary.withdrawalCount} saques x R$ 1,99</p>
                         </div>
                         <div className={`p-4 rounded-xl border-2 ${financialSummary.netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                            <p className="text-[10px] font-bold uppercase text-gray-600 mb-1">Lucro Liquido Worki</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Lucro Liquido Worki</p>
                             <p className={`text-2xl font-black ${financialSummary.netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatMoney(financialSummary.netProfit)}</p>
-                            <p className="text-[10px] text-gray-500 mt-1">Receita taxas - Custo Asaas</p>
+                            <p className="text-xs text-gray-500 mt-1">Receita taxas - Custo Asaas</p>
                         </div>
                     </div>
                 ) : (
-                    <p className="text-xs text-gray-400">Nao foi possivel carregar resumo financeiro.</p>
+                    <p className="text-xs text-gray-600">Nao foi possivel carregar resumo financeiro.</p>
                 )}
             </div>
 
@@ -483,19 +484,19 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                 <h2 className="text-lg font-black uppercase mb-4">Wallet Central Asaas (Dinheiro Real)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-4 rounded-xl border-2 bg-green-50 border-green-300">
-                        <p className="text-[10px] font-bold uppercase text-green-600 mb-1">Saldo Disponivel</p>
+                        <p className="text-xs font-bold uppercase text-green-600 mb-1">Saldo Disponivel</p>
                         <p className="text-2xl font-black text-green-800">{formatMoney(stats?.asaas?.currentBalance || 0)}</p>
-                        <p className="text-[10px] text-green-600 mt-1">Dinheiro real na conta Asaas</p>
+                        <p className="text-xs text-green-600 mt-1">Dinheiro real na conta Asaas</p>
                     </div>
                     <div className="p-4 rounded-xl border-2 bg-yellow-50 border-yellow-300">
-                        <p className="text-[10px] font-bold uppercase text-yellow-600 mb-1">Saldo Pendente</p>
+                        <p className="text-xs font-bold uppercase text-yellow-600 mb-1">Saldo Pendente</p>
                         <p className="text-2xl font-black text-yellow-800">{formatMoney(stats?.asaas?.pendingBalance || 0)}</p>
-                        <p className="text-[10px] text-yellow-600 mt-1">Pagamentos aguardando confirmacao</p>
+                        <p className="text-xs text-yellow-600 mt-1">Pagamentos aguardando confirmacao</p>
                     </div>
                     <div className="p-4 rounded-xl border-2 bg-gray-100 border-gray-400">
-                        <p className="text-[10px] font-bold uppercase text-gray-600 mb-1">Total Asaas</p>
+                        <p className="text-xs font-bold uppercase text-gray-600 mb-1">Total Asaas</p>
                         <p className="text-2xl font-black text-gray-800">{formatMoney(stats?.asaas?.totalBalance || 0)}</p>
-                        <p className="text-[10px] text-gray-500 mt-1">Disponivel + Pendente</p>
+                        <p className="text-xs text-gray-500 mt-1">Disponivel + Pendente</p>
                     </div>
                 </div>
                 {!stats?.asaas && (
@@ -506,7 +507,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
             {/* Saldos Internos (DB) */}
             <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 mb-6">
                 <h2 className="text-lg font-black uppercase mb-4">Saldos Internos (Livro Contabil)</h2>
-                <p className="text-[10px] text-gray-500 mb-3">Saldos rastreados pelo sistema. Devem bater com o Asaas em producao.</p>
+                <p className="text-xs text-gray-500 mb-3">Saldos rastreados pelo sistema. Devem bater com o Asaas em producao.</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <StatCard icon={<DollarSign size={18} />} label="Saldo Empresas" value={formatMoney(stats?.companyBalances || 0)} color="blue" />
                     <StatCard icon={<DollarSign size={18} />} label="Saldo Workers" value={formatMoney(stats?.workerBalances || 0)} color="green" />
@@ -554,7 +555,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                         </thead>
                         <tbody>
                             {filtered.length === 0 && (
-                                <tr><td colSpan={6} className="py-4 text-center text-gray-400">Nenhuma transacao</td></tr>
+                                <tr><td colSpan={6} className="py-4 text-center text-gray-600">Nenhuma transacao</td></tr>
                             )}
                             {filtered.map(tx => (
                                 <tr key={tx.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -562,7 +563,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                                         {formatDate(tx.created_at)}
                                     </td>
                                     <td className="py-2">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${TYPE_COLORS[tx.type] || 'bg-gray-100 text-gray-700'}`}>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap ${TYPE_COLORS[tx.type] || 'bg-gray-100 text-gray-700'}`}>
                                             {TYPE_LABELS[tx.type] || tx.type}
                                         </span>
                                     </td>
@@ -578,7 +579,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                                     <td className="py-2 text-xs text-gray-600 max-w-[200px] truncate">
                                         {tx.description || '-'}
                                     </td>
-                                    <td className="py-2 text-[10px] text-gray-400 font-mono max-w-[100px] truncate">
+                                    <td className="py-2 text-xs text-gray-600 font-mono max-w-[100px] truncate">
                                         {tx.reference_id || '-'}
                                     </td>
                                 </tr>
@@ -633,13 +634,13 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                     </thead>
                     <tbody>
                         {filtered.length === 0 && (
-                            <tr><td colSpan={7} className="py-4 text-center text-gray-400">Nenhum usuario</td></tr>
+                            <tr><td colSpan={7} className="py-4 text-center text-gray-600">Nenhum usuario</td></tr>
                         )}
                         {filtered.map(u => (
                             <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
                                 <td className="py-2 font-mono text-xs">{u.email}</td>
                                 <td className="py-2">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                                         u.user_type === 'worker' ? 'bg-green-100 text-green-700' :
                                         u.user_type === 'company' || u.user_type === 'hire' ? 'bg-blue-100 text-blue-700' :
                                         'bg-gray-100 text-gray-700'
@@ -653,14 +654,14 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                                 </td>
                                 <td className="py-2">
                                     {u.email_confirmed_at
-                                        ? <span className="text-green-600 font-bold text-[10px] bg-green-50 px-1.5 py-0.5 rounded">Sim</span>
-                                        : <span className="text-red-500 font-bold text-[10px] bg-red-50 px-1.5 py-0.5 rounded">Nao</span>
+                                        ? <span className="text-green-600 font-bold text-xs bg-green-50 px-1.5 py-0.5 rounded">Sim</span>
+                                        : <span className="text-red-500 font-bold text-xs bg-red-50 px-1.5 py-0.5 rounded">Nao</span>
                                     }
                                 </td>
-                                <td className="py-2 text-gray-400 text-xs whitespace-nowrap">
+                                <td className="py-2 text-gray-600 text-xs whitespace-nowrap">
                                     {u.last_sign_in_at ? formatDate(u.last_sign_in_at) : '-'}
                                 </td>
-                                <td className="py-2 text-gray-400 text-xs whitespace-nowrap">
+                                <td className="py-2 text-gray-600 text-xs whitespace-nowrap">
                                     {formatDate(u.created_at)}
                                 </td>
                             </tr>
@@ -723,7 +724,7 @@ function EscrowsTab({ escrows }: { escrows: RichEscrow[] }) {
                         </thead>
                         <tbody>
                             {filtered.length === 0 && (
-                                <tr><td colSpan={7} className="py-4 text-center text-gray-400">Nenhum escrow</td></tr>
+                                <tr><td colSpan={7} className="py-4 text-center text-gray-600">Nenhum escrow</td></tr>
                             )}
                             {filtered.map(e => (
                                 <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -743,7 +744,7 @@ function EscrowsTab({ escrows }: { escrows: RichEscrow[] }) {
                                         {formatMoney(e.amount)}
                                     </td>
                                     <td className="py-2">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                                             e.status === 'reserved' ? 'bg-orange-100 text-orange-800' :
                                             e.status === 'released' ? 'bg-green-100 text-green-800' :
                                             'bg-gray-100 text-gray-800'
@@ -751,7 +752,7 @@ function EscrowsTab({ escrows }: { escrows: RichEscrow[] }) {
                                             {e.status === 'reserved' ? 'Reservado' : e.status === 'released' ? 'Liberado' : 'Reembolsado'}
                                         </span>
                                     </td>
-                                    <td className="py-2 text-xs text-gray-400 whitespace-nowrap">
+                                    <td className="py-2 text-xs text-gray-600 whitespace-nowrap">
                                         {e.released_at ? formatDate(e.released_at) : '-'}
                                     </td>
                                 </tr>
@@ -774,7 +775,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
     };
     return (
         <div className={`p-4 rounded-xl border-2 ${colors[color] || colors.gray}`}>
-            <div className="flex items-center gap-2 mb-1">{icon} <span className="text-[10px] font-bold uppercase">{label}</span></div>
+            <div className="flex items-center gap-2 mb-1">{icon} <span className="text-xs font-bold uppercase">{label}</span></div>
             <p className="text-xl font-black">{value}</p>
         </div>
     );

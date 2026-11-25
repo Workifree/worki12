@@ -19,6 +19,7 @@ import {
     weekRangeLabel,
     type InviteSeriesTarget,
 } from './seriesWeekRisk';
+import { Dialog } from '../ui/Dialog';
 
 // Re-exportado para quem já importa o tipo a partir do componente (ex.: CompanyJobs.tsx).
 export type { InviteSeriesTarget } from './seriesWeekRisk';
@@ -202,13 +203,12 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     };
 
     return (
-        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="invite-series-title"
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6"
-            >
+        <Dialog
+            labelledBy="invite-series-title"
+            onClose={onClose}
+            locked={inviting}
+            initialFocus="panel"
+        >
                 <div className="flex items-center justify-between mb-4">
                     <h2 id="invite-series-title" className="text-lg font-bold tracking-tight">Convidar para a série</h2>
                     <button
@@ -229,13 +229,13 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         </p>
 
                         {teamLoading && (
-                            <div className="space-y-3 animate-pulse">
+                            <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
                             </div>
                         )}
 
                         {!teamLoading && teamMembers.length === 0 && (
-                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Seu elenco está vazio.</p>
                             </div>
@@ -294,7 +294,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                     {riskyWeeks.map((w) => (
                                                         <span
                                                             key={w.weekStart}
-                                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
+                                                            className="inline-flex items-center gap-1 text-xs font-bold text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
                                                         >
                                                             <AlertTriangle size={10} className="flex-shrink-0" />
                                                             Ficaria {w.count}x com você na sem. {weekRangeLabel(w.weekStart)}
@@ -342,7 +342,6 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         </Button>
                     </div>
                 )}
-            </div>
-        </div>
+        </Dialog>
     );
 }

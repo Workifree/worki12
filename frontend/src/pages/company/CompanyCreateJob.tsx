@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -25,6 +27,7 @@ import { Button, Card, Field, PageHeader } from '../../components/ui';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
+import { Dialog } from '../../components/ui/Dialog';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -43,6 +46,10 @@ function FormSection({ title, children }: { title: string; children: ReactNode }
 const CHIP_BASE = 'h-11 rounded-xl border-2 border-black text-sm font-bold transition-colors';
 const CHIP_ON = 'bg-black text-white';
 const CHIP_OFF = 'bg-white text-black hover:bg-gray-100';
+
+type CampoDoTurno =
+    | 'title' | 'category' | 'description' | 'start_date' | 'work_start_time' | 'work_end_time'
+    | 'weekdays' | 'rangeEnd' | 'budget';
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -70,6 +77,7 @@ export default function CompanyCreateJob() {
 
     const startDateRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(false);
+    const [tentouEnviar, setTentouEnviar] = useState(false);
 
     // Etiqueta (E5/R20, R26): opcional e só com equipe (divulgação progressiva). Não vale para série
     // (cada ocorrência é um turno; a etiqueta se aplica turno a turno depois).
@@ -374,27 +382,43 @@ export default function CompanyCreateJob() {
     // inconsistencia interna (Nielsen #1, visibilidade do estado, e #4, consistencia) num
     // formulario que a empresa preenche toda semana. E tambem a unica fonte de validade:
     // `canProceed` e "nao falta nada".
-    const oQueFalta = (): string[] => {
-        const falta: string[] = [];
-        if (!formData.title.trim()) falta.push('o título do turno');
-        if (!formData.category) falta.push('a função');
-        if (!formData.description.trim()) falta.push('a descrição');
-        if (!(parseFloat(formData.budget) > 0)) falta.push('o valor');
-        if (!formData.start_date) falta.push('a data');
-        else if (formData.start_date < todayLocalDate()) falta.push('uma data que ainda não passou');
-        if (!formData.work_start_time) falta.push('o horário de entrada');
-        if (!formData.work_end_time) falta.push('o horário de saída');
+    const errosDoTurno = (): Partial<Record<CampoDoTurno, { falta: string; erro: string }>> => {
+        const erros: Partial<Record<CampoDoTurno, { falta: string; erro: string }>> = {};
+        const marcar = (campo: CampoDoTurno, falta: string, erro: string) => { erros[campo] = { falta, erro }; };
+        if (!formData.title.trim()) marcar('title', 'o título do turno', 'Informe o título do turno.');
+        if (!formData.category) marcar('category', 'a função', 'Escolha a função.');
+        if (!formData.description.trim()) marcar('description', 'a descrição', 'Escreva a descrição.');
+        if (!formData.start_date) marcar('start_date', 'a data', 'Escolha a data.');
+        else if (formData.start_date < todayLocalDate()) marcar('start_date', 'uma data que ainda não passou', 'Escolha uma data que ainda não passou.');
+        if (!formData.work_start_time) marcar('work_start_time', 'o horário de entrada', 'Informe a entrada.');
+        if (!formData.work_end_time) marcar('work_end_time', 'o horário de saída', 'Informe a saída.');
         if (!isEditing && isRecurring) {
-            if (recurrenceType === 'weekly' && weekdays.length === 0) falta.push('os dias da semana');
-            if (!rangeEndDate || rangeEndDate < formData.start_date) falta.push('a data final da série');
-            else if (occurrenceDates.length === 0) falta.push('ao menos uma data na série');
-            else if (overCap) falta.push(`um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`);
+            if (recurrenceType === 'weekly' && weekdays.length === 0) marcar('weekdays', 'os dias da semana', 'Marque pelo menos um dia da semana.');
+            if (!rangeEndDate || rangeEndDate < formData.start_date) marcar('rangeEnd', 'a data final da série', 'Defina uma data final válida.');
+            else if (occurrenceDates.length === 0) marcar('rangeEnd', 'ao menos uma data na série', 'Nenhum turno seria criado com esse período.');
+            else if (overCap) marcar('rangeEnd', `um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`, `A série passaria de ${MAX_SERIES_OCCURRENCES} turnos. Encurte o período.`);
         }
-        return falta;
+        if (!(parseFloat(formData.budget) > 0)) marcar('budget', 'o valor', 'Informe um valor maior que zero.');
+        return erros;
     };
 
-    const faltas = oQueFalta();
+    const erros = errosDoTurno();
+    const faltas = Object.values(erros).map((e) => e.falta);
     const podeEnviar = faltas.length === 0;
+    const erroDe = (campo: CampoDoTurno) => (tentouEnviar ? erros[campo]?.erro : undefined);
+
+    // O botão nunca fica morto por validação: ao enviar incompleto, marca os campos e leva ao primeiro.
+    const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (loading || erroCarga?.modo === 'editar') return;
+        if (!podeEnviar) {
+            const form = e.currentTarget;
+            flushSync(() => setTentouEnviar(true));
+            focusFirstInvalid(form);
+            return;
+        }
+        void handleSubmit();
+    };
 
     const handleSubmit = async () => {
         setLoading(true);
@@ -596,7 +620,7 @@ export default function CompanyCreateJob() {
                 </div>
             )}
 
-            <div className="flex flex-col gap-6">
+            <form className="flex flex-col gap-6" noValidate onSubmit={handleFormSubmit}>
                 {/* Modelos: o turno real que a empresa ja fez vira um toque. Historico vazio = some. */}
                 {!isEditing && !repetirId && modelos.length > 0 && (
                     <section aria-label="Comece de um turno anterior">
@@ -623,7 +647,7 @@ export default function CompanyCreateJob() {
                 )}
 
                 <FormSection title="O turno">
-                    <Field label="Título do turno" required>
+                    <Field label="Título do turno" error={erroDe('title')} required>
                         <input
                             type="text"
                             aria-label="Título do Turno"
@@ -634,7 +658,7 @@ export default function CompanyCreateJob() {
                     </Field>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Field label="Função" required>
+                        <Field label="Função" error={erroDe('category')} required>
                             <select
                                 aria-label="Função"
                                 value={formData.category}
@@ -661,7 +685,7 @@ export default function CompanyCreateJob() {
                         </Field>
                     </div>
 
-                    <Field label="Descrição" required>
+                    <Field label="Descrição" error={erroDe('description')} required>
                         <textarea
                             aria-label="Descrição Completa"
                             className="!h-auto min-h-28 resize-y py-3"
@@ -686,7 +710,7 @@ export default function CompanyCreateJob() {
 
                 <FormSection title="Quando e onde">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Field label="Data de início" required hint={!isEditing && isRecurring ? 'Primeira data da série.' : undefined}>
+                        <Field label="Data de início" error={erroDe('start_date')} required hint={!isEditing && isRecurring ? 'Primeira data da série.' : undefined}>
                             <input
                                 ref={startDateRef}
                                 type="date"
@@ -696,7 +720,7 @@ export default function CompanyCreateJob() {
                                 onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                             />
                         </Field>
-                        <Field label="Entrada" required>
+                        <Field label="Entrada" error={erroDe('work_start_time')} required>
                             <input
                                 type="time"
                                 aria-label="Horário de entrada"
@@ -704,7 +728,7 @@ export default function CompanyCreateJob() {
                                 onChange={(e) => setFormData({ ...formData, work_start_time: e.target.value })}
                             />
                         </Field>
-                        <Field label="Saída" required>
+                        <Field label="Saída" error={erroDe('work_end_time')} required>
                             <input
                                 type="time"
                                 aria-label="Horário de saída"
@@ -790,7 +814,14 @@ export default function CompanyCreateJob() {
                                     {recurrenceType === 'weekly' && (
                                         <div className="flex flex-col gap-1.5">
                                             <span id="job-weekdays-label" className="text-sm font-bold">Dias da semana</span>
-                                            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="job-weekdays-label">
+                                            <div
+                                                className="flex flex-wrap gap-2"
+                                                role="group"
+                                                aria-labelledby="job-weekdays-label"
+                                                aria-describedby={erroDe('weekdays') ? 'job-weekdays-error' : undefined}
+                                                data-invalid={erroDe('weekdays') ? 'true' : undefined}
+                                                tabIndex={-1}
+                                            >
                                                 {WEEKDAY_LABELS.map((label, day) => (
                                                     <button
                                                         key={day}
@@ -804,10 +835,13 @@ export default function CompanyCreateJob() {
                                                     </button>
                                                 ))}
                                             </div>
+                                            {erroDe('weekdays') && (
+                                                <p id="job-weekdays-error" role="alert" className="text-xs font-bold text-red-600">{erroDe('weekdays')}</p>
+                                            )}
                                         </div>
                                     )}
 
-                                    <Field label="Repetir até" required>
+                                    <Field label="Repetir até" error={erroDe('rangeEnd')} required>
                                         <input
                                             type="date"
                                             aria-label="Repetir até"
@@ -853,6 +887,7 @@ export default function CompanyCreateJob() {
                         </Field>
                         <Field
                             label="Valor"
+                            error={erroDe('budget')}
                             required
                             hint={isEditing ? 'O valor não pode ser alterado após a criação.' : `Em reais, ${unidadeValor}.`}
                         >
@@ -935,15 +970,15 @@ export default function CompanyCreateJob() {
 
                 {/* CTA unico. Diz o que falta, em vez de so desabilitar o botao. */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600" role="status">
                         {!podeEnviar ? `Falta preencher: ${faltas.join(', ')}.` : ''}
                     </p>
                     <Button
                         variant="dark"
                         size="lg"
-                        onClick={handleSubmit}
+                        type="submit"
                         loading={loading}
-                        disabled={!podeEnviar || erroCarga?.modo === 'editar'}
+                        disabled={erroCarga?.modo === 'editar'}
                         title={podeEnviar ? undefined : 'Falta preencher: ' + faltas.join(', ')}
                         iconRight={!loading ? <Check size={18} /> : undefined}
                         className="w-full sm:w-auto"
@@ -951,18 +986,17 @@ export default function CompanyCreateJob() {
                         {loading ? 'Salvando...' : rotuloEnviar}
                     </Button>
                 </div>
-            </div>
+            </form>
 
             {/* Resumo pós-criação de série (R9) — NÃO abre o painel de convite (que assume 1
                 job); convidar continua sendo o fluxo por-ocorrência já existente na agenda. */}
             {createdSeriesSummary && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <Card
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="serie-criada-titulo"
-                        className="w-full max-w-md text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                    >
+                <Dialog
+                    labelledBy="serie-criada-titulo"
+                    onClose={() => navigate('/company/jobs')}
+                    dismissable={false}
+                    className="text-center"
+                >
                         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-black bg-primary-light">
                             <Repeat size={24} className="text-primary" />
                         </div>
@@ -974,19 +1008,17 @@ export default function CompanyCreateJob() {
                         <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/company/jobs')}>
                             Ir para Meus Turnos
                         </Button>
-                    </Card>
-                </div>
+                </Dialog>
             )}
 
             {/* Painel de convite pós-criação */}
             {showInvitePanel && createdJobId && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <Card
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="convidar-freela-titulo"
-                        className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                    >
+                <Dialog
+                    labelledBy="convidar-freela-titulo"
+                    onClose={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                    dismissable={false}
+                    initialFocus="panel"
+                >
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>
                             <Button
@@ -1005,7 +1037,7 @@ export default function CompanyCreateJob() {
                         </p>
 
                         {teamLoading && (
-                            <div className="space-y-3 animate-pulse">
+                            <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
                             </div>
                         )}
@@ -1060,7 +1092,7 @@ export default function CompanyCreateJob() {
                                                 )}
                                             </div>
                                             {invitedWorkerIds.includes(member.worker.id) ? (
-                                                <span className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary-light px-4 text-xs font-bold text-primary">
+                                                <span className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary-light px-4 text-xs font-bold text-primary-dark">
                                                     <Check size={14} /> Convidado
                                                 </span>
                                             ) : (
@@ -1096,8 +1128,7 @@ export default function CompanyCreateJob() {
                             )}
                             </>
                         )}
-                    </Card>
-                </div>
+                </Dialog>
             )}
         </div>
     );

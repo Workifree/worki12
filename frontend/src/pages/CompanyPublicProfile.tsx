@@ -131,7 +131,7 @@ export default function CompanyPublicProfile() {
 
     if (loading) {
         return (
-            <div className="max-w-4xl mx-auto pb-24 animate-pulse">
+            <div className="max-w-4xl mx-auto pb-24 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-6 w-24 bg-gray-200 rounded-lg mb-6" />
                 <div className="h-48 bg-gray-200 rounded-2xl mb-8" />
                 <div className="space-y-4">

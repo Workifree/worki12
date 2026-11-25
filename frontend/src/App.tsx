@@ -7,8 +7,11 @@ import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
+import RouteFocus from './components/RouteFocus';
+import PageMeta from './components/PageMeta';
 
 import { Suspense, lazy } from 'react';
+import type { ReactNode } from 'react';
 
 // Lazy Load Layouts
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -62,7 +65,8 @@ const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
-  <div className="h-screen w-full bg-[#F4F4F0] animate-pulse">
+  <div className="h-screen w-full bg-[#F4F4F0] animate-pulse" role="status">
+    <span className="sr-only">Carregando</span>
     <div className="flex flex-col md:flex-row max-w-7xl mx-auto min-h-screen">
       <div className="hidden md:block w-64 p-6 space-y-4">
         <div className="h-8 w-24 bg-gray-200 rounded-lg" />
@@ -96,6 +100,14 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Título da aba para as telas que não declaram o próprio <PageMeta>. */
+const titled = (title: string, page: ReactNode) => (
+  <>
+    <PageMeta title={title} />
+    {page}
+  </>
+);
+
 function App() {
   return (
     <ErrorBoundary>
@@ -105,17 +117,18 @@ function App() {
           <ToastProvider>
             <BrowserRouter>
               <PwaPrompts />
+              <RouteFocus />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public Routes */}
                   <Route path="/" element={<HomeRedirect />} />
                   <Route path="/login" element={<Login />} />
-                  <Route path="/termos" element={<Terms />} />
-                  <Route path="/privacidade" element={<Privacy />} />
-                  <Route path="/regulamento-trilha" element={<BonusRules />} />
-                  <Route path="/esqueci-senha" element={<ForgotPassword />} />
-                  <Route path="/redefinir-senha" element={<ResetPassword />} />
-                  <Route path="/ajuda" element={<Help />} />
+                  <Route path="/termos" element={titled('Termos de Uso', <Terms />)} />
+                  <Route path="/privacidade" element={titled('Política de Privacidade', <Privacy />)} />
+                  <Route path="/regulamento-trilha" element={titled('Regulamento da trilha', <BonusRules />)} />
+                  <Route path="/esqueci-senha" element={titled('Recuperar senha', <ForgotPassword />)} />
+                  <Route path="/redefinir-senha" element={titled('Nova senha', <ResetPassword />)} />
+                  <Route path="/ajuda" element={titled('Ajuda', <Help />)} />
                   <Route path="/sobre" element={<LandingPage />} />
 
                   {/*
@@ -145,7 +158,7 @@ function App() {
                   <Route element={<ProtectedRoute />}>
 
                     {/* Admin Route - protected, Admin.tsx checks email authorization */}
-                    <Route path="/admin" element={<Admin />} />
+                    <Route path="/admin" element={titled('Administração', <Admin />)} />
 
                     {/* Onboarding Routes - still protected as they need user session but not full layout yet if incomplete */}
                     <Route path="/company/onboarding" element={<CompanyOnboarding />} />
@@ -161,30 +174,30 @@ function App() {
                       <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="recebimentos" element={<MeusRecebimentos />} />
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
-                      <Route path="indicacoes" element={<QuemTeIndicou />} />
-                      <Route path="profile" element={<Profile />} />
-                      <Route path="messages" element={<Messages />} />
-                      <Route path="notifications" element={<Notifications />} />
+                      <Route path="indicacoes" element={titled('Quem te indicou', <QuemTeIndicou />)} />
+                      <Route path="profile" element={titled('Meu perfil', <Profile />)} />
+                      <Route path="messages" element={titled('Mensagens', <Messages />)} />
+                      <Route path="notifications" element={titled('Notificações', <Notifications />)} />
                     </Route>
 
                     {/* Company Layout Routes */}
                     <Route path="/company" element={<CompanyLayout />}>
                       <Route path="dashboard" element={<CompanyDashboard />} />
-                      <Route path="create" element={<CompanyCreateJob />} />
+                      <Route path="create" element={titled('Criar turno', <CompanyCreateJob />)} />
                       <Route path="jobs" element={<CompanyJobs />} />
                       <Route path="jobs/:id" element={<CompanyJobDetails />} />
-                      <Route path="jobs/:id/edit" element={<CompanyCreateJob />} />
-                      <Route path="jobs/:id/candidates" element={<CompanyJobCandidates />} />
+                      <Route path="jobs/:id/edit" element={titled('Editar turno', <CompanyCreateJob />)} />
+                      <Route path="jobs/:id/candidates" element={titled('Presença e pagamento', <CompanyJobCandidates />)} />
                       <Route path="worker/:id" element={<WorkerPublicProfile />} />
                       {/* DS11 (badges-empresas/ddl-aprovado.md §2.1): rota-espelho de /empresa/:id
                           para o mesmo CompanyPublicProfile, sob CompanyLayout. mode='view' do
                           CompanyBadges navega para cá — nunca para /empresa/:id (worker-only). */}
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
                       <Route path="gestao" element={<CompanyGestao />} />
-                      <Route path="profile" element={<CompanyProfile />} />
-                      <Route path="messages" element={<CompanyMessages />} />
-                      <Route path="team" element={<CompanyTeam />} />
-                      <Route path="indicacoes" element={<CompanyReferrals />} />
+                      <Route path="profile" element={titled('Dados da empresa', <CompanyProfile />)} />
+                      <Route path="messages" element={titled('Mensagens', <CompanyMessages />)} />
+                      <Route path="team" element={titled('Meu Elenco', <CompanyTeam />)} />
+                      <Route path="indicacoes" element={titled('Indicações', <CompanyReferrals />)} />
                       <Route path="organization" element={<Organization />} />
                       <Route path="configuracoes/equipe" element={<CompanyTeamMembers />} />
                       {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As
@@ -193,11 +206,11 @@ function App() {
                       <Route path="trilha" element={<BonusTrail />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="operacao" element={<CompanyOperationAnalytics />} />
-                      <Route path="notifications" element={<Notifications />} />
+                      <Route path="notifications" element={titled('Notificações', <Notifications />)} />
                     </Route>
 
                   </Route>
-                  <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={titled('Página não encontrada', <NotFound />)} />
                 </Routes>
               </Suspense>
             </BrowserRouter>

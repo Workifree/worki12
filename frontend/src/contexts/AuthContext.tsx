@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import * as Sentry from '@sentry/react';
 import { supabase } from '../lib/supabase';
 import { clearServiceWorkerCaches } from '../lib/pwa';
 import { clearJobDrafts } from '../lib/jobDraft';
+import { setMonitoringUser } from '../lib/logger';
 
 interface AuthContextType {
     user: User | null;
@@ -23,9 +23,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data: { session } } = await supabase.auth.getSession();
             setUser(session?.user ?? null);
             if (session?.user) {
-                Sentry.setUser({ id: session.user.id });
+                setMonitoringUser({ id: session.user.id });
             } else {
-                Sentry.setUser(null);
+                setMonitoringUser(null);
             }
             setLoading(false);
         };
@@ -36,9 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setUser(session?.user ?? null);
             if (session?.user) {
-                Sentry.setUser({ id: session.user.id });
+                setMonitoringUser({ id: session.user.id });
             } else {
-                Sentry.setUser(null);
+                setMonitoringUser(null);
             }
             setLoading(false);
         });

@@ -12,7 +12,7 @@ export default function Onboarding() {
       {/* Header / Nav */}
       <nav className="flex items-center justify-between p-6 md:px-12 z-10 border-b-2 border-black/5">
         <div className="flex items-center gap-2">
-          <img src="/worki.icon.png" alt="Worki Logo" className="w-8 h-8 object-contain" />
+          <img src="/favicon.svg" alt="" width={32} height={32} className="w-8 h-8" />
           <span className="text-2xl font-bold tracking-tight">Worki.</span>
         </div>
         <div className="flex items-center gap-4">

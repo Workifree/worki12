@@ -84,7 +84,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
   }, []);
 
   if (loading) {
-    return <div className="h-24 bg-gray-100 rounded-2xl animate-pulse mb-6" />;
+    return <div className="h-24 bg-gray-100 rounded-2xl animate-pulse mb-6" role="status"><span className="sr-only">Carregando</span></div>;
   }
   if (calls.length === 0) return null;
 
@@ -160,7 +160,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
 
             {/* A métrica que prova o valor do produto. */}
             {call.first_claim_at && (
-              <p className="flex items-center gap-1.5 text-xs font-bold text-primary bg-primary-light rounded-xl px-3 py-2 mb-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-primary-dark bg-primary-light rounded-xl px-3 py-2 mb-3">
                 <Timer size={14} />
                 Primeira vaga preenchida em {formatDurationShort(call.created_at, call.first_claim_at)}
               </p>

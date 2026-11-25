@@ -79,6 +79,7 @@ export default function Login() {
     const [isSignUp, setIsSignUp] = useState(searchParams.get('cadastro') === '1');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [mostrarSenha, setMostrarSenha] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -300,7 +301,10 @@ export default function Login() {
                     <Field label="Email">
                         <input
                             type="email"
-                            autoComplete="email"
+                            name="email"
+                            inputMode="email"
+                            autoComplete={isSignUp ? 'email' : 'username'}
+                            autoCapitalize="none"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
@@ -309,9 +313,10 @@ export default function Login() {
                     </Field>
 
                     <div>
-                        <Field label="Senha">
+                        <Field label="Senha" hint={isSignUp ? 'Mínimo de 8 caracteres.' : undefined}>
                             <input
-                                type="password"
+                                type={mostrarSenha ? 'text' : 'password'}
+                                name="password"
                                 autoComplete={isSignUp ? "new-password" : "current-password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -320,6 +325,15 @@ export default function Login() {
                                 placeholder="••••••••"
                             />
                         </Field>
+                        <label className="mt-1 inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-gray-600">
+                            <input
+                                type="checkbox"
+                                className="h-5 w-5"
+                                checked={mostrarSenha}
+                                onChange={(e) => setMostrarSenha(e.target.checked)}
+                            />
+                            Mostrar senha
+                        </label>
                         {isSignUp && password.length > 0 && (() => {
                             const strength = getPasswordStrength(password);
                             return (

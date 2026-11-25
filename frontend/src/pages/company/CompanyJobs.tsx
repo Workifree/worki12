@@ -24,6 +24,7 @@ import type { TeamMember, RecurrenceType } from '../../types';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
 import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
+import { Dialog } from '../../components/ui/Dialog';
 
 type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
 const FILTERS: Array<{ key: JobFilter; label: string }> = [
@@ -298,7 +299,7 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                                 </span>
                             </div>
                             {job.freela.state === 'confirmed' && (
-                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary">
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary-dark">
                                     <PlayCircle size={12} /> Presença
                                 </span>
                             )}
@@ -663,21 +664,18 @@ export default function CompanyJobs() {
         <>
         <PageMeta title="Turnos" />
         {deleteJobId && (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-                <Card
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="excluir-turno-titulo"
-                    className="w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                >
+            <Dialog
+                labelledBy="excluir-turno-titulo"
+                onClose={() => setDeleteJobId(null)}
+                className="max-w-sm"
+            >
                     <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
                     <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
                     <div className="flex gap-3">
                         <Button variant="secondary" fullWidth onClick={() => setDeleteJobId(null)}>Cancelar</Button>
                         <Button variant="danger" fullWidth onClick={() => handleDelete(deleteJobId)}>Excluir</Button>
                     </div>
-                </Card>
-            </div>
+            </Dialog>
         )}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
             <PageHeader
@@ -716,7 +714,7 @@ export default function CompanyJobs() {
             {/* Agenda por dia */}
             <div className="space-y-8">
                 {loading ? (
-                    <div className="space-y-4 animate-pulse">
+                    <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                         {[...Array(4)].map((_, i) => (
                             <div key={i} className="bg-gray-200 rounded-xl h-28" />
                         ))}
@@ -777,13 +775,12 @@ export default function CompanyJobs() {
 
         {/* Modal "Convidar Freela" — atrela um freela do elenco a uma vaga já criada */}
         {inviteJobId && (
-            <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <Card
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="convidar-freela-titulo"
-                    className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                >
+            <Dialog
+                labelledBy="convidar-freela-titulo"
+                onClose={() => setInviteJobId(null)}
+                locked={!!invitingWorkerId}
+                initialFocus="panel"
+            >
                     <div className="mb-2 flex items-center justify-between gap-3">
                         <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>
                         <Button
@@ -800,7 +797,7 @@ export default function CompanyJobs() {
                     </p>
 
                     {teamLoading && (
-                        <div className="space-y-3 animate-pulse">
+                        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                             {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
                         </div>
                     )}
@@ -856,8 +853,7 @@ export default function CompanyJobs() {
                             })}
                         </div>
                     )}
-                </Card>
-            </div>
+            </Dialog>
         )}
 
         {/* Escala Recorrente (F3) — ações de série (R10/R11) */}

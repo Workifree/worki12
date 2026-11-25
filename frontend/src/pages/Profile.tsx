@@ -1,7 +1,6 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, HelpCircle } from 'lucide-react';
 import { Button, Card, Field } from '../components/ui';
@@ -22,6 +21,7 @@ import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '
 import { SHIFT_CATEGORIES } from '../components/company/shiftCategories';
 import { checkSession } from '../lib/authSession';
 import ErroDeCarga from '../components/ErroDeCarga';
+import { Dialog } from '../components/ui/Dialog';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -247,14 +247,6 @@ export default function Profile() {
 
     // QR de identidade + "meu link" (link transitivo)
     const [qrModalOpen, setQrModalOpen] = useState(false);
-    // Saida de emergencia do modal do QR (heuristica #3) — mesmo contrato dos demais modais.
-    const fecharExclusaoPeloFundo = useModalDismiss(() => {
-        if (deleteModalOpen) { setDeleteModalOpen(false); setDeleteConfirmText(''); }
-        else if (qrModalOpen) setQrModalOpen(false);
-    });
-    const fecharQrPeloFundo = (e: React.MouseEvent<HTMLElement>) => {
-        if (e.target === e.currentTarget) setQrModalOpen(false);
-    };
     const [workerId, setWorkerId] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
@@ -620,7 +612,7 @@ export default function Profile() {
     };
 
     if (loading) return (
-        <div className="mx-auto max-w-3xl animate-pulse space-y-6 pb-12" aria-busy="true">
+        <div className="mx-auto max-w-3xl animate-pulse space-y-6 pb-12" aria-busy="true" role="status"><span className="sr-only">Carregando</span>
             <div className="h-28 rounded-2xl bg-gray-200" />
             <div className="space-y-4">
                 {[...Array(4)].map((_, i) => (
@@ -1119,7 +1111,7 @@ export default function Profile() {
                         {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
                             <span
                                 key={day}
-                                className="inline-flex h-8 items-center rounded-pill bg-primary-light px-3 text-sm font-semibold text-primary"
+                                className="inline-flex h-8 items-center rounded-pill bg-primary-light px-3 text-sm font-semibold text-primary-dark"
                             >
                                 {AVAILABILITY_WEEKDAY_LABELS[day]}: {(profile.availability_days?.[day] ?? [])
                                     .map((p) => AVAILABILITY_PERIOD_LABELS[p])
@@ -1312,16 +1304,12 @@ export default function Profile() {
 
         {/* Modal QR de identidade */}
         {qrModalOpen && workerId && (
-            <div
-                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
-                onClick={fecharQrPeloFundo}
+            <Dialog
+                labelledBy="perfil-qr-titulo"
+                onClose={() => setQrModalOpen(false)}
+                initialFocus="panel"
+                className="max-w-sm"
             >
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="perfil-qr-titulo"
-                    className="w-full max-w-sm rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-                >
                     <div className="mb-2 flex items-center justify-between gap-3">
                         <h2 id="perfil-qr-titulo" className="text-lg font-bold">Meu QR de identidade</h2>
                         <button
@@ -1370,22 +1358,16 @@ export default function Profile() {
                     <p className="mt-3 text-center text-xs text-gray-600">
                         Cole o <span className="font-bold">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
                     </p>
-                </div>
-            </div>
+            </Dialog>
         )}
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div
-                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
-                onClick={fecharExclusaoPeloFundo}
+            <Dialog
+                labelledBy="perfil-exclusao-titulo"
+                onClose={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
+                locked={deleting}
             >
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="perfil-exclusao-titulo"
-                    className="w-full max-w-md rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-                >
                     <h2 id="perfil-exclusao-titulo" className="mb-4 text-lg font-bold text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="mb-6 space-y-2 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
@@ -1406,7 +1388,7 @@ export default function Profile() {
                             autoComplete="off"
                         />
                     </Field>
-                    <div className="mt-6 flex gap-3 [&>*]:flex-1">
+                    <div className="worki-dialog-actions mt-6 flex gap-3 [&>*]:flex-1">
                         <Button
                             variant="secondary"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
@@ -1421,8 +1403,7 @@ export default function Profile() {
                             {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
                         </Button>
                     </div>
-                </div>
-            </div>
+            </Dialog>
         )}
         </>
     );

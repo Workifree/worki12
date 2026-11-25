@@ -14,6 +14,7 @@ import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
 import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
 import BackToGestao from '../../components/company/BackToGestao';
+import { Dialog } from '../../components/ui/Dialog';
 
 /** Linha de leitura (modo visualização): rótulo discreto + valor. */
 function ReadField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -360,7 +361,7 @@ export default function CompanyProfile() {
 
     if (loading) {
         return (
-            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-pulse">
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div className="h-10 bg-gray-200 rounded w-1/3" />
                     <div className="h-10 bg-gray-200 rounded w-32" />
@@ -876,13 +877,11 @@ export default function CompanyProfile() {
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="delete-company-title"
+            <Dialog
+                labelledBy="delete-company-title"
+                onClose={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
+                locked={deleting}
             >
-                <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                     <h2 id="delete-company-title" className="text-lg font-bold mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="space-y-2 mb-6 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
@@ -906,7 +905,7 @@ export default function CompanyProfile() {
                             placeholder="EXCLUIR"
                         />
                     </Field>
-                    <div className="flex gap-3">
+                    <div className="worki-dialog-actions flex gap-3">
                         <Button
                             variant="secondary"
                             className="flex-1"
@@ -924,8 +923,7 @@ export default function CompanyProfile() {
                             {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
                         </Button>
                     </div>
-                </div>
-            </div>
+            </Dialog>
         )}
         </>
     );

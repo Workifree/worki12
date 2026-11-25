@@ -1,10 +1,9 @@
 
-import { useState, useEffect } from 'react';
-import { useStackedModal, MODAL_LAYER } from '../hooks/useModalDismiss';
+import { useState } from 'react';
 import { Star, X } from 'lucide-react';
-import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logError } from '../lib/logger'
 import { Button, Field } from './ui'
+import { Dialog } from './ui/Dialog'
 
 interface RateModalProps {
     isOpen: boolean;
@@ -17,8 +16,6 @@ interface RateModalProps {
 }
 
 export default function RateModal({ isOpen, onClose, onSubmit, targetName, targetPhotoUrl, title, subtitle }: RateModalProps) {
-    // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
-    const { onBackdropClick: fecharPeloFundo, isTop } = useStackedModal(onClose, isOpen, MODAL_LAYER.dialog);
     // Nota nasce VAZIA, nao 5: com default pre-marcado dava para "avaliar" sem tocar em
     // estrela — 5 gravado por inercia. Avaliacao e input de julgamento: default opinativo
     // infla a nota e corroi a prova social que o produto vende (reputation inflation;
@@ -26,15 +23,6 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
     const [rating, setRating] = useState(0);
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const trapRef = useFocusTrap(isOpen && isTop);
-
-    useEffect(() => {
-        // Só pega o foco quando está na frente (o convite de turno pode estar por cima).
-        if (isOpen && isTop) {
-            const firstStar = trapRef.current?.querySelector<HTMLButtonElement>('.star-btn');
-            firstStar?.focus();
-        }
-    }, [isOpen, isTop, trapRef]);
 
     if (!isOpen) return null;
 
@@ -54,19 +42,12 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
 
 
     return (
-        <div
-            className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
-            onClick={fecharPeloFundo}
-            // Coberto por outro modal: fora do foco e da leitura de tela até o da frente fechar.
-            inert={!isTop}
+        <Dialog
+            labelledBy="rate-modal-title"
+            onClose={onClose}
+            locked={submitting}
+            initialFocus="panel"
         >
-            <div
-                ref={trapRef}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="rate-modal-title"
-                className="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
-            >
                 <div className="flex justify-between items-center gap-3 mb-6">
                     <h3 id="rate-modal-title" className="text-xl font-bold tracking-tight">{title}</h3>
                     <Button
@@ -101,7 +82,8 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                             onClick={() => setRating(star)}
                             aria-pressed={rating === star}
                             aria-label={`${star} estrela${star > 1 ? 's' : ''}`}
-                            className="star-btn flex h-11 w-11 items-center justify-center rounded-xl transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                            data-autofocus={star === 1 || undefined}
+                            className="flex h-11 w-11 items-center justify-center rounded-xl transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                         >
                             <Star
                                 size={32}
@@ -122,6 +104,7 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                     />
                 </Field>
 
+                <div className="worki-dialog-actions">
                 <Button
                     variant="primary"
                     size="lg"
@@ -132,7 +115,7 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                 >
                     {submitting ? 'Enviando...' : rating === 0 ? 'Toque nas estrelas para avaliar' : 'Enviar avaliação'}
                 </Button>
-            </div>
-        </div>
+                </div>
+        </Dialog>
     );
 }

@@ -32,7 +32,7 @@ function PixMatchProcedure() {
 function Alerts({ adapter }: Props) {
     const fetcher = useCallback(() => adapter.getAlerts(), [adapter]);
     const { data, loading, error } = useLoad(fetcher, 'bonus: alertas');
-    if (loading) return <div className="h-16 bg-gray-200 rounded-xl animate-pulse" />;
+    if (loading) return <div className="h-16 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>;
     if (error || !data) return <p role="alert" className="font-bold text-red-700">Não foi possível carregar os alertas. Não pague nada antes de conferir.</p>;
     const pixBlocked = data.items.some((a) => a.blockReason === 'pix_match');
     return (
@@ -211,7 +211,7 @@ export default function EnrollmentsPanel({ adapter }: Props) {
                 </div>
             </form>
 
-            {list.loading && <div className="h-24 bg-gray-200 rounded-xl animate-pulse" />}
+            {list.loading && <div className="h-24 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>}
             {list.error && <p role="alert" className="font-bold text-red-700">{list.error}</p>}
             {list.data && list.data.length === 0 && <p className="font-bold">Nenhuma inscrição.</p>}
             {(list.data ?? []).map((item) => (

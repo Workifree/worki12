@@ -270,7 +270,7 @@ export default function CompanyOrdersReport() {
       {/* Conteúdo */}
       {loading ? (
         <div className="flex items-center justify-center py-16 print:hidden">
-          <Loader2 size={28} className="animate-spin text-gray-400" />
+          <span role="status"><span className="sr-only">Carregando</span><Loader2 size={28} aria-hidden="true" className="animate-spin text-gray-600" /></span>
         </div>
       ) : error ? (
         <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center print:hidden">

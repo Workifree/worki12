@@ -91,7 +91,7 @@ export default function ReferralOptOutSection() {
   }
 
   if (loading) {
-    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" />;
+    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>;
   }
 
   return (

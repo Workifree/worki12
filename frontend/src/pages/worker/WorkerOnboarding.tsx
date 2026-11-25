@@ -1,5 +1,7 @@
 
 import { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
@@ -65,6 +67,18 @@ const PIX_KEY_PLACEHOLDERS: Record<PixKeyType, string> = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type CampoFreela =
+    | 'fullName' | 'cpf' | 'birthDate' | 'phone' | 'city' | 'pixKeyType' | 'pixKey'
+    | 'roles' | 'experienceYears' | 'availability' | 'tos';
+
+interface Pendencia {
+    campo: CampoFreela;
+    /** Como aparece no resumo "Falta preencher". */
+    falta: string;
+    /** Mensagem junto do campo. */
+    erro: string;
+}
+
 export default function WorkerOnboarding() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -72,6 +86,7 @@ export default function WorkerOnboarding() {
     const [saidaArmada, setSaidaArmada] = useState(false);
     const { addToast } = useToast();
     const [step, setStep] = useState(1);
+    const [tentou, setTentou] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState(false);
 
@@ -202,53 +217,51 @@ export default function WorkerOnboarding() {
     };
 
     /**
-     * O que ainda falta no passo atual, em português, na ordem em que aparece na tela.
-     *
-     * Antes, o botão simplesmente ficava `disabled` e a pessoa não tinha **como saber qual campo
-     * estava faltando** — testando o cadastro no navegador em 22/08/2026 eu mesmo fiquei preso
-     * nesse estado, com todos os campos visivelmente preenchidos e o botão morto (o que faltava
-     * era o tipo da chave PIX, que o `<select>` exibia como "CPF" sem ter valor no estado).
-     *
-     * Esta lista é a FONTE ÚNICA: `canProceed()` deriva dela. Ter as duas regras separadas era o
-     * risco real — a mensagem diria uma coisa e o botão obedeceria outra.
+     * O que ainda falta no passo atual, na ordem em que aparece na tela. FONTE ÚNICA do resumo
+     * ("Falta preencher") e das mensagens junto de cada campo: duas regras separadas fariam a
+     * mensagem dizer uma coisa e o envio obedecer outra.
      */
-    const camposFaltantes = (): string[] => {
-        switch (step) {
-            case 1: {
-                const falta: string[] = [];
-                if (!formData.fullName.trim()) falta.push('nome completo');
-                if (formData.cpf.replace(/\D/g, '').length !== 11) falta.push('CPF (11 dígitos)');
-                if (!formData.birthDate) falta.push('data de nascimento');
-                if (!formData.phone.trim()) falta.push('celular');
-                if (!formData.city.trim()) falta.push('cidade');
-                if (!formData.pixKeyType) falta.push('tipo da chave PIX');
-                else if (!isValidPixKey()) {
-                    falta.push(formData.pixKey.trim()
-                        ? `chave PIX válida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}"`
-                        : 'chave PIX');
-                }
-                return falta;
+    const pendenciasDoPasso = (): Pendencia[] => {
+        const lista: Pendencia[] = [];
+        const marcar = (campo: CampoFreela, falta: string, erro: string) => lista.push({ campo, falta, erro });
+        if (step === 1) {
+            if (!formData.fullName.trim()) marcar('fullName', 'nome completo', 'Informe seu nome completo.');
+            if (formData.cpf.replace(/\D/g, '').length !== 11) marcar('cpf', 'CPF (11 dígitos)', 'Informe o CPF com 11 dígitos.');
+            if (!formData.birthDate) marcar('birthDate', 'data de nascimento', 'Informe sua data de nascimento.');
+            if (!formData.phone.trim()) marcar('phone', 'celular', 'Informe seu celular.');
+            if (!formData.city.trim()) marcar('city', 'cidade', 'Informe sua cidade.');
+            if (!formData.pixKeyType) marcar('pixKeyType', 'tipo da chave PIX', 'Escolha o tipo da chave PIX.');
+            else if (!isValidPixKey()) {
+                const preenchida = formData.pixKey.trim();
+                marcar(
+                    'pixKey',
+                    preenchida ? `chave PIX válida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}"` : 'chave PIX',
+                    preenchida ? `Chave inválida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}".` : 'Informe sua chave PIX.',
+                );
             }
-            case 2: {
-                const falta: string[] = [];
-                if (formData.roles.length === 0) falta.push('ao menos uma especialidade');
-                if (!formData.experienceYears) falta.push('tempo de experiência');
-                return falta;
-            }
-            case 3: {
-                const falta: string[] = [];
-                if (formData.availability.length === 0) falta.push('ao menos um período de disponibilidade');
-                if (!tosAccepted) falta.push('aceite dos Termos de Uso');
-                return falta;
-            }
-            default: return [];
+        } else if (step === 2) {
+            if (formData.roles.length === 0) marcar('roles', 'ao menos uma especialidade', 'Marque ao menos uma especialidade.');
+            if (!formData.experienceYears) marcar('experienceYears', 'tempo de experiência', 'Escolha seu tempo de experiência.');
+        } else if (step === 3) {
+            if (formData.availability.length === 0) marcar('availability', 'ao menos um período de disponibilidade', 'Marque ao menos um período.');
+            if (!tosAccepted) marcar('tos', 'aceite dos Termos de Uso', 'Aceite os Termos de Uso para continuar.');
         }
+        return lista;
     };
 
-    const canProceed = () => camposFaltantes().length === 0;
+    const erroDe = (campo: CampoFreela) =>
+        tentou ? pendenciasDoPasso().find((p) => p.campo === campo)?.erro : undefined;
 
-    const handleNext = async (e: React.FormEvent) => {
+    const handleNext = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (loading) return;
+        if (pendenciasDoPasso().length > 0) {
+            const form = e.currentTarget;
+            flushSync(() => setTentou(true));
+            focusFirstInvalid(form);
+            return;
+        }
+        setTentou(false);
         if (step < TOTAL_STEPS) {
             setStep(step + 1);
         } else {
@@ -330,7 +343,7 @@ export default function WorkerOnboarding() {
     };
 
     const stepLabels = ['Dados', 'Profissão', 'Objetivos'];
-    const pendencias = camposFaltantes();
+    const pendencias = pendenciasDoPasso().map((p) => p.falta);
 
     const chipClass = (selected: boolean) =>
         `min-h-11 px-4 py-2 rounded-full border-2 font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
@@ -393,7 +406,7 @@ export default function WorkerOnboarding() {
                 {/* Form Card */}
                 <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
 
-                    <form onSubmit={handleNext} className="space-y-6">
+                    <form onSubmit={handleNext} noValidate className="space-y-6">
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
@@ -401,65 +414,78 @@ export default function WorkerOnboarding() {
                                 <h2 className="text-lg font-bold">Quem é você?</h2>
 
                                 <div className="space-y-4">
-                                    <Field label="Nome completo" required>
+                                    <Field label="Nome completo" required error={erroDe('fullName')}>
                                         <input
                                             type="text"
                                             required
                                             value={formData.fullName}
                                             onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                                            name="name"
+                                            autoComplete="name"
                                             aria-label="Nome completo"
                                             placeholder="Seu nome completo"
                                         />
                                     </Field>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="CPF" required>
+                                        <Field label="CPF" required error={erroDe('cpf')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.cpf}
                                                 onChange={e => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
+                                                name="cpf"
+                                                autoComplete="off"
+                                                inputMode="numeric"
                                                 aria-label="CPF"
                                                 placeholder="000.000.000-00"
                                             />
                                         </Field>
-                                        <Field label="Data de nascimento" required>
+                                        <Field label="Data de nascimento" required error={erroDe('birthDate')}>
                                             <input
                                                 type="date"
                                                 required
                                                 value={formData.birthDate}
                                                 onChange={e => setFormData({ ...formData, birthDate: e.target.value })}
+                                                name="bday"
+                                                autoComplete="bday"
                                                 aria-label="Data de nascimento"
                                             />
                                         </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Celular / WhatsApp" required>
+                                        <Field label="Celular / WhatsApp" required error={erroDe('phone')}>
                                             <input
                                                 type="tel"
                                                 required
                                                 value={formData.phone}
                                                 onChange={e => setFormData({ ...formData, phone: formatPhone(e.target.value) })}
+                                                name="tel"
+                                                autoComplete="tel"
+                                                inputMode="tel"
                                                 aria-label="Celular ou WhatsApp"
                                                 placeholder="(00) 00000-0000"
                                             />
                                         </Field>
-                                        <Field label="Cidade" required>
+                                        <Field label="Cidade" required error={erroDe('city')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData({ ...formData, city: e.target.value })}
+                                                name="city"
+                                                autoComplete="address-level2"
                                                 aria-label="Cidade"
                                                 placeholder="Ex: São Paulo"
                                             />
                                         </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Tipo de chave PIX" required>
+                                        <Field label="Tipo de chave PIX" required error={erroDe('pixKeyType')}>
                                             <select
                                                 required
                                                 value={formData.pixKeyType}
                                                 onChange={e => setFormData({ ...formData, pixKeyType: e.target.value as PixKeyType, pixKey: '' })}
+                                                name="pixKeyType"
                                                 aria-label="Tipo de chave PIX"
                                             >
                                                 {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
@@ -467,12 +493,15 @@ export default function WorkerOnboarding() {
                                                 ))}
                                             </select>
                                         </Field>
-                                        <Field label="Chave PIX" required>
+                                        <Field label="Chave PIX" required error={erroDe('pixKey')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.pixKey}
                                                 onChange={e => setFormData({ ...formData, pixKey: formatPixKey(formData.pixKeyType, e.target.value) })}
+                                                name="pixKey"
+                                                autoComplete="off"
+                                                inputMode={formData.pixKeyType === 'email' ? 'email' : formData.pixKeyType === 'telefone' ? 'tel' : formData.pixKeyType === 'aleatoria' ? 'text' : 'numeric'}
                                                 aria-label="Chave PIX"
                                                 placeholder={PIX_KEY_PLACEHOLDERS[formData.pixKeyType]}
                                             />
@@ -496,7 +525,7 @@ export default function WorkerOnboarding() {
                                             Quais suas especialidades?
                                             <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2" role="group" aria-label="Especialidades" aria-describedby={erroDe('roles') ? 'roles-error' : undefined} data-invalid={erroDe('roles') ? 'true' : undefined} tabIndex={-1}>
                                             {rolesList.map(role => (
                                                 <button
                                                     key={role}
@@ -509,9 +538,10 @@ export default function WorkerOnboarding() {
                                                 </button>
                                             ))}
                                         </div>
+                                        {erroDe('roles') && <p id="roles-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('roles')}</p>}
                                     </fieldset>
 
-                                    <Field label="Tempo de experiência" required>
+                                    <Field label="Tempo de experiência" required error={erroDe('experienceYears')}>
                                         <select
                                             required
                                             value={formData.experienceYears}
@@ -570,7 +600,7 @@ export default function WorkerOnboarding() {
                                             Disponibilidade
                                             <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="flex flex-wrap gap-2" role="group" aria-label="Disponibilidade" aria-describedby={erroDe('availability') ? 'availability-error' : undefined} data-invalid={erroDe('availability') ? 'true' : undefined} tabIndex={-1}>
                                             {availabilityOptions.map(opt => (
                                                 <button
                                                     key={opt}
@@ -583,12 +613,15 @@ export default function WorkerOnboarding() {
                                                 </button>
                                             ))}
                                         </div>
+                                        {erroDe('availability') && <p id="availability-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('availability')}</p>}
                                     </fieldset>
 
                                     <div className="flex items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
+                                            aria-invalid={erroDe('tos') ? true : undefined}
+                                            aria-describedby={erroDe('tos') ? 'tos-error' : undefined}
                                             checked={tosAccepted}
                                             onChange={e => setTosAccepted(e.target.checked)}
                                             className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
@@ -600,6 +633,7 @@ export default function WorkerOnboarding() {
                                             <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
                                         </label>
                                     </div>
+                                    {erroDe('tos') && <p id="tos-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('tos')}</p>}
                                 </div>
                             </div>
                         )}
@@ -633,7 +667,6 @@ export default function WorkerOnboarding() {
                                 type="submit"
                                 size="lg"
                                 loading={loading}
-                                disabled={!canProceed()}
                                 iconRight={<ArrowRight size={18} />}
                             >
                                 {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}

@@ -1,12 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
+import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link2, Phone, QrCode, UserPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { QrScannerPane } from './QrScannerPane';
 import { UUID_RE, extractInviteToken } from './utils';
 import { ModalShell } from './ModalShell';
 import { Button, Field } from '../ui';
+
+// A biblioteca de leitura de QR é pesada: só baixa quando a pessoa abre a aba QR.
+const QrScannerPane = lazy(() => import('./QrScannerPane').then((m) => ({ default: m.QrScannerPane })));
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Adicionar freela"
@@ -104,7 +105,6 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
     [addWorker, addToast, onAdded, onClose],
   );
 
-  useModalDismiss(onClose); // so o ESC — o backdrop deles ja fechava
 
 
   return (
@@ -174,7 +174,15 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
             Aponte a câmera para o <span className="font-bold text-black">QR de Identidade</span> do freela
             (ele encontra em Perfil → "Meu QR de Identidade").
           </p>
-          <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
+          <Suspense
+            fallback={
+              <div role="status" className="flex aspect-square w-full items-center justify-center rounded-xl bg-gray-100 text-sm font-semibold text-gray-600">
+                Carregando a câmera...
+              </div>
+            }
+          >
+            <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
+          </Suspense>
           <p className="text-xs text-gray-600 text-center">
             O freela aparecerá em "Aguardando" até aceitar o convite.
           </p>

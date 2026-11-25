@@ -67,7 +67,7 @@ export function CallsByStatusPanel({ block }: { block: CallsByStatusBlock }) {
                 colorClass={STATUS_BAR_CLASS[status]}
               />
             ))}
-            <p className="text-[11px] text-gray-400 font-bold">{data.total} chamado(s) no total.</p>
+            <p className="text-xs text-gray-600 font-bold">{data.total} chamado(s) no total.</p>
           </div>
         )}
       </MetricStateWrapper>

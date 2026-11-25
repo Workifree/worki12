@@ -479,7 +479,7 @@ export default function CompanyDashboard() {
                                     onRetry={() => { refetchJobs(); }}
                                 />
                             ) : jobsPending ? (
-                                <div className="space-y-4 animate-pulse">
+                                <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                     {[...Array(3)].map((_, i) => (
                                         <div key={i} className="bg-gray-200 rounded-2xl h-28" />
                                     ))}
@@ -505,7 +505,7 @@ export default function CompanyDashboard() {
                                                 <h3 className="font-bold text-base truncate">{job.title}</h3>
                                                 <p className="text-xs text-gray-600 mt-1">{job.location || 'Presencial'} • {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</p>
                                             </div>
-                                            <span className={`px-3 py-1 rounded-pill text-xs font-semibold flex-shrink-0 ${isJobActive(job, job.applications) ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
+                                            <span className={`px-3 py-1 rounded-pill text-xs font-semibold flex-shrink-0 ${isJobActive(job, job.applications) ? 'bg-primary-light text-primary-dark' : 'bg-gray-100 text-gray-700'}`}>
                                                 {isJobActive(job, job.applications) ? 'Ativo' : job.status === 'open' ? 'Concluído' : 'Fechado'}
                                             </span>
                                         </div>
@@ -541,7 +541,7 @@ export default function CompanyDashboard() {
                                     onRetry={() => { refetchJobs(); refetchApps(); }}
                                 />
                             ) : loading || isLoadingJobs || isLoadingApps ? (
-                                <div className="space-y-4 animate-pulse">
+                                <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                     {[...Array(4)].map((_, i) => (
                                         <div key={i} className="flex gap-3 items-start">
                                             <div className="w-2 h-2 mt-2 rounded-full bg-gray-200 flex-shrink-0" aria-hidden="true" />

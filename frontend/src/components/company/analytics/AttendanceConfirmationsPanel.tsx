@@ -20,15 +20,15 @@ export function AttendanceConfirmationsPanel({ block }: { block: AttendanceConfi
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
             <div>
               <p className="text-xl font-black tabular-nums">{data.requested}</p>
-              <p className="text-[10px] font-bold uppercase text-gray-500">Pedidas</p>
+              <p className="text-xs font-bold uppercase text-gray-500">Pedidas</p>
             </div>
             <div>
               <p className="text-xl font-black tabular-nums">{data.responded}</p>
-              <p className="text-[10px] font-bold uppercase text-gray-500">Respondidas</p>
+              <p className="text-xs font-bold uppercase text-gray-500">Respondidas</p>
             </div>
             <div>
               <p className="text-xl font-black tabular-nums">{data.declined}</p>
-              <p className="text-[10px] font-bold uppercase text-gray-500">Recusadas</p>
+              <p className="text-xs font-bold uppercase text-gray-500">Recusadas</p>
             </div>
           </div>
         )}

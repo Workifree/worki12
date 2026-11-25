@@ -1,7 +1,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import LocalDoTurno from '../components/LocalDoTurno';
-import { useStackedModal, MODAL_LAYER } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
 import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
@@ -26,6 +25,8 @@ import type {
     AttendanceConfirmationResponse,
     AttendanceConfirmationOutcome,
 } from '../types';
+import { Dialog } from '../components/ui/Dialog';
+import { nextTabIndex } from '../lib/tabsKeyboard';
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
 // 'confirmed'/'cannot_attend'/'already_responded'/'unauthenticated' têm tratamento dedicado no handler;
@@ -269,9 +270,6 @@ export default function MyJobs() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
     const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
-    // ESC do detalhe do histórico (heurística #3). Entra na pilha: com avaliação ou convite por
-    // cima, o Esc fecha só o da frente.
-    useStackedModal(() => setDetailJob(null), detailJob !== null, MODAL_LAYER.dialog);
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
     const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
@@ -760,7 +758,7 @@ export default function MyJobs() {
     );
 
     if (loading) return (
-        <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse">
+        <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse" role="status"><span className="sr-only">Carregando</span>
             <div className="h-9 bg-gray-200 rounded-xl w-1/3" />
             <div className="flex gap-2">
                 {[...Array(4)].map((_, i) => <div key={i} className="h-11 bg-gray-200 rounded-xl w-24" />)}
@@ -780,7 +778,7 @@ export default function MyJobs() {
         { id: 'history', label: 'Histórico', count: jobs.history.length, tone: 'neutral' },
     ];
     const TAB_COUNT_TONES = {
-        brand: 'bg-primary text-white',
+        brand: 'bg-primary-dark text-white',
         dark: 'bg-black text-white',
         neutral: 'bg-gray-200 text-gray-700',
     } as const;
@@ -814,7 +812,7 @@ export default function MyJobs() {
                             >
                                 <div className="flex items-center gap-2 mb-3">
                                     <CalendarClock size={18} className="text-primary" />
-                                    <span className="text-sm font-semibold text-primary">
+                                    <span className="text-sm font-semibold text-primary-dark">
                                         Confirma seu turno {rotuloDeQuando(job.raw_date)}?
                                     </span>
                                 </div>
@@ -829,7 +827,7 @@ export default function MyJobs() {
                                     </Chip>
                                 </div>
                                 {localResponse === 'confirmed' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary rounded-xl font-bold text-sm">
+                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary-dark rounded-xl font-bold text-sm">
                                         <ThumbsUp size={18} /> Confirmado
                                     </span>
                                 ) : localResponse === 'cannot_attend' ? (
@@ -889,7 +887,15 @@ export default function MyJobs() {
                         role="tab"
                         aria-selected={activeTab === tab.id}
                         aria-controls="meus-turnos-painel"
+                        tabIndex={activeTab === tab.id ? 0 : -1}
                         onClick={() => setActiveTab(tab.id)}
+                        onKeyDown={(e) => {
+                            const next = nextTabIndex(e.key, tabs.findIndex((t) => t.id === tab.id), tabs.length);
+                            if (next === null) return;
+                            e.preventDefault();
+                            setActiveTab(tabs[next].id);
+                            document.getElementById(`meus-turnos-tab-${tabs[next].id}`)?.focus();
+                        }}
                         className={`
                             min-h-11 justify-center px-2 sm:px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black rounded-t-xl
@@ -922,7 +928,7 @@ export default function MyJobs() {
                 {activeTab === 'invites' && (
                     <>
                         {invitesLoading && (
-                            <div className="space-y-4 animate-pulse">
+                            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(2)].map((_, i) => (
                                     <div key={i} className="h-32 bg-gray-200 rounded-2xl" />
                                 ))}
@@ -998,7 +1004,7 @@ export default function MyJobs() {
                                                 Quem aceitar primeiro
                                             </span>
                                         ) : (
-                                            <span className="ml-auto bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
+                                            <span className="ml-auto bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
                                                 Novo convite
                                             </span>
                                         )}
@@ -1093,7 +1099,7 @@ export default function MyJobs() {
                                     <p className="text-sm text-gray-600">{job.company_name}</p>
                                 </div>
                                 {isOnShift(job) && (
-                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
                                         <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
                                     </span>
                                 )}
@@ -1223,7 +1229,7 @@ export default function MyJobs() {
                                     <span className="block text-xs text-gray-600">Receber</span>
                                     <span className="block text-2xl font-bold tabular-nums text-primary">{formatBRL(job.pay)}</span>
                                 </div>
-                                <span className="bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200">Contratado</span>
+                                <span className="bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200">Contratado</span>
                             </div>
                             <div className="flex flex-col gap-2">
                                 <Button
@@ -1340,16 +1346,11 @@ export default function MyJobs() {
 
             {/* Detalhe do turno no histórico */}
             {detailJob && (
-                <div
-                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-                    onClick={(e) => { if (e.target === e.currentTarget) setDetailJob(null); }}
+                <Dialog
+                    labelledBy="detalhe-turno-titulo"
+                    onClose={() => setDetailJob(null)}
+                    initialFocus="panel"
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="detalhe-turno-titulo"
-                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-                    >
                         <div className="flex items-start justify-between gap-3 mb-5">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
@@ -1397,7 +1398,7 @@ export default function MyJobs() {
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1">Valor</p>
-                                <p className="font-bold text-sm tabular-nums text-primary">{formatBRL(detailJob.pay)}</p>
+                                <p className="font-bold text-sm tabular-nums text-primary-dark">{formatBRL(detailJob.pay)}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
@@ -1433,22 +1434,17 @@ export default function MyJobs() {
                                 </Button>
                             )
                         )}
-                    </div>
-                </div>
+                </Dialog>
             )}
 
             {/* Confirmação de cancelamento de turno agendado */}
             {cancelJob && (
-                <div
-                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-                    onClick={(e) => { if (e.target === e.currentTarget && !cancelLoading) setCancelJob(null); }}
+                <Dialog
+                    labelledBy="cancelar-turno-titulo"
+                    onClose={() => setCancelJob(null)}
+                    locked={cancelLoading}
+                    className="max-w-sm"
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="cancelar-turno-titulo"
-                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6"
-                    >
                         <div className="flex items-start gap-3 mb-4">
                             <div className="w-10 h-10 rounded-xl border-2 border-black bg-red-100 flex items-center justify-center flex-shrink-0">
                                 <XCircle size={20} className="text-red-600" />
@@ -1466,7 +1462,7 @@ export default function MyJobs() {
                             <p className="text-xs text-gray-600">{cancelJob.date} • {cancelJob.time}</p>
                         </div>
 
-                        <div className="flex gap-3">
+                        <div className="worki-dialog-actions flex gap-3">
                             <Button
                                 variant="secondary"
                                 className="flex-1"
@@ -1485,8 +1481,7 @@ export default function MyJobs() {
                                 Cancelar turno
                             </Button>
                         </div>
-                    </div>
-                </div>
+                </Dialog>
             )}
 
         </div>

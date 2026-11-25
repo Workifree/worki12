@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { clearAuthLockReload, isAuthLockAbort, sleep } from './authLock';
 
 /**
  * `getUser()` vai à rede. Sem conexão ele devolve `user: null` JUNTO com um erro de rede, e quem
@@ -17,11 +18,9 @@ function isSessionGone(error: { name?: string; status?: number }): boolean {
     return error.status === 400 || error.status === 401 || error.status === 403 || error.status === 404;
 }
 
-/**
- * Versão para os gates: lê a sessão salva (`getSession`). Com o token expirado e sem rede, o
- * auth-js devolve `session: null` JUNTO com o erro do refresh (a sessão continua salva).
- */
-export async function checkStoredSession(): Promise<SessionCheck> {
+const SESSION_RETRY_DELAYS_MS = [300, 1200];
+
+async function readStoredSession(): Promise<SessionCheck> {
     try {
         const { data, error } = await supabase.auth.getSession();
         if (data.session?.user) return { status: 'ok', user: data.session.user };
@@ -30,6 +29,23 @@ export async function checkStoredSession(): Promise<SessionCheck> {
     } catch (error) {
         return { status: 'unavailable', error };
     }
+}
+
+/**
+ * Versão para os gates: lê a sessão salva (`getSession`). Com o token expirado e sem rede, o
+ * auth-js devolve `session: null` JUNTO com o erro do refresh (a sessão continua salva).
+ * `AbortError` do lock de auth é repetido com espera; o resultado continua `unavailable` enquanto
+ * a sessão não for lida de verdade (o gate nunca abre na dúvida).
+ */
+export async function checkStoredSession(delays: readonly number[] = SESSION_RETRY_DELAYS_MS): Promise<SessionCheck> {
+    let result = await readStoredSession();
+    for (const delay of delays) {
+        if (result.status !== 'unavailable' || !isAuthLockAbort(result.error)) break;
+        await sleep(delay);
+        result = await readStoredSession();
+    }
+    if (result.status !== 'unavailable') clearAuthLockReload();
+    return result;
 }
 
 export async function checkSession(): Promise<SessionCheck> {

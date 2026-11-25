@@ -116,7 +116,7 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
             )}
             {/* Histórico com esta empresa — o dado que ajuda a decidir "chamo esse ou outro?". */}
             {restricted ? null : history && history.count > 0 ? (
-              <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary px-2.5 py-1 rounded-pill">
+              <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill">
                 <History size={12} /> {history.count} turno{history.count !== 1 ? 's' : ''} com você
                 {history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}
               </span>

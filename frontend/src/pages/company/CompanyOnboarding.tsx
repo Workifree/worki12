@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
@@ -11,12 +13,14 @@ import { logError } from '../../lib/logger'
 import { checkSession } from '../../lib/authSession';
 import ErroDeCarga from '../../components/ErroDeCarga';
 
+type CampoEmpresa = 'name' | 'cnpj' | 'companyType' | 'industry' | 'city' | 'hiringGoal' | 'hiringVolume' | 'tos';
+
 export default function CompanyOnboarding() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const { addToast } = useToast();
     const [step, setStep] = useState(1);
-    const [cnpjError, setCnpjError] = useState('');
+    const [tentou, setTentou] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState(false);
     const [saidaArmada, setSaidaArmada] = useState(false);
@@ -81,43 +85,43 @@ export default function CompanyOnboarding() {
         return () => { active = false; };
     }, [navigate, tentativa]);
 
-    const canProceed = () => {
-        switch (step) {
-            case 1: {
-                const cleanDoc = formData.cnpj.replace(/\D/g, '');
-                return Boolean(
-                    formData.name &&
-                    (cleanDoc.length === 11 || cleanDoc.length === 14) &&
-                    formData.companyType &&
-                    formData.industry &&
-                    formData.city
-                );
-            }
-            case 2: return Boolean(formData.hiringGoal && formData.hiringVolume && tosAccepted);
-            default: return true;
-        }
+    const documentoErro = (): string | undefined => {
+        const doc = formData.cnpj.replace(/\D/g, '');
+        if (!doc) return 'Informe o CNPJ ou o CPF.';
+        if (doc.length === 11) return validateCPF(doc) ? undefined : 'CPF inválido. Verifique os dígitos e tente novamente.';
+        if (doc.length === 14) return validateCNPJ(doc) ? undefined : 'CNPJ inválido. Verifique os dígitos e tente novamente.';
+        return 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.';
     };
 
-    const handleNext = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const errosDoPasso = (): Partial<Record<CampoEmpresa, string>> => {
+        const erros: Partial<Record<CampoEmpresa, string>> = {};
         if (step === 1) {
-            const cleanDoc = formData.cnpj.replace(/\D/g, '');
-            if (cleanDoc.length === 11) {
-                if (!validateCPF(cleanDoc)) {
-                    setCnpjError('CPF inválido. Verifique os dígitos e tente novamente.');
-                    return;
-                }
-            } else if (cleanDoc.length === 14) {
-                if (!validateCNPJ(cleanDoc)) {
-                    setCnpjError('CNPJ inválido. Verifique os dígitos e tente novamente.');
-                    return;
-                }
-            } else {
-                setCnpjError('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
-                return;
-            }
-            setCnpjError('');
+            if (!formData.name.trim()) erros.name = 'Informe o nome da empresa.';
+            const doc = documentoErro();
+            if (doc) erros.cnpj = doc;
+            if (!formData.companyType) erros.companyType = 'Escolha o tipo de empresa.';
+            if (!formData.industry) erros.industry = 'Escolha o setor.';
+            if (!formData.city.trim()) erros.city = 'Informe a cidade.';
+        } else {
+            if (!formData.hiringGoal) erros.hiringGoal = 'Escolha como você monta seus turnos.';
+            if (!formData.hiringVolume) erros.hiringVolume = 'Escolha a estimativa de turnos por mês.';
+            if (!tosAccepted) erros.tos = 'Aceite os Termos de Uso para continuar.';
         }
+        return erros;
+    };
+
+    const erros = tentou ? errosDoPasso() : {};
+
+    const handleNext = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (loading) return;
+        if (Object.keys(errosDoPasso()).length > 0) {
+            const form = e.currentTarget;
+            flushSync(() => setTentou(true));
+            focusFirstInvalid(form);
+            return;
+        }
+        setTentou(false);
         if (step < TOTAL_STEPS) {
             setStep(step + 1);
         } else {
@@ -220,7 +224,7 @@ export default function CompanyOnboarding() {
                 {/* Form Card */}
                 <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
 
-                    <form onSubmit={handleNext} className="space-y-6">
+                    <form onSubmit={handleNext} noValidate className="space-y-6">
 
                         {/* Step 1: Company Data */}
                         {step === 1 && (
@@ -228,35 +232,38 @@ export default function CompanyOnboarding() {
                                 <h2 className="text-lg font-bold">Sobre a empresa</h2>
 
                                 <div className="space-y-4">
-                                    <Field label="Nome da empresa" required>
+                                    <Field label="Nome da empresa" error={erros.name} required>
                                         <input
                                             type="text"
                                             required
                                             value={formData.name}
                                             onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                            name="organization"
+                                            autoComplete="organization"
                                             aria-label="Nome da empresa"
                                             placeholder="Ex: Tech Solutions Ltda"
                                         />
                                     </Field>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="CNPJ ou CPF" required error={cnpjError || undefined}>
+                                        <Field label="CNPJ ou CPF" required error={erros.cnpj}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.cnpj}
-                                                onChange={e => {
-                                                    setFormData({ ...formData, cnpj: formatCpfCnpj(e.target.value) });
-                                                    if (cnpjError) setCnpjError('');
-                                                }}
+                                                onChange={e => setFormData({ ...formData, cnpj: formatCpfCnpj(e.target.value) })}
+                                                name="document"
+                                                autoComplete="off"
+                                                inputMode="numeric"
                                                 aria-label="CNPJ ou CPF"
                                                 placeholder="00.000.000/0001-00 ou 000.000.000-00"
                                             />
                                         </Field>
-                                        <Field label="Tipo de empresa" required>
+                                        <Field label="Tipo de empresa" error={erros.companyType} required>
                                             <select
                                                 required
                                                 value={formData.companyType}
                                                 onChange={e => setFormData({ ...formData, companyType: e.target.value })}
+                                                name="companyType"
                                                 aria-label="Tipo de empresa"
                                             >
                                                 <option value="">Selecione...</option>
@@ -267,11 +274,12 @@ export default function CompanyOnboarding() {
                                         </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Setor" required>
+                                        <Field label="Setor" error={erros.industry} required>
                                             <select
                                                 required
                                                 value={formData.industry}
                                                 onChange={e => setFormData({ ...formData, industry: e.target.value })}
+                                                name="industry"
                                                 aria-label="Setor"
                                             >
                                                 <option value="">Selecione...</option>
@@ -280,12 +288,14 @@ export default function CompanyOnboarding() {
                                                 ))}
                                             </select>
                                         </Field>
-                                        <Field label="Cidade" required>
+                                        <Field label="Cidade" error={erros.city} required>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData({ ...formData, city: e.target.value })}
+                                                name="city"
+                                                autoComplete="address-level2"
                                                 aria-label="Cidade"
                                                 placeholder="Ex: São Paulo"
                                             />
@@ -310,6 +320,8 @@ export default function CompanyOnboarding() {
                                                         type="radio"
                                                         name="goal"
                                                         value={opt}
+                                                        aria-invalid={erros.hiringGoal ? true : undefined}
+                                                        aria-describedby={erros.hiringGoal ? 'goal-error' : undefined}
                                                         aria-label={opt}
                                                         checked={formData.hiringGoal === opt}
                                                         onChange={e => setFormData({ ...formData, hiringGoal: e.target.value })}
@@ -319,25 +331,29 @@ export default function CompanyOnboarding() {
                                                 </label>
                                             ))}
                                         </div>
+                                        {erros.hiringGoal && <p id="goal-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erros.hiringGoal}</p>}
                                     </fieldset>
 
                                     <fieldset>
                                         <legend className="text-sm font-bold mb-2">Turnos por mês (estimativa)</legend>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2" data-invalid={erros.hiringVolume ? 'true' : undefined} tabIndex={-1}>
                                             {['1-5', '6-20', '20+'].map(opt => (
                                                 <label key={opt} className={`flex-1 border-2 rounded-xl min-h-11 px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
-                                                    <input type="radio" name="volume" value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="sr-only" />
+                                                    <input type="radio" name="volume" aria-invalid={erros.hiringVolume ? true : undefined} aria-describedby={erros.hiringVolume ? 'volume-error' : undefined} value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="sr-only" />
                                                     <span className="text-lg font-bold">{opt}</span>
-                                                    <span className="text-[10px] uppercase tracking-wide opacity-70">Turnos</span>
+                                                    <span className="text-xs uppercase tracking-wide opacity-70">Turnos</span>
                                                 </label>
                                             ))}
                                         </div>
+                                        {erros.hiringVolume && <p id="volume-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erros.hiringVolume}</p>}
                                     </fieldset>
 
                                     <div className="flex items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
+                                            aria-invalid={erros.tos ? true : undefined}
+                                            aria-describedby={erros.tos ? 'tos-error' : undefined}
                                             checked={tosAccepted}
                                             onChange={e => setTosAccepted(e.target.checked)}
                                             className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
@@ -349,6 +365,7 @@ export default function CompanyOnboarding() {
                                             <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
                                         </label>
                                     </div>
+                                    {erros.tos && <p id="tos-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erros.tos}</p>}
                                 </div>
                             </div>
                         )}
@@ -381,7 +398,6 @@ export default function CompanyOnboarding() {
                                 variant="dark"
                                 size="lg"
                                 loading={loading}
-                                disabled={!canProceed()}
                                 iconRight={<ArrowRight size={18} />}
                             >
                                 {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}

@@ -105,7 +105,7 @@ export default function Notifications() {
 
             {/* Content */}
             {carregando && notifications.length === 0 ? (
-                <div className="space-y-3 py-4">
+                <div className="space-y-3 py-4" role="status" aria-label="Carregando">
                     {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
                 </div>
             ) : erroCarga && notifications.length === 0 ? (

@@ -20,6 +20,7 @@ import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { getSessionUserOrThrow } from '../../lib/authSession';
 import { Button, Card } from '../../components/ui';
+import { Dialog } from '../../components/ui/Dialog';
 
 const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
@@ -166,7 +167,7 @@ export default function CompanyJobDetails() {
     const podeCancelarTurno = cancelamentoDisponivel && hasTeamNav(currentCompany) && (souGestor || !turnoIniciado);
 
     if (loading) return (
-        <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-6">
+        <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-6" role="status"><span className="sr-only">Carregando</span>
             <div className="h-10 bg-gray-200 rounded w-1/2" />
             <div className="h-4 bg-gray-200 rounded w-1/3" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -218,21 +219,18 @@ export default function CompanyJobDetails() {
             />
         )}
         {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-                <Card
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="excluir-turno-titulo"
-                    className="w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                >
+            <Dialog
+                labelledBy="excluir-turno-titulo"
+                onClose={() => setShowDeleteConfirm(false)}
+                className="max-w-sm"
+            >
                     <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
                     <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
                     <div className="flex gap-3">
                         <Button variant="secondary" fullWidth onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
                         <Button variant="danger" fullWidth onClick={handleDelete}>Excluir</Button>
                     </div>
-                </Card>
-            </div>
+            </Dialog>
         )}
         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Barra superior: voltar + menu de ações do turno */}
@@ -302,7 +300,7 @@ export default function CompanyJobDetails() {
                 {/* Cabeçalho do turno: status, título, meta e valor */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                        <span className={`mb-3 inline-block rounded-full border border-black px-3 py-1 text-xs font-semibold ${job.status === 'open' ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`mb-3 inline-block rounded-full border border-black px-3 py-1 text-xs font-semibold ${job.status === 'open' ? 'bg-primary-light text-primary-dark' : 'bg-gray-100 text-gray-700'}`}>
                             {statusLabel}
                         </span>
                         <h1 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>

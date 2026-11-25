@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { TeamListService } from '../../services/teamListService';
@@ -99,8 +98,6 @@ export function ShiftCallModal({
   // Trava SÍNCRONA: dois cliques no mesmo instante passam antes de o React re-renderizar o botão
   // desabilitado e criariam dois chamados.
   const dispatchLock = useRef(false);
-    // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
-    useModalDismiss(() => { if (!dispatching) onClose(); });
   // F5: config da guarda de vínculo (busca em paralelo, nunca em série — LM-9) e contagem por
   // freela (estado próprio, nunca segura a lista do elenco — LM-10).
   const [riskConfig, setRiskConfig] = useState<LinkRiskConfig | null>(null);
@@ -555,7 +552,7 @@ export function ShiftCallModal({
 
       {/* Lista do elenco */}
       {loadingTeam && (
-        <div className="space-y-2 animate-pulse">
+        <div className="space-y-2 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-14 bg-gray-200 rounded-xl" />
           ))}
@@ -646,7 +643,7 @@ export function ShiftCallModal({
                     <span className="inline-flex items-center gap-1 flex-shrink-0">
                       {showAvailabilityBadge && (
                         <span
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary border border-primary rounded-pill px-2 py-0.5"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark border border-primary rounded-pill px-2 py-0.5"
                           title="Disponível para este dia e período, segundo a grade que este freela declarou"
                           aria-label="Freela declarou disponibilidade para este turno"
                         >

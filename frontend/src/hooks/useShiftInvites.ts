@@ -316,6 +316,9 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
   const [justInvited, setJustInvited] = useState<{ jobId: string; workerId: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitingWorkerId, setInvitingWorkerId] = useState<string | null>(null);
+  // `invitingWorkerId` só vale depois do re-render: dois cliques no mesmo instante passavam os dois
+  // e criavam dois chamados. A trava é por ref, síncrona, por turno+freela.
+  const inFlight = useRef(new Set<string>());
   const navigate = useNavigate();
   const { addToast } = useToast();
 
@@ -383,9 +386,17 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
         addToast('Turno ainda não foi criado. Tente novamente em instantes.', 'error');
         return false;
       }
+      const key = `${jobId}:${workerId}`;
+      if (inFlight.current.has(key)) return false;
+      inFlight.current.add(key);
       setInvitingWorkerId(workerId);
-      const result = await ShiftInviteService.inviteWorkerToShift(jobId, workerId, opts);
-      setInvitingWorkerId(null);
+      let result: Awaited<ReturnType<typeof ShiftInviteService.inviteWorkerToShift>>;
+      try {
+        result = await ShiftInviteService.inviteWorkerToShift(jobId, workerId, opts);
+      } finally {
+        inFlight.current.delete(key);
+        setInvitingWorkerId(null);
+      }
 
       if (result.alreadyInvited) {
         setJustInvited((prev) => [...prev, { jobId, workerId }]);

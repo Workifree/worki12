@@ -4,6 +4,7 @@ import BottomNav from '../components/BottomNav';
 import NotificationBell from '../components/NotificationBell';
 import InviteTakeover from '../components/InviteTakeover';
 import ProfileAvatarLink from '../components/ProfileAvatarLink';
+import SkipLink, { MAIN_CONTENT_ID } from '../components/SkipLink';
 
 export default function MainLayout() {
     // A checagem de sessao/papel/onboarding que vivia aqui era REDUNDANTE: este layout so e
@@ -13,7 +14,8 @@ export default function MainLayout() {
     // Auditoria de rede de 01/09: toda tela do freela pagava 2x a mesma consulta de onboarding.
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto">
+        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto">
+            <SkipLink />
             {/* Aviso em tela cheia de convite de turno (worker only) */}
             <InviteTakeover />
 
@@ -30,7 +32,7 @@ export default function MainLayout() {
             </header>
 
             {/* Main Content Area */}
-            <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24 md:pb-8 overflow-y-auto">
+            <main id={MAIN_CONTENT_ID} tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6 md:p-8 pb-24 md:pb-8 overflow-y-auto">
                 <Outlet />
             </main>
 

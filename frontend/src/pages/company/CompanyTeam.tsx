@@ -18,6 +18,7 @@ import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
 import { Button, Card, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
+import { Dialog } from '../../components/ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
@@ -173,7 +174,7 @@ export default function CompanyTeam() {
 
   if (loading || !roleResolved) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20">
+      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20" role="status"><span className="sr-only">Carregando</span>
         <div className="h-9 bg-gray-200 rounded-xl w-48" />
         <div className="h-11 bg-gray-200 rounded-xl w-40" />
         <div className="space-y-4">
@@ -272,7 +273,7 @@ export default function CompanyTeam() {
         </div>
 
         {loadingLists && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             {[...Array(2)].map((_, i) => (
               <div key={i} className="h-20 bg-gray-200 rounded-2xl" />
             ))}
@@ -402,13 +403,12 @@ export default function CompanyTeam() {
 
       {/* Modal de Confirmação de Exclusão de Lista (F2/R7) */}
       {deletingList && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingList) setDeletingList(null);
-          }}
+        <Dialog
+            labelledBy="delete-list-title"
+            onClose={() => setDeletingList(null)}
+            locked={isDeletingList}
+            className="max-w-sm text-center"
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="delete-list-title" className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
             <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
@@ -419,7 +419,7 @@ export default function CompanyTeam() {
             <p className="text-xs text-gray-600 mb-6">
               Excluir esta lista não remove ninguém do Elenco.
             </p>
-            <div className="flex gap-3">
+            <div className="worki-dialog-actions flex gap-3">
               <Button variant="secondary" fullWidth onClick={() => setDeletingList(null)} disabled={isDeletingList}>
                 Cancelar
               </Button>
@@ -433,8 +433,7 @@ export default function CompanyTeam() {
                 {isDeletingList ? 'Excluindo...' : 'Excluir'}
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

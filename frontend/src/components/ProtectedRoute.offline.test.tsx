@@ -68,6 +68,30 @@ describe('gates sem rede', () => {
         expect(await screen.findByText('Area protegida')).toBeInTheDocument()
     })
 
+    const abort = () => new DOMException('signal is aborted without reason', 'AbortError')
+
+    it('AbortError do lock de auth e depois sucesso: abre sozinho, sem tela de erro', async () => {
+        mockGetSession.mockRejectedValueOnce(abort()).mockResolvedValue(okSession)
+        renderGate()
+        expect(await screen.findByText('Area protegida', undefined, { timeout: 3000 })).toBeInTheDocument()
+        expect(mockGetSession).toHaveBeenCalledTimes(2)
+        expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+    })
+
+    it('AbortError persistente: gate fechado; "Tentar de novo" faz leitura nova e recupera', async () => {
+        window.sessionStorage.setItem('worki:auth-lock-reload', '1') // o único reload já foi gasto
+        mockGetSession.mockRejectedValue(abort())
+        renderGate()
+        expect(await screen.findByRole('button', { name: 'Tentar de novo' }, { timeout: 5000 })).toBeInTheDocument()
+        await expectError()
+        const antes = mockGetSession.mock.calls.length
+        mockGetSession.mockResolvedValue(okSession)
+        fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+        expect(await screen.findByText('Area protegida')).toBeInTheDocument()
+        expect(mockGetSession.mock.calls.length).toBeGreaterThan(antes)
+        expect(window.sessionStorage.getItem('worki:auth-lock-reload')).toBeNull()
+    })
+
     it('retoma sozinho no evento online', async () => {
         mockSingle.mockResolvedValueOnce(failedRead)
         renderGate()

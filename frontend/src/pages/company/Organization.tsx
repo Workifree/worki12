@@ -168,7 +168,7 @@ export default function Organization() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse space-y-6" role="status"><span className="sr-only">Carregando</span>
         <div className="h-10 bg-gray-200 rounded-xl w-1/3" />
         {[...Array(2)].map((_, i) => (
           <div key={i} className="h-40 bg-gray-200 rounded-2xl" />

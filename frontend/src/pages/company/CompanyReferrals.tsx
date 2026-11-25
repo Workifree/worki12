@@ -219,7 +219,7 @@ export default function CompanyReferrals() {
       {tab === 'received' && (
         <section aria-label="Indicações recebidas">
           {loadingReceived && (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
               {[...Array(2)].map((_, i) => (
                 <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
               ))}
@@ -241,7 +241,7 @@ export default function CompanyReferrals() {
       {tab === 'sent' && (
         <section aria-label="Indicações enviadas">
           {loadingSent && (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
               {[...Array(2)].map((_, i) => (
                 <div key={i} className="h-24 bg-gray-200 rounded-2xl" />
               ))}
@@ -266,7 +266,7 @@ export default function CompanyReferrals() {
                 <div className="min-w-0">
                   <p className="font-bold flex items-center gap-2 flex-wrap">
                     <span>{r.workerName ?? 'Freela'}</span>
-                    <span className="text-gray-400 font-normal">→</span>
+                    <span className="text-gray-600 font-normal">→</span>
                     <Building2 size={16} />
                     <span>{r.requestingCompanyName ?? 'Empresa'}</span>
                   </p>

@@ -13,9 +13,11 @@ import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { Button, Card } from '../../components/ui';
+import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
 
 export default function WorkerPublicProfile() {
     const { id } = useParams();
+    const podeUsarChat = useCanUseCompanyChat();
     const navigate = useNavigate();
     const { addToast } = useToast();
     interface WorkerProfileData {
@@ -236,7 +238,7 @@ export default function WorkerPublicProfile() {
     };
 
     if (loading) return (
-        <div className="max-w-4xl mx-auto p-8 animate-pulse">
+        <div className="max-w-4xl mx-auto p-8 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             <div className="flex items-center gap-6 mb-8">
                 <div className="w-20 h-20 bg-gray-200 rounded-full" />
                 <div className="flex-1 space-y-3">
@@ -291,22 +293,24 @@ export default function WorkerPublicProfile() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end pt-4">
-                        <div className="flex flex-col items-end gap-1">
-                            <Button
-                                variant="secondary"
-                                onClick={() => void handleChat()}
-                                disabled={!applicationId}
-                                loading={chatLoading}
-                                iconLeft={<MessageSquare size={18} />}
-                            >
-                                Mensagem
-                            </Button>
-                            {!applicationId && (
-                                <span className="text-xs text-gray-600 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
-                            )}
+                    {podeUsarChat && (
+                        <div className="flex justify-end pt-4">
+                            <div className="flex flex-col items-end gap-1">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => void handleChat()}
+                                    disabled={!applicationId}
+                                    loading={chatLoading}
+                                    iconLeft={<MessageSquare size={18} />}
+                                >
+                                    Mensagem
+                                </Button>
+                                {!applicationId && (
+                                    <span className="text-xs text-gray-600 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Basic Info */}
                     <div className="mt-4">

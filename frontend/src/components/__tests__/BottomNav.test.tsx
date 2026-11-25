@@ -56,18 +56,19 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('encarregado: cinco itens, com Elenco', () => {
+  it('encarregado: quatro itens, com Elenco e sem Mensagens', () => {
     mockCompany = company({ role: 'encarregado' })
     renderBottomNav('company', '/company/hoje')
 
-    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Gestão'])
+    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão'])
   })
 
   it('papel ainda carregando e sem dica: não oferece o que talvez tenha de esconder', () => {
     renderBottomNav('company', '/company/dashboard')
 
     expect(screen.queryByLabelText('Relatórios')).not.toBeInTheDocument()
-    expect(labels()).toHaveLength(5)
+    expect(screen.queryByLabelText('Mensagens')).not.toBeInTheDocument()
+    expect(labels()).toHaveLength(4)
   })
 
   it('papel carregando com dica de Gestor: menu completo desde o primeiro render', () => {

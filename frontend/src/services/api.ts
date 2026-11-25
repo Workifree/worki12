@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import * as Sentry from '@sentry/react';
+import { captureException, captureMessage } from '../lib/logger';
 
 /**
  * Helper para chamar Supabase Edge Functions com error handling padronizado.
@@ -20,12 +20,12 @@ export async function invokeFunction<T = Record<string, unknown>>(
       } catch { /* erro de parse ignorado */ }
     }
     const err = new Error(msg);
-    Sentry.captureException(err, { extra: { functionName } });
+    captureException(err, { extra: { functionName } });
     throw err;
   }
 
   if (data?.error) {
-    Sentry.captureMessage(`Edge function ${functionName} returned error: ${data.error}`, 'warning');
+    captureMessage(`Edge function ${functionName} returned error: ${data.error}`, 'warning');
     throw new Error(data.error);
   }
 

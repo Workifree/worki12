@@ -3,8 +3,7 @@ import appSource from '../App.tsx?raw';
 import {
     COMPANY_CREATE_ACTION, NOTIFICATIONS_PATHS, SECTION_TABS, WORKER_PROFILE_LINK,
     getCompanyNav, getGestaoGroups, getWorkerNav, isNavActive, toBottomNav,
-    type NavItem,
-} from './navigation';
+    type NavItem, isGestorOnlyPath } from './navigation';
 
 /** Lê do próprio App.tsx as rotas montadas dentro de um layout: rota nova sem caminho quebra aqui. */
 function layoutRoutes(startMarker: string, endMarker: string, prefix: string): string[] {
@@ -123,10 +122,11 @@ describe('navegação — estado ativo', () => {
         expect(activeIds(bottom, '/company/relatorio')).toEqual(['gestao']);
     });
 
-    it('encarregado: cinco itens (com Elenco, sem Relatórios) e, em Gestão, só trilha e ajuda', () => {
+    it('encarregado: quatro itens (com Elenco, sem Mensagens e Relatórios) e, em Gestão, só trilha e ajuda', () => {
         const items = getCompanyNav({ isEncarregado: true, hasTeam: true });
-        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Gestão']);
-        expect(toBottomNav(items)).toHaveLength(5);
+        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão']);
+        expect(isGestorOnlyPath('/company/messages')).toBe(true);
+        expect(toBottomNav(items)).toHaveLength(4);
         const cards = getGestaoGroups({ gestor: false, units: false, teamInvited: false, trail: true })
             .flatMap((g) => g.cards.map((c) => c.id));
         expect(cards).toEqual(['trilha', 'ajuda']);

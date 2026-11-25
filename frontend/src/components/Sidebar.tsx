@@ -133,7 +133,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             <span className="font-bold text-xs">W.</span>
                         </div>
                         <p className="text-2xl font-bold tracking-tight">Worki</p>
-                        {isCompany && <span className="text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full border border-black">Empresa</span>}
+                        {isCompany && <span className="text-xs font-semibold uppercase tracking-wide bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full border border-black">Empresa</span>}
                     </div>
                     <NotificationBell className={isCompany ? "text-gray-500 hover:bg-gray-100" : "text-gray-400 hover:bg-white/10"} />
                 </div>
@@ -217,7 +217,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             )}
                         </div>
                         {!isCompany && (
-                            <div className="absolute -top-2 -right-2 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-black leading-none">
+                            <div className="absolute -top-2 -right-2 bg-primary-dark text-white text-xs font-bold px-1.5 py-0.5 rounded-full border border-black leading-none">
                                 {`LVL ${workerData?.level || 1}`}
                             </div>
                         )}

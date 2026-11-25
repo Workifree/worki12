@@ -1,7 +1,7 @@
 import { isShiftInProgress } from '../../lib/shiftProgress';
 import { createContext, useContext, useEffect, useId, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
+import { Dialog } from '../../components/ui/Dialog';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { WalletService } from '../../services/walletService';
@@ -35,6 +35,7 @@ import type {
     AttendanceConfirmationOutcome,
 } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
 
 // ---------------------------------------------------------------------------
 // Confirmação de véspera (D-1) — helpers puros (module scope, sem estado de componente),
@@ -257,23 +258,15 @@ function StatusChip({ tone, icon, children }: { tone: ChipTone; icon?: ReactNode
 const ModalTitleIdContext = createContext<string | undefined>(undefined);
 
 /**
- * Casca padrão dos modais desta tela (overlay + caixa neo-brutalista). Overlay em z-[70] para
- * ficar ACIMA da BottomNav (z-50). Semântica de diálogo (role/aria-modal/aria-labelledby) vive
- * aqui, uma vez; cada modal só precisa renderizar o título com `ModalTitle`.
+ * Modais desta tela: a casca única (`ui/Dialog`) mais o id do título, para cada modal só precisar
+ * renderizar o `ModalTitle`.
  */
-function ModalShell({ onBackdropClick, children }: { onBackdropClick: (e: React.MouseEvent<HTMLElement>) => void; children: ReactNode }) {
+function ModalShell({ onClose, children }: { onClose: () => void; children: ReactNode }) {
     const titleId = useId();
     return (
-        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={onBackdropClick}>
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                className="bg-white rounded-2xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-            >
-                <ModalTitleIdContext.Provider value={titleId}>{children}</ModalTitleIdContext.Provider>
-            </div>
-        </div>
+        <Dialog labelledBy={titleId} onClose={onClose}>
+            <ModalTitleIdContext.Provider value={titleId}>{children}</ModalTitleIdContext.Provider>
+        </Dialog>
     );
 }
 
@@ -285,6 +278,7 @@ function ModalTitle({ as: Tag = 'h2', className, children }: { as?: 'h2' | 'h3';
 
 export default function CompanyJobCandidates() {
     const { id } = useParams();
+    const podeUsarChat = useCanUseCompanyChat();
     const navigate = useNavigate();
 
     const [candidates, setCandidates] = useState<Application[]>([]);
@@ -395,7 +389,7 @@ export default function CompanyJobCandidates() {
     const [invitePickerOpen, setInvitePickerOpen] = useState(false);
 
     // ── Saida de emergencia dos 7 modais inline desta pagina (heuristica #3) ────────────────
-    // Mesmo contrato dos modais componentizados (useModalDismiss): ESC e toque no fundo fecham
+    // Contrato da casca única (ui/Dialog): ESC e toque no fundo fecham
     // o modal ABERTO — e NUNCA no meio de uma gravacao (guarda pelas flags de em-andamento).
     // O ShiftCallModal fica fora da cadeia: ele ja tem o proprio ESC/fundo no componente.
     // So um modal abre por vez; a cadeia fecha o primeiro que encontrar aberto.
@@ -410,10 +404,6 @@ export default function CompanyJobCandidates() {
         else if (confirmDeliveryApp) setConfirmDeliveryApp(null);
         else if (invitePickerOpen) setInvitePickerOpen(false);
         else if (reopenApp) setReopenApp(null);
-    };
-    useModalDismiss(fecharModalAberto);
-    const aoTocarFundo = (e: React.MouseEvent<HTMLElement>) => {
-        if (e.target === e.currentTarget) fecharModalAberto();
     };
 
     const { addToast } = useToast();
@@ -778,7 +768,9 @@ export default function CompanyJobCandidates() {
         const ok = await sendReopenInvite(workerId);
         if (ok) {
             closeReopenModal();
-            fetchCandidates();
+            // O convite é um chamado: sem reler os dois, o painel do chamado só aparecia no reload.
+            refreshCalls();
+            void fetchCandidates();
         }
     };
 
@@ -1426,7 +1418,7 @@ export default function CompanyJobCandidates() {
             {/* Candidates List */}
             <div className="space-y-4">
                 {loading ? (
-                    <div className="space-y-4 animate-pulse">
+                    <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                         {[...Array(3)].map((_, i) => (
                             <div key={i} className="bg-gray-200 rounded-2xl h-32" />
                         ))}
@@ -1503,15 +1495,17 @@ export default function CompanyJobCandidates() {
                                 </div>
 
                                 <div className="-mr-2 -mt-1 flex shrink-0 items-center">
-                                    <Button
-                                        variant="ghost"
-                                        className={ICON_BUTTON_CLASS}
-                                        onClick={(e) => { e.stopPropagation(); handleChat(app); }}
-                                        title="Chat"
-                                        aria-label="Abrir chat com freela"
-                                    >
-                                        <MessageSquare size={20} />
-                                    </Button>
+                                    {podeUsarChat && (
+                                        <Button
+                                            variant="ghost"
+                                            className={ICON_BUTTON_CLASS}
+                                            onClick={(e) => { e.stopPropagation(); handleChat(app); }}
+                                            title="Chat"
+                                            aria-label="Abrir chat com freela"
+                                        >
+                                            <MessageSquare size={20} />
+                                        </Button>
+                                    )}
                                     {PULL_HIRE_ENABLED && app.status === 'pending' && (
                                         <>
                                             <Button
@@ -1851,7 +1845,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Convidar Freela" — vaga sem freela (invitePickerOpen) ou convite expirado (reopenApp, R8) */}
             {(reopenApp || invitePickerOpen) && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <div className="flex items-start justify-between gap-3 mb-2">
                         <ModalTitle className="text-lg font-bold tracking-tight">{reopenApp ? 'Convidar Outro Freela' : 'Convidar Freela'}</ModalTitle>
                         <Button
@@ -1870,7 +1864,7 @@ export default function CompanyJobCandidates() {
                     </p>
 
                     {reopenLoading && (
-                        <div className="space-y-3 animate-pulse">
+                        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                             {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
                         </div>
                     )}
@@ -1924,7 +1918,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal de Confirmação de Entrega */}
             {confirmDeliveryApp && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <ModalTitle className="text-lg font-bold tracking-tight mb-3">Confirmar Entrega</ModalTitle>
                     <p className="text-sm text-gray-600">
                         Tem certeza que deseja confirmar a entrega? O pagamento será liberado imediatamente ao profissional.
@@ -1956,7 +1950,7 @@ export default function CompanyJobCandidates() {
                 às 02h) como se fosse o horário real. Pré-preenchido com o horário PLANEJADO do
                 turno; o gerente confirma ou ajusta. */}
             {manualAttendance && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <ModalTitle className="text-lg font-bold tracking-tight">
                         {manualAttendance.type === 'checkin' ? 'Confirmar Presença' : 'Registrar Saída'}
                     </ModalTitle>
@@ -2004,7 +1998,7 @@ export default function CompanyJobCandidates() {
                 UMA confirmação só — dispensar e chamar substituto é uma decisão manual explícita
                 da empresa, só dividida em dois passos técnicos (blocker 3 do ddl-aprovado.md). */}
             {dismissApp && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <ModalTitle className="text-lg font-bold tracking-tight mb-3">
                         {dismissThenCall ? 'Dispensar e Chamar Substituto' : 'Dispensar Freela'}
                     </ModalTitle>
@@ -2049,7 +2043,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal de estorno de pagamento (scheduled|recorded -> voided) */}
             {voidingPayment && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <ModalTitle className="text-lg font-bold tracking-tight mb-3">Estornar pagamento</ModalTitle>
                     <p className="text-sm text-gray-600 mb-5">
                         {voidingPayment.status === 'scheduled'
@@ -2088,7 +2082,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
             {paymentModalApp && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     {!paymentRecorded ? (
                         <>
                             <ModalTitle className="text-lg font-bold tracking-tight">Registrar Pagamento</ModalTitle>
@@ -2225,7 +2219,7 @@ export default function CompanyJobCandidates() {
 
             {/* Modal "Agendar Pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
             {scheduleModalApp && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     {!paymentScheduled ? (
                         <>
                             <ModalTitle className="text-lg font-bold tracking-tight">Agendar Pagamento</ModalTitle>
@@ -2357,7 +2351,7 @@ export default function CompanyJobCandidates() {
 
             {/* Rating Modal */}
             {ratingModalOpen && (
-                <ModalShell onBackdropClick={aoTocarFundo}>
+                <ModalShell onClose={fecharModalAberto}>
                     <div className="flex items-start justify-between gap-3 mb-5">
                         <ModalTitle as="h3" className="text-lg font-bold tracking-tight">Avaliar Freela</ModalTitle>
                         <Button

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { Send, CalendarX2, PlusCircle } from 'lucide-react';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
@@ -141,8 +140,6 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
   const memberIsBusy = busyIds.has(member.worker.id);
 
   const isInviting = invitingWorkerId === member.worker.id;
-  // ESC com a mesma guarda do clique no fundo: nao fechar no meio do convite.
-  useModalDismiss(() => { if (!isInviting) onClose(); });
 
   return (
     <ModalShell
@@ -179,7 +176,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
       }
     >
       {loadingJobs && (
-        <div className="space-y-3 animate-pulse">
+        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-xl" />)}
         </div>
       )}

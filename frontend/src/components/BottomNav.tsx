@@ -16,7 +16,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
 
     return (
         <nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
-            <div className="flex items-stretch h-16 px-0.5">
+            <div className="flex items-stretch h-16">
                 {navItems.map((item) => {
                     const isActive = isNavActive(pathname, item);
                     const label = item.shortLabel ?? item.label;
@@ -27,7 +27,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                             aria-label={label}
                             aria-current={isActive ? 'page' : undefined}
                             className={`
-                 relative flex flex-col items-center justify-center flex-auto min-w-11 min-h-11 gap-1 py-2 px-0.5
+                 relative flex flex-col items-center justify-center flex-auto min-w-11 min-h-11 gap-1 py-2 px-px
                  transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
                                     ? (isCompany ? 'text-blue-600' : 'text-primary')
@@ -43,7 +43,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                             <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
                             {/* `truncate` é rede de segurança a 320px (iPhone SE). Rótulos sem uppercase
                                 e semibold: "Recebimentos" precisa caber. */}
-                            <span className="text-[10px] leading-none font-semibold truncate max-w-full">
+                            <span className="text-xs leading-none font-semibold tracking-tight truncate max-w-full">
                                 {label}
                             </span>
                         </Link>

@@ -35,6 +35,20 @@ function subscribeOnline(onChange: () => void): () => void {
 const getOnline = () => navigator.onLine
 const getOnlineOnServer = () => true
 
+/** Publica a altura da faixa offline em `--worki-offline-h` (o chat a desconta da tela). */
+function publishOfflineHeight(node: HTMLDivElement | null) {
+  if (!node) return
+  const root = document.documentElement
+  const update = () => root.style.setProperty('--worki-offline-h', `${node.offsetHeight}px`)
+  update()
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+  observer?.observe(node)
+  return () => {
+    observer?.disconnect()
+    root.style.removeProperty('--worki-offline-h')
+  }
+}
+
 function IconBadge({ children }: { children: ReactNode }) {
   return (
     <span
@@ -95,6 +109,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     <>
       {!online && (
         <div
+          ref={publishOfflineHeight}
           role="status"
           // No fluxo (não `fixed`): empurra o conteúdo em vez de cobrir cabeçalho, sino e avatar.
           className="flex items-center justify-center gap-2 bg-black px-4 pb-2 pt-[calc(0.5rem_+_env(safe-area-inset-top))] text-center text-xs font-bold text-white"

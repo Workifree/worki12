@@ -188,7 +188,7 @@ export default function ServiceTermSection({
 
     if (loading) {
         return (
-            <div className="border-t-2 border-black pt-6 mb-6 print:hidden animate-pulse space-y-3">
+            <div className="border-t-2 border-black pt-6 mb-6 print:hidden animate-pulse space-y-3" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-4 w-40 bg-gray-200 rounded-xl" />
                 <div className="h-24 bg-gray-200 rounded-xl" />
             </div>

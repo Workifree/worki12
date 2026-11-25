@@ -91,7 +91,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                         <p className="font-bold text-sm sm:text-base truncate">{jobTitle}</p>
                         <p className="text-xs text-gray-600 truncate">{companyName}</p>
                     </div>
-                    <p className={`font-bold text-lg tabular-nums flex-shrink-0 ${isVoided ? 'text-gray-400 line-through' : 'text-black'}`}>
+                    <p className={`font-bold text-lg tabular-nums flex-shrink-0 ${isVoided ? 'text-gray-600 line-through' : 'text-black'}`}>
                         {formatCurrency(payment.amount)}
                     </p>
                 </div>
@@ -104,13 +104,13 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                         </span>
                     )}
                     {needsConfirmation && (
-                        <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary px-2.5 py-1 rounded-pill border border-green-200">
+                        <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill border border-green-200">
                             <AlertTriangle size={12} />
                             Confirme o recebimento
                         </span>
                     )}
                     {payment.status === 'recorded' && payment.worker_confirmed_at && (
-                        <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary px-2.5 py-1 rounded-pill border border-green-200">
+                        <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill border border-green-200">
                             <CheckCircle2 size={12} />
                             Recebido{payment.paid_at ? ` · ${formatDateOnly(payment.paid_at, 'dd/MM/yyyy')}` : ''}
                         </span>
@@ -190,7 +190,7 @@ export default function MeusRecebimentos() {
 
     if (loading) {
         return (
-            <div className="max-w-4xl mx-auto pb-24 space-y-6 animate-pulse">
+            <div className="max-w-4xl mx-auto pb-24 space-y-6 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-9 bg-gray-200 rounded-xl w-64" />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[...Array(3)].map((_, i) => (

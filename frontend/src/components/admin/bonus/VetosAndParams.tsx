@@ -70,7 +70,7 @@ function Vetos({ adapter }: Props) {
                 </button>
             </form>
             {message && <p role="status" className="text-sm font-bold bg-gray-100 border-2 border-black rounded-xl px-4 py-2">{message}</p>}
-            {loading && <div className="h-20 bg-gray-200 rounded-xl animate-pulse" />}
+            {loading && <div className="h-20 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>}
             {error && <p role="alert" className="font-bold text-red-700">{error}</p>}
             {(data ?? []).length === 0 && !loading && !error && <p className="text-sm font-bold">Lista vazia.</p>}
             <ul className="space-y-2">
@@ -179,7 +179,7 @@ function History({ adapter }: Props) {
     return (
         <div>
             <h3 className="text-lg font-black uppercase mb-2">Quem mudou</h3>
-            {loading && <div className="h-16 bg-gray-200 rounded-xl animate-pulse" />}
+            {loading && <div className="h-16 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>}
             {error && <p role="alert" className="font-bold text-red-700">{error}</p>}
             {data && data.length === 0 && <p className="text-sm font-bold">Nenhuma mudança registrada.</p>}
             <ul className="space-y-2">
@@ -202,7 +202,7 @@ function Params({ adapter }: Props) {
         <section aria-labelledby="bonus-params" className="space-y-4">
             <h2 id="bonus-params" className="text-xl font-black uppercase">Parâmetros de antifraude</h2>
             <p className="text-sm text-gray-700">Limiares por trilha. Nunca aparecem para o operador.</p>
-            {loading && <div className="h-32 bg-gray-200 rounded-xl animate-pulse" />}
+            {loading && <div className="h-32 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>}
             {error && <p role="alert" className="font-bold text-red-700">{error}</p>}
             {(data ?? []).map((t) => <TrackParams key={`${t.trackKey}-${t.status}-${JSON.stringify(t.params)}`} adapter={adapter} track={t} onSaved={async () => { await reload(); setVersion((v) => v + 1); }} />)}
             <History key={version} adapter={adapter} />

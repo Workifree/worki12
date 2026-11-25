@@ -46,7 +46,7 @@ export default function PayoutList({ adapter }: Props) {
         setBusy(null);
     };
 
-    if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" /></div>;
+    if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div></div>;
     if (error) return <p role="alert" className="font-bold text-red-700">{error}</p>;
 
     const items = data ?? [];

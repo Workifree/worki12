@@ -45,7 +45,7 @@ export const ORGANIZATION_PATH = '/company/organization';
 /** Rotas só do Gestor (guarda única em `GestorRouteGuard`). Indicações: as RPCs são Gestor-only. */
 export const GESTOR_ONLY_ROUTES: readonly string[] = [
     '/company/indicacoes', '/company/relatorio', '/company/operacao', ORGANIZATION_PATH,
-    '/company/configuracoes/*',
+    '/company/configuracoes/*', '/company/messages',
 ];
 
 export function isGestorOnlyPath(pathname: string): boolean {
@@ -119,7 +119,11 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             id: 'elenco', label: 'Elenco', icon: Users, path: '/company/team',
             matches: [...tabPaths('elenco'), '/company/worker/:id', '/company/empresa/:id'],
         },
-        { id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/company/messages', matches: ['/company/messages'] },
+        // Chat da empresa fica fora da v1 para o Encarregado (spec equipe-encarregados).
+        {
+            id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/company/messages',
+            matches: ['/company/messages'], gestorOnly: true,
+        },
         {
             id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio', gestorOnly: true,
             matches: tabPaths('relatorios'), mobileParent: 'gestao',

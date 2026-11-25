@@ -82,7 +82,7 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
 
       <div className="mt-4">
         {loading ? (
-          <div className="h-12 animate-pulse rounded-xl bg-gray-200" />
+          <div className="h-12 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
         ) : loadFailed ? (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-yellow-50 p-3">
             <p className="text-sm font-semibold">Não foi possível carregar as etiquetas.</p>

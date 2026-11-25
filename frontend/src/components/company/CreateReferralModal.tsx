@@ -1,5 +1,4 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { X, Search, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
@@ -7,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { ReferralService } from '../../services/referralService';
 import type { TeamMember } from '../../types';
 import { Button, Field, FIELD_CONTROL_CLASS } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // "Indicar freela para outra empresa" (F10) — empresa indicadora (B).
@@ -67,7 +67,6 @@ export default function CreateReferralModal({
   onCreated,
 }: CreateReferralModalProps) {
     // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
-    const fecharPeloFundo = useModalDismiss(onClose);
   const { addToast } = useToast();
   const [workerId, setWorkerId] = useState('');
   const [message, setMessage] = useState('');
@@ -175,14 +174,12 @@ export default function CreateReferralModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-            onClick={fecharPeloFundo}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-referral-title"
-        className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-      >
+    <Dialog
+        labelledBy="create-referral-title"
+        onClose={handleClose}
+        locked={submitting}
+        initialFocus="panel"
+    >
         <div className="flex items-center justify-between mb-4">
           <h2 id="create-referral-title" className="text-lg font-bold tracking-tight">Indicar Freela</h2>
           <button
@@ -274,7 +271,7 @@ export default function CreateReferralModal({
             />
           </Field>
 
-          <div className="flex gap-3 pt-2">
+          <div className="worki-dialog-actions flex gap-3 pt-2">
             <Button variant="secondary" onClick={handleClose} disabled={submitting} className="flex-1">
               Cancelar
             </Button>
@@ -289,7 +286,6 @@ export default function CreateReferralModal({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

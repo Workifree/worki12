@@ -46,6 +46,8 @@ import {
   ROLE_LABEL,
 } from '../../services/teamMembersService';
 import type { RemoveMemberResult, TeamMemberItem, TeamMemberState } from '../../types';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 
 const STATE_BADGE: Record<TeamMemberState, { label: string; className: string }> = {
   invited: { label: 'Convite enviado', className: 'bg-blue-50 text-blue-700' },
@@ -91,6 +93,7 @@ export default function CompanyTeamMembers() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
+  const [inviteNameError, setInviteNameError] = useState<string | undefined>(undefined);
   const [invitePhone, setInvitePhone] = useState('');
   const [inviting, setInviting] = useState(false);
   const [share, setShare] = useState<ShareState | null>(null);
@@ -157,6 +160,7 @@ export default function CompanyTeamMembers() {
 
   const openInvite = () => {
     setInviteName('');
+    setInviteNameError(undefined);
     setInvitePhone('');
     setShare(null);
     setCopied(false);
@@ -177,9 +181,12 @@ export default function CompanyTeamMembers() {
     }
     const name = inviteName.trim();
     if (!name) {
-      addToast('Digite o nome da pessoa.', 'error');
+      const form = e.currentTarget as HTMLFormElement;
+      flushSync(() => setInviteNameError('Digite o nome da pessoa.'));
+      focusFirstInvalid(form);
       return;
     }
+    if (inviting) return;
     setInviting(true);
     const result = await inviteMember(companyId, name, 'encarregado');
     setInviting(false);
@@ -383,8 +390,8 @@ export default function CompanyTeamMembers() {
 
       {loading && (
         <div className="space-y-4" role="status" aria-label="Carregando a equipe">
-          <div className="h-24 bg-gray-200 rounded-xl animate-pulse" />
-          <div className="h-24 bg-gray-200 rounded-xl animate-pulse" />
+          <div className="h-24 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
+          <div className="h-24 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
         </div>
       )}
 
@@ -589,14 +596,15 @@ export default function CompanyTeamMembers() {
                   </button>
                 </div>
 
-                <Field label="Nome da pessoa" required hint="Do jeito que você a chama.">
+                <Field label="Nome da pessoa" required hint="Do jeito que você a chama." error={inviteNameError}>
                   <input
                     type="text"
+                    name="invitee-name"
                     data-autofocus
                     maxLength={80}
                     autoComplete="off"
                     value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
+                    onChange={(e) => { setInviteName(e.target.value); setInviteNameError(undefined); }}
                   />
                 </Field>
 
@@ -619,6 +627,7 @@ export default function CompanyTeamMembers() {
                 >
                   <input
                     type="tel"
+                    name="invitee-phone"
                     inputMode="tel"
                     autoComplete="off"
                     placeholder="(11) 91234-5678"

@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import ErroDeCarga from './ErroDeCarga';
 import { Button, Card, Field } from './ui';
 import { Award, Plus, Pencil, Trash2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
@@ -9,6 +8,7 @@ import { logError } from '../lib/logger';
 import { isCertificationExpired, formatDateOnly } from '../lib/dateUtils';
 import { CertificationService } from '../services/certificationService';
 import type { WorkerCertification } from '../types';
+import { Dialog } from './ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // "Minhas Certificações" (F8) — o freela CADASTRA/EDITA/REMOVE a própria certificação
@@ -146,13 +146,6 @@ export default function MyCertificationsSection() {
     setPendingLossConfirm(false);
   };
 
-  // ESC/toque no fundo fecha os modais (prioridade: exclusao > formulario). Depois de closeForm
-  // e dos estados que le, para nao acessar variavel antes da declaracao (React Compiler).
-  useModalDismiss(() => {
-    if (deletingId && !deleting) setDeletingId(null);
-    else if (formOpen && !saving) closeForm();
-  });
-
   const editingCert = editingId ? (certifications.find((c) => c.id === editingId) ?? null) : null;
   const editingWouldDropVerification = !!editingCert?.verified_by_company_id;
   const editingVerifierName = editingCert?.verified_by_company_id
@@ -239,7 +232,7 @@ export default function MyCertificationsSection() {
       </p>
 
       {loading && (
-        <div className="space-y-3 animate-pulse">
+        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(2)].map((_, i) => (
             <div key={i} className="h-20 bg-gray-200 rounded-xl" />
           ))}
@@ -271,7 +264,7 @@ export default function MyCertificationsSection() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm">{cert.title}</h4>
                       {expired && (
-                        <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                        <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
                           Vencida
                         </span>
                       )}
@@ -310,7 +303,7 @@ export default function MyCertificationsSection() {
 
                 {/* D3 — auto-declarado ≠ verificado. Distinção visual obrigatória, cópia travada. */}
                 {verified ? (
-                  <p className="mt-3 flex items-start gap-1.5 text-xs font-semibold text-primary bg-primary-light rounded-xl px-3 py-2">
+                  <p className="mt-3 flex items-start gap-1.5 text-xs font-semibold text-primary-dark bg-primary-light rounded-xl px-3 py-2">
                     <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                     Conferida por {verifierNames[cert.verified_by_company_id as string] ?? 'uma empresa'} em{' '}
                     {formatTimestampBR(cert.verified_at as string)} — a empresa confirma ter visto o
@@ -330,18 +323,12 @@ export default function MyCertificationsSection() {
 
       {/* Modal de cadastro/edição */}
       {formOpen && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !saving) closeForm();
-          }}
+        <Dialog
+            labelledBy="cert-form-title"
+            onClose={closeForm}
+            locked={saving}
+            focusKey={pendingLossConfirm ? 'aviso' : 'form'}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cert-form-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6"
-          >
             <div className="flex items-center justify-between mb-4">
               <h3 id="cert-form-title" className="text-lg font-bold">
                 {editingId ? 'Editar certificação' : 'Nova certificação'}
@@ -421,9 +408,11 @@ export default function MyCertificationsSection() {
                     />
                   </Field>
                 </div>
-                <Button type="submit" size="lg" fullWidth loading={saving}>
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </Button>
+                <div className="worki-dialog-actions">
+                  <Button type="submit" size="lg" fullWidth loading={saving}>
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </Button>
+                </div>
               </form>
             ) : (
               // Regra 1: aviso ANTES de salvar — editar conteúdo derruba a conferência (DS2).
@@ -435,7 +424,7 @@ export default function MyCertificationsSection() {
                     Uma empresa poderá conferir de novo em um próximo turno. Deseja continuar?
                   </p>
                 </div>
-                <div className="flex gap-3">
+                <div className="worki-dialog-actions flex gap-3">
                   <Button
                     variant="secondary"
                     className="flex-1"
@@ -454,24 +443,17 @@ export default function MyCertificationsSection() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Modal de confirmação de exclusão */}
       {deletingId && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !deleting) setDeletingId(null);
-          }}
+        <Dialog
+            labelledBy="cert-delete-title"
+            onClose={() => setDeletingId(null)}
+            locked={deleting}
+            className="max-w-sm text-center"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cert-delete-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6 text-center"
-          >
             <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
@@ -479,7 +461,7 @@ export default function MyCertificationsSection() {
             <p className="text-sm text-gray-600 mb-6">
               Esta ação não pode ser desfeita. Empresas com vínculo deixarão de ver este registro.
             </p>
-            <div className="flex gap-3">
+            <div className="worki-dialog-actions flex gap-3">
               <Button
                 variant="secondary"
                 className="flex-1"
@@ -498,8 +480,7 @@ export default function MyCertificationsSection() {
                 Excluir
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </Card>
   );

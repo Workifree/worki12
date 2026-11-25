@@ -52,8 +52,8 @@ export default function CompanyGestao() {
 
             {!resolved ? (
                 <div className="space-y-4" role="status" aria-label="Carregando as opções">
-                    <div className="h-24 animate-pulse rounded-xl bg-gray-200" />
-                    <div className="h-24 animate-pulse rounded-xl bg-gray-200" />
+                    <div className="h-24 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
+                    <div className="h-24 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
                 </div>
             ) : (
                 <div className="space-y-8">

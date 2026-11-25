@@ -21,14 +21,15 @@ por papel, com `matches` das sub-rotas) usada por lateral, barra inferior e abas
   /company/trilha só com useBonusTrailAccess), "Suporte" (Ajuda -> /ajuda). Cada sub-tela tem "‹ Gestão".
   Com trilha ativa, atalho compacto também no Início.
 - Item da lateral ativo em todas as sub-rotas (inclusive /company/jobs/:id*); /company/notifications não marca nada.
-- Encarregado: Início, Turnos, Elenco, Mensagens, Gestão. Elenco em modo restrito (equipe-encarregados
+- Encarregado: Início, Turnos, Elenco, Gestão (sem Mensagens: o chat da empresa fica fora da v1 para ele;
+  /company/messages mostra "sem acesso" e os atalhos de chat somem; o WhatsApp continua). Elenco em modo restrito (equipe-encarregados
   R7/R10b: lê pelos cartões sem PII e traz freelas; sem remover, repassar link, listas ou histórico). Não vê
   Indicações (RPCs Gestor-only) nem Relatórios; essas rotas, Operação, Unidades e Equipe mostram "sem acesso"
   (`GestorRouteGuard`); em Gestão só o que já podia usar (não ampliar acesso; RLS é a barreira). Enquanto o papel carrega, não mostrar e depois esconder.
 - Seletor de unidade permanece. Rodapé compacto: cartão da empresa (leva a Gestão), Sair; Ajuda.
 
 ## Empresa, celular
-- Barra de 5: Início, Turnos, Elenco, Mensagens, Gestão (os mesmos para o encarregado).
+- Barra de 5: Início, Turnos, Elenco, Mensagens, Gestão (encarregado: 4, sem Mensagens).
 - "Criar turno" vira botão flutuante estendido com texto em Início/Hoje e Turnos (>=44px, acima da barra com
   safe-area, com padding para não cobrir o fim da lista), acessível também nos estados vazios.
 - Cabeçalho sem ícones de Trilha e Equipe; fica o sino.

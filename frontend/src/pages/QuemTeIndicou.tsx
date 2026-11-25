@@ -144,7 +144,7 @@ export default function QuemTeIndicou() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto pb-20 space-y-4 animate-pulse">
+      <div className="max-w-2xl mx-auto pb-20 space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
         <div className="h-10 bg-gray-200 rounded-xl w-56" />
         {[...Array(2)].map((_, i) => (
           <div key={i} className="h-40 bg-gray-200 rounded-2xl" />
@@ -202,7 +202,7 @@ export default function QuemTeIndicou() {
 
               {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
 
-              <div className="bg-primary-light text-primary rounded-xl p-4 text-sm font-semibold leading-relaxed">
+              <div className="bg-primary-light text-primary-dark rounded-xl p-4 text-sm font-semibold leading-relaxed">
                 Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
                 pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
                 recusar, nada muda: você continua no elenco de quem te indicou normalmente.

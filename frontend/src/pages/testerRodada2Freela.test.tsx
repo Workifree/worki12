@@ -1,6 +1,7 @@
 /**
  * Reproduções de N-1, N-2 e D-14 (relatório do tester, rodada 2 — lado freela).
  */
+import { isShownAfter } from '../lib/dialogElement'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, renderHook, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -125,10 +126,12 @@ describe('N-1 — convite na frente da avaliação; um Esc fecha um modal por ve
     )
 
     const invite = await screen.findByRole('dialog', { name: /turno do convite/i })
-    const rateOverlay = screen.getByText('Avaliar Empresa').closest('.fixed') as HTMLElement
+    const rateOverlay = screen.getByText('Avaliar Empresa').closest('dialog') as HTMLElement
     await waitFor(() => expect(rateOverlay).toHaveAttribute('inert'))
-    expect(invite.className).toContain('z-[75]')
-    expect(rateOverlay.className).toContain('z-[70]')
+    // Na FRENTE de verdade: o <dialog> do convite é o último a entrar no top layer, mesmo quando o
+    // da avaliação foi aberto depois.
+    expect(invite).not.toHaveAttribute('inert')
+    await waitFor(() => expect(isShownAfter(invite as HTMLDialogElement, rateOverlay as HTMLDialogElement)).toBe(true))
     expect(invite.contains(document.activeElement)).toBe(true)
 
     fireEvent.keyDown(document, { key: 'Escape' })

@@ -136,29 +136,30 @@ export default function NotificationBell({ className = "" }: { className?: strin
                         ) : (
                             <div className="divide-y divide-gray-200">
                                 {notifications.map((notification) => (
-                                    <div
+                                    <button
+                                        type="button"
                                         key={notification.id}
                                         onClick={() => handleNotificationClick(notification.id, notification.link)}
-                                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ${!notification.read_at ? 'bg-gray-50' : ''}`}
+                                        className={`w-full text-left p-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${!notification.read_at ? 'bg-gray-50' : ''}`}
                                     >
                                         <div className={`mt-1 h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${!notification.read_at ? 'bg-white shadow-sm' : 'bg-gray-100'}`}>
                                             {getIcon(notification.type)}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className={`text-sm ${!notification.read_at ? 'font-bold text-black' : 'font-medium text-gray-700'}`}>
+                                            <span className={`block text-sm ${!notification.read_at ? 'font-bold text-black' : 'font-medium text-gray-700'}`}>
                                                 {notification.title}
-                                            </p>
-                                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                            </span>
+                                            <span className="block text-xs text-gray-600 mt-1 line-clamp-2">
                                                 {notification.message}
-                                            </p>
-                                            <p className="text-xs text-gray-600 mt-2">
+                                            </span>
+                                            <span className="block text-xs text-gray-600 mt-2">
                                                 {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: ptBR })}
-                                            </p>
+                                            </span>
                                         </div>
                                         {!notification.read_at && (
-                                            <div className="h-2 w-2 rounded-full bg-primary mt-2 flex-shrink-0" />
+                                            <span className="h-2 w-2 rounded-full bg-primary mt-2 flex-shrink-0"><span className="sr-only">Não lida</span></span>
                                         )}
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         )}

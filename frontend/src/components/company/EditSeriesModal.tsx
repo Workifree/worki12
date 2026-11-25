@@ -7,6 +7,7 @@ import { JobSeriesService } from '../../services/jobSeriesService';
 import { SHIFT_CATEGORIES } from './shiftCategories';
 import { describeSeriesPreview } from './seriesPreviewText';
 import { Button, Field } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 /**
  * Snapshot mínimo de um `jobs` que pertence a uma série — o suficiente para pré-preencher o
@@ -161,13 +162,14 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
     };
 
     return (
-        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="edit-series-title"
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-            >
+        <Dialog
+            labelledBy="edit-series-title"
+            onClose={onClose}
+            locked={saving}
+            focusKey={phase}
+            initialFocus="panel"
+            className="max-w-lg"
+        >
                 <div className="flex items-center justify-between mb-4">
                     <h2 id="edit-series-title" className="text-lg font-bold tracking-tight flex items-center gap-2">
                         <Repeat size={20} /> Editar os futuros
@@ -277,9 +279,11 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                             />
                         </Field>
 
-                        <Button variant="dark" size="lg" fullWidth onClick={() => setPhase('confirm')} disabled={!canContinue}>
-                            Continuar
-                        </Button>
+                        <div className="worki-dialog-actions">
+                            <Button variant="dark" size="lg" fullWidth onClick={() => setPhase('confirm')} disabled={!canContinue}>
+                                Continuar
+                            </Button>
+                        </div>
                     </div>
                 )}
 
@@ -310,7 +314,7 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                                 )}
                             </div>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="worki-dialog-actions flex gap-3">
                             <Button variant="secondary" onClick={() => setPhase('form')} disabled={saving} className="flex-1">
                                 Voltar
                             </Button>
@@ -344,7 +348,6 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                         </Button>
                     </div>
                 )}
-            </div>
-        </div>
+        </Dialog>
     );
 }

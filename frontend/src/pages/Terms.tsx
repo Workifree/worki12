@@ -65,7 +65,7 @@ export default function Terms() {
           <p>Todo o conteúdo da Plataforma (marca, logotipo, interface, código-fonte) é propriedade da Worki. O uso não autorizado constitui violação de direitos autorais e de propriedade intelectual.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">10. Proteção de Dados (LGPD)</h2>
-          <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-primary font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
+          <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-primary-dark font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">11. Suspensão e Encerramento</h2>
           <p>A Worki pode suspender ou encerrar o acesso de usuários que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais.</p>
@@ -75,7 +75,7 @@ export default function Terms() {
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">13. Contato</h2>
           {contactEmail ? (
-            <p>Para dúvidas sobre estes Termos: <a href={`mailto:${contactEmail}`} className="text-primary font-bold break-all">{contactEmail}</a></p>
+            <p>Para dúvidas sobre estes Termos: <a href={`mailto:${contactEmail}`} className="text-primary-dark font-bold underline break-all">{contactEmail}</a></p>
           ) : (
             <p>{CONTACT_PENDING_TEXT}</p>
           )}

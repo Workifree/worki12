@@ -447,8 +447,8 @@ export default function CompanyToday() {
 
       {loading && (
         <div className="space-y-4" role="status" aria-label="Carregando os turnos">
-          <div className="h-28 animate-pulse rounded-xl bg-gray-200" />
-          <div className="h-28 animate-pulse rounded-xl bg-gray-200" />
+          <div className="h-28 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
+          <div className="h-28 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
         </div>
       )}
 

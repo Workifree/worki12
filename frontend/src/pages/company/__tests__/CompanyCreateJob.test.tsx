@@ -98,63 +98,38 @@ describe('CompanyCreateJob — validação do formulário', () => {
     vi.clearAllMocks()
   })
 
-  it('começa com "Criar turno" desabilitado e diz o que falta', () => {
+  it('começa com "Criar turno" habilitado e diz o que falta', () => {
     renderPage()
-    expect(getSubmitButton()).toBeDisabled()
+    expect(getSubmitButton()).toBeEnabled()
     expect(screen.getByText(/falta preencher: o título do turno, a função, a descrição/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Título do Turno')).toBeRequired()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('continua desabilitado só com título preenchido', () => {
+  it('enviar vazio marca os campos, descreve o erro e foca o primeiro', () => {
     renderPage()
-    fireEvent.change(screen.getByLabelText('Título do Turno'), { target: { value: 'Garçom para evento' } })
-    expect(getSubmitButton()).toBeDisabled()
+    fireEvent.click(getSubmitButton())
+
+    const titulo = screen.getByLabelText('Título do Turno')
+    expect(titulo).toHaveAttribute('aria-invalid', 'true')
+    expect(titulo).toHaveAccessibleDescription(/informe o título do turno/i)
+    expect(titulo).toHaveFocus()
+    expect(screen.getByLabelText('Descrição Completa')).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('bloqueia sem descrição mesmo com o resto preenchido', () => {
-    renderPage()
-    fillBasics()
-    fillSchedule()
-    expect(getSubmitButton()).not.toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Descrição Completa'), { target: { value: '' } })
-    expect(getSubmitButton()).toBeDisabled()
-  })
-
-  it('exige valor > 0, data e horários antes de habilitar "Criar turno"', () => {
-    renderPage()
-    fillBasics()
-
-    const submitButton = getSubmitButton()
-    expect(submitButton).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Valor do orçamento'), { target: { value: '150' } })
-    expect(submitButton).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Data de início'), { target: { value: '2099-01-01' } })
-    expect(submitButton).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Horário de entrada'), { target: { value: '18:00' } })
-    expect(submitButton).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Horário de saída'), { target: { value: '23:00' } })
-    expect(submitButton).not.toBeDisabled()
-  })
-
-  it('mantém "Criar turno" desabilitado com data no passado, mesmo com o resto preenchido', () => {
+  it('foca o primeiro campo que ainda está errado (data no passado)', () => {
     renderPage()
     fillBasics()
     fillSchedule()
-
-    const submitButton = getSubmitButton()
-
-    // Data fixa no passado — não depende do relógio do ambiente de teste.
     fireEvent.change(screen.getByLabelText('Data de início'), { target: { value: '2020-01-01' } })
-    expect(submitButton).toBeDisabled()
+    fireEvent.click(getSubmitButton())
 
-    // Corrigindo para uma data futura, o botão libera — confirma que é a data (e não
-    // outro campo) que estava bloqueando.
-    fireEvent.change(screen.getByLabelText('Data de início'), { target: { value: '2099-01-01' } })
-    expect(submitButton).not.toBeDisabled()
+    const data = screen.getByLabelText('Data de início')
+    expect(data).toHaveFocus()
+    expect(data).toHaveAccessibleDescription(/ainda não passou/i)
+
+    fireEvent.change(data, { target: { value: '2099-01-01' } })
+    expect(data).not.toHaveAttribute('aria-invalid')
   })
 
   it('input de data de início tem "min" igual a hoje (barra data no passado no seletor do browser)', () => {

@@ -10,6 +10,7 @@ import AcessoEncerrado from './AcessoEncerrado';
 import { hasTeamMemberHint, readPendingTeamInviteToken } from '../lib/teamInviteToken';
 import ErroDeVerificacao from './ErroDeVerificacao';
 import { checkStoredSession } from '../lib/authSession';
+import { isAuthLockAbort, reloadOnceForAuthLock } from '../lib/authLock';
 import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado, invalidateCompanyScope } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
@@ -72,10 +73,18 @@ export default function ProtectedRoute() {
     }, [verificationFailed, retry]);
 
     useEffect(() => {
+        // Cada tentativa é independente: a resposta atrasada de uma anterior não pode sobrescrever
+        // a nova (nem recolocar a tela de erro depois de um "Tentar de novo" que deu certo).
+        let active = true;
+        const failVerification = () => { if (active) setVerificationFailed(true); };
+
         const checkAuth = async () => {
             const session = await checkStoredSession();
+            if (!active) return;
             if (session.status === 'unavailable') {
                 logError('ProtectedRoute.session', session.error);
+                // Lock de auth envenenado: só uma carga nova recupera (uma única vez).
+                if (isAuthLockAbort(session.error) && reloadOnceForAuthLock()) return;
                 setVerificationFailed(true);
                 setLoading(false);
                 return;
@@ -123,7 +132,7 @@ export default function ProtectedRoute() {
                     setTosAccepted(data ? data.accepted_tos === true : true);
                 } catch (error) {
                     logError('Erro ao verificar onboarding', error);
-                    setVerificationFailed(true);
+                    failVerification();
                     return;
                 }
 
@@ -146,7 +155,7 @@ export default function ProtectedRoute() {
                         // Sem saber se esta conta já tem empresa, o formulário de onboarding NÃO abre
                         // (ele grava por cima da linha existente): tela de erro com "Tentar de novo".
                         logError('Erro ao verificar a empresa no onboarding', error);
-                        setVerificationFailed(true);
+                        failVerification();
                         return;
                     }
                     setOnboardingChecked(true);
@@ -188,7 +197,7 @@ export default function ProtectedRoute() {
                     // gravaria por cima de uma empresa já cadastrada) nem finge tela de espera para o
                     // dono. Onboarding só com resposta VÁLIDA sem empresa.
                     logError('Erro ao verificar onboarding', error);
-                    setVerificationFailed(true);
+                    failVerification();
                     return;
                 }
 
@@ -204,6 +213,7 @@ export default function ProtectedRoute() {
         };
 
         checkAuth();
+        return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [attempt]);
 
@@ -227,8 +237,9 @@ export default function ProtectedRoute() {
 
     if (loading || (user && !onboardingChecked) || (user && tosAccepted === null)) {
         return (
-            <div className="flex h-screen w-full items-center justify-center bg-gray-50">
-                <Loader2 className="animate-spin text-primary" size={48} />
+            <div className="flex h-screen w-full items-center justify-center bg-gray-50" role="status">
+                <span className="sr-only">Carregando</span>
+                <Loader2 aria-hidden="true" className="animate-spin text-primary" size={48} />
             </div>
         );
     }

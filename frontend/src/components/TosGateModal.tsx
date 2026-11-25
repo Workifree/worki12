@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { Button } from './ui';
+import { Dialog } from './ui/Dialog';
+import { MODAL_LAYER } from '../hooks/useModalDismiss';
 import { getAuthenticatedCompanyId } from '../services/companyScopeService';
 import { checkSession } from '../lib/authSession';
 
@@ -77,13 +79,16 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="tos-gate-title"
-                className="bg-white rounded-2xl w-full max-w-lg p-6 sm:p-8 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-            >
+        // Gate: sem Esc nem toque no fundo; o <dialog> modal deixa a página atrás inerte.
+        <Dialog
+            labelledBy="tos-gate-title"
+            onClose={() => {}}
+            dismissable={false}
+            layer={MODAL_LAYER.gate}
+            initialFocus="panel"
+            overlayClassName="!bg-black/80"
+            className="max-w-lg sm:!p-8"
+        >
                 <h2 id="tos-gate-title" className="text-2xl font-bold tracking-tight mb-3">Termos de Uso Atualizados</h2>
 
                 <p className="text-sm sm:text-base text-gray-700 mb-3 leading-relaxed">
@@ -121,7 +126,6 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                 >
                     {loading ? 'Salvando...' : 'Aceitar e Continuar'}
                 </Button>
-            </div>
-        </div>
+        </Dialog>
     );
 }

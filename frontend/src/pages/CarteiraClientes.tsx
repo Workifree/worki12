@@ -1,6 +1,5 @@
 import { useState, type MouseEvent } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
@@ -11,6 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import type { MyStore, TeamConnection } from '../types';
+import { Dialog } from '../components/ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de empresa aceita
@@ -164,7 +164,7 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
           <p className="text-xs text-gray-600">Convite de</p>
           <p className="font-bold truncate">{name}</p>
         </div>
-        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary text-xs font-bold px-2.5 py-1 rounded-pill">
+        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary-dark text-xs font-bold px-2.5 py-1 rounded-pill">
           Novo
         </span>
       </div>
@@ -205,7 +205,6 @@ export default function CarteiraClientes() {
   const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
-  const fecharPeloFundo = useModalDismiss(() => { if (confirmLeaveId) setConfirmLeaveId(null); });
 
   const handleAccept = async (connectionId: string) => {
     setRespondingId(connectionId);
@@ -256,7 +255,7 @@ export default function CarteiraClientes() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-24">
+      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-24" role="status"><span className="sr-only">Carregando</span>
         <div className="h-9 bg-gray-200 rounded-xl w-56" />
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -356,13 +355,11 @@ export default function CarteiraClientes() {
 
       {/* Modal de confirmação: sair/bloquear */}
       {confirmLeaveId && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharPeloFundo}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sair-empresa-titulo"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6"
-          >
+        <Dialog
+            labelledBy="sair-empresa-titulo"
+            onClose={() => setConfirmLeaveId(null)}
+            className="max-w-sm"
+        >
             <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2">Sair desta empresa?</h3>
             <p className="text-sm text-gray-600 mb-6">
               Você não fará mais parte do elenco dessa empresa. Esta ação não pode ser desfeita.
@@ -375,8 +372,7 @@ export default function CarteiraClientes() {
                 Sair
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

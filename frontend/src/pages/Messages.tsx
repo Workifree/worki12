@@ -52,9 +52,12 @@ export default function Messages() {
     const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
+    // Trava do envio por ref: o campo NÃO é desabilitado (desabilitar fecha o teclado no celular).
+    const sendingRef = useRef(false);
+    const inputRef = useRef<HTMLInputElement>(null);
     const { addToast } = useToast();
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const logRef = useRef<HTMLDivElement>(null);
     const presenceChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -100,7 +103,8 @@ export default function Messages() {
 
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const log = logRef.current;
+        if (log) log.scrollTop = log.scrollHeight;
     }, [messages]);
 
     // Load conversations and unread counts
@@ -309,8 +313,9 @@ export default function Messages() {
     }, [selectedConversation, currentUser, reloadMensagens]);
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !selectedConversation || !currentUser) return;
+        if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
 
+        sendingRef.current = true;
         setSending(true);
         const messageContent = newMessage.trim();
         setNewMessage('');
@@ -341,10 +346,12 @@ export default function Messages() {
 
         if (error) {
             logError('Error sending message:', error);
-            setNewMessage(messageContent); // Restore message on error
+            // Devolve o texto sem apagar o que foi digitado enquanto enviava.
+            setNewMessage((atual) => (atual ? `${messageContent} ${atual}` : messageContent));
             addToast('Erro ao enviar mensagem. Tente novamente.', 'error');
         }
 
+        sendingRef.current = false;
         setSending(false);
     };
 
@@ -391,9 +398,9 @@ export default function Messages() {
 
     if (loading) {
         return (
-            <div className="flex flex-col h-[calc(100vh-140px)] max-w-6xl mx-auto animate-pulse">
+            <div className="worki-chat flex flex-col max-w-6xl mx-auto animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-4" />
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
+                <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
                     <div className="space-y-3">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="h-16 bg-gray-200 rounded-xl" />
@@ -406,11 +413,11 @@ export default function Messages() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] font-sans text-accent max-w-6xl mx-auto">
+        <div className="worki-chat flex flex-col font-sans text-accent max-w-6xl mx-auto">
             <PageHeader
                 title="Mensagens"
                 subtitle="Converse com empresas sobre seus turnos."
-                className="!mb-4"
+                className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
             <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -472,7 +479,7 @@ export default function Messages() {
                 {/* Chat Area */}
                 {/* min-w-0: sem ele a coluna não encolhe abaixo do conteúdo e, a 320px, o botão Enviar e o
                     selo de status saíam do cartão (overflow hidden). */}
-                <div className={`flex-1 min-w-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
@@ -516,7 +523,13 @@ export default function Messages() {
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                            <div
+                                ref={logRef}
+                                role="log"
+                                aria-label="Mensagens da conversa"
+                                tabIndex={0}
+                                className="flex-1 min-h-0 overflow-y-auto overscroll-contain motion-safe:scroll-smooth p-4 space-y-4 bg-gray-50"
+                            >
                                 {erroMensagens ? (
                             <div className="p-4">
                                 <ErroDeCarga onRetry={() => setReloadMensagens(k => k + 1)} mensagem="O histórico não sumiu — a carga falhou. Tente de novo." />
@@ -530,9 +543,9 @@ export default function Messages() {
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-primary text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-primary-dark text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
+                                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
                                                         relógio ao lado de uma mensagem significa "pendente" em qualquer app de
                                                         conversa — aqui não significava nada, e nunca sumia.
@@ -556,7 +569,6 @@ export default function Messages() {
                                         </div>
                                     ))
                                 )}
-                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Typing Indicator */}
@@ -570,11 +582,22 @@ export default function Messages() {
                             )}
 
                             {/* Message Input */}
-                            <div className="p-4 border-t-2 border-black bg-white">
-                                <div className="flex gap-2 sm:gap-3">
+                            <div className="shrink-0 p-2 sm:p-4 border-t-2 border-black bg-white">
+                                <form
+                                    className="flex gap-2 sm:gap-3"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        void handleSendMessage();
+                                        inputRef.current?.focus();
+                                    }}
+                                >
                                     <input
                                         type="text"
                                         aria-label="Mensagem"
+                                        ref={inputRef}
+                                        name="message"
+                                        autoComplete="off"
+                                        enterKeyHint="send"
                                         value={newMessage}
                                         onChange={(e) => {
                                             setNewMessage(e.target.value);
@@ -586,14 +609,16 @@ export default function Messages() {
                                                 }, 3000);
                                             }
                                         }}
-                                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                                        onKeyDown={(e) => {
+                                            // Enter que confirma a composição (IME/teclado preditivo) não envia.
+                                            if (e.key === 'Enter' && e.nativeEvent.isComposing) e.preventDefault();
+                                        }}
                                         placeholder="Digite sua mensagem..."
                                         className={`${FIELD_CONTROL_CLASS} flex-1 min-w-0`}
-                                        disabled={sending}
                                     />
                                     <Button
                                         variant="primary"
-                                        onClick={handleSendMessage}
+                                        type="submit"
                                         disabled={!newMessage.trim()}
                                         loading={sending}
                                         aria-label="Enviar mensagem"
@@ -601,7 +626,7 @@ export default function Messages() {
                                     >
                                         <span className="hidden sm:inline">Enviar</span>
                                     </Button>
-                                </div>
+                                </form>
                             </div>
                         </>
                     ) : (

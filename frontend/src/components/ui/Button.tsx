@@ -8,7 +8,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg'
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary = verde (worker) · dark = preto (empresa) · secondary = borda · ghost = sem moldura · danger = destrutivo */
   variant?: ButtonVariant
-  /** sm h-9 · md h-11 (alvo de toque 44px) · lg h-12 */
+  /** sm 36px (44px em tela de toque) · md 44px · lg 48px — alturas MÍNIMAS */
   size?: ButtonSize
   loading?: boolean
   fullWidth?: boolean
@@ -19,7 +19,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm leading-none select-none ' +
+  'inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm leading-tight select-none ' +
   'transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
   'focus-visible:ring-black disabled:cursor-not-allowed disabled:opacity-50'
@@ -41,9 +41,10 @@ const VARIANTS: Record<ButtonVariant, string> = {
 }
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-9 px-3',
-  md: 'h-11 px-5',
-  lg: 'h-12 px-6',
+  // min-h (não altura fixa): rótulo que quebra em duas linhas não é cortado.
+  sm: 'min-h-9 px-3 py-1.5 [@media(pointer:coarse)]:min-h-11',
+  md: 'min-h-11 px-5 py-2',
+  lg: 'min-h-12 px-6 py-2.5',
 }
 
 function Spinner() {

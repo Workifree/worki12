@@ -19,6 +19,7 @@ interface ControlProps {
   className?: string
   'aria-describedby'?: string
   'aria-invalid'?: boolean | 'true' | 'false'
+  required?: boolean
 }
 
 export interface FieldProps {
@@ -49,6 +50,9 @@ export function Field({ label, children, hint, error, required, className }: Fie
     id: controlId,
     'aria-describedby': describedBy,
     'aria-invalid': error ? true : children.props['aria-invalid'],
+    // Obrigatório para a tecnologia assistiva também. O <form> que usa `required` leva
+    // `noValidate`: a mensagem é a nossa, junto do campo, não o balão do navegador.
+    required: required || children.props.required,
     className: cx(children.type === 'textarea' ? FIELD_TEXTAREA_CLASS : FIELD_CONTROL_CLASS, children.props.className),
   })
 
