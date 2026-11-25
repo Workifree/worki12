@@ -55,6 +55,7 @@ async function percorrerAteAceitar() {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
   mockGetUser.mockResolvedValue({ data: { user: null } });
   mockSignInWithOtp.mockResolvedValue({ error: null });
   mockVerifyOtp.mockResolvedValue({ data: { user: { id: 'u1', user_metadata: { user_type: 'hire' } } }, error: null });
@@ -124,7 +125,11 @@ describe('AcceptTeamInvite — entrada por código, sem senha', () => {
     await percorrerAteAceitar();
     expect(mockSignInWithOtp).toHaveBeenCalledWith({
       email: 'ana@exemplo.com',
-      options: { shouldCreateUser: true, data: { user_type: 'hire' } },
+      options: {
+        shouldCreateUser: true,
+        data: { user_type: 'hire' },
+        emailRedirectTo: `${window.location.origin}/convite-equipe/${TOKEN}`,
+      },
     });
     expect(mockVerifyOtp).toHaveBeenCalledWith({ email: 'ana@exemplo.com', token: '123456', type: 'email' });
   });
@@ -166,6 +171,42 @@ describe('AcceptTeamInvite — entrada por código, sem senha', () => {
     fireEvent.click(botao);
     await waitFor(() => expect(acceptMemberInvite).toHaveBeenCalledWith(TOKEN, true));
     expect(mockSignInWithOtp).not.toHaveBeenCalled();
+  });
+});
+
+describe('AcceptTeamInvite — volta pelo botão do e-mail', () => {
+  const voltaLogada = (email: string) =>
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u', email, user_metadata: { user_type: 'hire' } } } });
+
+  /** Pede o código e fecha a aba; a próxima renderização é a aba aberta pelo e-mail. */
+  async function pedirCodigoEFechar() {
+    const aba = renderPage();
+    await screen.findByText(/te convidou como Encarregado/);
+    fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'Ana@Exemplo.com' } });
+    fireEvent.click(screen.getByLabelText(/Li e aceito/));
+    fireEvent.click(screen.getByRole('button', { name: /Receber código por e-mail/ }));
+    await screen.findByLabelText(/Código do e-mail/);
+    aba.unmount();
+    sessionStorage.clear();
+  }
+
+  it('aba nova autenticada conclui o aceite sozinha, com o token da URL', async () => {
+    vi.mocked(acceptMemberInvite).mockResolvedValue({ outcome: 'accepted' });
+    await pedirCodigoEFechar();
+    voltaLogada('ana@exemplo.com');
+    renderPage();
+    expect(await screen.findByTestId('dashboard')).toBeInTheDocument();
+    expect(acceptMemberInvite).toHaveBeenCalledWith(TOKEN, true);
+    expect(localStorage.getItem('worki_team_invite_tos')).toBeNull();
+  });
+
+  it('outro e-mail logado NÃO aceita sozinho: pede os Termos', async () => {
+    await pedirCodigoEFechar();
+    voltaLogada('outra@exemplo.com');
+    renderPage();
+    expect(await screen.findByText('outra@exemplo.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Entrar na equipe/ })).toBeDisabled();
+    expect(acceptMemberInvite).not.toHaveBeenCalled();
   });
 });
 

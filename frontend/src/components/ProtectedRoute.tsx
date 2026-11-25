@@ -205,6 +205,12 @@ export default function ProtectedRoute() {
         return <Navigate to={onboardingRedirect} replace />;
     }
 
+    // Avisos de chat gravados antes de 20261126000300 apontam a EMPRESA para /messages (rota de
+    // freela). Reescreve para a rota da empresa, preservando a conversa.
+    if (user.user_metadata?.user_type === 'hire' && location.pathname === '/messages' && location.search) {
+        return <Navigate to={`/company/messages${location.search}`} replace />;
+    }
+
     // Role isolation: prevent wrong role from accessing wrong routes. Derivado PURAMENTE do
     // pathname corrente a cada render (nunca guardado em state) — como este componente
     // permanece montado ao navegar entre rotas irmãs (mesmo <Route element={<ProtectedRoute/>}>

@@ -3,7 +3,7 @@
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const FROM_EMAIL = 'Worki <noreply@worki.com.br>';
-const APP_URL = Deno.env.get('APP_URL') ?? 'https://worki.com.br';
+const APP_URL = Deno.env.get('APP_URL') ?? 'https://worki-opal.vercel.app';
 
 interface EmailPayload {
     to: string;

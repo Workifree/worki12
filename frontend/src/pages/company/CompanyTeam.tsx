@@ -29,6 +29,11 @@ export default function CompanyTeam() {
   const { addToast } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Link pré-carregado: o Safari/iOS só deixa copiar dentro do próprio toque, e uma ida à rede
+  // antes do `writeText` perde essa permissão.
+  const [teamLink, setTeamLink] = useState<{ companyId: string; url: string } | null>(null);
+  // Cópia recusada pelo navegador: mostra o link na tela para copiar à mão.
+  const [manualLink, setManualLink] = useState<{ companyId: string; url: string } | null>(null);
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   // R "Convidar direto do elenco": modal por membro + histórico batch (1 query p/ todo o elenco).
@@ -119,21 +124,43 @@ export default function CompanyTeam() {
     return () => { active = false; };
   }, [companyId, teamMembers]);
 
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    void (async () => {
+      try {
+        const gerado = await TeamConnectionService.generateInviteToken(companyId);
+        if (active && gerado) setTeamLink({ companyId, url: gerado.url });
+      } catch (err) {
+        // Sem aviso aqui: o toque em "Copiar link" tenta de novo e avisa se falhar.
+        logError('CompanyTeam.prefetchTeamLink', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [companyId]);
+
   // Link do elenco: mesmo caminho do Perfil Empresa (token estável via serviço, falha tratada).
   const handleCopyTeamLink = async () => {
     if (!companyId) return;
-    const gerado = await TeamConnectionService.generateInviteToken(companyId);
-    if (!gerado) {
-      addToast('Não foi possível obter o link do seu elenco agora.', 'error');
-      return;
+    let url = teamLink?.companyId === companyId ? teamLink.url : null;
+    if (!url) {
+      const gerado = await TeamConnectionService.generateInviteToken(companyId);
+      if (!gerado) {
+        addToast('Não foi possível obter o link do seu elenco agora.', 'error');
+        return;
+      }
+      url = gerado.url;
+      setTeamLink({ companyId, url });
     }
     try {
-      await navigator.clipboard.writeText(gerado.url);
+      await navigator.clipboard.writeText(url);
+      setManualLink(null);
       setLinkCopied(true);
       addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
       setTimeout(() => setLinkCopied(false), 2500);
     } catch {
-      addToast('Não foi possível copiar o link.', 'error');
+      setManualLink({ companyId, url });
+      addToast('Não foi possível copiar sozinho. Copie o link que apareceu na tela.', 'error');
     }
   };
 
@@ -166,7 +193,7 @@ export default function CompanyTeam() {
       />
 
       {/* Link do elenco — antes só existia dentro do Perfil Empresa. Discreto: secundário, sem competir com a ação principal. */}
-      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:items-center gap-3">
+      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do seu elenco</p>
           <p className="text-xs text-gray-600 mt-1">
@@ -182,6 +209,15 @@ export default function CompanyTeam() {
         >
           {linkCopied ? 'Link copiado!' : 'Copiar link'}
         </Button>
+        {manualLink && manualLink.companyId === companyId && (
+          <input
+            readOnly
+            value={manualLink.url}
+            aria-label="Link do elenco para copiar à mão"
+            onFocus={(e) => e.currentTarget.select()}
+            className="w-full min-h-11 min-w-0 rounded-xl border-2 border-black bg-white px-3 text-sm"
+          />
+        )}
       </Card>
 
       {/* Elenco aceito */}

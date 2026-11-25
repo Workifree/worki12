@@ -25,7 +25,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, User, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { TeamConnectionService } from '../services/teamConnectionService';
+import { TeamConnectionService, NOT_A_WORKER_ERROR } from '../services/teamConnectionService';
 import { logError } from '../lib/logger';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
@@ -100,7 +100,10 @@ export default function InviteAccept() {
         } catch {
           // sessionStorage indisponível (ex.: modo privado restrito) — segue só com o query param
         }
-        navigate(`/login?redirect=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
+        // Link de contato de freela (`w_`) só serve a EMPRESA: sem `type=hire` o /login assume
+        // freela, a conta nasce com o papel errado e o link fica inutilizável para ela.
+        const papel = TeamConnectionService.isWorkerInviteToken(token) ? 'type=hire&' : '';
+        navigate(`/login?${papel}redirect=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
         return;
       }
 
@@ -112,6 +115,13 @@ export default function InviteAccept() {
         if (!active) return;
 
         if (result.error) {
+          // Desfecho final nesta aba: sem limpar, o próximo login "seco" voltaria a este erro.
+          // (O token continua na URL, então recarregar a página ainda tenta de novo.)
+          try {
+            sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+          } catch {
+            // ignora — best-effort
+          }
           setPage({ state: 'error', errorMsg: result.error });
           return;
         }
@@ -263,7 +273,9 @@ export default function InviteAccept() {
             <p className="text-xs sm:text-sm text-gray-600 mb-6">
               {direction === 'worker'
                 ? 'Este link só pode ser aberto por uma conta de empresa.'
-                : 'Peça à empresa um novo link de convite.'}
+                : page.errorMsg === NOT_A_WORKER_ERROR
+                  ? 'O link está certo, não precisa de outro. Envie para o freela; para testar, abra em uma janela anônima.'
+                  : 'Peça à empresa um novo link de convite.'}
             </p>
             <Button
               variant="dark"

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Login from '../Login'
+
+function Destino() {
+  return <div data-testid="destino">{useLocation().pathname}</div>
+}
 
 // Mock supabase
 vi.mock('../../lib/supabase', () => ({
@@ -167,5 +171,71 @@ describe('Login — R2: cadastro com e-mail ja existente mostra mensagem especif
     await waitFor(() => {
       expect(screen.getByText(/conta criada! verifique seu email/i)).toBeInTheDocument()
     })
+  })
+})
+
+describe('Login — destino de redirect', () => {
+  async function entrar(entry: string) {
+    const user = userEvent.setup()
+    vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
+      data: { user: { id: 'u9', user_metadata: { user_type: 'work' } }, session: {} },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>)
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Destino />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await user.type(screen.getByLabelText('Email'), 'a@b.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /entrar/i }))
+    return (await screen.findByTestId('destino')).textContent
+  }
+
+  it.each(['//site-externo.com', '/\\site-externo.com', '/%2F%2Fsite-externo.com', '/%5Csite-externo.com'])(
+    'ignora o redirect externo %s e vai para o painel',
+    async (alvo) => {
+      expect(await entrar(`/login?redirect=${encodeURIComponent(alvo)}`)).toBe('/dashboard')
+    },
+  )
+
+  it('respeita o redirect interno do convite', async () => {
+    expect(await entrar('/login?redirect=%2Fconvite%2Fabc123')).toBe('/convite/abc123')
+  })
+
+  async function cadastrar(entry: string) {
+    const user = userEvent.setup()
+    vi.mocked(supabase.auth.signUp).mockReset()
+    vi.mocked(supabase.auth.signUp).mockResolvedValue({
+      data: { user: { id: 'u10', identities: [{ id: 'i' }], user_metadata: {} }, session: null },
+      error: null,
+    } as unknown as Awaited<ReturnType<typeof supabase.auth.signUp>>)
+    renderLogin(entry)
+    await user.click(screen.getByText('Cadastre-se'))
+    await user.type(screen.getByLabelText('Email'), 'novo@exemplo.com')
+    await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
+    await user.click(screen.getByRole('button', { name: /criar conta/i }))
+    await waitFor(() => expect(supabase.auth.signUp).toHaveBeenCalled())
+    return vi.mocked(supabase.auth.signUp).mock.calls[0][0] as {
+      options?: { emailRedirectTo?: string; data?: unknown }
+    }
+  }
+
+  it('cadastro vindo do convite leva o convite no retorno da confirmação de e-mail', async () => {
+    const args = await cadastrar('/login?redirect=%2Fconvite%2Fabc123')
+    expect(args.options?.emailRedirectTo).toBe(`${window.location.origin}/convite/abc123`)
+  })
+
+  it('redirect externo nunca vira emailRedirectTo', async () => {
+    const args = await cadastrar('/login?redirect=%2F%2Fsite-externo.com')
+    expect(args.options).not.toHaveProperty('emailRedirectTo')
+  })
+
+  it('link de contato de freela cria conta de empresa', async () => {
+    const args = await cadastrar('/login?redirect=%2Fconvite%2Fw_abc')
+    expect(args.options?.data).toEqual({ user_type: 'hire' })
   })
 })

@@ -4,6 +4,7 @@ import ProtectedRoute from '../ProtectedRoute'
 
 const mockNavigate = vi.fn()
 const mockOutlet = vi.fn()
+let mockLocation: { pathname: string; search?: string } = { pathname: '/dashboard' }
 
 vi.mock('react-router-dom', () => ({
   Navigate: (props: { to: string; replace?: boolean }) => {
@@ -14,7 +15,7 @@ vi.mock('react-router-dom', () => ({
     mockOutlet()
     return <div data-testid="outlet">Protected Content</div>
   },
-  useLocation: () => ({ pathname: '/dashboard' }),
+  useLocation: () => mockLocation,
 }))
 
 const mockGetSession = vi.fn()
@@ -28,6 +29,7 @@ vi.mock('../../lib/supabase', () => ({
       onAuthStateChange: () => mockOnAuthStateChange(),
     },
     from: () => mockFrom(),
+    rpc: () => Promise.resolve({ data: [{ role: 'owner', onboarding_completed: true, accepted_tos: true }], error: null }),
   },
 }))
 
@@ -45,6 +47,7 @@ vi.mock('../../contexts/ToastContext', () => ({
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockLocation = { pathname: '/dashboard' }
     mockOnAuthStateChange.mockReturnValue({
       data: {
         subscription: { unsubscribe: vi.fn() },
@@ -56,6 +59,19 @@ describe('ProtectedRoute', () => {
           single: () => Promise.resolve({ data: { onboarding_completed: true, accepted_tos: true }, error: null }),
         }),
       }),
+    })
+  })
+
+  it('empresa em aviso antigo /messages?conversation= vai para a rota da empresa', async () => {
+    mockLocation = { pathname: '/messages', search: '?conversation=conv-1' }
+    mockGetSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-123', user_metadata: { user_type: 'hire' } } } },
+    })
+
+    render(<ProtectedRoute />)
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/company/messages?conversation=conv-1', replace: true })
     })
   })
 

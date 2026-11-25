@@ -10,6 +10,9 @@
  * empresa, sem onboarding de CNPJ. Se o Gestor ainda não confirmou, o ProtectedRoute mostra a tela de
  * espera (R22).
  *
+ * O botão do e-mail volta para ESTA rota (`emailRedirectTo`): o token vai no caminho, então sobrevive
+ * a uma aba nova; com a sessão aberta e os Termos já marcados antes do envio, o aceite se conclui.
+ *
  * O token nunca vai em URL de RPC: a prévia e o aceite saem por POST (`.rpc()`), ver service.
  */
 
@@ -21,7 +24,13 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, Field } from '../components/ui';
-import { clearPendingTeamInviteToken, readPendingTeamInviteToken, storePendingTeamInviteToken } from '../lib/teamInviteToken';
+import {
+  clearPendingTeamInviteToken,
+  consumeTeamInviteTos,
+  readPendingTeamInviteToken,
+  rememberTeamInviteTos,
+  storePendingTeamInviteToken,
+} from '../lib/teamInviteToken';
 import { acceptMemberInvite, getInvitePreview, ROLE_LABEL } from '../services/teamMembersService';
 import type { AcceptMemberInviteOutcome, InvitePreviewResult } from '../types';
 
@@ -99,7 +108,7 @@ export default function AcceptTeamInvite() {
   const loadPreview = useCallback(async () => {
     if (!token) {
       setPreview({ outcome: 'not_found' });
-      return;
+      return null;
     }
     setPreview(null);
     const result = await getInvitePreview(token);
@@ -109,23 +118,8 @@ export default function AcceptTeamInvite() {
     if (result.outcome === 'ok') storePendingTeamInviteToken(token);
     else if (result.outcome !== 'error') clearStoredToken();
     setPreview(result);
+    return result;
   }, [token]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      await loadPreview();
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!active || !user) return;
-        setSessionEmail(user.email ?? null);
-        setSessionIsWorker(user.user_metadata?.user_type === 'work');
-      } catch (err) {
-        logError('AcceptTeamInvite.getUser', err);
-      }
-    })();
-    return () => { active = false; };
-  }, [loadPreview]);
 
   /** Chama o aceite com a sessão atual e traduz o desfecho. */
   const finish = useCallback(async () => {
@@ -157,6 +151,27 @@ export default function AcceptTeamInvite() {
     setStep('form');
   }, [token, navigate]);
 
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const result = await loadPreview();
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!active || !user) return;
+        const isWorker = user.user_metadata?.user_type === 'work';
+        setSessionEmail(user.email ?? null);
+        setSessionIsWorker(isWorker);
+        // Voltou pelo botão do e-mail: conclui o aceite que a própria pessoa iniciou.
+        if (!isWorker && token && user.email && result?.outcome === 'ok' && consumeTeamInviteTos(token, user.email)) {
+          await finish();
+        }
+      } catch (err) {
+        logError('AcceptTeamInvite.getUser', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [loadPreview, finish, token]);
+
   const sendCode = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(undefined);
@@ -169,11 +184,18 @@ export default function AcceptTeamInvite() {
       setFormError('Aceite os Termos de Uso e a Política de Privacidade para continuar.');
       return;
     }
+    if (!token) return;
     setSending(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: clean,
-      // A conta nasce como EMPRESA ('hire'): quem entra na equipe nunca é conta de freela.
-      options: { shouldCreateUser: true, data: { user_type: 'hire' } },
+      options: {
+        shouldCreateUser: true,
+        // A conta nasce como EMPRESA ('hire'): quem entra na equipe nunca é conta de freela.
+        data: { user_type: 'hire' },
+        // Sem isto o botão do e-mail cai na Site URL e o convite se perde. Precisa estar na
+        // allowlist de redirect do Supabase (docs/ops-supabase-smtp-e-emails.md).
+        emailRedirectTo: `${window.location.origin}/convite-equipe/${encodeURIComponent(token)}`,
+      },
     });
     setSending(false);
     if (error) {
@@ -186,6 +208,7 @@ export default function AcceptTeamInvite() {
       );
       return;
     }
+    rememberTeamInviteTos(token, clean);
     setEmail(clean);
     setCode('');
     setStep('code');
@@ -200,6 +223,8 @@ export default function AcceptTeamInvite() {
       return;
     }
     setSending(true);
+    // Entrando pelo código nesta aba, a marca para o botão do e-mail não é mais necessária.
+    if (token) consumeTeamInviteTos(token, email);
     const { data, error } = await supabase.auth.verifyOtp({ email, token: clean, type: 'email' });
     setSending(false);
     if (error || !data.user) {

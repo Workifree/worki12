@@ -6,6 +6,7 @@ import { ArrowLeft, MapPin, Star, Building2, Globe, ClipboardList, MessageCircle
 import PageMeta from '../components/PageMeta';
 import ProfileReviews from '../components/ProfileReviews';
 import { logError } from '../lib/logger';
+import { toSafeWebsiteHref } from '../lib/websiteUrl';
 import { useToast } from '../contexts/ToastContext';
 import { Button, Card } from '../components/ui';
 
@@ -166,9 +167,7 @@ export default function CompanyPublicProfile() {
     }
 
     const hasRating = (company.reviews_count ?? 0) > 0 && (company.rating_average ?? 0) > 0;
-    const websiteHref = company.website
-        ? (company.website.startsWith('http') ? company.website : `https://${company.website}`)
-        : null;
+    const websiteHref = toSafeWebsiteHref(company.website);
 
     return (
         <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import InviteAccept from './InviteAccept'
 
 // Mock supabase — sessão de empresa ativa (necessária pra `processInvite` seguir em frente
@@ -15,6 +15,7 @@ vi.mock('../lib/supabase', () => ({
 
 // Mock TeamConnectionService — InviteAccept chama os métodos direto, sem passar por supabase.from.
 vi.mock('../services/teamConnectionService', () => ({
+  NOT_A_WORKER_ERROR: 'Apenas freelas entram em um elenco por este link.',
   TeamConnectionService: {
     isWorkerInviteToken: vi.fn((token: string) => token.startsWith('w_')),
     addWorkerToTeamByToken: vi.fn(),
@@ -23,12 +24,18 @@ vi.mock('../services/teamConnectionService', () => ({
 }))
 
 import { TeamConnectionService } from '../services/teamConnectionService'
+import { supabase } from '../lib/supabase'
+
+function LoginFalso() {
+  return <div data-testid="login">{useLocation().search}</div>
+}
 
 function renderWithToken(token: string) {
   return render(
     <MemoryRouter initialEntries={[`/convite/${token}`]}>
       <Routes>
         <Route path="/convite/:token" element={<InviteAccept />} />
+        <Route path="/login" element={<LoginFalso />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -83,5 +90,40 @@ describe('InviteAccept — veto do freela (R-05)', () => {
     await waitFor(() => {
       expect(screen.getByText('Freela Convidado!')).toBeInTheDocument()
     })
+  })
+})
+
+describe('InviteAccept — caminhos do link', () => {
+  function deslogado() {
+    vi.mocked(supabase.auth.getUser).mockResolvedValueOnce({ data: { user: null }, error: null } as never)
+  }
+
+  it('deslogado com link do elenco: vai ao login guardando o convite, sem forçar papel', async () => {
+    deslogado()
+    renderWithToken('abc123')
+
+    expect((await screen.findByTestId('login')).textContent).toBe('?redirect=%2Fconvite%2Fabc123')
+    expect(sessionStorage.getItem('pending_invite_token')).toBe('abc123')
+    expect(TeamConnectionService.addToTeamByToken).not.toHaveBeenCalled()
+  })
+
+  it('deslogado com link de contato de freela (w_): pede conta de empresa', async () => {
+    deslogado()
+    renderWithToken('w_abc')
+
+    expect((await screen.findByTestId('login')).textContent).toBe('?type=hire&redirect=%2Fconvite%2Fw_abc')
+  })
+
+  it('empresa abrindo o próprio link: não manda pedir link novo e descarta o convite pendente', async () => {
+    sessionStorage.setItem('pending_invite_token', 'abc123')
+    vi.mocked(TeamConnectionService.addToTeamByToken).mockResolvedValue({
+      connection: null,
+      error: 'Apenas freelas entram em um elenco por este link.',
+    })
+    renderWithToken('abc123')
+
+    expect(await screen.findByText(/o link está certo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/peça à empresa um novo link/i)).not.toBeInTheDocument()
+    expect(sessionStorage.getItem('pending_invite_token')).toBeNull()
   })
 })

@@ -45,6 +45,44 @@ export function clearPendingTeamInviteToken(): void {
   }
 }
 
+/**
+ * Quem pediu o código já marcou os Termos. O botão do e-mail costuma abrir em OUTRA aba: esta marca
+ * (localStorage, 1h = validade do código) deixa a volta concluir o aceite sem repetir o clique.
+ * O token não é gravado, só uma impressão curta dele. Uso único.
+ */
+const TEAM_INVITE_TOS_KEY = 'worki_team_invite_tos';
+const TEAM_INVITE_TOS_TTL_MS = 60 * 60 * 1000;
+
+function fingerprint(token: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < token.length; i += 1) hash = Math.imul(hash ^ token.charCodeAt(i), 0x01000193);
+  return (hash >>> 0).toString(16);
+}
+
+export function rememberTeamInviteTos(token: string, email: string): void {
+  try {
+    localStorage.setItem(TEAM_INVITE_TOS_KEY, JSON.stringify({ invite: fingerprint(token), email, at: Date.now() }));
+  } catch {
+    // best-effort: sem a marca, a volta pede os Termos de novo
+  }
+}
+
+/** `true` (uma única vez) se ESTE e-mail aceitou os Termos para ESTE convite há menos de 1h. */
+export function consumeTeamInviteTos(token: string, email: string): boolean {
+  try {
+    const raw = localStorage.getItem(TEAM_INVITE_TOS_KEY);
+    if (!raw) return false;
+    const mark = JSON.parse(raw) as { invite?: string; email?: string; at?: number };
+    const ok = mark.invite === fingerprint(token)
+      && mark.email === email.trim().toLowerCase()
+      && Date.now() - (mark.at ?? 0) < TEAM_INVITE_TOS_TTL_MS;
+    if (ok) localStorage.removeItem(TEAM_INVITE_TOS_KEY);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function markTeamMember(uid: string | null | undefined): void {
   if (!uid) return;
   try {

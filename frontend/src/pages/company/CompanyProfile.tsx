@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
+import { toSafeWebsiteHref } from '../../lib/websiteUrl';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { getMyCompanies, pickCurrentCompany, canSeeOrganization, isGestor } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
@@ -606,11 +607,11 @@ export default function CompanyProfile() {
                             ) : (
                                 <div className="space-y-5">
                                     <ReadField label="Website">
-                                        {company.website ? (
-                                            <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">
-                                                <Globe size={16} /> {company.website.replace(/^https?:\/\//, '')}
+                                        {toSafeWebsiteHref(company.website) ? (
+                                            <a href={toSafeWebsiteHref(company.website) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">
+                                                <Globe size={16} /> {company.website?.replace(/^https?:\/\//i, '')}
                                             </a>
-                                        ) : <p className="text-gray-600">—</p>}
+                                        ) : <p className="text-gray-600">{company.website || '—'}</p>}
                                     </ReadField>
                                     <ReadField label="Email Corporativo">
                                         {company.email ? (

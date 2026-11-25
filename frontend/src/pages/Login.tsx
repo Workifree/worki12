@@ -8,6 +8,7 @@ import PageMeta from '../components/PageMeta';
 import { Button, Card, Field } from '../components/ui';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 /**
  * Subtítulo da tela de acesso da EMPRESA.
@@ -29,12 +30,14 @@ const SUBTITULO_EMPRESA = 'Monte seu elenco e preencha turnos com quem você já
  * (`PENDING_MANAGER_INVITE_TOKEN_KEY`) para não colidir com o convite de equipe.
  */
 function resolvePendingInviteRedirect(explicitRedirect: string | null): string | null {
-    if (explicitRedirect && explicitRedirect.startsWith('/')) return explicitRedirect;
+    // Nunca `startsWith('/')`: `//site-externo` passava (redirect aberto) — ver lib/safeRedirect.
+    const explicitSafe = safeInternalPath(explicitRedirect);
+    if (explicitSafe) return explicitSafe;
     try {
         const pendingManagerToken = sessionStorage.getItem(PENDING_MANAGER_INVITE_TOKEN_KEY);
-        if (pendingManagerToken) return `/convite-gerente/${pendingManagerToken}`;
+        if (pendingManagerToken) return safeInternalPath(`/convite-gerente/${pendingManagerToken}`);
         const pendingToken = sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
-        if (pendingToken) return `/convite/${pendingToken}`;
+        if (pendingToken) return safeInternalPath(`/convite/${pendingToken}`);
     } catch {
         // sessionStorage indisponível — sem rede de segurança, segue fluxo padrão
     }
@@ -55,16 +58,19 @@ export default function Login() {
     // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
     // 'type' — nesse caso não há intenção explícita de papel a comparar (R1).
     const explicitType = searchParams.get('type');
-    // Convite de GERENTE exige conta de empresa. Quando o token vem do sessionStorage (o
+    // Convite de GERENTE e link de contato de freela (`/convite/w_...`) exigem conta de empresa.
+    // Quando o token vem do sessionStorage (o
     // usuario voltou ao /login "seco"), nao ha `type` na URL para declarar isso — sem esta
     // deducao a tela recebe o convidado com a copy de freela e ele cria a conta errada.
     const destinoPendente = resolvePendingInviteRedirect(searchParams.get('redirect'));
     const type = explicitType
-        || (destinoPendente?.startsWith('/convite-gerente/') ? 'hire' : 'work');
+        || (destinoPendente?.startsWith('/convite-gerente/') || destinoPendente?.startsWith('/convite/w_')
+            ? 'hire'
+            : 'work');
     const reason = searchParams.get('reason');
     // Preserva o destino pretendido (ex.: /convite/<token>) quando o usuário chega ao
     // login vindo de um link que exigia sessão — ver InviteAccept.tsx (item 11 do GTM).
-    const redirectTo = searchParams.get('redirect');
+    const redirectTo = safeInternalPath(searchParams.get('redirect'));
     const navigate = useNavigate();
 
     // Os CTAs "Cadastrar como…" da landing e do onboarding levavam para ca em modo ENTRAR:
@@ -120,6 +126,10 @@ export default function Login() {
                     return;
                 }
                 // Sign Up
+                // Se o projeto exigir confirmação de e-mail, o link abre em OUTRA aba (sem o
+                // sessionStorage do convite): o destino precisa ir no próprio retorno. A URL tem
+                // de estar nas Redirect URLs do Supabase Auth; fora da lista, cai na Site URL.
+                const conviteDeRetorno = resolvePendingInviteRedirect(redirectTo);
                 const { data, error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
@@ -127,6 +137,9 @@ export default function Login() {
                         data: {
                             user_type: type, // 'work' or 'hire'
                         },
+                        ...(conviteDeRetorno
+                            ? { emailRedirectTo: `${window.location.origin}${conviteDeRetorno}` }
+                            : {}),
                     },
                 });
 

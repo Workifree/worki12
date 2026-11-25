@@ -26,6 +26,21 @@ Em **Authentication → Emails → Templates** (versionados em `supabase/email-t
 
 > Atenção ao conferir o assunto do modelo "Magic link or OTP": se um gerenciador de senhas estiver preenchendo o campo "Subject" com um e-mail pessoal, **desative o preenchimento automático nessa página** antes de salvar, ou o assunto fica errado.
 
+## URLs de redirect (obrigatório)
+Em **Authentication → URL Configuration**. O app informa para onde o botão do e-mail deve voltar; se o endereço não estiver em **Redirect URLs**, o Supabase ignora e manda para a **Site URL**, e a pessoa convidada perde o convite (pode cair no cadastro de empresa).
+
+- **Site URL:** `https://worki-opal.vercel.app`
+- **Redirect URLs** (produção):
+  - `https://worki-opal.vercel.app/convite-equipe/**` (convite de equipe)
+  - `https://worki-opal.vercel.app/redefinir-senha` (recuperação de senha)
+- **Redirect URLs** (desenvolvimento local):
+  - `http://localhost:5173/convite-equipe/**`
+  - `http://localhost:5173/redefinir-senha`
+
+Se o domínio mudar, ou se o convite for testado em um deploy de preview, inclua os mesmos caminhos para o novo domínio. Some estas entradas às que já existirem; não apague outras sem conferir quem as usa.
+
+Para conferir: peça o código em um convite, toque no botão do e-mail e veja que o endereço aberto é `/convite-equipe/...`. No mesmo navegador a entrada se conclui sozinha; em outro aparelho, a tela pede só o aceite dos Termos.
+
 ## Como verificar que está tudo certo
 - Um e-mail de teste chega em menos de 1 minuto, na caixa de entrada.
 - O código tem 6 dígitos e vale 1 hora.

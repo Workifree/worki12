@@ -84,6 +84,9 @@ async function getAuthenticatedCompanyId(): Promise<string> {
 // TeamConnectionService
 // ---------------------------------------------------------------------------
 
+/** Quem abriu o link do elenco não é conta de freela (ex.: a própria empresa testando). */
+export const NOT_A_WORKER_ERROR = 'Apenas freelas entram em um elenco por este link.';
+
 export const TeamConnectionService = {
   // -------------------------------------------------------------------------
   // EMPRESA: adicionar freela à equipe
@@ -350,7 +353,7 @@ export const TeamConnectionService = {
       logError('teamConnection.addToTeamByToken.rpc', error);
       const m = error.message ?? '';
       const msg = m.includes('company_not_found') ? 'Empresa do convite não encontrada.'
-        : m.includes('not_a_worker') ? 'Apenas freelas entram em um elenco por este link.'
+        : m.includes('not_a_worker') ? NOT_A_WORKER_ERROR
         : m.includes('invalid_token') ? 'Link de convite inválido ou expirado.'
         : 'Não foi possível registrar o convite.';
       return { connection: null, error: msg };
