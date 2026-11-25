@@ -256,5 +256,14 @@ describe('PwaPrompts', () => {
       })
       expect(screen.queryByText(/sem internet/i)).not.toBeInTheDocument()
     })
+
+    it('fica no fluxo (empurra o conteúdo) e respeita a safe-area, sem cobrir o cabeçalho', () => {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+      renderAt()
+
+      const banner = screen.getByRole('status')
+      expect(banner.classList.contains('fixed') || banner.classList.contains('absolute')).toBe(false)
+      expect(banner.className).toContain('env(safe-area-inset-top)')
+    })
   })
 })

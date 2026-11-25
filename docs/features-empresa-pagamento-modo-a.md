@@ -80,7 +80,7 @@ O pagamento é registrado no histórico do turno e pode ser acessado a qualquer 
 
 ### Acessar o Recibo
 
-1. Vá para **"Meus Recebimentos"** (menu inferior)
+1. Vá para **"Recebimentos"** (no menu)
 2. Localize o pagamento registrado pela empresa
 3. Clique nele para abrir o **recibo**
 
@@ -154,7 +154,4 @@ R: **Zero** — enquanto no piloto. O Worki só registra e gera recibo; sem movi
 
 ## Suporte
 
-Dúvidas ou problemas?
-- **Chat no app** — fale com o time Worki
-- **E-mail:** [suporte@worki.com]
-- **Horário:** Segunda a sexta, 9h–18h (horário de Brasília)
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

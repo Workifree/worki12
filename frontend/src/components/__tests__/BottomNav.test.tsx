@@ -1,7 +1,18 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import BottomNav from '../BottomNav'
+import type { MyCompany } from '../../types'
+
+let mockCompany: MyCompany | null = null
+vi.mock('../../hooks/useCurrentCompany', () => ({ useCurrentCompany: () => mockCompany }))
+
+function company(overrides: Partial<MyCompany> = {}): MyCompany {
+  return {
+    company_id: 'c1', company_name: 'Loja', role: 'owner', organization_id: 'o1', organization_name: null,
+    onboarding_completed: true, accepted_tos: true, team_enabled: false, ...overrides,
+  }
+}
 
 function renderBottomNav(type: 'worker' | 'company' = 'worker', path = '/dashboard') {
   return render(
@@ -11,89 +22,72 @@ function renderBottomNav(type: 'worker' | 'company' = 'worker', path = '/dashboa
   )
 }
 
+const labels = () =>
+  within(screen.getByLabelText('Menu de navegação')).getAllByRole('link').map((a) => a.getAttribute('aria-label'))
+
 describe('BottomNav', () => {
-  it('renderiza links de navegacao para worker', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    mockCompany = null
+  })
+
+  it('freela: cinco itens (o perfil foi para o cabeçalho) com as rotas certas', () => {
     renderBottomNav('worker')
 
-    expect(screen.getByLabelText('Início')).toBeInTheDocument()
-    expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Empresas')).toBeInTheDocument()
-    expect(screen.getByLabelText('Recebimentos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Mensagens')).toBeInTheDocument()
-    expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
-  })
-
-  it('renderiza links de navegacao para company', () => {
-    renderBottomNav('company', '/company/dashboard')
-
-    expect(screen.getByLabelText('Início')).toBeInTheDocument()
-    expect(screen.getByLabelText('Elenco')).toBeInTheDocument()
-    expect(screen.getByLabelText('Criar')).toBeInTheDocument()
-    expect(screen.getByLabelText('Turnos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Mensagens')).toBeInTheDocument()
-    expect(screen.getByLabelText('Perfil')).toBeInTheDocument()
-  })
-
-  it('worker tem 6 itens de navegacao (push-first, sem busca de vagas + Meus Recebimentos)', () => {
-    renderBottomNav('worker')
-
-    const nav = screen.getByLabelText('Menu de navegação')
-    const links = nav.querySelectorAll('a')
-    expect(links).toHaveLength(6)
-  })
-
-  it('company tem 6 itens de navegacao (Mensagens acessivel no mobile)', () => {
-    renderBottomNav('company', '/company/dashboard')
-
-    const nav = screen.getByLabelText('Menu de navegação')
-    const links = nav.querySelectorAll('a')
-    expect(links).toHaveLength(6)
-  })
-
-  it('links de worker apontam para rotas corretas', () => {
-    renderBottomNav('worker')
-
-    expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/dashboard')
+    expect(labels()).toEqual(['Início', 'Turnos', 'Empresas', 'Recebimentos', 'Mensagens'])
     expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/my-jobs')
     expect(screen.getByLabelText('Empresas')).toHaveAttribute('href', '/carteira')
-    expect(screen.getByLabelText('Recebimentos')).toHaveAttribute('href', '/recebimentos')
-    expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/profile')
   })
 
-  it('links de company apontam para rotas corretas', () => {
+  it('empresa: cinco itens, sem "Criar" nem "Perfil"', () => {
+    mockCompany = company()
     renderBottomNav('company', '/company/dashboard')
 
+    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Gestão'])
     expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/company/dashboard')
-    expect(screen.getByLabelText('Elenco')).toHaveAttribute('href', '/company/team')
-    expect(screen.getByLabelText('Criar')).toHaveAttribute('href', '/company/create')
-    expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/company/jobs')
-    expect(screen.getByLabelText('Mensagens')).toHaveAttribute('href', '/company/messages')
-    expect(screen.getByLabelText('Perfil')).toHaveAttribute('href', '/company/profile')
+    expect(screen.getByLabelText('Gestão')).toHaveAttribute('href', '/company/gestao')
   })
 
-  it('possui aria-label no elemento nav', () => {
-    renderBottomNav('worker')
+  it('com equipe, Início leva à tela Hoje e fica ativo nas duas abas', () => {
+    mockCompany = company({ team_enabled: true })
+    renderBottomNav('company', '/company/dashboard')
 
-    expect(screen.getByLabelText('Menu de navegação')).toBeInTheDocument()
+    expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/company/hoje')
+    expect(screen.getByLabelText('Início')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('destaca rota ativa para worker', () => {
-    renderBottomNav('worker', '/my-jobs')
+  it('encarregado: cinco itens, com Elenco', () => {
+    mockCompany = company({ role: 'encarregado' })
+    renderBottomNav('company', '/company/hoje')
 
-    const activeLink = screen.getByLabelText('Turnos')
-    expect(activeLink.className).toContain('text-primary')
-
-    const inactiveLink = screen.getByLabelText('Início')
-    expect(inactiveLink.className).toContain('text-gray-500')
+    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Gestão'])
   })
 
-  it('destaca rota ativa para company', () => {
-    renderBottomNav('company', '/company/team')
+  it('papel ainda carregando e sem dica: não oferece o que talvez tenha de esconder', () => {
+    renderBottomNav('company', '/company/dashboard')
 
-    const activeLink = screen.getByLabelText('Elenco')
-    expect(activeLink.className).toContain('text-blue-600')
+    expect(screen.queryByLabelText('Relatórios')).not.toBeInTheDocument()
+    expect(labels()).toHaveLength(5)
+  })
 
-    const inactiveLink = screen.getByLabelText('Início')
-    expect(inactiveLink.className).toContain('text-gray-500')
+  it('papel carregando com dica de Gestor: menu completo desde o primeiro render', () => {
+    sessionStorage.setItem('worki_nav_role_hint', 'gestor')
+    renderBottomNav('company', '/company/dashboard')
+
+    expect(screen.getByLabelText('Elenco')).toBeInTheDocument()
+  })
+
+  it('sub-rota mantém o item ativo (freela e empresa)', () => {
+    renderBottomNav('worker', '/indicacoes')
+    expect(screen.getByLabelText('Empresas').className).toContain('text-primary')
+    expect(screen.getByLabelText('Início').className).toContain('text-gray-500')
+  })
+
+  it('empresa: detalhe do turno marca Turnos', () => {
+    mockCompany = company()
+    renderBottomNav('company', '/company/jobs/abc/candidates')
+
+    expect(screen.getByLabelText('Turnos')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('Turnos').className).toContain('text-blue-600')
   })
 })

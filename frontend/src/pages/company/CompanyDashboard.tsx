@@ -9,7 +9,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ReferralService } from '../../services/referralService';
 import { logError } from '../../lib/logger';
+import { getJobScope, canSeeJob } from '../../services/jobScopeService';
+import { fillMissingWorkers } from '../../services/workerCardsService';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
+import { useCompanyNavContext } from '../../hooks/useCompanyNavContext';
+import SectionTabs from '../../components/SectionTabs';
+import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { Button, Card, PageHeader } from '../../components/ui';
 import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
 
@@ -50,9 +56,11 @@ function ClickableCard({ onClick, className, children }: { onClick: () => void; 
 
 export default function CompanyDashboard() {
     const navigate = useNavigate();
+    // Com equipe, esta tela é a aba "Visão geral" do Início; dono único vê só "Início", sem abas.
+    const { hasTeam, isEncarregado } = useCompanyNavContext(useCurrentCompany());
+    const pageTitle = hasTeam ? 'Visão geral' : 'Início';
 
-    // Indicações recebidas (F10) — atalho de mobile-reachability. `/company/indicacoes` não
-    // está no BottomNav (as duas listas já têm 6 itens, cheias) e nenhuma notificação aponta pra
+    // Indicações recebidas (F10) — atalho direto: nenhuma notificação aponta pra
     // lá do lado de A (a de aceite vai para `/company/team`) — sem isto, a aba "Recebidas" só
     // existe para quem abre a URL direto ou usa desktop. Padrão useState/useEffect (Article 5),
     // isolado do bloco de useQuery abaixo (não migra o arquivo inteiro, só esta peça nova).
@@ -87,17 +95,17 @@ export default function CompanyDashboard() {
     const { data: jobs = [], isLoading: isLoadingJobs, isError: isErrorJobs, refetch: refetchJobs } = useQuery({
         queryKey: ['companyJobs'],
         queryFn: async () => {
-            const companyId = await getAuthenticatedCompanyId();
+            const scope = await getJobScope();
             // F3 (Escala Recorrente) pode gerar até 60 turnos por série: sem este filtro, uma
             // série cancelada em massa (soft delete, status='deleted') ficava inteira aqui —
             // cosmético antes, inutilizante agora (ADR-20260817).
             const { data } = await supabase
                 .from('jobs')
                 .select('*, views, applications(status)')
-                .eq('company_id', companyId)
+                .eq('company_id', scope.companyId)
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false });
-            return data || [];
+            return (data || []).filter((job) => canSeeJob(scope, job));
         },
         enabled: !!company
     });
@@ -143,6 +151,7 @@ export default function CompanyDashboard() {
                 .select(`
                     id,
                     job_id,
+                    worker_id,
                     status,
                     worker_checkin_at,
                     company_checkin_confirmed_at,
@@ -155,7 +164,7 @@ export default function CompanyDashboard() {
                 .eq('jobs.company_id', companyId)
                 .in('status', ['hired', 'in_progress'])
                 .order('created_at', { ascending: false });
-            return (data ?? []) as unknown as ActiveShiftRow[];
+            return (await fillMissingWorkers(data ?? [])) as unknown as ActiveShiftRow[];
         },
         enabled: !!company
     });
@@ -196,7 +205,7 @@ export default function CompanyDashboard() {
                 // 1 marcador ativo por (turno, freela) — o UNIQUE parcial do banco garante.
                 const comMarcador = new Set((marcadores ?? []).map((m) => `${m.job_id}:${m.worker_id}`));
                 const rows: PendingPayRow[] = [];
-                for (const a of (concluidos ?? []) as unknown as Array<{ job_id: string; worker_id: string; worker: { full_name: string | null } | { full_name: string | null }[] | null; jobs: { title: string | null } | { title: string | null }[] | null }>) {
+                for (const a of (await fillMissingWorkers(concluidos ?? [])) as unknown as Array<{ job_id: string; worker_id: string; worker: { full_name: string | null } | { full_name: string | null }[] | null; jobs: { title: string | null } | { title: string | null }[] | null }>) {
                     if (comMarcador.has(`${a.job_id}:${a.worker_id}`)) continue;
                     rows.push({
                         job_id: a.job_id,
@@ -269,7 +278,8 @@ export default function CompanyDashboard() {
 
     return (
         <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <PageMeta title="Dashboard da Empresa" />
+            <PageMeta title={pageTitle} />
+            {hasTeam && <SectionTabs section="inicio" />}
             {/* Critical error: company profile failed */}
             {isErrorCompany && (
                 <div className="mb-6">
@@ -280,9 +290,11 @@ export default function CompanyDashboard() {
                 </div>
             )}
 
-            <PageHeader title="Dashboard" subtitle={companyName ? `Bem-vindo de volta, ${companyName}` : loading ? 'Bem-vindo de volta' : 'Bem-vindo de volta, Empresa'} />
+            <PageHeader title={pageTitle} subtitle={companyName ? `Bem-vindo de volta, ${companyName}` : loading ? 'Bem-vindo de volta' : 'Bem-vindo de volta, Empresa'} />
 
             <div className="space-y-8">
+                <TrailShortcutCard />
+
                 {/* PRECISA DE VOCÊ — o rabo do laço do dinheiro, persistente no painel.
                     No topo: é a triagem do dia. Início = o que precisa de você agora;
                     Turnos = a gestão completa. */}
@@ -427,6 +439,7 @@ export default function CompanyDashboard() {
 
                 {/* Indicações recebidas (F10) — atalho mobile, ver comentário no hook acima. Fica
                     visível mesmo com 0 pendentes: é a PORTA para a caixa de entrada, não só um badge. */}
+                {!isEncarregado && (
                 <ClickableCard onClick={() => navigate('/company/indicacoes')}>
                     <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
@@ -449,6 +462,7 @@ export default function CompanyDashboard() {
                         )}
                     </div>
                 </ClickableCard>
+                )}
 
                 {/* Recent Jobs Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -563,6 +577,7 @@ export default function CompanyDashboard() {
                             )}
                         </Card>
 
+                        {!isEncarregado && (
                         <Card>
                             <h3 className="font-bold text-base mb-2">Dica</h3>
                             <p className="text-sm text-gray-600 mb-4">Freelas veem seu perfil antes de aceitar o convite. Endereço e briefing padrão preenchidos aceleram a resposta.</p>
@@ -570,6 +585,7 @@ export default function CompanyDashboard() {
                                 Completar Perfil
                             </Button>
                         </Card>
+                        )}
                     </section>
                 </div>
             </div>

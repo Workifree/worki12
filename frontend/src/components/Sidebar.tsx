@@ -1,5 +1,5 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown, BadgeCheck, CircleDashed, UserCog, CalendarClock, Trophy } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { User, Zap, PlusCircle, Building2, LogOut, HelpCircle, ChevronDown, ChevronRight, BadgeCheck, CircleDashed } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -7,8 +7,9 @@ import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
 import { Button } from './ui';
 import { useEffect, useState } from 'react';
-import { useBonusTrailAccess } from '../hooks/useBonusTrailAccess';
-import { getMyCompanies, pickCurrentCompany, setSelectedCompanyId, canSeeOrganization as podeVerOrganizacao, showTeamNav, hasTeamNav, readTeamNavHint, writeTeamNavHint, subscribeCompanyScope } from '../services/companyScopeService';
+import { useCompanyNavContext } from '../hooks/useCompanyNavContext';
+import { COMPANY_CREATE_ACTION, COMPANY_GESTAO_PATH, WORKER_PROFILE_LINK, getCompanyNav, getWorkerNav, isNavActive } from '../lib/navigation';
+import { getMyCompanies, pickCurrentCompany, switchCompanyUnit, subscribeCompanyScope } from '../services/companyScopeService';
 import type { MyCompany } from '../types';
 
 interface SidebarProps {
@@ -97,68 +98,11 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         fetchData();
     }, [type, scopeVersion]);
 
-    // Nav push-first (pivô empresa-primeiro, jun/2026): worker não busca vagas —
-    // recebe Convites e cuida das suas Empresas. "Buscar Vagas"/"Analytics"
-    // saem do menu (Fase 2, ver ADR-20260630-pagamento-opcional-piloto), sem remover a rota.
-    const workerNavItems = [
-        { icon: Home, label: 'Início', path: '/dashboard' },
-        // "Meus Turnos", nao "Convites": o rotulo descreve o DESTINO (a pagina se chama Meus
-        // Turnos e guarda agendados/andamento/historico), nao o evento mais quente. Information
-        // scent (Pirolli & Card): quem procura "meu turno de amanha" nao clicaria em "Convites".
-        // A saliencia do convite continua no badge, no takeover e no hero do dashboard.
-        { icon: Inbox, label: 'Meus Turnos', path: '/my-jobs' },
-        { icon: Contact, label: 'Minhas Empresas', path: '/carteira' },
-        { icon: Receipt, label: 'Meus Recebimentos', path: '/recebimentos' },
-        { icon: Share2, label: 'Quem Te Indicou', path: '/indicacoes' },
-        { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
-        { icon: User, label: 'Meu Perfil', path: '/profile' },
-    ];
-
-    const currentCompany = myCompanies.find(c => c.company_id === currentCompanyId) ?? null;
-    // R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização.
-    const canSeeOrganization = podeVerOrganizacao(currentCompany);
-
-    // Encarregado confirmado opera turnos, mas não vê Elenco, pagamentos, operação nem indicações
-    // (a barreira real é o RLS; aqui é só para não oferecer o que ele não pode usar).
-    const isEncarregado = currentCompany?.role === 'encarregado';
-    const ocultoParaEncarregado = new Set([
-        '/company/team',
-        '/company/indicacoes',
-        '/company/relatorio',
-        '/company/operacao',
-    ]);
-
-    // Hoje só para quem tem equipe ou é encarregado (mesma regra do BottomNav; dono único não vê).
-    const comEquipe = currentCompany ? hasTeamNav(currentCompany) : readTeamNavHint();
-    useEffect(() => {
-        if (currentCompany) writeTeamNavHint(hasTeamNav(currentCompany));
-    }, [currentCompany]);
-
-    // Trilha de bônus: só com inscrição ativa (consulta leve e em cache; dono único não vê nada novo).
-    const temTrilha = useBonusTrailAccess(type === 'company');
-
-    const companyNavItems = [
-        { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
-        ...(comEquipe ? [{ icon: CalendarClock, label: 'Hoje', path: '/company/hoje' }] : []),
-        { icon: Users, label: 'Meu Elenco', path: '/company/team' },
-        // R23 (divulgação progressiva): "Equipe" só ganha destaque depois da primeira pessoa;
-        // antes disso o acesso é por Configurações (Perfil Empresa).
-        ...(showTeamNav(currentCompany) ? [{ icon: UserCog, label: 'Equipe', path: '/company/configuracoes/equipe' }] : []),
-        { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
-        { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
-        { icon: Share2, label: 'Indicações', path: '/company/indicacoes' },
-        ...(temTrilha ? [{ icon: Trophy, label: 'Trilha', path: '/company/trilha' }] : []),
-        { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
-        { icon: FileText, label: 'Pagamentos', path: '/company/relatorio' },
-        { icon: BarChart3, label: 'Operação', path: '/company/operacao' },
-        ...(canSeeOrganization ? [{ icon: Network, label: 'Organização', path: '/company/organization' }] : []),
-        { icon: User, label: 'Perfil Empresa', path: '/company/profile' },
-    ];
-
-    const navItems = type === 'company'
-        ? companyNavItems.filter((item) => !(isEncarregado && ocultoParaEncarregado.has(item.path)))
-        : workerNavItems;
     const isCompany = type === 'company';
+    const { pathname } = useLocation();
+    const currentCompany = myCompanies.find(c => c.company_id === currentCompanyId) ?? null;
+    const companyNav = useCompanyNavContext(isCompany ? currentCompany : null);
+    const navItems = isCompany ? getCompanyNav(companyNav) : getWorkerNav();
 
     // F13 (R13) — troca de unidade: grava a seleção (companyScopeService, singleton + sessionStorage)
     // e recarrega a página. Um reload total é a forma mais simples e segura de garantir que TODA
@@ -166,7 +110,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // da unidade nova, sem precisar plumbar um contexto reativo por todas as páginas de empresa.
     const handleSwitchCompany = (companyId: string) => {
         if (companyId === currentCompanyId) return;
-        setSelectedCompanyId(companyId);
+        switchCompanyUnit(companyId);
         window.location.assign('/company/dashboard');
     };
 
@@ -219,29 +163,51 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                 </div>
             )}
 
-            {/* Navigation */}
-            <nav className="flex-1 px-4 py-5 flex flex-col gap-1.5 overflow-y-auto [@media(max-height:860px)]:py-2 [@media(max-height:860px)]:gap-0.5">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        className={({ isActive }) => `
-              flex items-center gap-3 h-11 [@media(max-height:860px)]:h-9 px-4 shrink-0 rounded-xl border-2 text-sm font-semibold
-              transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
-              ${isActive
-                                ? activeNavClass
-                                : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-black'}
-            `}
+            {isCompany && (
+                <div className="px-4 pt-4">
+                    <Link
+                        to={COMPANY_CREATE_ACTION.path}
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-black bg-black text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none hover:-translate-y-px hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                     >
-                        <item.icon size={18} strokeWidth={2} aria-hidden="true" className="shrink-0" />
-                        <span className="truncate">{item.label}</span>
-                    </NavLink>
-                ))}
+                        <PlusCircle size={18} aria-hidden="true" />
+                        {COMPANY_CREATE_ACTION.label}
+                    </Link>
+                </div>
+            )}
+
+            {/* Navigation — itens e sub-rotas ativas vêm de lib/navigation */}
+            <nav aria-label="Navegação principal" className="flex-1 px-4 py-5 flex flex-col gap-1.5 overflow-y-auto [@media(max-height:860px)]:py-2 [@media(max-height:860px)]:gap-0.5">
+                {navItems.map((item) => {
+                    const active = isNavActive(pathname, item);
+                    return (
+                        <Link
+                            key={item.id}
+                            to={item.path}
+                            aria-current={active ? 'page' : undefined}
+                            className={`
+              flex items-center gap-3 h-11 px-4 shrink-0 rounded-xl border-2 text-sm font-semibold
+              transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
+              ${active
+                                    ? activeNavClass
+                                    : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-black'}
+            `}
+                        >
+                            <item.icon size={18} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                        </Link>
+                    );
+                })}
             </nav>
 
             {/* Conta: identidade + sair */}
-            <div className="p-4 border-t-2 border-black bg-gray-50 flex flex-col gap-3">
-                <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-black bg-white">
+            <div className="p-4 border-t-2 border-black bg-gray-50 flex flex-col gap-2">
+                {/* O cartão é o link: empresa vai para Gestão, freela para o próprio perfil. */}
+                <NavLink
+                    to={isCompany ? COMPANY_GESTAO_PATH : WORKER_PROFILE_LINK.path}
+                    className={({ isActive }) => `flex items-center gap-3 p-3 rounded-xl border-2 border-black bg-white transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${!isCompany && isActive ? 'shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]' : ''}`}
+                    // No lado da empresa, quem marca "página atual" é o item Gestão do menu.
+                    {...(isCompany ? { 'aria-current': undefined } : {})}
+                >
                     <div className="relative shrink-0">
                         <div className="w-11 h-11 rounded-xl bg-gray-100 border-2 border-black flex items-center justify-center overflow-hidden">
                             {isCompany ? (
@@ -256,7 +222,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             </div>
                         )}
                     </div>
-                    <div className="flex flex-col min-w-0 gap-0.5">
+                    <div className="flex flex-col min-w-0 flex-1 gap-0.5">
                         {isCompany && isVerified === null ? (
                             <div className="space-y-1.5 animate-pulse" role="status" aria-label="Carregando dados da empresa">
                                 <div className="h-4 w-32 rounded bg-gray-200" />
@@ -278,8 +244,10 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                                 {`${workerData?.xp || 0} XP`}
                             </span>
                         )}
+                        {!isCompany && <span className="text-xs font-bold text-black underline">Ver meu perfil</span>}
                     </div>
-                </div>
+                    <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-gray-500" />
+                </NavLink>
 
                 <Button
                     variant="ghost"

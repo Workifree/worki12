@@ -24,8 +24,14 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
 /** Se o `controllerchange` não vier, recarrega mesmo assim — o botão "Atualizar" nunca fica mudo. */
 const RELOAD_FALLBACK_MS = 3000
 
+/** Trava anti-loop: no máximo um recarregamento automático por chunk ausente nesta janela. */
+const CHUNK_RELOAD_KEY = 'worki:pwa-chunk-reload-at'
+const CHUNK_RELOAD_WINDOW_MS = 5 * 60 * 1000
+
 /** Prefixo dos caches do service worker (deve casar com `CACHE_PREFIX` em public/sw.js). */
 const CACHE_PREFIX = 'worki-'
+/** Página offline (só arquivos públicos). Preservado: sem controller não há quem o recrie. */
+const CORE_CACHE_PREFIX = `${CACHE_PREFIX}core-`
 
 export const INSTALL_DISMISS_KEY = 'worki:pwa-install-dismissed-at'
 /** Depois de dispensado, o convite de instalação só volta em 30 dias. */
@@ -201,6 +207,24 @@ export function registerServiceWorker(enabled: boolean = import.meta.env.PROD): 
 }
 
 /**
+ * Depois de um deploy, os chunks antigos deixam de existir e uma aba aberta na versão velha falha
+ * ao trocar de tela (`vite:preloadError`). Recarregar busca o HTML novo. Só recarrega online e uma
+ * vez por janela; sem sessionStorage não há como travar loop, então não recarrega.
+ */
+function reloadOnStaleChunk(): void {
+  if (!navigator.onLine) return
+  try {
+    const now = Date.now()
+    const last = Number(window.sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0)
+    if (now - last < CHUNK_RELOAD_WINDOW_MS) return
+    window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now))
+  } catch {
+    return
+  }
+  window.location.reload()
+}
+
+/**
  * Liga os listeners de instalação e registra o service worker (produção). Idempotente — chamar
  * duas vezes (StrictMode, HMR) não duplica listeners.
  */
@@ -209,6 +233,8 @@ export function initPwa(options: { registerServiceWorker?: boolean } = {}): void
   initialized = true
 
   setState({ installed: isStandalone() })
+
+  window.addEventListener('vite:preloadError', reloadOnStaleChunk)
 
   window.addEventListener('beforeinstallprompt', (event) => {
     // Impede o mini-infobar automático do Chrome; o convite é nosso (PwaPrompts), no momento certo.
@@ -274,7 +300,13 @@ export function clearServiceWorkerCaches(): void {
     if (typeof caches !== 'undefined') {
       void caches
         .keys()
-        .then((keys) => Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX)).map((k) => caches.delete(k))))
+        .then((keys) =>
+          Promise.all(
+            keys
+              .filter((k) => k.startsWith(CACHE_PREFIX) && !k.startsWith(CORE_CACHE_PREFIX))
+              .map((k) => caches.delete(k)),
+          ),
+        )
         .catch(() => undefined)
     }
   } catch {

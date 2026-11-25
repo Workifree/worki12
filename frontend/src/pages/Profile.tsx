@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, Share2, HelpCircle } from 'lucide-react';
+import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, HelpCircle } from 'lucide-react';
 import { Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
@@ -838,7 +838,7 @@ export default function Profile() {
                     </div>
                 </dl>
 
-                {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                {/* Atalho: Recebimentos — histórico de pagamentos registrados (shift_payments) */}
                 <div className="mt-5 border-t-2 border-gray-100 pt-5">
                     <Button
                         variant="secondary"
@@ -847,7 +847,7 @@ export default function Profile() {
                         iconLeft={<Receipt size={18} />}
                         iconRight={<ChevronRight size={18} />}
                     >
-                        Meus recebimentos
+                        Recebimentos
                     </Button>
                     <p className="mt-2 text-center text-xs text-gray-600">Pagamentos registrados pelas empresas</p>
                 </div>
@@ -1174,7 +1174,6 @@ export default function Profile() {
                 <h2 id="perfil-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h2>
                 <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
                     {[
-                        { to: '/indicacoes', label: 'Quem te indicou', icon: <Share2 size={18} /> },
                         { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} /> },
                     ].map(item => (
                         <li key={item.to}>

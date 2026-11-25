@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Inbox, Send, Star, X, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import { checkSession } from '../../lib/authSession';
 import { useToast } from '../../contexts/ToastContext';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { ReferralService } from '../../services/referralService';
 import type { WorkerReferral, WorkerReferralCard } from '../../types';
 import CreateReferralModal from '../../components/company/CreateReferralModal';
 import { Button, Card, PageHeader } from '../../components/ui';
+import SectionTabs from '../../components/SectionTabs';
 
 // ---------------------------------------------------------------------------
 // "Indicações" (F10) — lado da empresa. Duas caixas:
@@ -121,12 +123,17 @@ export default function CompanyReferrals() {
     setLoadingReceived(true);
     const result = await ReferralService.listReceivedCards();
     if (result.outcome === 'unauthenticated') {
-      navigate('/login');
+      if ((await checkSession()).status === 'signed_out') {
+        navigate('/login');
+        return;
+      }
+      addToast('Não foi possível carregar as indicações. Verifique sua conexão e recarregue.', 'error');
+      setLoadingReceived(false);
       return;
     }
     setReceived(result.items);
     setLoadingReceived(false);
-  }, [navigate]);
+  }, [navigate, addToast]);
 
   const loadSent = useCallback(async () => {
     if (!companyId) return;
@@ -179,6 +186,7 @@ export default function CompanyReferrals() {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+      <SectionTabs section="elenco" />
       <PageHeader
         title="Indicações"
         subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."

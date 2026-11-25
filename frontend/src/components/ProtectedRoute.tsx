@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
@@ -8,8 +8,9 @@ import TosGateModal from './TosGateModal';
 import AguardandoConfirmacao from './AguardandoConfirmacao';
 import AcessoEncerrado from './AcessoEncerrado';
 import { hasTeamMemberHint, readPendingTeamInviteToken } from '../lib/teamInviteToken';
-import ErroDeEmpresa from './ErroDeEmpresa';
-import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado } from '../services/companyScopeService';
+import ErroDeVerificacao from './ErroDeVerificacao';
+import { checkStoredSession } from '../lib/authSession';
+import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado, invalidateCompanyScope } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
 /**
@@ -27,6 +28,8 @@ function RoleRedirect({ to }: { to: string }) {
     return <Navigate to={to} replace />;
 }
 
+const VERIFICATION_TIMEOUT_MS = 20_000;
+
 export default function ProtectedRoute() {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<{ id: string; user_metadata?: { user_type?: string } } | null>(null);
@@ -39,14 +42,45 @@ export default function ProtectedRoute() {
     const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
     // Quem era da equipe e ficou sem nenhuma empresa (removido/revogado): tela neutra, nunca onboarding de CNPJ.
     const [accessEnded, setAccessEnded] = useState(false);
-    // `get_my_companies` falhou: não sabemos se há empresa — mostra erro, nunca decide por ausência.
-    const [scopeError, setScopeError] = useState(false);
+    // Alguma leitura do gate falhou (sessão, workers, get_my_companies): não sabemos o estado da
+    // conta. Mostra erro, nunca decide por ausência e nunca abre a área protegida.
+    const [verificationFailed, setVerificationFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
     const location = useLocation();
+
+    const retry = useCallback(() => {
+        invalidateCompanyScope();
+        setVerificationFailed(false);
+        setOnboardingChecked(false);
+        setLoading(true);
+        setAttempt((n) => n + 1);
+    }, []);
+
+    // Já houve carga presa para sempre (AbortError do lock de auth depois do login): passado o
+    // prazo, o giro vira erro com "Tentar de novo".
+    const checking = loading || (!!user && (!onboardingChecked || tosAccepted === null));
+    useEffect(() => {
+        if (!checking || verificationFailed) return;
+        const timer = setTimeout(() => setVerificationFailed(true), VERIFICATION_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+    }, [checking, verificationFailed, attempt]);
+
+    useEffect(() => {
+        if (!verificationFailed) return;
+        window.addEventListener('online', retry);
+        return () => window.removeEventListener('online', retry);
+    }, [verificationFailed, retry]);
 
     useEffect(() => {
         const checkAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            const currentUser = session?.user ?? null;
+            const session = await checkStoredSession();
+            if (session.status === 'unavailable') {
+                logError('ProtectedRoute.session', session.error);
+                setVerificationFailed(true);
+                setLoading(false);
+                return;
+            }
+            const currentUser = session.status === 'ok' ? session.user : null;
             setUser(currentUser as { id: string; user_metadata?: { user_type?: string } } | null);
             setLoading(false);
 
@@ -73,28 +107,26 @@ export default function ProtectedRoute() {
                     setTosAccepted(true);
                     return;
                 }
+                // supabase-js não lança: a falha vem em `error`. Só PGRST116 (zero linhas no
+                // `.single()`) é resposta válida "sem perfil".
                 try {
-                    const { data } = await supabase
+                    const { data, error } = await supabase
                         .from('workers')
-                        .select('onboarding_completed')
+                        .select('onboarding_completed, accepted_tos')
                         .eq('id', authUser.id)
                         .single();
+                    if (error && error.code !== 'PGRST116') throw error;
 
                     if (data?.onboarding_completed !== true) {
                         setOnboardingRedirect('/worker/onboarding');
                     }
+                    setTosAccepted(data ? data.accepted_tos === true : true);
                 } catch (error) {
                     logError('Erro ao verificar onboarding', error);
-                    setOnboardingRedirect('/worker/onboarding');
+                    setVerificationFailed(true);
+                    return;
                 }
 
-                const { data: workerData } = await supabase
-                    .from('workers')
-                    .select('accepted_tos')
-                    .eq('id', authUser.id)
-                    .single();
-
-                setTosAccepted(workerData ? workerData.accepted_tos === true : true);
                 setDetectedRole('worker');
                 setOnboardingChecked(true);
                 return;
@@ -114,7 +146,8 @@ export default function ProtectedRoute() {
                         // Sem saber se esta conta já tem empresa, o formulário de onboarding NÃO abre
                         // (ele grava por cima da linha existente): tela de erro com "Tentar de novo".
                         logError('Erro ao verificar a empresa no onboarding', error);
-                        setScopeError(true);
+                        setVerificationFailed(true);
+                        return;
                     }
                     setOnboardingChecked(true);
                     setTosAccepted(true);
@@ -155,8 +188,8 @@ export default function ProtectedRoute() {
                     // gravaria por cima de uma empresa já cadastrada) nem finge tela de espera para o
                     // dono. Onboarding só com resposta VÁLIDA sem empresa.
                     logError('Erro ao verificar onboarding', error);
-                    setScopeError(true);
-                    setTosAccepted(true);
+                    setVerificationFailed(true);
+                    return;
                 }
 
                 setDetectedRole('company');
@@ -171,8 +204,15 @@ export default function ProtectedRoute() {
         };
 
         checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [attempt]);
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            // Sessão nula fora do SIGNED_OUT (ex.: INITIAL_SESSION com refresh sem rede) não é
+            // logout; quem decide isso é o `checkStoredSession` acima.
+            if (!session?.user && event !== 'SIGNED_OUT') return;
+            if (!session?.user) setVerificationFailed(false);
             setUser(session?.user as { id: string; user_metadata?: { user_type?: string } } | null);
             if (!session?.user) {
                 setTosAccepted(null);
@@ -181,8 +221,9 @@ export default function ProtectedRoute() {
         });
 
         return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    if (verificationFailed) return <ErroDeVerificacao onRetry={retry} />;
 
     if (loading || (user && !onboardingChecked) || (user && tosAccepted === null)) {
         return (
@@ -193,8 +234,6 @@ export default function ProtectedRoute() {
     }
 
     if (!user) return <Navigate to="/" replace />;
-
-    if (scopeError) return <ErroDeEmpresa />;
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
     if (awaitingConfirmation) return <AguardandoConfirmacao />;
@@ -227,27 +266,16 @@ export default function ProtectedRoute() {
         roleRedirectTarget = '/company/dashboard';
     } else if (
         userType === 'hire'
-        && pathname.startsWith('/company/organization')
-        && companyRole !== null
-        && companyRole !== 'owner'
-        && companyRole !== 'operator'
-    ) {
-        // R16: /company/organization só é acessível a sócio/operador (organization_members
-        // ativo) — mesma técnica do bloqueio worker⇎company acima. Gerente comum (role
-        // 'manager') não vê a visão consolidada da organização (fora do escopo dele, R14).
-        roleRedirectTarget = '/company/dashboard';
-    } else if (
-        userType === 'hire'
         && companyRole === 'encarregado'
         && (
-            pathname.startsWith('/company/configuracoes')
+            // As demais telas do Gestor mostram "sem acesso" (GestorRouteGuard, no CompanyLayout).
             // Onboarding de CNPJ e perfil da empresa também são do Gestor: a empresa não é dele.
-            || pathname === '/company/onboarding'
+            pathname === '/company/onboarding'
             || pathname === '/company/profile'
             || pathname.startsWith('/company/profile/')
         )
     ) {
-        // Equipe/Configurações/perfil da empresa são do Gestor. Encarregado nunca administra pessoas.
+        // Onboarding e perfil da empresa são do Gestor.
         roleRedirectTarget = '/company/dashboard';
     }
 

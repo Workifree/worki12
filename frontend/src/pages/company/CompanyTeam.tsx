@@ -3,6 +3,8 @@ import { Users, Clock, UserPlus, ListChecks, Plus, Pencil, Trash2, AlertTriangle
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
@@ -15,6 +17,7 @@ import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
 import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
 import { Button, Card, PageHeader } from '../../components/ui';
+import SectionTabs from '../../components/SectionTabs';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
@@ -25,8 +28,12 @@ import { Button, Card, PageHeader } from '../../components/ui';
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, erroSessao, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const { addToast } = useToast();
+  // Encarregado: lê o Elenco e traz freelas (R7/R10b); remover, listas e histórico são do Gestor.
+  // Falha ao saber o papel = modo restrito.
+  const { company, resolved: roleResolved, error: roleError } = useCurrentCompanyState();
+  const restricted = roleError || company?.role === 'encarregado';
   const [showAddModal, setShowAddModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   // Link pré-carregado: o Safari/iOS só deixa copiar dentro do próprio toque, e uma ida à rede
@@ -86,7 +93,7 @@ export default function CompanyTeam() {
 
   // Histórico com a empresa (turnos concluídos) para TODO o elenco de uma vez — evita N+1.
   useEffect(() => {
-    if (!companyId || teamMembers.length === 0) {
+    if (!roleResolved || restricted || !companyId || teamMembers.length === 0) {
       setHistoryByWorker({});
       return;
     }
@@ -122,7 +129,7 @@ export default function CompanyTeam() {
       setHistoryByWorker(map);
     })();
     return () => { active = false; };
-  }, [companyId, teamMembers]);
+  }, [companyId, teamMembers, roleResolved, restricted]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -139,7 +146,7 @@ export default function CompanyTeam() {
     return () => { active = false; };
   }, [companyId]);
 
-  // Link do elenco: mesmo caminho do Perfil Empresa (token estável via serviço, falha tratada).
+  // Link do elenco: mesmo caminho de Dados da empresa (token estável via serviço, falha tratada).
   const handleCopyTeamLink = async () => {
     if (!companyId) return;
     let url = teamLink?.companyId === companyId ? teamLink.url : null;
@@ -164,7 +171,7 @@ export default function CompanyTeam() {
     }
   };
 
-  if (loading) {
+  if (loading || !roleResolved) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20">
         <div className="h-9 bg-gray-200 rounded-xl w-48" />
@@ -178,8 +185,17 @@ export default function CompanyTeam() {
     );
   }
 
+  if (erroSessao && teamMembers.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto pb-20">
+        <ErroDeCarga onRetry={refresh} />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+      {!restricted && <SectionTabs section="elenco" />}
       <PageHeader
         title="Meu Elenco"
         subtitle={`${teamMembers.length} freela${teamMembers.length !== 1 ? 's' : ''} no elenco${
@@ -192,7 +208,7 @@ export default function CompanyTeam() {
         }
       />
 
-      {/* Link do elenco — antes só existia dentro do Perfil Empresa. Discreto: secundário, sem competir com a ação principal. */}
+      {/* Link do elenco — antes só existia nos dados da empresa. Discreto: secundário, sem competir com a ação principal. */}
       <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do seu elenco</p>
@@ -231,6 +247,7 @@ export default function CompanyTeam() {
               <MemberCard
                 key={member.connection.id}
                 member={member}
+                restricted={restricted}
                 onRemove={(m) => setRemovingMember(m)}
                 onInvite={(m) => setInvitingMember(m)}
                 history={historyByWorker[member.worker.id]}
@@ -241,14 +258,17 @@ export default function CompanyTeam() {
       )}
 
       {/* Listas do Elenco (F2) — atalhos por função pra chamar o grupo inteiro de uma vez */}
+      {(!restricted || lists.length > 0) && (
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-bold flex items-center gap-2">
             <ListChecks size={20} aria-hidden="true" /> Listas do elenco
           </h2>
-          <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
-            Nova lista
-          </Button>
+          {!restricted && (
+            <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
+              Nova lista
+            </Button>
+          )}
         </div>
 
         {loadingLists && (
@@ -276,6 +296,7 @@ export default function CompanyTeam() {
                     {list.memberIds.length} {list.memberIds.length === 1 ? 'membro' : 'membros'}
                   </p>
                 </div>
+                {!restricted && (
                 <div className="flex gap-1 shrink-0">
                   <button
                     type="button"
@@ -294,6 +315,7 @@ export default function CompanyTeam() {
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
+                )}
               </Card>
             ))}
           </div>
@@ -306,6 +328,7 @@ export default function CompanyTeam() {
           </p>
         )}
       </section>
+      )}
 
       {/* Convites pendentes */}
       {pendingConnections.length > 0 && (
@@ -315,7 +338,7 @@ export default function CompanyTeam() {
           </h2>
           <div className="space-y-3">
             {pendingConnections.map((conn) => (
-              <PendingCard key={conn.id} connection={conn} />
+              <PendingCard key={conn.id} connection={conn} restricted={restricted} />
             ))}
           </div>
         </section>

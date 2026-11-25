@@ -8,6 +8,8 @@ import { validateCPF, validateCNPJ, formatCpfCnpj } from '../../lib/validation';
 import PageMeta from '../../components/PageMeta';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
+import { checkSession } from '../../lib/authSession';
+import ErroDeCarga from '../../components/ErroDeCarga';
 
 export default function CompanyOnboarding() {
     const navigate = useNavigate();
@@ -64,15 +66,20 @@ export default function CompanyOnboarding() {
         }
         loadCategories();
 
-        // Get current user
-        supabase.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUserId(data.user.id);
-            } else {
-                navigate('/login');
-            }
+    }, []);
+
+    const [erroSessao, setErroSessao] = useState(false);
+    const [tentativa, setTentativa] = useState(0);
+    useEffect(() => {
+        let active = true;
+        void checkSession().then((session) => {
+            if (!active) return;
+            if (session.status === 'ok') setUserId(session.user.id);
+            else if (session.status === 'signed_out') navigate('/login');
+            else setErroSessao(true);
         });
-    }, [navigate]);
+        return () => { active = false; };
+    }, [navigate, tentativa]);
 
     const canProceed = () => {
         switch (step) {
@@ -167,6 +174,15 @@ export default function CompanyOnboarding() {
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
+                {erroSessao && (
+                    <div className="mb-4">
+                        <ErroDeCarga
+                            onRetry={() => { setErroSessao(false); setTentativa((n) => n + 1); }}
+                            mensagem="Sem conexão para verificar seu acesso. O que você digitou continua aqui."
+                        />
+                    </div>
+                )}
+
                 {/* Exit button */}
                 <div className="flex justify-end mb-2">
                     <button

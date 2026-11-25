@@ -1,9 +1,14 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, PageHeader } from '../components/ui';
+import { CONTACT_PENDING_TEXT, getContactEmail } from '../lib/contact';
 
 export default function Privacy() {
   const navigate = useNavigate();
+  const contactEmail = getContactEmail();
+  const mailLink = contactEmail && (
+    <a href={`mailto:${contactEmail}`} className="text-primary font-bold break-all">{contactEmail}</a>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
@@ -99,7 +104,11 @@ export default function Privacy() {
             <li><strong>Informação sobre compartilhamento:</strong> saber com quais entidades seus dados são compartilhados</li>
             <li><strong>Oposição:</strong> opor-se ao tratamento quando não baseado em consentimento</li>
           </ul>
-          <p className="mt-2">Para exercer seus direitos, envie um e-mail para <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a> com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
+          {contactEmail ? (
+            <p className="mt-2">Para exercer seus direitos, envie um e-mail para {mailLink} com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
+          ) : (
+            <p className="mt-2">{CONTACT_PENDING_TEXT}</p>
+          )}
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">8. Cookies</h2>
           <p>Utilizamos apenas cookies essenciais para autenticação e funcionamento da Plataforma (tokens de sessão). Não utilizamos cookies de rastreamento, publicidade ou analíticos de terceiros.</p>
@@ -111,11 +120,11 @@ export default function Privacy() {
           <p>Podemos atualizar esta Política periodicamente. Alterações significativas serão comunicadas por e-mail ou pela Plataforma. O uso continuado após as alterações constitui aceitação da nova Política.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">11. Contato e Encarregado (DPO)</h2>
-          <p>Para questões de privacidade e proteção de dados:</p>
-          <ul className="list-disc pl-6 space-y-1">
-            <li><strong>E-mail:</strong> <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a></li>
-            <li><strong>E-mail geral:</strong> <a href="mailto:contato@worki.com.br" className="text-primary font-bold">contato@worki.com.br</a></li>
-          </ul>
+          {contactEmail ? (
+            <p>Para questões de privacidade e proteção de dados: {mailLink}</p>
+          ) : (
+            <p>{CONTACT_PENDING_TEXT}</p>
+          )}
         </Card>
       </div>
     </div>

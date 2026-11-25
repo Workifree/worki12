@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
+import { fillMissingWorkers } from '../../services/workerCardsService';
 import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui'
 import ErroDeCarga from '../../components/ErroDeCarga'
 import { checkSession } from '../../lib/authSession'
@@ -100,6 +101,7 @@ export default function CompanyMessages() {
                 islocked,
                 application:applications!fk_conversation_application_uuid (
                     id,
+                    worker_id,
                     status,
                     worker_checkin_at,
                     company_checkin_confirmed_at,
@@ -129,6 +131,7 @@ export default function CompanyMessages() {
             islocked: boolean;
             application?: {
                 id: string;
+                worker_id?: string;
                 status: string;
                 worker_checkin_at?: string | null;
                 company_checkin_confirmed_at?: string | null;
@@ -146,7 +149,7 @@ export default function CompanyMessages() {
             };
         }
 
-        const myConversations = ((convData || []) as unknown as ConversationData[]).filter((c) => {
+        const ownConversations = ((convData || []) as unknown as ConversationData[]).filter((c) => {
             if (!c.application || !c.application.job) {
                 return false; // Skip malformed data
             }
@@ -154,6 +157,10 @@ export default function CompanyMessages() {
             const jobCorpId = c.application.job.company_id;
             return companyIds.has(jobCorpId);
         });
+
+        // Encarregado: o embed `workers` volta `null`; os cartões das RPCs dão o nome.
+        const filledApps = await fillMissingWorkers(ownConversations.map((c) => c.application!));
+        const myConversations = ownConversations.map((c, i) => ({ ...c, application: filledApps[i] }));
 
         // Fetch all unread messages for these conversations
         const conversationIds = myConversations.map((c) => c.id);

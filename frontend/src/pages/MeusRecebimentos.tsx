@@ -211,12 +211,12 @@ export default function MeusRecebimentos() {
     return (
         <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">
             <PageMeta
-                title="Meus Recebimentos"
+                title="Recebimentos"
                 description="Acompanhe os pagamentos registrados pelas empresas: recebidos, agendados e aguardando sua confirmação."
             />
 
             <PageHeader
-                title="Meus Recebimentos"
+                title="Recebimentos"
                 subtitle="Histórico dos pagamentos que as empresas registraram por fora do app."
             />
 

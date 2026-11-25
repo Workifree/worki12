@@ -10,7 +10,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import { useToast } from '../contexts/ToastContext';
 import type { TeamConnection, TeamMember, MyStore, TeamConnectionSource } from '../types';
@@ -22,6 +21,8 @@ import { checkSession } from '../lib/authSession';
 // ---------------------------------------------------------------------------
 
 export interface UseCompanyTeamResult {
+  /** Não deu para verificar a sessão (rede): lista vazia aqui não significa Elenco vazio. */
+  erroSessao: boolean;
   /** Membros aceitos (com perfil do worker). */
   teamMembers: TeamMember[];
   /** Convites de equipe pendentes (empresa enviou, aguarda worker). */
@@ -42,18 +43,23 @@ export function useCompanyTeam(): UseCompanyTeamResult {
   const [pendingConnections, setPendingConnections] = useState<TeamConnection[]>([]);
   const [companyId, setCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [erroSessao, setErroSessao] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    const session = await checkSession();
+    if (session.status === 'signed_out') {
       navigate('/login');
       return;
     }
+    if (session.status === 'unavailable') {
+      setErroSessao(true);
+      setLoading(false);
+      return;
+    }
 
+    setErroSessao(false);
     setLoading(true);
     // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
     // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
@@ -74,11 +80,13 @@ export function useCompanyTeam(): UseCompanyTeamResult {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const session = await checkSession();
+      if (session.status === 'signed_out') {
         navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        if (active) { setErroSessao(true); setLoading(false); }
         return;
       }
 
@@ -143,7 +151,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     [addToast, load],
   );
 
-  return { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh: load };
+  return { teamMembers, pendingConnections, loading, erroSessao, companyId, addWorker, removeWorker, refresh: load };
 }
 
 // ---------------------------------------------------------------------------

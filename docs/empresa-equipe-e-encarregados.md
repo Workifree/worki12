@@ -14,7 +14,7 @@ dos turnos.
 ## Antes de começar
 
 Se você é o único que usa a conta, nada muda para você. As ferramentas de equipe só aparecem depois que você
-convida a primeira pessoa. Até lá, o menu segue como sempre, e o único lugar novo é **Configurações → Equipe**.
+convida a primeira pessoa. Para convidar, abra **Gestão → Equipe e acessos**.
 
 ---
 
@@ -24,7 +24,7 @@ convida a primeira pessoa. Até lá, o menu segue como sempre, e o único lugar 
 
 Você não precisa do e-mail da pessoa. O convite vai pelo WhatsApp.
 
-1. Abra **Configurações → Equipe**.
+1. Abra **Gestão → Equipe e acessos**.
 2. Toque em **Convidar pessoa**.
 3. Digite o **nome** da pessoa (do jeito que você a chama).
 4. Confira o papel: **Encarregado**.
@@ -38,7 +38,7 @@ Se preferir, toque em **Copiar link** e mande do jeito que quiser.
 
 ### Confirmar "é a pessoa certa?"
 
-Depois que a pessoa entra pelo link, ela aparece no topo da tela **Equipe**, com a pergunta
+Depois que a pessoa entra pelo link, ela aparece no topo da tela **Equipe e acessos**, com a pergunta
 **"{Nome} entrou. É a pessoa certa?"**.
 
 - **Confirmar:** libera o acesso. A partir daí, ela já pode trabalhar.
@@ -48,7 +48,7 @@ Enquanto você não confirma, a pessoa não vê nada do trabalho.
 
 ### Convite vencido, reenviar ou cancelar
 
-Na lista da tela **Equipe**, cada convite pendente mostra o status **Convite enviado** ou **Venceu**.
+Na lista da tela **Equipe e acessos**, cada convite pendente mostra o status **Convite enviado** ou **Venceu**.
 
 - **Gerar novo link:** cria um link novo e renova os 14 dias. **O link antigo deixa de funcionar.** Use isso
   quando o convite venceu ou quando o link foi parar em mãos erradas.
@@ -56,7 +56,7 @@ Na lista da tela **Equipe**, cada convite pendente mostra o status **Convite env
 
 ### Remover alguém da equipe
 
-1. Na tela **Equipe**, toque em **Remover da equipe** na pessoa.
+1. Na tela **Equipe e acessos**, toque em **Remover da equipe** na pessoa.
 2. Leia o aviso. Ele diz:
    - que o acesso dela é cortado **agora**;
    - quantos turnos abertos no nome dela **ficarão com você**;
@@ -75,7 +75,7 @@ Você não precisa passar os turnos dela para outra pessoa antes de remover. Iss
 
 Etiquetas agrupam turnos, por exemplo **Salão** ou **Evento**. Elas servem para filtrar a tela Hoje.
 
-- Quem cria e arquiva etiquetas é o **Gestor**, na tela **Equipe**.
+- Quem cria e arquiva etiquetas é o **Gestor**, na tela **Equipe e acessos**.
 - Uma etiqueta tem de 1 a 40 caracteres.
 - **Arquivar** tira a etiqueta da lista de quando você cria um turno novo. Ela continua nos filtros e no
   histórico dos turnos antigos.
@@ -83,7 +83,7 @@ Etiquetas agrupam turnos, por exemplo **Salão** ou **Evento**. Elas servem para
 
 ### A tela Hoje
 
-**Hoje** mostra os turnos dos próximos 14 dias, do dia de hoje em diante, agrupados por dia. Em cada turno você
+Com equipe, o **Início** abre em duas abas: **Hoje** e **Visão geral**. A aba **Hoje** mostra os turnos dos próximos 14 dias, do dia de hoje em diante, agrupados por dia. Em cada turno você
 vê quem é o **responsável**.
 
 - Com **Todos**, você vê todos os turnos da empresa.
@@ -199,7 +199,7 @@ Depois que o Gestor libera o seu acesso, a tela **Hoje** mostra só o **seu trab
 
 - turnos de outros responsáveis, nem na lista nem nos filtros;
 - valores pagos de turnos que não são seus;
-- a tela **Equipe**, as configurações da empresa e as etiquetas para criar ou arquivar;
+- a tela **Equipe e acessos**, as configurações da empresa e as etiquetas para criar ou arquivar;
 - a lista de quem mais opera a empresa, com exceção do que aparece em **Passar para...** e **Cobrir**.
 
 **Freela ocupado:** se o freela que você quer chamar já está ocupado com **outro turno naquele horário**, aparece
@@ -238,13 +238,13 @@ Não. Os freelas ficam no Elenco da empresa. Remover alguém corta só o acesso 
 Não. O aviso só informa. Quem decide é quem está chamando.
 
 **Quem convida outro Gestor?**
-Hoje, a tela Equipe convida **Encarregados**.
+Hoje, a tela Equipe e acessos convida **Encarregados**.
 
 **O convite precisa de e-mail do convidado?**
 Não. O convite sai pelo WhatsApp. O e-mail é pedido só na entrada, para receber o código.
 
 **Quem vê o link de convite?**
-Só o Gestor, na tela Equipe. Ele é de uso único da pessoa convidada.
+Só o Gestor, na tela Equipe e acessos. Ele é de uso único da pessoa convidada.
 
 ---
 

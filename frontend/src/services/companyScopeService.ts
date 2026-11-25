@@ -108,6 +108,7 @@ try {
     if (event === 'SIGNED_OUT') {
       // Aparelho compartilhado: a marca "já foi da equipe" não sobrevive ao logout.
       clearAllTeamMemberHints();
+      clearNavHints();
       lastUserId = null;
       invalidateCompanyScope();
       return;
@@ -178,7 +179,7 @@ export function isUnconfirmedEncarregado(company: MyCompany | null | undefined):
 
 /**
  * R23 (divulgação progressiva): o destaque "Equipe" na navegação só aparece ao Gestor quando a
- * empresa já tem ao menos uma pessoa. Dono único chega à tela por Configurações (Perfil Empresa).
+ * empresa já tem ao menos uma pessoa. Dono único chega à tela por Gestão > Equipe e acessos.
  */
 export function showTeamNav(company: MyCompany | null | undefined): boolean {
   return isGestor(company) && company?.team_enabled === true;
@@ -215,9 +216,49 @@ export function writeTeamNavHint(value: boolean): void {
   }
 }
 
+const NAV_ROLE_HINT_KEY = 'worki_nav_role_hint';
+
+export type NavRoleHint = 'gestor' | 'encarregado';
+
+/**
+ * Mesmo padrão da dica acima, para o papel: o menu não pode mostrar Elenco/Relatórios e esconder
+ * depois. `null` = nunca resolvido nesta sessão (a navegação assume o menu restrito).
+ */
+export function readNavRoleHint(): NavRoleHint | null {
+  try {
+    const value = sessionStorage.getItem(NAV_ROLE_HINT_KEY);
+    return value === 'gestor' || value === 'encarregado' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeNavRoleHint(value: NavRoleHint): void {
+  try {
+    sessionStorage.setItem(NAV_ROLE_HINT_KEY, value);
+  } catch {
+    // best-effort
+  }
+}
+
+/** Troca de unidade: as dicas de menu eram da unidade anterior (senão itens aparecem e somem). */
+export function switchCompanyUnit(companyId: string): void {
+  setSelectedCompanyId(companyId);
+  clearNavHints();
+}
+
+function clearNavHints(): void {
+  try {
+    sessionStorage.removeItem(NAV_ROLE_HINT_KEY);
+    sessionStorage.removeItem(TEAM_NAV_HINT_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
 /**
  * R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização
- * (`/company/organization`). Regra única — Sidebar e atalhos mobile do perfil devem usar esta.
+ * (`/company/organization`). Regra única — a navegação (lib/navigation) deve usar esta.
  */
 export function canSeeOrganization(company: MyCompany | null | undefined): boolean {
   return company?.role === 'owner' || company?.role === 'operator';

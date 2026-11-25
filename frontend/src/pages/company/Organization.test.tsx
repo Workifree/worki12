@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import Organization from './Organization';
@@ -74,7 +75,7 @@ describe('Organization (F13 R16)', () => {
   });
 
   it('lista a unidade com contagens de turnos abertos e elenco', async () => {
-    render(<Organization />);
+    render(<Organization />, { wrapper: MemoryRouter });
 
     await waitFor(() => {
       expect(screen.getByText('Loja Centro')).toBeInTheDocument();
@@ -108,7 +109,7 @@ describe('Organization (F13 R16)', () => {
       return { select: vi.fn(() => countChain(0)) };
     });
 
-    render(<Organization />);
+    render(<Organization />, { wrapper: MemoryRouter });
 
     await waitFor(() => {
       expect(screen.getByText('Loja Centro')).toBeInTheDocument();
@@ -147,7 +148,7 @@ describe('Organization (F13 R16)', () => {
       return Promise.resolve({ data: null, error: null });
     });
 
-    render(<Organization />);
+    render(<Organization />, { wrapper: MemoryRouter });
 
     await waitFor(() => {
       expect(screen.getByText('ger@ex.com')).toBeInTheDocument();

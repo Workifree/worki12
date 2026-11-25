@@ -170,7 +170,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
               <p className="flex items-center gap-1.5 text-xs text-gray-700 mb-3">
                 <Clock size={14} />
                 {isOpen
-                  ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                  ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
                   : `Expirou às ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} sem ninguém aceitar — chame de novo`}
               </p>
             )}

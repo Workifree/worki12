@@ -32,6 +32,7 @@ import {
   storePendingTeamInviteToken,
 } from '../lib/teamInviteToken';
 import { acceptMemberInvite, getInvitePreview, ROLE_LABEL } from '../services/teamMembersService';
+import { invalidateCompanyScope, switchCompanyUnit } from '../services/companyScopeService';
 import type { AcceptMemberInviteOutcome, InvitePreviewResult } from '../types';
 
 type Step = 'form' | 'code' | 'working';
@@ -132,6 +133,9 @@ export default function AcceptTeamInvite() {
       || result.outcome === 'already_operator'
     ) {
       clearStoredToken();
+      // Quem já tem empresa própria cairia nela (`pickPrimaryCompany`): abre a do convite.
+      if (result.companyId) switchCompanyUnit(result.companyId);
+      invalidateCompanyScope();
       // Cai direto na Hoje (E5); sem onboarding de CNPJ (o ProtectedRoute resolve pelo seam
       // e, se o Gestor ainda não confirmou, mostra a tela de espera).
       navigate('/company/hoje', { replace: true });

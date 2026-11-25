@@ -83,6 +83,8 @@ function renderModal() {
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
   getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+  pickCurrentCompany: () => null,
+  subscribeCompanyScope: () => () => undefined,
 }))
 
 describe('InviteToShiftModal - elegibilidade do turno de hoje à noite (fuso BRT)', () => {

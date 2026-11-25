@@ -6,15 +6,19 @@ import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, Pause
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import SemAcesso from '../../components/SemAcesso';
+import { getJobScope, canSeeJob } from '../../services/jobScopeService';
+import { deleteShift } from '../../services/deleteShiftService';
+import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
 import { formatDateOnly, toBrazilDateOnly } from '../../lib/dateUtils';
 import { getAuthenticatedCompanyId, isGestor, hasTeamNav } from '../../services/companyScopeService';
 import { jobHasStarted } from '../../lib/todayView';
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
+import { getSessionUserOrThrow } from '../../lib/authSession';
 import { Button, Card } from '../../components/ui';
 
 const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
@@ -53,6 +57,7 @@ export default function CompanyJobDetails() {
     const cancelamentoDisponivel = useCancelJobAvailable(hasTeamNav(currentCompany));
     const [activeWorkersCount, setActiveWorkersCount] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
+    const [semAcesso, setSemAcesso] = useState(false);
     const { addToast } = useToast();
 
     // Esc fecha o menu de ações (o clique fora é a camada transparente z-10 abaixo do menu).
@@ -92,7 +97,7 @@ export default function CompanyJobDetails() {
         // mesmo se essa função for chamada de outro lugar além do useEffect que já checa `if (id)`.
         if (!id) { navigate('/company/jobs'); return; }
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
             if (!user) { navigate('/login'); return; }
 
             const { data, error } = await supabase
@@ -103,6 +108,7 @@ export default function CompanyJobDetails() {
                 .single();
 
             if (error) throw error;
+            if (!canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
 
             // Fetch candidate count manually
             const { count } = await supabase
@@ -140,37 +146,13 @@ export default function CompanyJobDetails() {
     const handleDelete = async () => {
         if (!id) return;
 
-        // 1. Cancel hired workers' applications — efeito colateral em LOTE: 0 linhas é
-        // legítimo (turno sem ninguém contratado), não é erro. Usa o retorno só para
-        // informar quantos freelas foram de fato notificados.
-        const { data: cancelledApps, error: cancelError } = await supabase
-            .from('applications')
-            .update({ status: 'cancelled' })
-            .eq('job_id', id)
-            .in('status', ['hired', 'in_progress'])
-            .select('id');
-        if (cancelError) {
-            logError('CompanyJobDetails.handleDelete.cancelApplications', cancelError);
-        }
-        const cancelledCount = cancelledApps?.length ?? 0;
-
-        // 2. First refund any pending escrow back to the company wallet
-        await WalletService.refundEscrow(id, 'Dinheiro retornado do escrow - turno deletado');
-
-        // 3. Then mark the job as deleted — gesto explícito com toast de sucesso: precisa
-        // de `.select('id')` para não afirmar "excluído" quando a RLS negou em silêncio.
-        const { data: deletedJob, error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', id).select('id');
-        if (!error && deletedJob && deletedJob.length > 0) {
-            addToast(
-                cancelledCount > 0
-                    ? `Turno excluído com sucesso. ${cancelledCount} freela${cancelledCount > 1 ? 's' : ''} notificado${cancelledCount > 1 ? 's' : ''}.`
-                    : 'Turno excluído com sucesso.',
-                'success'
-            );
+        // `cancel_job` encerra convites, candidaturas e chamados junto com o turno.
+        const result = await deleteShift(id);
+        if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
+            addToast(deleteShiftToast(result), 'success');
             navigate('/company/jobs');
         } else {
-            if (error) logError('CompanyJobDetails.handleDelete.deleteJob', error);
-            addToast('Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.', 'error');
+            addToast(cancelJobMessage(result, isGestor(currentCompany) ? 'gestor' : 'encarregado'), 'error');
         }
         setShowDeleteConfirm(false);
     };
@@ -192,6 +174,9 @@ export default function CompanyJobDetails() {
             </div>
             <div className="h-40 bg-gray-200 rounded-xl" />
         </div>
+    );
+    if (semAcesso) return (
+        <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />
     );
     if (erroCarga && !job) return (
         <div className="max-w-4xl mx-auto p-4 sm:p-8">

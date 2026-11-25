@@ -202,7 +202,6 @@ R: Infelizmente não — expirado é expirado. Mas a empresa pode convidar de no
 
 ## Suporte
 
-Dúvidas sobre um convite específico?
-- **Chat no app** com a empresa
-- **Suporte do Worki:** [suporte@worki.com]
-- **Horário:** Segunda a sexta, 9h–18h (horário de Brasília)
+Dúvidas sobre um convite específico? Use o **chat no app** com a empresa.
+
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

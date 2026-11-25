@@ -13,7 +13,7 @@
  * o quarto estado ('loading') é tratado aqui com um skeleton neo-brutalista.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
+import SectionTabs from '../../components/SectionTabs';
 import { OperationAnalyticsService, emptyAnalytics } from '../../services/operationAnalyticsService';
 import type { OperationAnalyticsPeriod } from '../../services/operationAnalyticsService';
 import type { OperationAnalytics } from '../../types';
@@ -134,13 +134,13 @@ export default function CompanyOperationAnalytics() {
 
   return (
     <div className="flex flex-col gap-6 pb-20 md:pb-12 font-sans text-accent max-w-6xl mx-auto">
-      <PageMeta title="Analytics de Operação" />
+      <PageMeta title="Relatório de Operação" />
 
       <div>
-        <PainelNumerosTabs />
+        <SectionTabs section="relatorios" />
         {/* Espelho do subtitulo do Relatorio de Pagamentos: cada pagina diz o que responde. */}
         <PageHeader
-          title="Analytics de Operação"
+          title="Relatório de Operação"
           subtitle="Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite. Somente leitura, não move saldo."
           className="!mb-0"
         />

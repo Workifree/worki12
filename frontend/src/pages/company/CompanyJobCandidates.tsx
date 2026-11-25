@@ -14,11 +14,16 @@ import { SosCallButton } from '../../components/team/SosCallButton';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
+import SemAcesso from '../../components/SemAcesso';
+import { getJobScope, canSeeJob } from '../../services/jobScopeService';
+import { fillMissingWorkers } from '../../services/workerCardsService';
 import { ArrowLeft, Star, MapPin, Clock, CheckCircle, XCircle, MessageSquare, MessageCircle, UserX, Play, Square, Receipt, Send, Users, X, CalendarClock, Wallet, Copy, Check, Megaphone, Bell, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import JobLifecycleStepper from '../../components/JobLifecycleStepper';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { getSessionUserOrThrow } from '../../lib/authSession';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
 import { todayLocalDate, formatDateOnly } from '../../lib/dateUtils';
 import type {
@@ -304,6 +309,8 @@ export default function CompanyJobCandidates() {
     // Sem entrada no map = turno sem escrow (modo A); 'prepaid'/'postpaid' = caminho de escrow existente.
     const [escrowKindMap, setEscrowKindMap] = useState<Record<string, 'prepaid' | 'postpaid'>>({});
     const [jobBudget, setJobBudget] = useState(0);
+    const [erroCarga, setErroCarga] = useState(false);
+    const [semAcesso, setSemAcesso] = useState(false);
     // Registro de pagamento externo (modo A) por freela (ADR-20260816 — o marcador é por
     // (job_id, worker_id), não mais por job_id sozinho: um turno com N freelas tem N
     // marcadores independentes). Cada card olha só a própria entrada deste mapa.
@@ -325,12 +332,14 @@ export default function CompanyJobCandidates() {
     // oferece "chamar varios de uma vez" e cai aqui com o chamado 1->N JA ABERTO, em vez de
     // largar a pessoa numa pagina onde ela precisa reencontrar o botao. Abre UMA vez (ref), para
     // um F5 nao reabrir o modal em cima de quem ja o fechou.
-    const [chamarParams] = useSearchParams();
+    const [chamarParams, setChamarParams] = useSearchParams();
     const chamarAoChegar = useRef(chamarParams.get('chamar') === '1');
     useEffect(() => {
         if (chamarAoChegar.current) {
             chamarAoChegar.current = false;
             setCallModalOpen(true);
+            // Tira o `?chamar=1` da URL: recarregar não reabre o modal.
+            setChamarParams((atual) => { atual.delete('chamar'); return atual; }, { replace: true });
         }
     }, []);
 
@@ -445,17 +454,21 @@ export default function CompanyJobCandidates() {
         // mesmo se essa função for chamada de outro lugar (ex.: `fetchCandidates()` após ações).
         if (!id) { navigate('/company/jobs'); return; }
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
             if (!user) { navigate('/login'); return; }
+            setErroCarga(false);
 
             // Fetch Job Title (only if owned by this company)
             const { data: job, error: jobError } = await supabase
                 .from('jobs')
-                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement, company_id')
+                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement, company_id, responsible_id')
                 .eq('id', id)
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
-            if (jobError || !job) { navigate('/company/jobs'); return; }
+            // PGRST116 = nenhuma linha; outro erro é falha de carga, não "turno inexistente".
+            if (jobError && jobError.code !== 'PGRST116') throw jobError;
+            if (!job) { navigate('/company/jobs'); return; }
+            if (!canSeeJob(await getJobScope(), job)) { setSemAcesso(true); return; }
             setJobTitle(job.title);
             setJobCertificationRequirement(job.certification_requirement ?? null);
             setJobBudget(job.budget ?? 0);
@@ -491,7 +504,8 @@ export default function CompanyJobCandidates() {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setCandidates(data || []);
+            // Encarregado: o embed `workers` volta `null`; os cartões das RPCs preenchem.
+            setCandidates(await fillMissingWorkers(data || [], id));
 
             // Fetch escrow kind per application for this job (só o kind é usado para ramificar
             // Confirmar Entrega vs Registrar Pagamento — ver `renderCompletionAction`).
@@ -529,6 +543,7 @@ export default function CompanyJobCandidates() {
             }
         } catch (error) {
             logError('CompanyJobCandidates', error);
+            setErroCarga(true);
         } finally {
             setLoading(false);
         }
@@ -1289,6 +1304,19 @@ export default function CompanyJobCandidates() {
         return renderRegisterPaymentActions(app);
     };
 
+    if (semAcesso) {
+        return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
+    }
+
+    // Só quando nada carregou: falha ao recarregar depois de uma ação mantém a tela.
+    if (erroCarga && !jobTitle) {
+        return (
+            <div className="max-w-4xl mx-auto p-4 sm:p-8">
+                <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); void fetchCandidates(); }} />
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Header */}
@@ -1447,11 +1475,15 @@ export default function CompanyJobCandidates() {
                                 {/* Info */}
                                 <div className="min-w-0 flex-1">
                                     <h3 className="flex flex-wrap items-center gap-2 text-lg font-bold leading-tight">
-                                        {app.worker?.full_name || 'Usuário Worki'}
-                                        <span className="rounded-full bg-black px-2 py-0.5 text-xs font-semibold text-white">Lvl {app.worker?.level || 1}</span>
+                                        {app.worker?.full_name || 'Freela'}
+                                        {app.worker?.level ? (
+                                            <span className="rounded-full bg-black px-2 py-0.5 text-xs font-semibold text-white">Lvl {app.worker.level}</span>
+                                        ) : null}
                                     </h3>
                                     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
-                                        <span className="flex items-center gap-1"><MapPin size={12} /> {app.worker?.city || 'Não informado'}</span>
+                                        {(app.worker?.city || app.worker?.reviews_count != null) && (
+                                            <span className="flex items-center gap-1"><MapPin size={12} /> {app.worker?.city || 'Não informado'}</span>
+                                        )}
                                         {/* Sem avaliação, isto mostrava "5.0 (0 avaliações)" -- nota
                                             maxima inventada para quem nunca foi avaliado, no lugar exato
                                             onde a empresa decide quem chamar. "Novo" diz a verdade. */}
@@ -1461,7 +1493,7 @@ export default function CompanyJobCandidates() {
                                                 {Number(app.worker.rating_average).toFixed(1)}
                                                 <span className="text-gray-600">({app.worker.reviews_count === 1 ? '1 avaliação' : `${app.worker.reviews_count} avaliações`})</span>
                                             </span>
-                                        ) : (
+                                        ) : app.worker?.reviews_count == null ? null : (
                                             <span className="flex items-center gap-1">
                                                 <Star size={12} /> Sem avaliações ainda
                                             </span>

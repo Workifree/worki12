@@ -30,7 +30,7 @@ Encontre oportunidades, responda convites de empresas e ganhe com flexibilidade.
 
 **Tópicos principais:**
 - Configurar Chave PIX — para a empresa pagar você rápido via PIX
-- Meus Recebimentos — acompanhe todos os pagamentos registrados pelas empresas
+- Recebimentos — acompanhe todos os pagamentos registrados pelas empresas
 - Carteira de Clientes — veja empresas que você trabalha regularmente
 - Perfil Público da Empresa — conheça a empresa antes de aceitar convite
 - Aba "Convites" em Meus Jobs — responda aos convites de turno

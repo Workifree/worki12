@@ -23,6 +23,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { fillMissingWorkers } from './workerCardsService';
 import type {
   PendingInvite,
   ShiftCall,
@@ -278,7 +279,11 @@ export const ShiftCallService = {
         logError('shiftCall.listCallsByJob', error);
         return [];
       }
-      return (data ?? []) as ShiftCall[];
+      return await Promise.all(
+        ((data ?? []) as ShiftCall[]).map(async (call) =>
+          call.targets ? { ...call, targets: await fillMissingWorkers(call.targets, jobId) } : call,
+        ),
+      );
     } catch (err) {
       logError('shiftCall.listCallsByJob', err);
       return [];

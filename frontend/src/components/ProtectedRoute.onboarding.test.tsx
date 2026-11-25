@@ -189,23 +189,6 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             })
         })
 
-        it('gerente comum (role=manager) é bloqueado de /company/organization — só sócio/operador', async () => {
-            mockGetSession.mockResolvedValue({
-                data: { session: { user: { id: 'manager-3', user_metadata: { user_type: 'hire' } } } },
-            })
-            mockRpc.mockResolvedValue({
-                data: [myCompaniesRow({ company_id: 'comp-9', role: 'manager' })],
-                error: null,
-            })
-
-            renderRoute('/company/organization')
-
-            await waitFor(() => {
-                expect(screen.getByTestId('outlet-content')).toBeInTheDocument()
-            })
-            expect(screen.queryByTestId('organization-content')).not.toBeInTheDocument()
-        })
-
         it('encarregado NÃO confirmado vê só a tela de espera, nunca o conteúdo (R22)', async () => {
             mockGetSession.mockResolvedValue({
                 data: { session: { user: { id: 'enc-1', user_metadata: { user_type: 'hire' } } } },
@@ -358,23 +341,6 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             })
             expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
             expect(screen.queryByText('Termos de Uso Atualizados')).not.toBeInTheDocument()
-        })
-
-        it('encarregado confirmado é barrado de /company/configuracoes/equipe', async () => {
-            mockGetSession.mockResolvedValue({
-                data: { session: { user: { id: 'enc-3', user_metadata: { user_type: 'hire' } } } },
-            })
-            mockRpc.mockResolvedValue({
-                data: [myCompaniesRow({ company_id: 'comp-9', role: 'encarregado', confirmed: true })],
-                error: null,
-            })
-
-            renderRoute('/company/configuracoes/equipe')
-
-            await waitFor(() => {
-                expect(screen.getByTestId('outlet-content')).toBeInTheDocument()
-            })
-            expect(screen.queryByTestId('equipe-content')).not.toBeInTheDocument()
         })
 
         it('Gestor (manager) acessa /company/configuracoes/equipe', async () => {

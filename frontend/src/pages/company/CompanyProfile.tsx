@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert, Share2, Network, HelpCircle, ChevronRight, UserCog } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,10 +8,11 @@ import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { toSafeWebsiteHref } from '../../lib/websiteUrl';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { getMyCompanies, pickCurrentCompany, canSeeOrganization, isGestor } from '../../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
 import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import BackToGestao from '../../components/company/BackToGestao';
 
 /** Linha de leitura (modo visualização): rótulo discreto + valor. */
 function ReadField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -50,10 +51,6 @@ export default function CompanyProfile() {
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [companyId, setCompanyId] = useState<string | null>(null);
-    // R16: mesma regra do Sidebar (canSeeOrganization) — só sócio/operador vê Organização.
-    const [showOrganizationShortcut, setShowOrganizationShortcut] = useState(false);
-    // Equipe e encarregados: o acesso fica sempre óbvio ao Gestor em Configurações, mesmo sem equipe.
-    const [showTeamShortcut, setShowTeamShortcut] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -123,8 +120,6 @@ export default function CompanyProfile() {
                     return;
                 }
                 setCompanyId(current.company_id);
-                setShowOrganizationShortcut(canSeeOrganization(current));
-                setShowTeamShortcut(isGestor(current));
 
                 const { data } = await supabase
                     .from('companies')
@@ -387,8 +382,9 @@ export default function CompanyProfile() {
         <>
         <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Page Header — a única ação primária da tela é "Editar Perfil" */}
+            <BackToGestao />
             <PageHeader
-                title="Perfil da Empresa"
+                title="Dados da empresa"
                 subtitle="Gerencie as informações públicas da sua organização."
                 action={
                     !isEditing ? (
@@ -779,29 +775,6 @@ export default function CompanyProfile() {
                     {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
                 </Button>
             </Card>
-
-            {/* Atalhos — paridade de navegacao mobile (R6): o BottomNav nao comporta estes destinos. */}
-            <nav aria-labelledby="empresa-atalhos" className="mt-6">
-                <h3 id="empresa-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h3>
-                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
-                    {[
-                        { to: '/company/configuracoes/equipe', label: 'Equipe', icon: <UserCog size={18} />, show: showTeamShortcut },
-                        { to: '/company/indicacoes', label: 'Indicações', icon: <Share2 size={18} />, show: true },
-                        { to: '/company/organization', label: 'Organização', icon: <Network size={18} />, show: showOrganizationShortcut },
-                        { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} />, show: true },
-                    ].filter(item => item.show).map(item => (
-                        <li key={item.to}>
-                            <Link
-                                to={item.to}
-                                className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2 text-sm font-bold transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                            >
-                                <span className="inline-flex items-center gap-2">{item.icon}{item.label}</span>
-                                <ChevronRight size={18} aria-hidden="true" />
-                            </Link>
-                        </li>
-                    ))}
-                </ul>
-            </nav>
 
             {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}
             <div className="mt-6">

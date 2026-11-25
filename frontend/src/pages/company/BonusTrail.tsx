@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PageMeta from '../../components/PageMeta';
+import BackToGestao from '../../components/company/BackToGestao';
 import { Button, Card, PageHeader } from '../../components/ui';
 import AlmostThere from '../../components/bonus/AlmostThere';
 import CelebrationBanner, { type Celebration } from '../../components/bonus/CelebrationBanner';
@@ -84,6 +85,7 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
   if (failed || !snapshot) {
     return (
       <div className="mx-auto max-w-3xl">
+        <BackToGestao />
         <Card className="text-center">
           <h1 className="text-xl font-black">Não conseguimos abrir a trilha agora</h1>
           <p className="mt-2 text-sm text-gray-700">Seus marcos continuam registrados. Tente de novo em instantes.</p>
@@ -105,7 +107,10 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-24">
       <PageMeta title="Trilha de bônus" description="Seus marcos e bônus em dinheiro." />
-      <PageHeader title="Trilha de bônus" subtitle={subtitle} />
+      <div>
+        <BackToGestao />
+        <PageHeader title="Trilha de bônus" subtitle={subtitle} />
+      </div>
 
       {/* Região viva sempre montada: o leitor de tela anuncia o aviso sem roubar o foco. */}
       <div role="status" data-testid="bonus-live">

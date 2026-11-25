@@ -10,7 +10,7 @@ Seu perfil tem um **código QR único** que identifica você no Worki. Empresas 
 
 ### Como acessar seu QR
 
-1. Vá para **Meu Perfil**
+1. Abra o seu **perfil** (**Ver meu perfil** no rodapé do menu; no celular, a sua foto no topo)
 2. Clique no ícone **QR** (canto superior direito)
 3. Exiba o código
 
@@ -116,13 +116,13 @@ Ambos veem as avaliações mútuas — isso constrói confiança e reputação.
 
 ---
 
-## Meus Recebimentos
+## Recebimentos
 
-Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Meus Recebimentos"** — uma tela dedicada onde você acompanha todos os pagamentos.
+Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Recebimentos"** — uma tela dedicada onde você acompanha todos os pagamentos.
 
-### Acessar Meus Recebimentos
+### Acessar Recebimentos
 
-1. No menu inferior (BottomNav), clique em **"Receb."** (Meus Recebimentos)
+1. No menu, clique em **"Recebimentos"**
 2. Você vê todos os pagamentos registrados separados por status:
    - **Agendados:** A empresa prometeu pagar em uma data futura
    - **Aguardam confirmação:** A empresa registrou que pagou — confirme que recebeu
@@ -131,7 +131,7 @@ Quando uma empresa registra um pagamento pelo seu turno, ele aparece em **"Meus 
 
 ### Acessar o Recibo
 
-1. Clique em qualquer item em **"Meus Recebimentos"**
+1. Clique em qualquer item em **"Recebimentos"**
 2. Abre o **recibo** — o comprovante bilateral do pagamento
 
 ### O Recibo Mostra

@@ -8,7 +8,7 @@ import { logError } from '../../lib/logger';
 import { todayLocalDate } from '../../lib/dateUtils';
 import type { TeamMember } from '../../types';
 import { formatHistoryDate } from './utils';
-import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { getJobScope, canSeeJob, type JobScope } from '../../services/jobScopeService';
 import { ModalShell } from './ModalShell';
 import { Button } from '../ui';
 import { useBusyWorkers } from '../../hooks/useBusyWorkers';
@@ -59,9 +59,9 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         if (!user) { if (active) setLoadingJobs(false); return; }
 
         // `owner_id` sozinho e a ancora antiga: nao cobre gerente de unidade.
-        let companyId: string;
+        let scope: JobScope;
         try {
-          companyId = await getAuthenticatedCompanyId();
+          scope = await getJobScope();
         } catch {
           if (active) { setJobs([]); setLoadingJobs(false); }
           return;
@@ -70,8 +70,8 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         // Turnos abertos/pausados desta empresa — candidatos a convite.
         const { data: jobsData, error: jobsErr } = await supabase
           .from('jobs')
-          .select('id, title, start_date, work_start_time, work_end_time, location, budget')
-          .eq('company_id', companyId)
+          .select('id, title, start_date, work_start_time, work_end_time, location, budget, responsible_id')
+          .eq('company_id', scope.companyId)
           .in('status', ['open', 'paused'])
           .order('start_date', { ascending: true });
 
@@ -84,7 +84,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         const todayStr = todayLocalDate();
         // Data futura (ou hoje) ou sem data — convidar para turno de ontem não faz sentido.
         const futureOrUndated = (jobsData ?? []).filter(
-          (j) => !j.start_date || j.start_date >= todayStr,
+          (j) => canSeeJob(scope, j) && (!j.start_date || j.start_date >= todayStr),
         );
 
         const jobIds = futureOrUndated.map((j) => j.id);
@@ -103,7 +103,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         }
 
         const eligible = futureOrUndated.filter((j) => !excludeSet.has(j.id));
-        if (active) { setJobs(eligible); setJobsCompanyId(companyId); }
+        if (active) { setJobs(eligible); setJobsCompanyId(scope.companyId); }
       } catch (err) {
         logError('CompanyTeam.InviteToShiftModal', err);
         if (active) setJobs([]);

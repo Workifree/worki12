@@ -16,8 +16,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, ArrowRight } from 'lucide-react';
 import { acceptManagerInvite } from '../services/organizationService';
-import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { checkSession } from '../lib/authSession';
+import ErroDeVerificacao from '../components/ErroDeVerificacao';
 import PageMeta from '../components/PageMeta';
 import { Button, Card } from '../components/ui';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
@@ -36,6 +37,8 @@ export default function AcceptManagerInvite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [page, setPage] = useState<PageState>('loading');
+  const [semConexao, setSemConexao] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -46,8 +49,14 @@ export default function AcceptManagerInvite() {
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const session = await checkSession();
+      if (session.status === 'unavailable') {
+        // Rede fora não é "sem conta": não manda para o login nem gasta o convite.
+        logError('AcceptManagerInvite.session', session.error);
+        if (active) setSemConexao(true);
+        return;
+      }
+      if (session.status === 'signed_out') {
         if (!active) return;
         try {
           sessionStorage.setItem(PENDING_MANAGER_INVITE_TOKEN_KEY, token);
@@ -91,7 +100,7 @@ export default function AcceptManagerInvite() {
 
     void processInvite();
     return () => { active = false; };
-  }, [token, navigate]);
+  }, [token, navigate, tentativa]);
 
   const CONTENT: Record<PageState, { title: string; body: string; tone: 'success' | 'warning' | 'error' }> = {
     loading: { title: 'Processando convite...', body: '', tone: 'success' },
@@ -132,6 +141,10 @@ export default function AcceptManagerInvite() {
     },
   };
 
+  if (semConexao) {
+    return <ErroDeVerificacao onRetry={() => { setSemConexao(false); setTentativa((n) => n + 1); }} />;
+  }
+
   const current = CONTENT[page];
   const isSuccess = page === 'accepted' || page === 'already_accepted';
 
@@ -143,7 +156,7 @@ export default function AcceptManagerInvite() {
       ? '/login?type=hire&cadastro=1'
       : '/login';
   const rotulo = isSuccess
-    ? 'Ir para o Dashboard'
+    ? 'Ir para o Início'
     : page === 'worker_cannot_be_manager'
       ? 'Criar conta de empresa'
       : 'Voltar ao Login';

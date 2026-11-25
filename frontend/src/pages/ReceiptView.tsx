@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
+import { fillMissingWorkers } from '../services/workerCardsService';
 import { formatDateOnly, calculateWorkedHours } from '../lib/dateUtils';
 import PageMeta from '../components/PageMeta';
 import ServiceTermSection from '../components/ServiceTermSection';
@@ -81,7 +82,14 @@ export default function ReceiptView() {
             if (!user) { navigate('/login'); return; }
             setCurrentUserId(user.id);
 
-            const data = await PaymentRecordService.getReceiptChecked(jobId, workerIdParam ?? undefined);
+            let data = await PaymentRecordService.getReceiptChecked(jobId, workerIdParam ?? undefined);
+            // Encarregado: o embed `workers` volta `null`; o cartão do turno dá o nome.
+            if (data && !data.worker) {
+                const [filled] = await fillMissingWorkers(
+                    [{ worker_id: data.payment.worker_id, worker: data.worker }], jobId,
+                );
+                data = { ...data, worker: filled.worker };
+            }
             setReceipt(data);
 
             // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte

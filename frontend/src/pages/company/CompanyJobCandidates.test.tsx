@@ -215,6 +215,10 @@ beforeEach(() => {
 // deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([]),
+  pickCurrentCompany: () => null,
+  subscribeCompanyScope: () => () => undefined,
+  isGestor: () => true,
 }))
 
 describe('CompanyJobCandidates — renderiza candidatos com status in_progress', () => {

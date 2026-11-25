@@ -3,6 +3,7 @@ import { Hourglass, RefreshCw, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { invalidateCompanyScope } from '../services/companyScopeService';
+import CompanySwitcher from './company/CompanySwitcher';
 import PageMeta from './PageMeta';
 import { Button, Card } from './ui';
 
@@ -62,6 +63,8 @@ export default function AguardandoConfirmacao() {
                         </p>
                     </div>
                     <div className="space-y-3">
+                        {/* Quem também opera outra empresa não fica preso nesta tela. */}
+                        <CompanySwitcher className="text-left" />
                         <Button
                             variant="dark"
                             size="lg"

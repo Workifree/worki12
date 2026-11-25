@@ -128,7 +128,7 @@ export default function Notifications() {
                         size="lg"
                         onClick={handleGoToDashboard}
                     >
-                        Ir para o Dashboard
+                        Ir para o Início
                     </Button>
                 </div>
             ) : (

@@ -237,31 +237,23 @@ describe('sw.js — o que NUNCA intercepta (segurança)', () => {
 })
 
 describe('sw.js — navegação (network-first)', () => {
-  it('online: devolve a resposta da rede e atualiza a casca em cache', async () => {
+  it('online: devolve a resposta da rede e NÃO guarda o HTML do app', async () => {
+    await runLifecycle('install')
     const response = await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' }))
 
-    expect(response).not.toBeNull()
     expect(await response!.text()).toBe(SHELL_HTML)
-    const core = [...caches.stores.keys()].find((name) => name.startsWith('worki-core-'))!
-    expect(await caches.stores.get(core)!.match('/')).toBeDefined()
+    for (const store of caches.stores.values()) {
+      expect(store.entries.has(`${ORIGIN}/`)).toBe(false)
+      expect(store.entries.has(`${ORIGIN}/my-jobs`)).toBe(false)
+    }
   })
 
-  it('offline com casca em cache: abre o app (casca), não a página de erro do navegador', async () => {
-    await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' })) // visita online
+  it('offline: mostra /offline.html, nunca o app (que pareceria deslogado), mesmo após visita online', async () => {
+    await runLifecycle('install')
+    await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' }))
     online = false
 
     const response = await dispatchFetch(makeRequest('/company/jobs', { mode: 'navigate' }))
-
-    expect(await response!.text()).toBe(SHELL_HTML)
-  })
-
-  it('offline sem casca: cai em /offline.html (pré-cacheado no install)', async () => {
-    await runLifecycle('install')
-    const core = [...caches.stores.keys()].find((name) => name.startsWith('worki-core-'))!
-    await caches.stores.get(core)!.delete(`${ORIGIN}/`) // simula install sem a casca
-    online = false
-
-    const response = await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' }))
 
     expect(await response!.text()).toBe('<h1>offline</h1>')
   })
@@ -270,13 +262,6 @@ describe('sw.js — navegação (network-first)', () => {
     online = false
     const response = await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' }))
     expect(response!.status).toBe(503)
-  })
-
-  it('não guarda como casca uma resposta de erro (404/500) nem não-HTML', async () => {
-    network.set(`${ORIGIN}/quebrada`, () => new Response('erro', { status: 500, headers: { 'content-type': 'text/html' } }))
-    await dispatchFetch(makeRequest('/quebrada', { mode: 'navigate' }))
-    const core = [...caches.stores.keys()].find((name) => name.startsWith('worki-core-'))
-    expect(core ? await caches.stores.get(core)!.match('/') : undefined).toBeUndefined()
   })
 })
 
@@ -313,10 +298,21 @@ describe('sw.js — assets com hash (cache-first imutável)', () => {
       network.set(`${ORIGIN}/assets/chunk-${i}.js`, js)
       await dispatchFetch(makeRequest(`/assets/chunk-${i}.js`, { destination: 'script' }))
     }
-    const assets = caches.stores.get('worki-assets-v1')!
+    const assets = caches.stores.get('worki-assets-v2')!
     expect(assets.entries.size).toBeLessThanOrEqual(160)
     expect(assets.entries.has(`${ORIGIN}/assets/chunk-169.js`)).toBe(true)
     expect(assets.entries.has(`${ORIGIN}/assets/chunk-0.js`)).toBe(false)
+  })
+})
+
+describe('sw.js — falha de cache', () => {
+  it('cota cheia no cache.put não derruba a resposta da rede', async () => {
+    const assets = await caches.open('worki-assets-v2')
+    assets.put = () => Promise.reject(new Error('QuotaExceededError'))
+
+    const response = await dispatchFetch(makeRequest('/assets/index-abc.js', { destination: 'script' }))
+
+    expect(await response!.text()).toBe('console.log(1)')
   })
 })
 
@@ -338,7 +334,7 @@ describe('sw.js — imagens e fontes (stale-while-revalidate)', () => {
     await dispatchFetch(makeRequest('/foto.png', { destination: 'image' }))
     await dispatchFetch(makeRequest('/foto2.png', { destination: 'image' }))
 
-    const statics = caches.stores.get('worki-static-v1')
+    const statics = caches.stores.get('worki-static-v2')
     expect(statics?.entries.size ?? 0).toBe(0)
   })
 
@@ -353,21 +349,13 @@ describe('sw.js — imagens e fontes (stale-while-revalidate)', () => {
 })
 
 describe('sw.js — ciclo de vida e mensagens', () => {
-  it('install pré-cacheia offline + casca + assets referenciados, e NÃO chama skipWaiting sozinho', async () => {
+  it('install pré-cacheia a página offline e NÃO chama skipWaiting sozinho', async () => {
     await runLifecycle('install')
 
     expect(skipWaiting).not.toHaveBeenCalled()
-    const core = caches.stores.get([...caches.stores.keys()].find((n) => n.startsWith('worki-core-'))!)!
+    const core = caches.stores.get('worki-core-v2-test-build')!
     expect(core.entries.has(`${ORIGIN}/offline.html`)).toBe(true)
-    expect(core.entries.has(`${ORIGIN}/`)).toBe(true)
-    const assets = caches.stores.get('worki-assets-v1')!
-    expect(assets.entries.has(`${ORIGIN}/assets/index-abc.js`)).toBe(true)
-    expect(assets.entries.has(`${ORIGIN}/assets/index-abc.css`)).toBe(true)
-  })
-
-  it('install não falha se a casca estiver indisponível (melhor esforço)', async () => {
-    network.set(`${ORIGIN}/`, () => new Response('x', { status: 500 }))
-    await expect(runLifecycle('install')).resolves.toBeUndefined()
+    expect(core.entries.has(`${ORIGIN}/offline.js`)).toBe(true)
   })
 
   it('SKIP_WAITING só por mensagem', async () => {
@@ -386,6 +374,7 @@ describe('sw.js — ciclo de vida e mensagens', () => {
     await runLifecycle('install')
     await caches.open('worki-core-v1-build-antigo')
     await caches.open('worki-assets-v0')
+    await caches.open('worki-assets-v2')
     await caches.open('outro-app-cache')
 
     await runLifecycle('activate')
@@ -394,8 +383,8 @@ describe('sw.js — ciclo de vida e mensagens', () => {
     expect(names).not.toContain('worki-core-v1-build-antigo')
     expect(names).not.toContain('worki-assets-v0')
     expect(names).toContain('outro-app-cache')
-    expect(names).toContain('worki-core-v1-test-build')
-    expect(names).toContain('worki-assets-v1')
+    expect(names).toContain('worki-core-v2-test-build')
+    expect(names).toContain('worki-assets-v2')
     expect(claim).toHaveBeenCalled()
   })
 
@@ -408,9 +397,38 @@ describe('sw.js — ciclo de vida e mensagens', () => {
 
     const names = await caches.keys()
     expect(names).toContain('outro-app-cache')
-    expect(caches.stores.get('worki-static-v1')).toBeUndefined()
-    const core = caches.stores.get('worki-core-v1-test-build')!
+    expect(caches.stores.get('worki-static-v2')).toBeUndefined()
+    const core = caches.stores.get('worki-core-v2-test-build')!
     expect(core.entries.has(`${ORIGIN}/offline.html`)).toBe(true)
+  })
+
+  it('CLEAR_CACHES do worker antigo preserva o core do worker novo em espera', async () => {
+    await runLifecycle('install')
+    const waiting = await caches.open('worki-core-v2-build-novo')
+    await waiting.put('/offline.html', html('<h1>offline novo</h1>'))
+
+    await sendMessage({ type: 'CLEAR_CACHES' })
+
+    const kept = await caches.match('/offline.html', { cacheName: 'worki-core-v2-build-novo' })
+    expect(await kept!.text()).toBe('<h1>offline novo</h1>')
+    expect(await caches.keys()).toContain('worki-core-v2-test-build')
+  })
+
+  it('activate recria o core se ele sumiu: offline continua funcionando', async () => {
+    await runLifecycle('install')
+    await caches.delete('worki-core-v2-test-build')
+
+    await runLifecycle('activate')
+    online = false
+
+    const response = await dispatchFetch(makeRequest('/my-jobs', { mode: 'navigate' }))
+    expect(await response!.text()).toBe('<h1>offline</h1>')
+  })
+
+  it('activate sem rede e sem core não falha e ainda assume o controle', async () => {
+    online = false
+    await expect(runLifecycle('activate')).resolves.toBeUndefined()
+    expect(claim).toHaveBeenCalled()
   })
 
   it('GET_VERSION responde ao cliente com o id do build', async () => {

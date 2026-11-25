@@ -17,6 +17,21 @@ function isSessionGone(error: { name?: string; status?: number }): boolean {
     return error.status === 400 || error.status === 401 || error.status === 403 || error.status === 404;
 }
 
+/**
+ * Versão para os gates: lê a sessão salva (`getSession`). Com o token expirado e sem rede, o
+ * auth-js devolve `session: null` JUNTO com o erro do refresh (a sessão continua salva).
+ */
+export async function checkStoredSession(): Promise<SessionCheck> {
+    try {
+        const { data, error } = await supabase.auth.getSession();
+        if (data.session?.user) return { status: 'ok', user: data.session.user };
+        if (!error || isSessionGone(error)) return { status: 'signed_out' };
+        return { status: 'unavailable', error };
+    } catch (error) {
+        return { status: 'unavailable', error };
+    }
+}
+
 export async function checkSession(): Promise<SessionCheck> {
     try {
         const { data, error } = await supabase.auth.getUser();

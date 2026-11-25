@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
+import SectionTabs from '../../components/SectionTabs';
 import { FileText, Printer, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { OrderReportService, toCSV } from '../../services/orderReportService';
 import type { OrderReport, OrderRow, OrderStatus } from '../../services/orderReportService';
@@ -158,7 +158,7 @@ export default function CompanyOrdersReport() {
 
       {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
       <div className="print:hidden">
-        <PainelNumerosTabs />
+        <SectionTabs section="relatorios" />
         {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
             (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
         <PageHeader

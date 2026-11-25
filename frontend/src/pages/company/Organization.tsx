@@ -29,6 +29,7 @@ import { getMyCompanies } from '../../services/companyScopeService';
 import { inviteManager, listCompanyManagers, revokeManager } from '../../services/organizationService';
 import type { MyCompany, CompanyMember } from '../../types';
 import PageMeta from '../../components/PageMeta';
+import BackToGestao from '../../components/company/BackToGestao';
 import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
 
 interface UnitSummary {
@@ -178,10 +179,11 @@ export default function Organization() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <PageMeta title="Organização" description="Unidades da sua organização no Worki." />
+      <PageMeta title="Unidades" description="Unidades da sua organização no Worki." />
+      <BackToGestao />
 
       <PageHeader
-        title="Organização"
+        title="Unidades"
         subtitle="Visão das unidades da sua rede — turnos abertos, elenco e gerentes de cada loja."
       />
 

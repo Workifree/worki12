@@ -1,4 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#00A651"/>
-  <text x="16" y="23" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="20" fill="white">W</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="113" fill="#00A651"/><g fill="#fff" transform="translate(71.68 161.86) scale(0.9910)"><polygon points="0,0 58,0 95,125 125,20 175,20 205,125 242,0 300,0 238,190 184,190 150,75 116,190 62,190"/><circle cx="344" cy="162" r="28"/></g></svg>

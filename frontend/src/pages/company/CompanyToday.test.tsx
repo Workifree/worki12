@@ -205,7 +205,9 @@ describe('CompanyToday — Gestor', () => {
   it('Gestor tem caminho de volta ao painel', async () => {
     renderPage();
     await screen.findByText('Garçom de salão');
-    expect(screen.getByRole('button', { name: /Ver o painel da empresa/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Visão geral' })).toHaveAttribute('href', '/company/dashboard');
+    expect(screen.getByRole('link', { name: 'Hoje' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('button', { name: /Ver o painel da empresa/ })).not.toBeInTheDocument();
   });
 
   it('erro da lista de operadores mostra aviso claro e esconde Passar/Cobrir sem quebrar a tela', async () => {

@@ -1,20 +1,26 @@
-import { Search, PlusCircle, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
-import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { logError } from '../../lib/logger'
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
+import { isGestor } from '../../services/companyScopeService';
+import { getSessionUserOrThrow } from '../../lib/authSession';
+import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
+import { fillMissingWorkers } from '../../services/workerCardsService';
+import { deleteShift } from '../../services/deleteShiftService';
+import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
 import { groupJobsByDay, formatDateOnly, parseDateOnly, type DayBucketKey } from '../../lib/jobScheduling';
 import { todayLocalDate } from '../../lib/dateUtils';
 import EditSeriesModal, { type SeriesJobSnapshot } from '../../components/company/EditSeriesModal';
 import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
 import type { TeamMember, RecurrenceType } from '../../types';
-import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
 import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
@@ -420,6 +426,8 @@ export default function CompanyJobs() {
 
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
+    const [erroCarga, setErroCarga] = useState(false);
+    const currentCompany = useCurrentCompany();
     const [searchParams, setSearchParams] = useSearchParams();
     // Filtro inicial vem do deep-link (?filter=andamento vindo do dashboard, etc.).
     const initialFilter = (['all', 'open', 'closed', 'andamento'] as const).find(f => f === searchParams.get('filter')) ?? 'all';
@@ -482,15 +490,21 @@ export default function CompanyJobs() {
 
     const fetchJobs = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            const user = await getSessionUserOrThrow();
+            if (!user) { navigate('/login'); return; }
 
-            const { data: jobsData } = await supabase
+            // Encarregado: só os turnos dele e os que cobre (R9).
+            const scope = await getJobScope();
+            let query = supabase
                 .from('jobs')
                 .select('*')
-                .eq('company_id', await getAuthenticatedCompanyId())
-                .neq('status', 'deleted') // Filter out deleted jobs
-                .order('created_at', { ascending: false });
+                .eq('company_id', scope.companyId)
+                .neq('status', 'deleted'); // Filter out deleted jobs
+            if (scope.restricted) query = query.in('responsible_id', scopeResponsibleIds(scope));
+            const { data: allJobs, error: jobsError } = await query.order('created_at', { ascending: false });
+            if (jobsError) throw jobsError;
+            setErroCarga(false);
+            const jobsData = allJobs ? allJobs.filter((job) => canSeeJob(scope, job)) : allJobs;
 
             if (jobsData) {
                 // Batch fetch das candidaturas/convites (1 query) para derivar o estado do freela por vaga.
@@ -501,7 +515,7 @@ export default function CompanyJobs() {
                     .in('job_id', jobIds);
 
                 const byJob: Record<string, AppRow[]> = {};
-                (apps || []).forEach((a) => {
+                (await fillMissingWorkers(apps || [])).forEach((a) => {
                     // PostgREST tipa o embed `worker` como array (relação); normalizamos p/ objeto.
                     const w = Array.isArray(a.worker) ? a.worker[0] : a.worker;
                     (byJob[a.job_id] ||= []).push({
@@ -517,7 +531,10 @@ export default function CompanyJobs() {
 
                 // Convite de hoje é um chamado (`shift_calls`): não existe `applications` até o aceite.
                 // Sem esta leitura o turno com convite pendente aparecia como "Sem freela".
-                const pendingCalls = await fetchPendingCallRows(jobIds);
+                const pendingRows = await fetchPendingCallRows(jobIds);
+                const pendingCalls = (await fillMissingWorkers(
+                    pendingRows.map((c) => ({ ...c, worker_id: c.workerId, worker: c.row.worker })),
+                )).map((c) => ({ jobId: c.jobId, workerId: c.workerId, row: { ...c.row, worker: c.worker } }));
                 const inApplications = new Set((apps || []).map(a => `${a.job_id}:${a.worker_id}`));
                 pendingCalls.forEach(({ jobId, workerId, row }) => {
                     const key = `${jobId}:${workerId}`;
@@ -550,6 +567,7 @@ export default function CompanyJobs() {
             }
         } catch (error) {
             logError('Erro ao carregar vagas', error);
+            setErroCarga(true);
         } finally {
             setLoading(false);
         }
@@ -573,37 +591,13 @@ export default function CompanyJobs() {
     };
 
     const handleDelete = async (jobId: string) => {
-        // 1. Cancel hired workers — efeito colateral em LOTE: 0 linhas é legítimo (turno sem
-        // ninguém contratado), não é erro. Usa o retorno só para informar quantos freelas
-        // foram de fato notificados.
-        const { data: cancelledApps, error: cancelError } = await supabase
-            .from('applications')
-            .update({ status: 'cancelled' })
-            .eq('job_id', jobId)
-            .in('status', ['hired', 'in_progress'])
-            .select('id');
-        if (cancelError) {
-            logError('CompanyJobs.handleDelete.cancelApplications', cancelError);
-        }
-        const cancelledCount = cancelledApps?.length ?? 0;
-
-        // 2. Refund escrow
-        await WalletService.refundEscrow(jobId, 'Dinheiro retornado do escrow - turno deletado');
-
-        // 3. Mark deleted — gesto explícito com toast de sucesso: precisa de `.select('id')`
-        // para não afirmar "excluído" quando a RLS negou em silêncio.
-        const { data: deletedJob, error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', jobId).select('id');
-        if (!error && deletedJob && deletedJob.length > 0) {
-            addToast(
-                cancelledCount > 0
-                    ? `Turno excluído com sucesso. ${cancelledCount} freela${cancelledCount > 1 ? 's' : ''} notificado${cancelledCount > 1 ? 's' : ''}.`
-                    : 'Turno excluído com sucesso.',
-                'success'
-            );
+        // `cancel_job` encerra convites, candidaturas e chamados junto com o turno.
+        const result = await deleteShift(jobId);
+        if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
+            addToast(deleteShiftToast(result), 'success');
             fetchJobs();
         } else {
-            if (error) logError('CompanyJobs.handleDelete.deleteJob', error);
-            addToast('Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.', 'error');
+            addToast(cancelJobMessage(result, isGestor(currentCompany) ? 'gestor' : 'encarregado'), 'error');
         }
         setDeleteJobId(null);
     };
@@ -667,7 +661,7 @@ export default function CompanyJobs() {
 
     return (
         <>
-        <PageMeta title="Meus Turnos" />
+        <PageMeta title="Turnos" />
         {deleteJobId && (
             <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
                 <Card
@@ -687,17 +681,8 @@ export default function CompanyJobs() {
         )}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
             <PageHeader
-                title="Meus turnos"
+                title="Turnos"
                 subtitle="Sua agenda, dia a dia."
-                action={
-                    <Button
-                        variant="dark"
-                        onClick={() => navigate('/company/create')}
-                        iconLeft={<PlusCircle size={18} strokeWidth={2.5} />}
-                    >
-                        Novo turno
-                    </Button>
-                }
             />
 
             {/* Busca + filtros: uma linha de controles, o ativo em preto */}
@@ -736,6 +721,8 @@ export default function CompanyJobs() {
                             <div key={i} className="bg-gray-200 rounded-xl h-28" />
                         ))}
                     </div>
+                ) : erroCarga && jobs.length === 0 ? (
+                    <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); void fetchJobs(); }} />
                 ) : filteredJobs.length === 0 ? (
                     <div className="rounded-2xl border-2 border-dashed border-gray-300 py-10 text-center text-sm font-semibold text-gray-600">
                         Nenhum turno encontrado.

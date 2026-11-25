@@ -15,13 +15,18 @@ import { formatHistoryDate } from './utils';
 export interface MemberCardProps {
   member: TeamMember;
   onRemove: (member: TeamMember) => void;
+  /**
+   * Modo do Encarregado: só ver e convidar para turno. Sem remover, repassar link, histórico da
+   * empresa (seriam turnos alheios) nem abrir o perfil (leitura de PII que ele não tem).
+   */
+  restricted?: boolean;
   /** Histórico de turnos concluídos com ESTA empresa (batch, sem N+1). */
   history?: WorkerHistoryWithCompany;
   /** Abre o modal "Convidar para turno" para este freela. */
   onInvite: (member: TeamMember) => void;
 }
 
-export function MemberCard({ member, onRemove, history, onInvite }: MemberCardProps) {
+export function MemberCard({ member, onRemove, history, onInvite, restricted = false }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
@@ -62,17 +67,17 @@ export function MemberCard({ member, onRemove, history, onInvite }: MemberCardPr
 
   return (
     <Card
-      interactive
-      role="button"
-      tabIndex={0}
-      onClick={goToProfile}
-      onKeyDown={(e) => {
+      interactive={!restricted}
+      role={restricted ? undefined : 'button'}
+      tabIndex={restricted ? undefined : 0}
+      onClick={restricted ? undefined : goToProfile}
+      onKeyDown={restricted ? undefined : (e) => {
         // Só o próprio card ativa a navegação: Enter/Espaço num botão interno
         // não pode borbulhar e ter a ação cancelada pelo preventDefault.
         if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); }
       }}
-      className="flex flex-col gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+      className="flex flex-col gap-4 [&[role=button]]:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       <div className="flex items-start gap-4">
         {/* Avatar */}
@@ -110,7 +115,7 @@ export function MemberCard({ member, onRemove, history, onInvite }: MemberCardPr
               </span>
             )}
             {/* Histórico com esta empresa — o dado que ajuda a decidir "chamo esse ou outro?". */}
-            {history && history.count > 0 ? (
+            {restricted ? null : history && history.count > 0 ? (
               <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary px-2.5 py-1 rounded-pill">
                 <History size={12} /> {history.count} turno{history.count !== 1 ? 's' : ''} com você
                 {history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}
@@ -157,6 +162,8 @@ export function MemberCard({ member, onRemove, history, onInvite }: MemberCardPr
         >
           Convidar para turno
         </Button>
+        {!restricted && (
+          <>
         <Button
           variant="secondary"
           onClick={(e) => { e.stopPropagation(); void handleShareLink(); }}
@@ -175,6 +182,8 @@ export function MemberCard({ member, onRemove, history, onInvite }: MemberCardPr
         >
           <Trash2 size={16} />
         </Button>
+          </>
+        )}
       </div>
     </Card>
   );

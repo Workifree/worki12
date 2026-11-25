@@ -96,7 +96,8 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
       {!online && (
         <div
           role="status"
-          className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-black px-4 py-2 text-center text-xs font-bold text-white"
+          // No fluxo (não `fixed`): empurra o conteúdo em vez de cobrir cabeçalho, sino e avatar.
+          className="flex items-center justify-center gap-2 bg-black px-4 pb-2 pt-[calc(0.5rem_+_env(safe-area-inset-top))] text-center text-xs font-bold text-white"
         >
           <WifiOff aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span>Você está sem internet. Algumas telas podem não carregar.</span>
@@ -104,7 +105,9 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
       )}
 
       {(showUpdate || showInstall) && (
-        <div className="fixed inset-x-3 bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))] z-40 md:inset-x-auto md:bottom-6 md:right-6 md:w-96">
+        // No topo, abaixo do cabeçalho: a base da tela é da navegação inferior, dos toasts e das
+        // barras de ação flutuantes, que variam de altura.
+        <div className="fixed inset-x-3 top-[calc(4.75rem_+_env(safe-area-inset-top))] z-40 md:inset-x-auto md:right-6 md:top-6 md:w-96">
           {showUpdate && (
             <Card
               padding="sm"

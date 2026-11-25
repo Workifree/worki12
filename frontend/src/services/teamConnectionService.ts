@@ -14,6 +14,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { fillMissingWorkers } from './workerCardsService';
 import { getAuthenticatedCompanyId as resolveAuthenticatedCompanyId } from './companyScopeService';
 import type {
   TeamConnection,
@@ -175,7 +176,7 @@ export const TeamConnectionService = {
    *
    * O token é um segredo opaco em `company_invite_links` (lido via RLS por quem opera a
    * empresa). Se ainda não existir linha, a RPC `get_company_invite_token(p_company_id)` a cria.
-   * A UI monta a URL: `https://app.worki.com/convite/{token}`. Retorna null em qualquer falha.
+   * A UI monta a URL: `<origem do app>/convite/{token}`. Retorna null em qualquer falha.
    */
   async generateInviteToken(companyId: string): Promise<ConnectionInviteToken | null> {
     // Era `btoa(companyId)` -- ou seja, o "token" era o id PUBLICO da empresa em base64, e
@@ -569,7 +570,13 @@ export const TeamConnectionService = {
         return [];
       }
 
-      return ((data ?? []) as Array<TeamConnection & { worker: WorkerProfile }>).map(
+      // Encarregado: o embed volta `null` (RLS de PII). Os cartões sem PII preenchem; quem não
+      // aparece em nenhuma fonte ganha só o rótulo neutro, para a tela nunca receber `null`.
+      const rows = await fillMissingWorkers(
+        (data ?? []) as Array<TeamConnection & { worker: WorkerProfile | null }>,
+      );
+
+      return rows.map(
         (row) => ({
           connection: {
             id: row.id,
@@ -582,7 +589,7 @@ export const TeamConnectionService = {
             accepted_at: row.accepted_at,
             updated_at: row.updated_at,
           },
-          worker: row.worker,
+          worker: row.worker ?? ({ id: row.worker_id, full_name: 'Freela' } as WorkerProfile),
         }),
       );
     } catch (err) {

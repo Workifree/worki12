@@ -7,6 +7,8 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megaphone } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import SemAcesso from '../../components/SemAcesso';
+import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
 import { generateOccurrenceDates, MAX_SERIES_OCCURRENCES } from '../../lib/recurrence';
 import { JobSeriesService } from '../../services/jobSeriesService';
@@ -19,6 +21,8 @@ import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
@@ -137,15 +141,16 @@ export default function CompanyCreateJob() {
         let ativo = true;
         void (async () => {
             try {
-                const companyId = await getAuthenticatedCompanyId();
-                const { data } = await supabase
+                const scope = await getJobScope();
+                let query = supabase
                     .from('jobs')
-                    .select('id, title, budget, work_start_time, work_end_time, created_at')
-                    .eq('company_id', companyId)
-                    .neq('status', 'deleted')
-                    .order('created_at', { ascending: false })
-                    .limit(30);
-                if (!ativo || !data) return;
+                    .select('id, title, budget, work_start_time, work_end_time, created_at, responsible_id, start_date')
+                    .eq('company_id', scope.companyId)
+                    .neq('status', 'deleted');
+                if (scope.restricted) query = query.in('responsible_id', scopeResponsibleIds(scope));
+                const { data: rows } = await query.order('created_at', { ascending: false }).limit(30);
+                if (!ativo || !rows) return;
+                const data = rows.filter((j) => canSeeJob(scope, j));
                 // dedupe por titulo normalizado: a serie de 10 "Garcom sabado" vira UM cartao (o mais recente)
                 const vistos = new Set<string>();
                 const unicos: ModeloDeTurno[] = [];
@@ -203,6 +208,11 @@ export default function CompanyCreateJob() {
         return () => clearTimeout(t);
     }, [formData, isEditing, showInvitePanel]);
 
+    // Falha ao carregar o turno (editar/repetir): aviso na própria tela, sem desmontar o formulário.
+    const [erroCarga, setErroCarga] = useState<{ jobId: string; modo: 'editar' | 'repetir' } | null>(null);
+
+    const [semAcesso, setSemAcesso] = useState(false);
+
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
         if (formData.requirements || formData.briefing || formData.certification_requirement) {
@@ -249,7 +259,7 @@ export default function CompanyCreateJob() {
 
     const fetchJobData = async (jobId: string, modo: 'editar' | 'repetir' = 'editar') => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
             if (!user) { navigate('/login'); return; }
 
             const { data, error } = await supabase
@@ -260,6 +270,8 @@ export default function CompanyCreateJob() {
                 .single();
 
             if (error) throw error;
+            setErroCarga(null);
+            if (data && !canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
             if (data) {
                 if (modo === 'editar') {
                     setTagId(data.tag_id ?? '');
@@ -291,7 +303,9 @@ export default function CompanyCreateJob() {
             }
         } catch (error) {
             logError('Error fetching job:', error);
-            navigate('/company/jobs');
+            // PGRST116 = turno inexistente/sem acesso. O resto é falha de carga: fica na tela.
+            if ((error as { code?: string } | null)?.code === 'PGRST116') navigate('/company/jobs');
+            else setErroCarga({ jobId, modo });
         }
     };
 
@@ -368,8 +382,14 @@ export default function CompanyCreateJob() {
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Usuário não autenticado");
+            const session = await checkSession();
+            if (session.status === 'unavailable') {
+                addToast('Sem conexão. O que você digitou continua aqui. Tente de novo.', 'error');
+                setLoading(false);
+                return;
+            }
+            // O rascunho fica salvo no aparelho, então ir ao login não perde o que foi digitado.
+            if (session.status === 'signed_out') { navigate('/login'); return; }
 
             const budgetAmount = parseFloat(formData.budget) || 0;
 
@@ -534,6 +554,10 @@ export default function CompanyCreateJob() {
 
     const rotuloEnviar = isEditing ? 'Salvar alterações' : (isRecurring ? 'Criar série de turnos' : 'Criar turno');
 
+    if (semAcesso) {
+        return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
+    }
+
     return (
         <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             <Button
@@ -545,9 +569,15 @@ export default function CompanyCreateJob() {
                 Voltar
             </Button>
             <PageHeader
-                title={isEditing ? 'Editar turno' : 'Novo turno'}
+                title={isEditing ? 'Editar turno' : 'Criar turno'}
                 subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto — o Worki registra e emite o recibo.'}
             />
+
+            {erroCarga && (
+                <div className="mb-6">
+                    <ErroDeCarga onRetry={() => { void fetchJobData(erroCarga.jobId, erroCarga.modo); }} />
+                </div>
+            )}
 
             <div className="flex flex-col gap-6">
                 {/* Modelos: o turno real que a empresa ja fez vira um toque. Historico vazio = some. */}
@@ -896,7 +926,7 @@ export default function CompanyCreateJob() {
                         size="lg"
                         onClick={handleSubmit}
                         loading={loading}
-                        disabled={!podeEnviar}
+                        disabled={!podeEnviar || erroCarga?.modo === 'editar'}
                         title={podeEnviar ? undefined : 'Falta preencher: ' + faltas.join(', ')}
                         iconRight={!loading ? <Check size={18} /> : undefined}
                         className="w-full sm:w-auto"

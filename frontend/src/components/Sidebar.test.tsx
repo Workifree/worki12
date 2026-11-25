@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { invalidateCompanyScope } from '../services/companyScopeService';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
@@ -11,7 +11,7 @@ vi.mock('../lib/supabase', () => ({
   supabase: {
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
     from: vi.fn(() => ({
-      select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(), maybeSingle: vi.fn() })) })),
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(), maybeSingle: vi.fn(async () => ({ data: null })) })) })),
     })),
     rpc: (...args: unknown[]) => mockRpc(...args),
   },
@@ -35,10 +35,10 @@ function companyRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderSidebar() {
+function renderSidebar(path = '/company/dashboard', type: 'company' | 'worker' = 'company') {
   return render(
-    <MemoryRouter>
-      <Sidebar type="company" />
+    <MemoryRouter initialEntries={[path]}>
+      <Sidebar type={type} />
     </MemoryRouter>,
   );
 }
@@ -47,6 +47,7 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
   beforeEach(() => {
         invalidateCompanyScope()  // o cache de rajada do seam nao pode vazar entre testes
     vi.clearAllMocks();
+    sessionStorage.clear();
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email_confirmed_at: '2026-01-01' } } });
   });
 
@@ -79,24 +80,47 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     expect(screen.getByRole('option', { name: 'Loja Zona Sul' })).toBeInTheDocument();
   });
 
-  it('role=owner: link "Organização" aparece no menu', async () => {
-    mockRpc.mockResolvedValue({ data: [companyRow({ role: 'owner' })], error: null });
+  const itens = () =>
+    within(screen.getByRole('navigation', { name: 'Navegação principal' })).getAllByRole('link').map((a) => a.textContent);
+
+  it('empresa: "Criar turno" no topo e seis itens agrupados', async () => {
+    mockRpc.mockResolvedValue({ data: [companyRow()], error: null });
 
     renderSidebar();
 
-    await waitFor(() => {
-      expect(screen.getByText('Organização')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Gestão']));
+    expect(screen.getByRole('link', { name: 'Criar turno' })).toHaveAttribute('href', '/company/create');
+    expect(screen.getByRole('link', { name: /Divino Fogão/ })).toHaveAttribute('href', '/company/gestao');
   });
 
-  it('role=manager (gerente comum): link "Organização" NÃO aparece no menu', async () => {
-    mockRpc.mockResolvedValue({ data: [companyRow({ role: 'manager' })], error: null });
+  it('encarregado: com Elenco, sem Relatórios', async () => {
+    mockRpc.mockResolvedValue({ data: [companyRow({ role: 'encarregado' })], error: null });
 
     renderSidebar();
 
-    await waitFor(() => {
-      expect(screen.getByText('Perfil Empresa')).toBeInTheDocument();
-    });
-    expect(screen.queryByText('Organização')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/company/hoje'));
+    expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Gestão']);
+  });
+
+  it('sub-rota mantém o item ativo; notificações não marcam nada', async () => {
+    mockRpc.mockResolvedValue({ data: [companyRow()], error: null });
+
+    const { unmount } = renderSidebar('/company/jobs/abc/edit');
+    expect(screen.getByRole('link', { name: 'Turnos' })).toHaveAttribute('aria-current', 'page');
+    unmount();
+
+    renderSidebar('/company/notifications');
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' });
+    expect(nav.querySelector('[aria-current]')).toBeNull();
+  });
+
+  it('freela: cinco itens e o cartão do rodapé leva ao perfil, ativo em /profile', () => {
+    renderSidebar('/profile', 'worker');
+
+    expect(itens()).toEqual(['Início', 'Meus Turnos', 'Empresas', 'Recebimentos', 'Mensagens']);
+    const perfil = screen.getByRole('link', { name: /Ver meu perfil/ });
+    expect(perfil).toHaveAttribute('href', '/profile');
+    expect(perfil).toHaveAttribute('aria-current', 'page');
+    expect(within(perfil).getByText('0 XP')).toBeInTheDocument();
   });
 });

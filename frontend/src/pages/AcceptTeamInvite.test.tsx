@@ -25,6 +25,7 @@ vi.mock('../services/teamMembersService', async () => {
 });
 
 import { acceptMemberInvite, getInvitePreview } from '../services/teamMembersService';
+import { getSelectedCompanyId } from '../services/companyScopeService';
 
 const TOKEN = 'a'.repeat(64);
 
@@ -222,6 +223,17 @@ describe('AcceptTeamInvite — todos os outcomes do aceite', () => {
       expect(sessionStorage.getItem('pending_team_invite_token')).toBeNull();
     },
   );
+
+  it('D-2: quem já tem empresa passa a operar a empresa do convite', async () => {
+    sessionStorage.setItem('worki_nav_role_hint', 'gestor');
+    vi.mocked(acceptMemberInvite).mockResolvedValue({ outcome: 'accepted', companyId: 'empresa-do-convite' });
+    renderPage();
+    await percorrerAteAceitar();
+    expect(await screen.findByTestId('dashboard')).toBeInTheDocument();
+    expect(getSelectedCompanyId()).toBe('empresa-do-convite');
+    // dica de menu da unidade anterior não sobrevive à troca
+    expect(sessionStorage.getItem('worki_nav_role_hint')).toBeNull();
+  });
 
   const COPY: Array<[string, string]> = [
     ['expired', 'Convite vencido'],

@@ -1,9 +1,11 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, PageHeader } from '../components/ui';
+import { CONTACT_PENDING_TEXT, getContactEmail } from '../lib/contact';
 
 export default function Terms() {
   const navigate = useNavigate();
+  const contactEmail = getContactEmail();
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
@@ -72,7 +74,11 @@ export default function Terms() {
           <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de São Paulo/SP para dirimir quaisquer controvérsias.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">13. Contato</h2>
-          <p>Para dúvidas sobre estes Termos: <a href="mailto:contato@worki.com.br" className="text-primary font-bold">contato@worki.com.br</a></p>
+          {contactEmail ? (
+            <p>Para dúvidas sobre estes Termos: <a href={`mailto:${contactEmail}`} className="text-primary font-bold break-all">{contactEmail}</a></p>
+          ) : (
+            <p>{CONTACT_PENDING_TEXT}</p>
+          )}
         </Card>
       </div>
     </div>

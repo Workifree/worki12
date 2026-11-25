@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { supabase } from './lib/supabase';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
+import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './contexts/ToastContext';
@@ -17,7 +17,6 @@ const CompanyLayout = lazy(() => import('./layouts/CompanyLayout'));
 // Lazy Load Pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
-const Onboarding = lazy(() => import('./pages/Onboarding'));
 const CompanyOnboarding = lazy(() => import('./pages/company/CompanyOnboarding'));
 const WorkerOnboarding = lazy(() => import('./pages/worker/WorkerOnboarding'));
 const CompanyDashboard = lazy(() => import('./pages/company/CompanyDashboard'));
@@ -45,6 +44,7 @@ const Organization = lazy(() => import('./pages/company/Organization'));
 const CompanyTeamMembers = lazy(() => import('./pages/company/CompanyTeamMembers'));
 const CompanyToday = lazy(() => import('./pages/company/CompanyToday'));
 const BonusTrail = lazy(() => import('./pages/company/BonusTrail'));
+const CompanyGestao = lazy(() => import('./pages/company/CompanyGestao'));
 const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
@@ -82,30 +82,6 @@ const PageLoader = () => (
     </div>
   </div>
 );
-
-// Componente para redirecionar usuários logados da raiz
-function HomeRedirect() {
-  const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const userType = user.user_metadata?.user_type;
-        if (userType === 'hire') {
-          navigate('/company/dashboard');
-        } else {
-          navigate('/dashboard');
-        }
-      }
-      setChecking(false);
-    });
-  }, [navigate]);
-
-  if (checking) return <div className="h-screen flex items-center justify-center bg-[#F4F4F0] animate-pulse"><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
-
-  return <Onboarding />;
-}
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -204,6 +180,7 @@ function App() {
                           para o mesmo CompanyPublicProfile, sob CompanyLayout. mode='view' do
                           CompanyBadges navega para cá — nunca para /empresa/:id (worker-only). */}
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
+                      <Route path="gestao" element={<CompanyGestao />} />
                       <Route path="profile" element={<CompanyProfile />} />
                       <Route path="messages" element={<CompanyMessages />} />
                       <Route path="team" element={<CompanyTeam />} />

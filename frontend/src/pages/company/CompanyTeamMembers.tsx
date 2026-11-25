@@ -1,5 +1,5 @@
 /**
- * CompanyTeamMembers — Configurações → Equipe (só Gestor). Rota: /company/configuracoes/equipe.
+ * CompanyTeamMembers — Gestão → Equipe e acessos (só Gestor). Rota: /company/configuracoes/equipe.
  *
  * "Equipe" = pessoas que OPERAM a empresa; "Elenco" = freelas (`CompanyTeam`). Nunca misturar rótulos.
  *
@@ -25,6 +25,7 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import PageMeta from '../../components/PageMeta';
+import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
@@ -367,10 +368,11 @@ export default function CompanyTeamMembers() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <PageMeta title="Equipe" description="Quem opera a sua empresa no Worki." />
+      <PageMeta title="Equipe e acessos" description="Quem opera a sua empresa no Worki." />
+      <BackToGestao />
 
       <PageHeader
-        title="Equipe"
+        title="Equipe e acessos"
         subtitle="Pessoas que operam a empresa com você. Seus freelas ficam em Meu Elenco."
         action={
           <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>

@@ -58,7 +58,7 @@ describe('Notifications page', () => {
     renderComponent()
 
     expect(screen.getByText(/Nenhuma notificação por aqui ainda/)).toBeInTheDocument()
-    expect(screen.getByText('Ir para o Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Ir para o Início')).toBeInTheDocument()
   })
 
   it('filtro Pagamentos exibe apenas notificações com type=payment', () => {

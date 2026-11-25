@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
 import type { WorkerReferral } from '../types';
 import { Button, Card, PageHeader } from '../components/ui';
+import SectionTabs from '../components/SectionTabs';
 import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
@@ -154,6 +155,7 @@ export default function QuemTeIndicou() {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+      <SectionTabs section="empresas" role="worker" />
       <PageHeader
         title="Quem te indicou"
         subtitle="Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita."

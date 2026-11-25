@@ -8,9 +8,11 @@ import type { TeamConnection } from '../../types';
 
 export interface PendingCardProps {
   connection: TeamConnection;
+  /** Modo do Encarregado: o cartão não abre o perfil do freela. */
+  restricted?: boolean;
 }
 
-export function PendingCard({ connection }: PendingCardProps) {
+export function PendingCard({ connection, restricted = false }: PendingCardProps) {
   const workerData = connection.worker;
   const name = workerData?.full_name ?? 'Freela';
   const navigate = useNavigate();
@@ -21,11 +23,11 @@ export function PendingCard({ connection }: PendingCardProps) {
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={goToProfile}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
-      className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:border-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+      role={restricted ? undefined : 'button'}
+      tabIndex={restricted ? undefined : 0}
+      onClick={restricted ? undefined : goToProfile}
+      onKeyDown={restricted ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
+      className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-4 flex items-center gap-3 [&[role=button]]:cursor-pointer [&[role=button]]:hover:border-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       <div className="w-10 h-10 rounded-xl bg-gray-200 border-2 border-gray-300 flex items-center justify-center font-bold text-gray-600 shrink-0">
         {name[0]?.toUpperCase() ?? '?'}

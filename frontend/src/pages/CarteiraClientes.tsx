@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, PageHeader } from '../components/ui';
+import SectionTabs from '../components/SectionTabs';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -271,12 +272,13 @@ export default function CarteiraClientes() {
   return (
     <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">
       <PageMeta
-        title="Minhas Empresas"
+        title="Minhas empresas"
         description="Acompanhe as empresas que têm você no elenco e responda a convites de novas empresas."
       />
 
+      <SectionTabs section="empresas" role="worker" />
       <PageHeader
-        title="Minhas Empresas"
+        title="Minhas empresas"
         subtitle={
           `${myStores.length} empresa${myStores.length !== 1 ? 's' : ''}` +
           (pendingConnections.length > 0
@@ -318,11 +320,11 @@ export default function CarteiraClientes() {
       {/* Empresas aceitas */}
       {myStores.length > 0 && (
         <section className="mb-8">
-          {/* A página já se chama "Minhas Empresas": o título da seção só entra quando há
+          {/* A página já se chama "Minhas empresas": o título da seção só entra quando há
               convites pendentes acima, para separar os dois grupos. */}
           {pendingConnections.length > 0 && (
             <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <Users size={18} /> Minhas Empresas
+              <Users size={18} /> No elenco delas
             </h2>
           )}
           <div className="grid grid-cols-1 gap-4">

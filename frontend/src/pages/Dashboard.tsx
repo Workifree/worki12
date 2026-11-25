@@ -282,7 +282,7 @@ export default function Dashboard() {
 
     return (
         <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-5xl mx-auto w-full">
-            <PageMeta title="Dashboard" />
+            <PageMeta title="Início" />
 
             <PageHeader
                 className="!mb-0"

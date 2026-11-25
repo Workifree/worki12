@@ -20,10 +20,13 @@ import CoverageModal, { type CoveragePerson } from '../../components/company/Cov
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { Button, Card, PageHeader } from '../../components/ui';
+import SectionTabs from '../../components/SectionTabs';
+import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { useToast } from '../../contexts/ToastContext';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
-import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import { checkSession } from '../../lib/authSession';
+import ErroDeVerificacao from '../../components/ErroDeVerificacao';
 import { todayInBrazil } from '../../lib/dateUtils';
 import {
   TODAY_RANGE_DAYS,
@@ -156,19 +159,24 @@ export default function CompanyToday() {
   const cancelAvailable = useCancelJobAvailable(teamEnabled);
 
   // quem sou eu (a UI do encarregado e os rótulos "Para mim"/"Você" dependem disto)
+  const [sessionFailed, setSessionFailed] = useState(false);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     void (async () => {
-      try {
-        const { data } = await supabase.auth.getUser();
-        if (active) setUserId(data.user?.id ?? null);
-      } catch (error) {
-        logError('CompanyToday.getUser', error);
-        if (active) setUserId(null);
+      const session = await checkSession();
+      if (!active) return;
+      if (session.status === 'unavailable') {
+        // Rede fora não é logout: fica na tela, com "Tentar de novo".
+        logError('CompanyToday.session', session.error);
+        setSessionFailed(true);
+        return;
       }
+      setSessionFailed(false);
+      setUserId(session.status === 'ok' ? session.user.id : null);
     })();
     return () => { active = false; };
-  }, []);
+  }, [sessionAttempt]);
 
   // sem sessão não há o que mostrar: volta ao login
   useEffect(() => {
@@ -333,6 +341,10 @@ export default function CompanyToday() {
     ? 'Os turnos de hoje e dos próximos dias, com quem responde por cada um.'
     : 'Os seus turnos de hoje e dos próximos dias.';
 
+  if (sessionFailed) {
+    return <ErroDeVerificacao onRetry={() => { setSessionFailed(false); setSessionAttempt((n) => n + 1); }} />;
+  }
+
   if (noCompany) {
     return (
       <div className="max-w-3xl mx-auto pb-24">
@@ -355,6 +367,7 @@ export default function CompanyToday() {
   return (
     <div className={`max-w-3xl mx-auto animate-in fade-in duration-300 ${selectedVisible.length > 0 ? 'pb-44' : 'pb-24'}`}>
       <PageMeta title="Hoje" description="Turnos de hoje e dos próximos dias." />
+      {teamEnabled && <SectionTabs section="inicio" />}
       <PageHeader
         title="Hoje"
         subtitle={subtitle}
@@ -366,6 +379,8 @@ export default function CompanyToday() {
           ) : undefined
         }
       />
+
+      <TrailShortcutCard className="mb-6" />
 
       {teamEnabled && operatorsFailed && (
         <p role="alert" className="mb-4 rounded-xl border-2 border-black bg-yellow-50 p-3 text-sm font-semibold">
@@ -546,7 +561,8 @@ export default function CompanyToday() {
         <p className="text-center text-sm text-gray-600">Mostrando os primeiros 500 turnos. Use os filtros para ver o resto.</p>
       )}
 
-      {gestor && !loading && (
+      {/* Com equipe a Visão geral é uma aba; sem equipe (acesso direto) fica este caminho. */}
+      {gestor && !teamEnabled && !loading && (
         <div className="mt-2 text-center">
           <Button variant="ghost" size="lg" iconLeft={<LayoutDashboard size={18} />} onClick={() => navigate('/company/dashboard')}>
             Ver o painel da empresa

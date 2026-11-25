@@ -504,6 +504,13 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
 }
 
 /** O desfecho recusou sem alterar nada (turno intacto)? */
+/** Aviso do gesto "Excluir turno". */
+export function deleteShiftToast(result: CancelJobResult): string {
+  const total = result.cancelledApplications + result.closedCandidates;
+  if (total === 0) return 'Turno excluído com sucesso.';
+  return `Turno excluído com sucesso. ${total} freela${total > 1 ? 's' : ''} notificado${total > 1 ? 's' : ''}.`;
+}
+
 export function cancelJobWasRefused(outcome: CancelJobOutcome): boolean {
   return ['active_payment', 'active_escrow', 'attendance_started', 'job_in_the_past', 'forbidden'].includes(outcome);
 }
