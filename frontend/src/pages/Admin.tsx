@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Users, Briefcase, DollarSign, ShieldCheck, ArrowLeft, Lock, LogIn, RefreshCw } from 'lucide-react';
 import { invokeFunction } from '../services/api';
 import { logError } from '../lib/logger';
+import BonusAdminPanel from '../components/admin/bonus/BonusAdminPanel';
 
 const ADMIN_EMAILS = import.meta.env.VITE_ADMIN_EMAILS
     ? (import.meta.env.VITE_ADMIN_EMAILS as string).split(',').map((e: string) => e.trim())
@@ -76,7 +77,7 @@ interface RichEscrow {
     worker_info: UserInfo | null;
 }
 
-type Tab = 'dashboard' | 'users' | 'escrows';
+type Tab = 'dashboard' | 'users' | 'escrows' | 'bonus';
 
 export default function Admin() {
     const navigate = useNavigate();
@@ -329,8 +330,8 @@ export default function Admin() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-2 mb-6">
-                    {(['dashboard', 'users', 'escrows'] as Tab[]).map(t => (
+                <div className="flex flex-wrap gap-2 mb-6">
+                    {(['dashboard', 'users', 'escrows', 'bonus'] as Tab[]).map(t => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
@@ -338,7 +339,7 @@ export default function Admin() {
                                 tab === t ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300 hover:border-black'
                             }`}
                         >
-                            {t === 'dashboard' ? 'Dashboard' : t === 'users' ? 'Usuarios' : 'Escrows'}
+                            {t === 'dashboard' ? 'Dashboard' : t === 'users' ? 'Usuarios' : t === 'escrows' ? 'Escrows' : 'Bônus'}
                         </button>
                     ))}
                 </div>
@@ -346,6 +347,7 @@ export default function Admin() {
                 {tab === 'dashboard' && <DashboardTab stats={stats} transactions={transactions} />}
                 {tab === 'users' && (loadingTab ? <TabLoader /> : <UsersTab users={users} />)}
                 {tab === 'escrows' && (loadingTab ? <TabLoader /> : <EscrowsTab escrows={escrows} />)}
+                {tab === 'bonus' && <BonusAdminPanel />}
             </div>
         </div>
     );

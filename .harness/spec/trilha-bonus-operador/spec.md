@@ -48,7 +48,7 @@ os limiares são **parâmetros por trilha**, não constantes no código (R6).
 3. Marcos **acumulativos** (não semanais), todos conferíveis por evento do sistema. "Turno completo" =
    freela aceitou + check-in + checkout + recibo validado pelos 2 lados. Marcos de 6 em diante são
    **ações do operador** (atribuição por responsável/ator; depende de `equipe-encarregados`).
-4. Trilha de **20 marcos** (tabela em R7). Nada que o operador possa perder; sem clawback; quebrar
+4. Trilha de **19 marcos contáveis + Coleção completa** (tabela em R7). Nada que o operador possa perder; sem clawback; quebrar
    sequência não pune.
 5. Tela estilo missões do Nubank (R20-R24). Não chamar de saldo/carteira. Prazos honestos.
 6. Saque: PIX por pedido toda segunda-feira, mínimo R$25, **feito MANUALMENTE pelo dono** a partir de
@@ -155,8 +155,8 @@ documentado no código).
       (fora do v1, **Assumido**: o admin cancela e reinscreve se necessário). **Exceção:** o teto de 2
       turnos por freela por semana é "regra real da rede" e vem com default 2 em `params`, mas **não pode
       ser configurado acima de 2** (CHECK).
-- [ ] R7: **Definição dos 20 marcos.** Valores em R$; "ator" = `requires_actor`. Ordem de exibição =
-      numeração. Marcos 1-2 são os "2 de 20" iniciais. **Assumido:** o contador "N de 20" conta A-D;
+- [ ] R7: **Definição dos 19 marcos contáveis + Coleção.** Valores em R$; "ator" = `requires_actor`. Ordem de exibição =
+      numeração. Marcos 1-2 são os "2 de 19" iniciais. **Assumido:** o contador "N de 19" conta A-D;
       o grupo E (coleção) é um prêmio-meta fora dos 20 (A4+B8+C6+D2 = 20; somando E seriam 21).
       "Turno completo" é só o que o motor conta como **contável** (R10 + AF1-AF3).
 
@@ -169,9 +169,9 @@ documentado no código).
 | 5 | B | 1º turno publicado | 10 | 1 `bonus_attributions` do operador com `jobs.status` não `deleted` | sim |
 | 6 | B | 3 freelas do Elenco aceitaram | 10 | 3 freelas distintos, não excluídos, convidados pelo operador (marco 4), com `team_connections.status='accepted'` (**Assumido**: "aceitaram" = aceitaram entrar no Elenco) | sim |
 | 7 | B | 1º check-in e checkout confirmados | 10 | 1ª `applications` de turno atribuído com check-in, checkout e conclusão confirmada pela empresa (nomes de campo: builder confirma no catálogo), **contável** | sim |
-| 8 | B | 1º turno completo | 20 | Definição de turno completo contável (R10) | sim |
+| 8 | B | 1º turno completo | 30 | Definição de turno completo contável (R10) | sim |
 | 9 | B | 1º recibo validado em até 24h | 10 | Turno completo cujo `shift_payments.worker_confirmed_at` ocorreu em até `params.receipt_hours` (24) do checkout, **e** `recorded` pela empresa dentro do mesmo prazo (**Assumido**) | sim |
-| 10 | B | 1ª avaliação de freela | 10 | `reviews` direction `worker` feita pelo operador (`bonus_events kind='review'`) sobre turno atribuído a ele, freela não excluído | sim |
+| ~~10~~ | B | ~~1ª avaliação de freela~~ REMOVIDO (ADR-20261124 A-i; R$10 realocados ao marco 8) | 0 | `reviews` direction `worker` feita pelo operador (`bonus_events kind='review'`) sobre turno atribuído a ele, freela não excluído | sim |
 | 11 | B | 1º chamado de turno preenchido | 15 | `shift_calls.created_by = operador`, status `filled` com `first_claim_at`, claimante não excluído | sim |
 | 12 | B | 1º freela repetido | 15 | Um mesmo freela não excluído com >= 2 turnos **contáveis** em turnos atribuídos ao operador, jobs distintos (o teto de 2/semana por freela, AF3, pode adiar o 2º para outra semana, o que é intencional) | sim |
 | 13 | C | 3 turnos completos | 15 | Acumulado de turnos **contáveis** até `ends_at` | sim |
@@ -219,11 +219,10 @@ documentado no código).
       milestone_id, tier) DO NOTHING`. Nunca apaga nem reduz award existente por conta própria (sem
       clawback); a única forma de um award virar `not_counted` é a decisão **do dono** na fila (AF6),
       e só antes de `paid`. Grava `evidence`. GRANT só a `postgres`/`service_role` e ao wrapper do
-      operador. Disparada: (1) por trigger em `shift_payments` quando `worker_confirmed_at` vira não
-      nulo; (2) por `bonus_get_my_trail()` ao abrir a tela; (3) por `pg_cron` **de hora em hora** (libera
-      a janela de 48h, AF5) e em `ends_at` (marco 20), no padrão degradante F4/F8 (`IF EXISTS
-      pg_cron`, com `RAISE WARNING` se faltar); **mas a feature é incompleta sem o cron**: sem ele nada
-      vira `available` sozinho (a promessa "sem aprovação manual no caso normal" depende dele).
+      operador. **Nenhum gatilho a executa** (MEDIUM-2; ver adendo do ADR): o trigger em `shift_payments`
+      só **registra** a confirmação (com `lock_timeout='2s'`). A avaliação roda na **primeira leitura**
+      após o recibo: `bonus_get_my_trail()` (tela do operador), pedido de saque e `admin_bonus_refresh`
+      (o admin roda antes das listas). A janela de 48h conta a partir dessa avaliação.
 - [ ] R12 a R16: **substituídos pela seção "Antifraude invisível" (AF1-AF10).** Mapa: R12 (duração
       mínima) -> AF2; R13 (veto de freela) -> AF1; R14 (teto semanal) -> AF3; R15 (recibo bilateral +
       estorno) -> AF2/AF4 (`voided_after`); R16 (auditoria manual de tudo) -> **removido**: AF5-AF6.
@@ -336,13 +335,14 @@ há atraso visível além de uma janela de 48h igual para todos. Tudo é parâme
       `<ProtectedRoute>` papel empresa; item no menu só aparece se `bonus_get_my_trail()` devolve
       inscrição `active` (divulgação progressiva; ninguém sem inscrição vê nada). Mobile-first,
       neo-brutalista azul (Article 13).
-- [ ] R21: **Roadmap de missões.** Lista vertical dos 20 marcos na ordem de R7: concluídos acesos
+- [ ] R21: **Roadmap de missões.** Lista vertical dos 19 marcos contáveis na ordem de R7: concluídos acesos
       (selo, valor e data); **no máximo 3 ativos por vez** (os 3 primeiros não concluídos em
       `sort_order`, destacados, com barra de progresso real, ex.: "2 de 3 turnos", contando só turnos
       contáveis); os demais **trancados**, com cadeado e **valor à vista**. Marco E aparece no fim como
       "Coleção completa". **Trancar é só visual:** o progresso e os awards de um marco trancado são
       calculados e concedidos normalmente; o motor não olha o que a tela mostra.
-- [ ] R22: Contador "N de 20 marcos concluídos". Começa com **2 de 20** (marcos 1-2) logo após aceitar.
+- [ ] R22: Contador "N de 19 marcos concluídos". Começa com **2 de 19** (marcos 1-2) logo após aceitar.
+      (ADR-20261124 A-i: marco de avaliação removido; "Coleção completa" fica fora do contador.)
 - [ ] R23: **Três números** no topo: **"Bônus conquistado"** (soma de awards `validating`, `in_review`,
       `available`, `in_payout`, `paid`; subtexto "R$ X liberando" para `validating`/`in_review`, com a data
       real quando `validating`, e "libera em até 48h" quando `in_review`), **"Disponível para saque"**
@@ -366,8 +366,9 @@ há atraso visível além de uma janela de 48h igual para todos. Tudo é parâme
       `requested` com **todos** os awards `available` sem pedido e dentro do corte de AF5, se soma >=
       `min_payout_cents` (2500), há chave PIX cadastrada e não há outro pedido aberto. **Exceção:**
       inscrição `ended` pode pedir o saldo restante abaixo do mínimo (**Assumido**: saque final sem
-      mínimo). `scheduled_for` = próxima segunda-feira em SP cujo corte (domingo 23:59:59 SP) ainda não
-      passou; pedido feito na segunda vale para a segunda seguinte (**Assumido**). Grava
+      mínimo). `scheduled_for` = segunda-feira seguinte ao corte de **sexta 23:59:59 America/Sao_Paulo**
+      (ADR-20261124 C10): pedido de segunda a sexta até o corte vale para a segunda seguinte; pedido de
+      sábado/domingo cai **duas segundas depois** (A-ii). Grava
       `pix_key_snapshot`. Não há expiração para pedir saque (**Assumido**: nada se perde).
       `bonus_cancel_payout()` cancela pedido `requested` até o corte e devolve os awards a `available`.
       Alterar a chave PIX com pedido aberto é recusado (cancele antes).
@@ -417,7 +418,7 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
       `track_not_open` e a inscrição segue `invited`.
 - [ ] A3: Dado Sabrina com identidade própria confirmada que aceita o regulamento v1, então
       `starts_at` = início do dia local, `ends_at` = `starts_at + 84 dias`, existem **exatamente 2**
-      awards (marco 1 R$0, marco 2 R$10), `milestones_snapshot` preenchido e a tela mostra "2 de 20".
+      awards (marco 1 R$0, marco 2 R$10), `milestones_snapshot` preenchido e a tela mostra "2 de 19".
 - [ ] A4: Dado operador cujo `auth.uid()` não tem `company_members` ativo e confirmado (login
       compartilhado, ou service_role), quando tenta aceitar, então `identity_required`, nenhum award, e
       nenhum marco de ator conta depois.
@@ -457,8 +458,9 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
       10:00 e completado em seguida (sem antecedência de `min_lead_minutes`), então `counted=false`
       (`no_lead_time`); sem aviso em todos.
 - [ ] A10: Dado turno com checkout feito mas `shift_payments` sem `worker_confirmed_at`, então **não** é
-      turno completo; após o freela confirmar o recibo, o award dos marcos 8/13 é concedido (via
-      trigger em `shift_payments`), com `earned_at` = instante da confirmação.
+      turno completo; após o freela confirmar o recibo, o trigger só registra; o award dos marcos 8/13
+      é concedido na primeira leitura seguinte (tela, saque ou admin), com `earned_at` = instante dessa
+      avaliação (não o da confirmação).
 
 **Tetos (AF3)**
 
@@ -511,7 +513,7 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
 - [ ] A15: Dado 1º turno completo contável com recibo confirmado pelo freela em 20h após o checkout, então
       marcos 7 (R$10), 8 (R$20) e 9 (R$10) são concedidos; com confirmação em 30h, 9 **não** é concedido
       e 7/8 sim.
-- [ ] A16: Dado avaliação de freela feita pela Sabrina sobre turno atribuído a ela, então marco 10
+- [x] A16 (REMOVIDO por ADR-20261124 A-i — nenhuma avaliação gera marco): Dado avaliação de freela feita pela Sabrina sobre turno atribuído a ela, então marco 10
       (R$10); avaliação feita por outra pessoa, não.
 - [ ] A17: Dado chamado criado pela Sabrina com claimante aceito (`first_claim_at`), então marco 11
       (R$15); dado claimante excluído (AF1), não.
@@ -525,10 +527,11 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
       formem 5 em 14 dias, então tier 2 concede **+10** (total 25, nunca 40); dado 5 em 14 dias sem nunca ter
       tido tier 1, concede 25 no total (um ou dois awards; a soma é 25).
 - [ ] A22: Dado ao `ends_at` >= 6 turnos contáveis e nenhuma lacuna > 10 dias (incluindo do último
-      turno até `ends_at`), então marco 20 (R$15) é concedido **só então** (cron); dado uma lacuna de 11
+      turno até `ends_at`), então marco 20 (R$15) é concedido **só então**, na primeira avaliação lida após `ends_at`
+      (sem cron, ADR-20261124 C4); dado uma lacuna de 11
       dias, não é concedido, a tela mostra "não conquistado" sem texto de perda e nenhum outro award muda.
 - [ ] A23: Dado marcos 1-12 todos concluídos, então "Coleção completa" concede R$30 e o contador "N de
-      20" **não** passa de 20; soma total de awards (exceto `not_counted`) nunca excede R$300 (teste:
+      19" **não** passa de 19; soma total de awards (exceto `not_counted`) nunca excede R$300 (teste:
       inserir award que estoure o cap falha pelo trigger).
 - [ ] A24: Dado ações capturadas antes da ativação de `equipe-encarregados` (turnos sem atribuição),
       quando o motor roda, então nenhum marco de ator é concedido retroativamente.
@@ -537,7 +540,7 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
 
 - [ ] A25: Dado Sabrina com inscrição ativa, quando abre `/company/trilha` em 375 px de largura, então
       vê topo com os três números "Bônus conquistado", "Disponível para saque", "Próximo PIX
-      (segunda)", "2 de 20 marcos concluídos", exatamente 3 marcos ativos com barra de progresso, os
+      (segunda)", "2 de 19 marcos concluídos", exatamente 3 marcos ativos com barra de progresso, os
       demais com cadeado e valor em R$, e nenhum texto "saldo"/"carteira" (teste por busca no DOM).
 - [ ] A26: Dado marco trancado (ex.: marco 14, 6 turnos) cuja condição for cumprida antes de os
       anteriores concluírem, então o award é concedido mesmo trancado e a tela o mostra aceso.
@@ -553,8 +556,9 @@ ROLLBACK;` com dados de QA (padrão de `supabase/tests/`). UI: Vitest co-located
 
 - [ ] A30: Dado R$20 `available`, então "Disponível" mostra R$20,00 com "Faltam R$ 5,00 para o mínimo de
       R$ 25" e `bonus_request_payout()` retorna `below_minimum`; com R$35 `available` e PIX cadastrado,
-      cria pedido de R$35 com `scheduled_for` = próxima segunda por regra de corte (testar quarta, domingo
-      23:59 e segunda 00:01 em SP).
+      cria pedido de R$35 com `scheduled_for` = segunda por regra de corte de sexta 23:59:59 SP (testar quarta e
+      sexta 23:59 → segunda seguinte; sábado 00:00 e domingo 23:59 → duas segundas depois; ADR-20261124
+      C10/A-ii).
 - [ ] A31: Dado pedido aberto, quando o operador pede de novo ou altera a chave PIX, então recusa; ao
       cancelar o pedido antes do corte, awards voltam a `available` e a chave pode ser alterada.
 - [ ] A32: Dado inscrição `ended` com R$10 `available`, então o pedido de saque final é aceito (sem
@@ -618,7 +622,7 @@ aplicadas por MCP dirigido e verificadas no catálogo (nunca `supabase db push`)
 | Fatia | Entrega | Gate | Reversão |
 |---|---|---|---|
 | S0 | ADR "bônus de aquisição pago manualmente do caixa do Worki, fora do razão"; confirmar estado de `equipe-encarregados` E4/E5 e nomes de colunas (check-in/checkout, `created_by`, `jobs.created_at`/`start_date`, `reviews.reviewer_id`, `default_briefing`, `workers.cpf`/`phone`) no **catálogo** | architect | n/a |
-| S1 | Migration de schema: tabelas (incl. `bonus_shift_ledger`), RLS (operador lê só o próprio e nunca o ledger), UNIQUEs, CHECK do teto 2/freela/semana, trigger de cap e de imutabilidade `paid`, seed da trilha `eventos` (20 marcos, params de AF) e `lojas` em `calibrating`, `enabled=false` | architect + security | DROP TABLE (nada referencia) |
+| S1 | Migration de schema: tabelas (incl. `bonus_shift_ledger`), RLS (operador lê só o próprio e nunca o ledger), UNIQUEs, CHECK do teto 2/freela/semana, trigger de cap e de imutabilidade `paid`, seed da trilha `eventos` (19 marcos contáveis + Coleção, params de AF) e `lojas` em `calibrating`, `enabled=false` | architect + security | DROP TABLE (nada referencia) |
 | S2 | Triggers de captura de atribuição/eventos (R9, R9b) com bloco de exceção; testes SQL de ator (concierge/dono não conta) | security | DROP TRIGGER |
 | S3 | Motor `bonus_evaluate_enrollment` por grupos: (a) ledger + exclusões silenciosas AF1-AF3, (b) marcos A-B, (c) C, (d) D+E, cada um com testes SQL de fixtures (vetos, PIX/CPF/telefone, duração, lead time, tetos dia/semana/freela, 24h, fuso) | evaluator | `CREATE OR REPLACE` anterior |
 | S3b | Anomalias AF4 + máquina `validating`/`in_review`/`available` + cron horário (AF5) | evaluator + security | `CREATE OR REPLACE`; DROP cron |
