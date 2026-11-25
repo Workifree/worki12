@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
@@ -96,6 +96,9 @@ export function ShiftCallModal({
   // `null` = "até o início do turno"; número = horas.
   const [expiryHours, setExpiryHours] = useState<number | null>(DEFAULT_CALL_EXPIRY_HOURS);
   const [dispatching, setDispatching] = useState(false);
+  // Trava SÍNCRONA: dois cliques no mesmo instante passam antes de o React re-renderizar o botão
+  // desabilitado e criariam dois chamados.
+  const dispatchLock = useRef(false);
     // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
     useModalDismiss(() => { if (!dispatching) onClose(); });
   // F5: config da guarda de vínculo (busca em paralelo, nunca em série — LM-9) e contagem por
@@ -339,7 +342,8 @@ export function ShiftCallModal({
   };
 
   const handleDispatch = async () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || dispatchLock.current) return;
+    dispatchLock.current = true;
     setDispatching(true);
 
     const result = await ShiftCallService.createShiftCall(job.id, Array.from(selected), {
@@ -352,6 +356,7 @@ export function ShiftCallModal({
     setDispatching(false);
 
     if (result.error || !result.call) {
+      dispatchLock.current = false; // falhou: libera nova tentativa (no sucesso o modal fecha)
       addToast(result.error ?? 'Não foi possível abrir o chamado.', 'error');
       return;
     }

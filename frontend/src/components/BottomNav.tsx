@@ -49,14 +49,14 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
 
     return (
         <nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
-            <div className="flex justify-around items-stretch h-16 px-1">
+            <div className="flex items-stretch h-16 px-0.5">
                 {navItems.map((item) => (
                     <NavLink
                         key={item.path}
                         to={item.path}
                         aria-label={item.label}
                         className={({ isActive }) => `
-                 relative flex flex-col items-center justify-center w-full min-h-11 gap-1 py-2 px-1
+                 relative flex flex-col items-center justify-center flex-auto min-w-11 min-h-11 gap-1 py-2 px-0.5
                  transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
                                 ? (isCompany ? 'text-blue-600' : 'text-primary')

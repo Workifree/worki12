@@ -148,6 +148,12 @@ export interface UseWorkerInvitesResult {
  * janela. `origem` evita que quem disparou recarregue duas vezes.
  */
 export const EVENTO_CONVITES = 'worki:convites-mudaram';
+
+export interface ConvitesMudaramDetail {
+  origem?: number;
+  /** Turno (job) que o freela acabou de aceitar, quando a resposta foi um aceite sem erro. */
+  jobAceito?: string;
+}
 let proximaInstancia = 0;
 
 export function useWorkerInvites(): UseWorkerInvitesResult {
@@ -266,7 +272,11 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
       // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
       load();
       // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
-      window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail: { origem: instanciaId } }));
+      const detail: ConvitesMudaramDetail = {
+        origem: instanciaId,
+        jobAceito: ok && response === 'accepted' ? invite.jobId : undefined,
+      };
+      window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail }));
       return ok;
     },
     [pendingInvites, addToast, load, instanciaId],

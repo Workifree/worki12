@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megaphone } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
-import { todayLocalDate, formatDateOnly, localDateToTimestamp } from '../../lib/dateUtils';
+import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
 import { generateOccurrenceDates, MAX_SERIES_OCCURRENCES } from '../../lib/recurrence';
 import { JobSeriesService } from '../../services/jobSeriesService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
@@ -295,21 +295,6 @@ export default function CompanyCreateJob() {
         }
     };
 
-    const calculateHours = (start: string, end: string, lunch: boolean = false) => {
-        if (!start || !end) return { total: 0, work: 0 };
-        const [startH, startM] = start.split(':').map(Number);
-        const [endH, endM] = end.split(':').map(Number);
-
-        let total = (endH + endM / 60) - (startH + startM / 60);
-        if (total < 0) total += 24; // Handle overnight
-
-        const work = lunch ? Math.max(0, total - 1) : total;
-        return {
-            total: total.toFixed(1).replace('.0', ''),
-            work: work.toFixed(1).replace('.0', '')
-        };
-    };
-
     const toggleWeekday = (day: number) => {
         setWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort((a, b) => a - b));
     };
@@ -539,11 +524,12 @@ export default function CompanyCreateJob() {
     };
 
     const unidadeValor = formData.budget_type === 'hourly' ? 'por hora' : formData.budget_type === 'daily' ? 'por dia' : 'total do projeto';
-    const horasTotais = formData.work_start_time && formData.work_end_time
-        ? calculateHours(formData.work_start_time, formData.work_end_time)
+    const temHorario = Boolean(formData.work_start_time && formData.work_end_time);
+    const duracaoTurno = temHorario
+        ? formatShiftDuration(shiftMinutes(formData.work_start_time, formData.work_end_time))
         : null;
-    const horasTrabalho = formData.work_start_time && formData.work_end_time
-        ? calculateHours(formData.work_start_time, formData.work_end_time, formData.has_lunch)
+    const duracaoTrabalho = temHorario
+        ? formatShiftDuration(shiftMinutes(formData.work_start_time, formData.work_end_time, formData.has_lunch ? 60 : 0))
         : null;
 
     const rotuloEnviar = isEditing ? 'Salvar alterações' : (isRecurring ? 'Criar série de turnos' : 'Criar turno');
@@ -692,9 +678,9 @@ export default function CompanyCreateJob() {
                             />
                             Intervalo de almoço (1h)
                         </label>
-                        {horasTotais && horasTrabalho && (
+                        {duracaoTurno && (
                             <p className="text-xs text-gray-600">
-                                {horasTotais.total}h de turno{formData.has_lunch ? ` · ${horasTrabalho.work}h de trabalho` : ''}
+                                {duracaoTurno} de turno{formData.has_lunch ? ` · ${duracaoTrabalho} de trabalho` : ''}
                             </p>
                         )}
                     </div>

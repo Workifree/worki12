@@ -19,6 +19,7 @@
  *   `analytics-operacao`, que consome `get_my_companies()` por conta própria.
  */
 
+import { isJobConcluded } from '../../lib/shiftProgress';
 import { useCallback, useEffect, useState } from 'react';
 import { Users, Briefcase, Mail, UserMinus, Send, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -63,7 +64,7 @@ async function countOpenJobs(companyId: string): Promise<number | null> {
     return null;
   }
   return ((data ?? []) as Array<{ slots: number | null; applications: Array<{ status: string }> | null }>)
-    .filter((job) => (job.applications ?? []).filter((a) => a.status === 'completed').length < (job.slots ?? 1))
+    .filter((job) => !isJobConcluded(job.slots, job.applications))
     .length;
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { ShiftCallModal } from './ShiftCallModal'
 import type { TeamMember, TeamListWithMembers, Job } from '../../types'
 
@@ -619,5 +619,41 @@ describe('ShiftCallModal — aviso de freela ocupado (E5/R14)', () => {
     expect(last.excludeJobId).toBe('job-1')
     expect(last.workerIds).toEqual(['w1'])
     expect(last.windows[0]?.start).toBe('2026-08-21T18:00:00-03:00')
+  })
+})
+
+describe('ShiftCallModal — trava contra duplo disparo', () => {
+  it('dois cliques no mesmo instante criam UM chamado', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana')])
+    mockListLists.mockResolvedValue([])
+    mockCreateShiftCall.mockReturnValue(new Promise(() => undefined))
+
+    renderModal()
+    await screen.findByText('Ana')
+    fireEvent.click(screen.getByText('Ana').closest('label')!.querySelector('input[type="checkbox"]')!)
+    const botao = screen.getByRole('button', { name: 'Enviar convite' })
+
+    // sem re-render entre os dois: dentro do mesmo act
+    act(() => {
+      botao.click()
+      botao.click()
+    })
+
+    expect(mockCreateShiftCall).toHaveBeenCalledTimes(1)
+  })
+
+  it('depois de uma falha a trava é liberada para tentar de novo', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana')])
+    mockListLists.mockResolvedValue([])
+    mockCreateShiftCall.mockResolvedValue({ error: 'falhou', invited: 0 })
+
+    renderModal()
+    await screen.findByText('Ana')
+    fireEvent.click(screen.getByText('Ana').closest('label')!.querySelector('input[type="checkbox"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar convite' })).not.toBeDisabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }))
+
+    await waitFor(() => expect(mockCreateShiftCall).toHaveBeenCalledTimes(2))
   })
 })

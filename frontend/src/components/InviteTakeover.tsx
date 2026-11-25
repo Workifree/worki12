@@ -17,7 +17,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import LocalDoTurno from './LocalDoTurno';
-import { useModalDismiss } from '../hooks/useModalDismiss';
+import { useStackedModal, MODAL_LAYER } from '../hooks/useModalDismiss';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle2, XCircle, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
@@ -96,15 +97,26 @@ export default function InviteTakeover() {
 
   // ESC/toque no fundo = mesmo gesto do X: dispensa o overlay SEM responder o convite
   // (ele reaparece enquanto seguir 'invited') — consistente com os demais modais do app.
-  const fecharPeloFundo = useModalDismiss(() => {
-    const alvo = visibleInvite;
-    if (!alvo) return;
-    setDismissedIds((prev) => {
-      const next = new Set(prev);
-      next.add(alvo.id);
-      return next;
-    });
-  });
+  // Fica na FRENTE dos outros diálogos: o convite tem prazo (a avaliação, não).
+  const aberto = !loading && !!visibleInvite;
+  const { onBackdropClick: fecharPeloFundo, isTop } = useStackedModal(
+    () => {
+      const alvo = visibleInvite;
+      if (!alvo) return;
+      setDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(alvo.id);
+        return next;
+      });
+    },
+    aberto,
+    MODAL_LAYER.invite,
+  );
+  const trapRef = useFocusTrap(aberto && isTop);
+  // Foco no cartão (não em "Aceitar": um Enter distraído não pode responder o convite).
+  useEffect(() => {
+    if (aberto && isTop) trapRef.current?.focus();
+  }, [aberto, isTop, trapRef]);
 
   if (loading || !visibleInvite) return null;
 
@@ -163,13 +175,17 @@ export default function InviteTakeover() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+      // Acima dos diálogos (70) e abaixo dos toasts (80).
+      className="fixed inset-0 z-[75] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
       onClick={fecharPeloFundo}
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-takeover-title"
     >
-      <div className="relative bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div
+        ref={trapRef}
+        tabIndex={-1}
+        className="relative bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
         <Button
           variant="ghost"
           onClick={dismiss}

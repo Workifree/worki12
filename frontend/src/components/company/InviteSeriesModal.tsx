@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
@@ -165,7 +165,12 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const riskEnabled = riskConfig?.enabled !== false;
     const riskThreshold = riskConfig?.threshold ?? DEFAULT_LINK_RISK_THRESHOLD;
 
+    // Trava síncrona: dois toques no mesmo instante não disparam a série em dobro.
+    const inviteLock = useRef(false);
+
     const handleInvite = async (workerId: string) => {
+        if (inviteLock.current) return;
+        inviteLock.current = true;
         setInviting(true);
         setProgress({ done: 0, total: targetJobIds.length });
         try {
@@ -191,6 +196,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
             logError('InviteSeriesModal.handleInvite', error);
             addToast('Não foi possível convidar o freela para a série. Tente novamente.', 'error');
         } finally {
+            inviteLock.current = false;
             setInviting(false);
         }
     };

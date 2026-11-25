@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ShiftCallsPanel } from './ShiftCallsPanel';
 import type { ShiftCall } from '../../types';
 
@@ -204,3 +204,31 @@ describe('ShiftCallsPanel — membrana do SOS (F11)', () => {
     expect(screen.getByText('Freela Pendente')).toBeInTheDocument();
   });
 });
+
+describe('ShiftCallsPanel — cancelar pede confirmação', () => {
+  const aberto = () => [{ ...makeTeamCall(), status: 'open' as const, expires_at: new Date(Date.now() + 3_600_000).toISOString() }]
+
+  it('"Cancelar" não age na hora; só depois de confirmar, e uma única vez', () => {
+    const onCancel = vi.fn()
+    render(<ShiftCallsPanel calls={aberto()} loading={false} cancellingId={null} onCancel={onCancel} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(onCancel).not.toHaveBeenCalled()
+    const confirmar = screen.getByRole('button', { name: 'Sim, cancelar o chamado' })
+    act(() => {
+      confirmar.click()
+      confirmar.click()
+    })
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Manter o chamado" fecha sem cancelar', () => {
+    const onCancel = vi.fn()
+    render(<ShiftCallsPanel calls={aberto()} loading={false} cancellingId={null} onCancel={onCancel} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Manter o chamado' }))
+    expect(onCancel).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

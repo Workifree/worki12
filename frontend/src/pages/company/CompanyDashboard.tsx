@@ -11,6 +11,7 @@ import { ReferralService } from '../../services/referralService';
 import { logError } from '../../lib/logger';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { Button, Card, PageHeader } from '../../components/ui';
+import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
@@ -92,7 +93,7 @@ export default function CompanyDashboard() {
             // cosmético antes, inutilizante agora (ADR-20260817).
             const { data } = await supabase
                 .from('jobs')
-                .select('*, views')
+                .select('*, views, applications(status)')
                 .eq('company_id', companyId)
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false });
@@ -116,21 +117,6 @@ export default function CompanyDashboard() {
         enabled: !!company
     });
 
-    // Turnos "em andamento" (freela contratado/atuando agora) — distinto de turnos só abertos.
-    const { data: inProgressCount = 0 } = useQuery({
-        queryKey: ['companyInProgress'],
-        queryFn: async () => {
-            const companyId = await getAuthenticatedCompanyId();
-            const { data } = await supabase
-                .from('applications')
-                .select('job_id, jobs!inner(company_id)')
-                .eq('jobs.company_id', companyId)
-                .in('status', ['hired', 'in_progress']);
-            return new Set((data || []).map((r: { job_id: string }) => r.job_id)).size;
-        },
-        enabled: !!company
-    });
-
     // PostgREST tipa embeds de relação como array; normalizamos para objeto no render.
     interface ActiveShiftWorker { id: string; full_name: string | null; avatar_url: string | null; primary_role: string | null }
     interface ActiveShiftJob { id: string; title: string | null; location: string | null; work_start_time: string | null; work_end_time: string | null }
@@ -148,7 +134,7 @@ export default function CompanyDashboard() {
     }
 
     // Detalhes dos turnos ativos/em andamento para acesso direto de acompanhamento
-    const { data: activeShifts = [] } = useQuery<ActiveShiftRow[]>({
+    const { data: activeShifts = [], isLoading: isLoadingShifts } = useQuery<ActiveShiftRow[]>({
         queryKey: ['companyActiveShifts'],
         queryFn: async () => {
             const companyId = await getAuthenticatedCompanyId();
@@ -251,8 +237,14 @@ export default function CompanyDashboard() {
     // depois da empresa, e nesse intervalo `jobs` é [] sem estar carregado.
     const jobsPending = loading || isLoadingJobs || (!company && !isErrorCompany);
 
+    // Contratado não é "em andamento": só conta quem já chegou e não teve a saída confirmada.
+    const shiftsInProgress = activeShifts.filter(isShiftInProgress);
+    const shiftsContracted = activeShifts.filter((row) => !isShiftInProgress(row));
+    const inProgressCount = new Set(shiftsInProgress.map((row) => row.job_id)).size;
+    const kpiPending = jobsPending || isLoadingShifts;
+
     const stats = {
-        activeJobs: isErrorJobs ? null : jobs.filter(j => j.status === 'open').length,
+        activeJobs: isErrorJobs ? null : jobs.filter(j => isJobActive(j, j.applications)).length,
         totalJobs: isErrorJobs ? null : jobs.length,
     };
 
@@ -288,7 +280,7 @@ export default function CompanyDashboard() {
                 </div>
             )}
 
-            <PageHeader title="Dashboard" subtitle={`Bem-vindo de volta, ${companyName || 'Empresa'}`} />
+            <PageHeader title="Dashboard" subtitle={companyName ? `Bem-vindo de volta, ${companyName}` : loading ? 'Bem-vindo de volta' : 'Bem-vindo de volta, Empresa'} />
 
             <div className="space-y-8">
                 {/* PRECISA DE VOCÊ — o rabo do laço do dinheiro, persistente no painel.
@@ -331,7 +323,7 @@ export default function CompanyDashboard() {
                         message="Erro ao carregar indicadores. Tente novamente."
                         onRetry={() => { refetchJobs(); }}
                     />
-                ) : jobsPending ? (
+                ) : kpiPending ? (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="status" aria-label="Carregando indicadores">
                         {[0, 1, 2].map((i) => <div key={i} className="h-28 bg-gray-200 rounded-2xl animate-pulse" />)}
                     </div>
@@ -354,18 +346,21 @@ export default function CompanyDashboard() {
                 )}
 
                 {/* Turnos em Andamento / Acompanhamento Direto */}
-                {activeShifts.length > 0 && (
-                    <section aria-label="Turnos em andamento">
+                {[
+                    { key: 'andamento', title: 'Turnos em andamento', rows: shiftsInProgress, link: '/company/jobs?filter=andamento' },
+                    { key: 'contratados', title: 'Contratados', rows: shiftsContracted, link: '/company/jobs' },
+                ].filter((group) => group.rows.length > 0).map((group) => (
+                    <section key={group.key} aria-label={group.title}>
                         <div className="flex items-center justify-between gap-3 mb-4">
                             <h2 className="text-lg font-bold flex items-center gap-2">
-                                <PlayCircle size={20} className="text-green-600 animate-pulse" aria-hidden="true" /> Turnos em andamento ({activeShifts.length})
+                                <PlayCircle size={20} className={group.key === 'andamento' ? 'text-green-600 animate-pulse' : 'text-gray-500'} aria-hidden="true" /> {group.title} ({group.rows.length})
                             </h2>
-                            <Button variant="ghost" size="sm" onClick={() => navigate('/company/jobs?filter=andamento')}>
+                            <Button variant="ghost" size="sm" onClick={() => navigate(group.link)}>
                                 Ver todos
                             </Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {activeShifts.slice(0, 4).map((app) => {
+                            {group.rows.slice(0, 4).map((app) => {
                                 const worker = Array.isArray(app.worker) ? app.worker[0] : app.worker;
                                 const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
                                 // Quatro estados, nao dois: "Aguardando Chegada" pintava IGUAL o freela
@@ -428,7 +423,7 @@ export default function CompanyDashboard() {
                             })}
                         </div>
                     </section>
-                )}
+                ))}
 
                 {/* Indicações recebidas (F10) — atalho mobile, ver comentário no hook acima. Fica
                     visível mesmo com 0 pendentes: é a PORTA para a caixa de entrada, não só um badge. */}
@@ -496,8 +491,8 @@ export default function CompanyDashboard() {
                                                 <h3 className="font-bold text-base truncate">{job.title}</h3>
                                                 <p className="text-xs text-gray-600 mt-1">{job.location || 'Presencial'} • {job.type === 'freelance' ? 'Freelance' : 'Fixo'}</p>
                                             </div>
-                                            <span className={`px-3 py-1 rounded-pill text-xs font-semibold flex-shrink-0 ${job.status === 'open' ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
-                                                {job.status === 'open' ? 'Ativo' : 'Fechado'}
+                                            <span className={`px-3 py-1 rounded-pill text-xs font-semibold flex-shrink-0 ${isJobActive(job, job.applications) ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
+                                                {isJobActive(job, job.applications) ? 'Ativo' : job.status === 'open' ? 'Concluído' : 'Fechado'}
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between gap-4 text-xs text-gray-600 border-t-2 border-gray-100 pt-3 mt-4">

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import ModalShell from '../ModalShell';
 import { Megaphone, Siren, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
 import { formatDurationShort } from '../../lib/dateUtils';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
@@ -64,6 +65,19 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
   // pagina, que e exatamente a mentira que essa derivacao existe para evitar. 30s e resolucao de
   // sobra para um campo que mostra minuto.
   const [agora, setAgora] = useState(() => Date.now());
+  // Cancelar um chamado não tem volta (quem foi chamado perde o convite): pede confirmação.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const confirmLock = useRef(false);
+  const askCancel = (callId: string) => {
+    confirmLock.current = false;
+    setConfirmingId(callId);
+  };
+  const confirmCancel = () => {
+    if (!confirmingId || confirmLock.current) return;
+    confirmLock.current = true;
+    onCancel(confirmingId);
+    setConfirmingId(null);
+  };
   useEffect(() => {
     const id = setInterval(() => setAgora(Date.now()), 30_000);
     return () => clearInterval(id);
@@ -134,7 +148,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
               {isOpen && (
                 <Button
                   variant="secondary"
-                  onClick={() => onCancel(call.id)}
+                  onClick={() => askCancel(call.id)}
                   disabled={cancellingId === call.id}
                   loading={cancellingId === call.id}
                   className="flex-shrink-0"
@@ -182,6 +196,21 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
           </Card>
         );
       })}
+
+      {confirmingId && (
+        <ModalShell labelledBy="cancelar-chamado-titulo" onClose={() => setConfirmingId(null)}>
+          <h2 id="cancelar-chamado-titulo" className="text-xl font-black">Cancelar este chamado?</h2>
+          <p className="mt-2 text-sm text-gray-700">
+            Quem ainda não respondeu deixa de poder aceitar e é avisado. Quem já aceitou continua no turno.
+          </p>
+          <div className="mt-5 flex flex-col gap-3">
+            <Button variant="danger" size="lg" fullWidth onClick={confirmCancel}>Sim, cancelar o chamado</Button>
+            <Button variant="secondary" size="lg" fullWidth data-autofocus onClick={() => setConfirmingId(null)}>
+              Manter o chamado
+            </Button>
+          </div>
+        </ModalShell>
+      )}
     </div>
   );
 }

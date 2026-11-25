@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import LocalDoTurno from '../components/LocalDoTurno';
-import { useModalDismiss } from '../hooks/useModalDismiss';
+import { useStackedModal, MODAL_LAYER } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
 import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
@@ -17,8 +17,9 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { useWorkerInvites } from '../hooks/useShiftInvites';
+import { useWorkerInvites, EVENTO_CONVITES, type ConvitesMudaramDetail } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
+import { isOnShift } from '../lib/shiftPresence';
 import type {
     ReviewDirection,
     ShiftAttendanceConfirmation,
@@ -249,15 +250,14 @@ export default function MyJobs() {
 
     // Rating State
     const [rateModalOpen, setRateModalOpen] = useState(false);
-    // ESC do modal de detalhe do historico (heuristica #3). O RateModal ja tem o proprio ESC via
-    // useModalDismiss interno; a guarda !rateModalOpen garante que, com os dois abertos, um ESC
-    // fecha UM por vez (avaliacao primeiro, detalhe no proximo) — nunca os dois de uma tacada.
-    useModalDismiss(() => { if (!rateModalOpen) setDetailJob(null); });
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
     const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
+    // ESC do detalhe do histórico (heurística #3). Entra na pilha: com avaliação ou convite por
+    // cima, o Esc fecha só o da frente.
+    useStackedModal(() => setDetailJob(null), detailJob !== null, MODAL_LAYER.dialog);
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
     const [cancelJob, setCancelJob] = useState<JobApplication | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
@@ -455,12 +455,30 @@ export default function MyJobs() {
             });
 
             setJobs({ in_progress, scheduled, history });
+            setLoading(false);
+            return { in_progress, scheduled };
         }
         setLoading(false);
     }, [navigate]);
 
     useEffect(() => {
         fetchJobs();
+    }, [fetchJobs]);
+
+    // Convite respondido (pelo aviso em tela cheia ou pela aba): os turnos mudaram. Sem reler, o
+    // turno aceito não aparecia em aba nenhuma até recarregar a página.
+    useEffect(() => {
+        const aoMudarConvites = (e: Event) => {
+            const jobAceito = (e as CustomEvent<ConvitesMudaramDetail>).detail?.jobAceito;
+            void (async () => {
+                const listas = await fetchJobs();
+                if (!jobAceito || !listas) return;
+                if (listas.in_progress.some((j) => j.job_id === jobAceito)) setActiveTab('in_progress');
+                else if (listas.scheduled.some((j) => j.job_id === jobAceito)) setActiveTab('scheduled');
+            })();
+        };
+        window.addEventListener(EVENTO_CONVITES, aoMudarConvites);
+        return () => window.removeEventListener(EVENTO_CONVITES, aoMudarConvites);
     }, [fetchJobs]);
 
     const fetchConfirmations = useCallback(async () => {
@@ -1052,9 +1070,11 @@ export default function MyJobs() {
                                     <h3 className="font-bold text-lg">{job.title}</h3>
                                     <p className="text-sm text-gray-600">{job.company_name}</p>
                                 </div>
-                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
-                                    <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
-                                </span>
+                                {isOnShift(job) && (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
+                                        <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
+                                    </span>
+                                )}
                             </div>
                             <div className="flex flex-wrap gap-2 mt-3">
                                 <Chip>

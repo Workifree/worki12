@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { useModalDismiss } from '../hooks/useModalDismiss';
+import { useStackedModal, MODAL_LAYER } from '../hooks/useModalDismiss';
 import { Star, X } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logError } from '../lib/logger'
@@ -18,7 +18,7 @@ interface RateModalProps {
 
 export default function RateModal({ isOpen, onClose, onSubmit, targetName, targetPhotoUrl, title, subtitle }: RateModalProps) {
     // Hooks primeiro, SEMPRE — ha early-returns abaixo (rules-of-hooks).
-    const fecharPeloFundo = useModalDismiss(onClose);
+    const { onBackdropClick: fecharPeloFundo, isTop } = useStackedModal(onClose, isOpen, MODAL_LAYER.dialog);
     // Nota nasce VAZIA, nao 5: com default pre-marcado dava para "avaliar" sem tocar em
     // estrela — 5 gravado por inercia. Avaliacao e input de julgamento: default opinativo
     // infla a nota e corroi a prova social que o produto vende (reputation inflation;
@@ -26,14 +26,15 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
     const [rating, setRating] = useState(0);
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const trapRef = useFocusTrap(isOpen);
+    const trapRef = useFocusTrap(isOpen && isTop);
 
     useEffect(() => {
-        if (isOpen) {
+        // Só pega o foco quando está na frente (o convite de turno pode estar por cima).
+        if (isOpen && isTop) {
             const firstStar = trapRef.current?.querySelector<HTMLButtonElement>('.star-btn');
             firstStar?.focus();
         }
-    }, [isOpen, trapRef]);
+    }, [isOpen, isTop, trapRef]);
 
     if (!isOpen) return null;
 
@@ -56,6 +57,8 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
         <div
             className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={fecharPeloFundo}
+            // Coberto por outro modal: fora do foco e da leitura de tela até o da frente fechar.
+            inert={!isTop}
         >
             <div
                 ref={trapRef}

@@ -39,6 +39,7 @@ vi.mock('react-router-dom', async () => {
 // completo com lista vazia: a aba "Convites" não é o alvo deste teste, e o card de confirmação
 // de véspera fica FORA das abas (sempre visível), então não depende deste hook.
 vi.mock('../hooks/useShiftInvites', () => ({
+  EVENTO_CONVITES: 'worki:convites-mudaram',
   useWorkerInvites: () => ({
     pendingInvites: [],
     loading: false,

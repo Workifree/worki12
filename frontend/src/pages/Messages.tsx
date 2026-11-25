@@ -407,7 +407,7 @@ export default function Messages() {
                 {/* Conversations List */}
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Conversas ({conversations.length})</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h3>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -459,7 +459,9 @@ export default function Messages() {
                 </div>
 
                 {/* Chat Area */}
-                <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                {/* min-w-0: sem ele a coluna não encolhe abaixo do conteúdo e, a 320px, o botão Enviar e o
+                    selo de status saíam do cartão (overflow hidden). */}
+                <div className={`flex-1 min-w-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}

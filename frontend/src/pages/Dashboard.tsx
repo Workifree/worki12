@@ -18,9 +18,14 @@ import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { Button, Card, PageHeader } from '../components/ui';
 import { getSessionUserOrThrow } from '../lib/authSession';
+import { isOnShift, hasLeftShift } from '../lib/shiftPresence';
 
 interface NextJobData {
     status: string;
+    worker_checkin_at: string | null;
+    worker_checkout_at: string | null;
+    company_checkin_confirmed_at: string | null;
+    company_checkout_confirmed_at: string | null;
     job: {
         title: string;
         start_date: string;
@@ -93,7 +98,7 @@ export default function Dashboard() {
             if (!user) return null;
             const { data, error } = await supabase
                 .from('applications')
-                .select('status, job:jobs(*, company:companies(name))')
+                .select('status, worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at, job:jobs(*, company:companies(name))')
                 .eq('worker_id', user.id)
                 .in('status', ['hired', 'in_progress']);
             if (error) throw error;
@@ -102,8 +107,8 @@ export default function Dashboard() {
             if (rows.length === 0) return null;
 
             // Turno em andamento tem prioridade sobre qualquer "próximo" agendado.
-            const inProgress = rows.find(r => r.status === 'in_progress');
-            if (inProgress) return inProgress;
+            const onShift = rows.find(isOnShift);
+            if (onShift) return onShift;
 
             // PostgREST não ordena de forma confiável por coluna de embed (job.start_date),
             // então ordenamos no cliente e ignoramos linhas sem start_date válido.
@@ -111,7 +116,9 @@ export default function Dashboard() {
             today.setHours(0, 0, 0, 0);
 
             const upcoming = rows
-                .filter(r => r.status === 'hired')
+                // Turno com saída registrada já acabou para o freela: não é o "próximo".
+                // (`in_progress` sem carimbo nenhum segue aqui, como turno agendado.)
+                .filter(r => !hasLeftShift(r))
                 .filter(r => {
                     const d = r.job?.start_date ? new Date(r.job.start_date) : null;
                     return d instanceof Date && !isNaN(d.getTime()) && d >= today;
@@ -342,7 +349,7 @@ export default function Dashboard() {
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="md:col-span-2 flex flex-col">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-primary" /> {nextJob?.status === 'in_progress' ? 'Você está no turno agora' : 'Próximo turno'}
+                        <Clock size={18} className="text-primary" /> {nextJob && isOnShift(nextJob) ? 'Você está no turno agora' : 'Próximo turno'}
                     </h2>
                     {nextJob ? (
                         <>
@@ -361,7 +368,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <span className="inline-block mb-1 bg-primary-light text-primary text-xs font-bold px-2.5 py-0.5 rounded-pill">
-                                        {nextJob.status === 'in_progress' ? 'Em andamento' : 'Agendado'}
+                                        {isOnShift(nextJob) ? 'Em andamento' : 'Agendado'}
                                     </span>
                                     <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
                                     {nextJob.job.company?.name && (

@@ -17,6 +17,7 @@ import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
 import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
 
 type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
 const FILTERS: Array<{ key: JobFilter; label: string }> = [
@@ -49,6 +50,9 @@ interface FreelaSummary {
 
 interface AppRow {
     status: string;
+    worker_checkin_at?: string | null;
+    company_checkin_confirmed_at?: string | null;
+    company_checkout_confirmed_at?: string | null;
     invitation_expires_at?: string | null;
     invitation_response?: string | null;
     worker?: { full_name?: string | null; avatar_url?: string | null } | null;
@@ -153,6 +157,10 @@ interface Job {
     work_start_time?: string | null;
     work_end_time?: string | null;
     freela?: FreelaSummary | null;
+    /** Alguém já chegou e a saída ainda não foi confirmada. */
+    inProgress?: boolean;
+    /** `status` ainda 'open', mas todas as vagas já foram concluídas. */
+    concluded?: boolean;
     // Escala Recorrente (F3) — presentes quando o turno é uma ocorrência de série.
     series_id?: string | null;
     series_occurrence_date?: string | null;
@@ -226,9 +234,9 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-bold sm:text-lg">{job.title}</h3>
                         {/* Turno aberto e o normal — so o desvio ganha selo. */}
-                        {job.status !== 'open' && (
+                        {(job.status !== 'open' || job.concluded) && (
                             <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
-                                {job.status === 'paused' ? 'Pausado' : 'Fechado'}
+                                {job.concluded ? 'Concluído' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
                             </span>
                         )}
                         {urgentGap && (
@@ -489,7 +497,7 @@ export default function CompanyJobs() {
                 const jobIds = jobsData.map(j => j.id);
                 const { data: apps } = await supabase
                     .from('applications')
-                    .select('job_id, worker_id, status, invitation_expires_at, invitation_response, worker:workers(full_name, avatar_url)')
+                    .select('job_id, worker_id, status, worker_checkin_at, company_checkin_confirmed_at, company_checkout_confirmed_at, invitation_expires_at, invitation_response, worker:workers(full_name, avatar_url)')
                     .in('job_id', jobIds);
 
                 const byJob: Record<string, AppRow[]> = {};
@@ -498,6 +506,9 @@ export default function CompanyJobs() {
                     const w = Array.isArray(a.worker) ? a.worker[0] : a.worker;
                     (byJob[a.job_id] ||= []).push({
                         status: a.status,
+                        worker_checkin_at: a.worker_checkin_at,
+                        company_checkin_confirmed_at: a.company_checkin_confirmed_at,
+                        company_checkout_confirmed_at: a.company_checkout_confirmed_at,
                         invitation_expires_at: a.invitation_expires_at,
                         invitation_response: a.invitation_response,
                         worker: w ?? null,
@@ -530,6 +541,8 @@ export default function CompanyJobs() {
                 const jobsWithFreela = jobsData.map(job => ({
                     ...job,
                     freela: summarizeFreela(byJob[job.id] || []),
+                    inProgress: (byJob[job.id] || []).some(isShiftInProgress),
+                    concluded: job.status === 'open' && isJobConcluded(job.slots, byJob[job.id]),
                     seriesRecurrenceType: job.series_id ? (seriesTypeById[job.series_id] ?? null) : null,
                 }));
 
@@ -642,9 +655,9 @@ export default function CompanyJobs() {
         const matchesSearch = job.title.toLowerCase().includes(debouncedSearch.toLowerCase());
         const matchesFilter =
             filter === 'all' ? true
-                : filter === 'open' ? job.status === 'open'
-                    : filter === 'andamento' ? job.freela?.state === 'confirmed' // freela contratado/atuando agora
-                        : job.status !== 'open';
+                : filter === 'open' ? job.status === 'open' && !job.concluded
+                    : filter === 'andamento' ? job.inProgress === true // contratado sozinho não é "em andamento"
+                        : job.status !== 'open' || job.concluded === true;
         return matchesSearch && matchesFilter;
     });
 

@@ -1,3 +1,4 @@
+import { isShiftInProgress } from '../../lib/shiftProgress';
 import { createContext, useContext, useEffect, useId, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useModalDismiss } from '../../hooks/useModalDismiss';
@@ -1565,7 +1566,7 @@ export default function CompanyJobCandidates() {
                                                                 'info'
                                             }
                                         >
-                                            {app.status === 'interview' ? 'Em Entrevista' : app.status === 'hired' ? 'Contratado' : app.status === 'in_progress' ? 'Em Andamento' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
+                                            {(app.status === 'hired' || app.status === 'in_progress') && app.company_checkout_confirmed_at ? 'Saída confirmada' : app.status === 'interview' ? 'Em Entrevista' : isShiftInProgress(app) ? 'Em Andamento' : app.status === 'hired' || app.status === 'in_progress' ? 'Contratado' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
                                         </StatusChip>
                                     )}
 

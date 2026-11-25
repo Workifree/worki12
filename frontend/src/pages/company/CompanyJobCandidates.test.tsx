@@ -218,8 +218,33 @@ vi.mock('../../services/companyScopeService', () => ({
 }))
 
 describe('CompanyJobCandidates — renderiza candidatos com status in_progress', () => {
+  it('D-14: contratado sem chegada aparece como "Contratado", não "Em Andamento"', async () => {
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({
+      ...a, status: 'hired', worker_checkin_at: null, worker_checkout_at: null, company_checkin_confirmed_at: null, company_checkout_confirmed_at: null,
+    })))
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('João Silva')).toBeInTheDocument()
+    })
+    expect(screen.getAllByText('Contratado').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Em Andamento')).not.toBeInTheDocument()
+  })
+
+  it('D-14: com a saída confirmada mostra "Saída confirmada"', async () => {
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({
+      ...a,
+      company_checkin_confirmed_at: '2026-03-10T09:00:00.000Z',
+      company_checkout_confirmed_at: '2026-03-10T17:00:00.000Z',
+    })))
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('Saída confirmada')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Em Andamento')).not.toBeInTheDocument()
+  })
+
   it('exibe candidato com status Em Andamento', async () => {
-    setupMocksWithApps(APP_IN_PROGRESS)
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({ ...a, worker_checkout_at: null, company_checkout_confirmed_at: null })))
     renderComponent()
 
     await waitFor(() => {
