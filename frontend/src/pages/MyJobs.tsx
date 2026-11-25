@@ -19,7 +19,7 @@ import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useWorkerInvites, EVENTO_CONVITES, type ConvitesMudaramDetail } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
-import { isOnShift } from '../lib/shiftPresence';
+import { isOnShift, hasLeftShift } from '../lib/shiftPresence';
 import type {
     ReviewDirection,
     ShiftAttendanceConfirmation,
@@ -146,6 +146,20 @@ function checkinOpensAt(startDate: string | null | undefined, startTime: string 
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
+
+/** Selo do Histórico para turno com saída registrada que a empresa ainda não fechou. */
+function awaitingLabel(job: JobApplication): string | null {
+    if (job.status !== 'hired' && job.status !== 'in_progress') return null;
+    return job.company_checkout_confirmed_at ? 'Saída confirmada' : 'Aguardando confirmação';
+}
+
+function AwaitingBadge({ label }: { label: string }) {
+    return (
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-800 bg-yellow-50 border border-yellow-300 px-2.5 py-1 rounded-pill">
+            <Clock size={12} /> {label}
+        </span>
+    );
+}
 
 // Rotulo de "quando" para o card de confirmacao de vespera.
 // O texto era chumbado em "amanha", mas `request_attendance_confirmation` aceita turno de ate
@@ -365,6 +379,7 @@ export default function MyJobs() {
             const in_progress: JobApplication[] = [];
             const scheduled: JobApplication[] = [];
             const history: JobApplication[] = [];
+            const awaiting: JobApplication[] = [];
 
             const now = new Date();
 
@@ -445,7 +460,11 @@ export default function MyJobs() {
 
                 const isInProgress = (app.status === 'hired' && isJobToday && isWithinWorkHours) || app.status === 'in_progress';
 
-                if (isInProgress) {
+                // Saída já registrada: o turno acabou para o freela, mesmo antes de a empresa
+                // fechar. Vai para o Histórico como "aguardando", nunca para "Em Andamento".
+                if ((app.status === 'hired' || app.status === 'in_progress') && hasLeftShift(application)) {
+                    awaiting.push(application);
+                } else if (isInProgress) {
                     in_progress.push(application);
                 } else if (app.status === 'hired') {
                     scheduled.push(application);
@@ -454,7 +473,8 @@ export default function MyJobs() {
                 }
             });
 
-            setJobs({ in_progress, scheduled, history });
+            // Quem ainda espera a empresa vem primeiro.
+            setJobs({ in_progress, scheduled, history: [...awaiting, ...history] });
             setLoading(false);
             return { in_progress, scheduled };
         }
@@ -615,6 +635,8 @@ export default function MyJobs() {
             }
             addToast('Check-out registrado! A empresa confirma a saída.', 'success');
             await fetchJobs();
+            // O turno saiu de "Em Andamento": mostra para onde ele foi, em vez de sumir.
+            setActiveTab('history');
         } catch (err) {
             logError('Error checking out:', err);
             addToast(guardMessageFor(appId, err) ?? 'Erro ao fazer check-out. Tente novamente.', 'error');
@@ -1157,18 +1179,6 @@ export default function MyJobs() {
                                 </Button>
                             )}
 
-                            {job.worker_checkout_at && (
-                                <StatusLine tone="neutral" icon={<CheckCircle2 size={16} />}>
-                                    Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
-                                </StatusLine>
-                            )}
-
-                            {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
-                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                    Empresa registrou sua saída
-                                </StatusLine>
-                            )}
-
                             {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
                             <Button
                                 variant="secondary"
@@ -1265,7 +1275,9 @@ export default function MyJobs() {
                             </div>
                             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                                 <span className="font-bold tabular-nums text-gray-800">{formatBRL(job.pay)}</span>
-                                {job.status === 'completed' ? (
+                                {awaitingLabel(job) ? (
+                                    <AwaitingBadge label={awaitingLabel(job)!} />
+                                ) : job.status === 'completed' ? (
                                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-pill">
                                         <CheckCircle2 size={12} /> Concluído
                                     </span>
@@ -1276,6 +1288,18 @@ export default function MyJobs() {
                                 )}
                             </div>
                         </div>
+                        {awaitingLabel(job) && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                                <Button
+                                    variant="secondary"
+                                    onClick={(e) => { e.stopPropagation(); void handleChat(job); }}
+                                    loading={chattingId === job.id}
+                                    iconLeft={<MessageCircle size={14} />}
+                                >
+                                    Falar com a empresa
+                                </Button>
+                            </div>
+                        )}
                         {job.status === 'completed' && (
                             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
                                 <Button
@@ -1352,7 +1376,9 @@ export default function MyJobs() {
 
                         {/* Status */}
                         <div className="mb-5">
-                            {detailJob.status === 'completed' ? (
+                            {awaitingLabel(detailJob) ? (
+                                <AwaitingBadge label={awaitingLabel(detailJob)!} />
+                            ) : detailJob.status === 'completed' ? (
                                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-pill">
                                     <CheckCircle2 size={14} /> Concluído
                                 </span>
@@ -1379,7 +1405,7 @@ export default function MyJobs() {
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
-                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkout_at)}</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkout_at ?? detailJob.company_checkout_confirmed_at)}</p>
                             </div>
                         </div>
 

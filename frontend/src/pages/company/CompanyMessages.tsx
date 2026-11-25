@@ -8,6 +8,9 @@ import { useToast } from '../../contexts/ToastContext';
 import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
 import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui'
+import ErroDeCarga from '../../components/ErroDeCarga'
+import { checkSession } from '../../lib/authSession'
+import { activeShiftLabel, type ShiftAttendanceLike } from '../../lib/shiftProgress'
 
 interface ConversationItem {
     id: string;
@@ -19,6 +22,7 @@ interface ConversationItem {
     last_message_at?: string;
     unread_count: number;
     status: string;
+    attendance?: ShiftAttendanceLike;
 }
 
 interface Message {
@@ -54,20 +58,35 @@ export default function CompanyMessages() {
     const [isOtherTyping, setIsOtherTyping] = useState(false);
 
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    // Falha de carga ≠ "nenhuma conversa".
+    const [erroCarga, setErroCarga] = useState(false);
 
     // Scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    const falharCarga = (contexto: string, causa: unknown) => {
+        logError(contexto, causa);
+        setErroCarga(true);
+        setLoading(false);
+    };
+
     const loadData = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return navigate('/login');
+        const session = await checkSession();
+        if (session.status === 'signed_out') return navigate('/login');
+        if (session.status === 'unavailable') return falharCarga('CompanyMessages.session', session.error);
+        const user = session.user;
         setCurrentUser(user.id);
 
         // Todas as unidades que a sessao OPERA — inclui gerente (company_members), que a
         // consulta por `owner_id` deixava de fora: ele nao via conversa nenhuma.
-        const operadas = await getMyCompanies();
+        let operadas: Awaited<ReturnType<typeof getMyCompanies>>;
+        try {
+            operadas = await getMyCompanies();
+        } catch (causa) {
+            return falharCarga('CompanyMessages.companies', causa);
+        }
         const companyIds = new Set(operadas.map(c => c.company_id));
         companyIds.add(user.id); // dono cujo company_id E o proprio uid
 
@@ -82,6 +101,9 @@ export default function CompanyMessages() {
                 application:applications!fk_conversation_application_uuid (
                     id,
                     status,
+                    worker_checkin_at,
+                    company_checkin_confirmed_at,
+                    company_checkout_confirmed_at,
                     worker:workers (
                         id,
                         full_name,
@@ -96,11 +118,8 @@ export default function CompanyMessages() {
             `)
             .order('createdat', { ascending: false });
 
-        if (error) {
-            logError('SUPABASE ERROR fetching conversations:', error);
-            setLoading(false);
-            return;
-        }
+        if (error) return falharCarga('SUPABASE ERROR fetching conversations:', error);
+        setErroCarga(false);
 
         // Filter to only show conversations for jobs belonging to any of the user's companies
         interface ConversationData {
@@ -111,6 +130,9 @@ export default function CompanyMessages() {
             application?: {
                 id: string;
                 status: string;
+                worker_checkin_at?: string | null;
+                company_checkin_confirmed_at?: string | null;
+                company_checkout_confirmed_at?: string | null;
                 worker?: {
                     id: string;
                     full_name: string;
@@ -160,6 +182,7 @@ export default function CompanyMessages() {
             worker_avatar: c.application?.worker?.avatar_url,
             job_title: c.application?.job?.title || 'Turno sem título',
             status: c.application?.status || 'pending',
+            attendance: c.application,
             last_message: undefined,
             last_message_at: c.createdat,
             unread_count: unreadCounts[c.id] || 0
@@ -354,7 +377,9 @@ export default function CompanyMessages() {
         }
     };
 
-    const getStatusLabel = (status: string) => {
+    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) => {
+        const turno = attendance ? activeShiftLabel(attendance) : null;
+        if (turno) return turno;
         switch (status) {
             case 'invited': return 'Convidado';
             case 'hired': return 'Contratado';
@@ -394,11 +419,15 @@ export default function CompanyMessages() {
 
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Freelas ({conversations.length})</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{erroCarga ? 'Freelas' : `Freelas (${conversations.length})`}</h3>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
-                        {conversations.length === 0 ? (
+                        {erroCarga ? (
+                            <div className="p-4">
+                                <ErroDeCarga onRetry={() => { setLoading(true); setRefreshTrigger(n => n + 1); }} />
+                            </div>
+                        ) : conversations.length === 0 ? (
                             <div className="p-6 text-center text-gray-600">
                                 <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>
@@ -428,7 +457,7 @@ export default function CompanyMessages() {
                                                     </span>
                                                 ) : (
                                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status)}
+                                                        {getStatusLabel(conv.status, conv.attendance)}
                                                     </span>
                                                 )}
                                             </div>
@@ -444,7 +473,8 @@ export default function CompanyMessages() {
                     </div>
                 </div>
 
-                <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                {/* min-w-0: a coluna precisa encolher a 320px, senão Enviar, bolha e selo saem do cartão. */}
+                <div className={`flex-1 min-w-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
                             <div className="p-4 border-b-2 border-black flex items-center gap-3">
@@ -464,12 +494,12 @@ export default function CompanyMessages() {
                                 <div className="flex-1 min-w-0">
                                     <h4 className="font-bold truncate">{selectedConversation.worker_name}</h4>
                                     <p className="text-xs text-gray-600 flex items-center gap-1">
-                                        <Briefcase size={10} />
-                                        {selectedConversation.job_title}
+                                        <Briefcase size={10} className="shrink-0" />
+                                        <span className="truncate">{selectedConversation.job_title}</span>
                                     </p>
                                 </div>
                                 <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status)}
+                                    {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
                                 </span>
                             </div>
 

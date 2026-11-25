@@ -33,3 +33,13 @@ export function isJobActive(
 ): boolean {
   return job.status === 'open' && !isJobConcluded(job.slots, apps);
 }
+
+/**
+ * Rótulo de uma candidatura ligada a turno em curso (selo do chat). `null` = o status não é de
+ * turno em curso e quem chama usa o próprio rótulo.
+ */
+export function activeShiftLabel(app: ShiftAttendanceLike): 'Saída confirmada' | 'Em Andamento' | 'Contratado' | null {
+  if (app.status !== 'hired' && app.status !== 'in_progress') return null;
+  if (app.company_checkout_confirmed_at) return 'Saída confirmada';
+  return isShiftInProgress(app) ? 'Em Andamento' : 'Contratado';
+}

@@ -16,7 +16,7 @@ export function PainelNumerosTabs() {
         { rotulo: 'Operação', para: '/company/operacao', Icone: BarChart3 },
     ];
     return (
-        <div className="flex gap-2 mb-6 border-b-2 border-gray-200">
+        <div className="flex gap-1 sm:gap-2 mb-6 border-b-2 border-gray-200">
             {abas.map(({ rotulo, para, Icone }) => {
                 const ativa = pathname === para;
                 return (
@@ -24,13 +24,13 @@ export function PainelNumerosTabs() {
                         key={para}
                         to={para}
                         aria-current={ativa ? 'page' : undefined}
-                        className={`min-h-11 px-5 py-2 rounded-t-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-all ${
+                        className={`min-h-11 min-w-0 flex-1 sm:flex-none justify-center px-2 sm:px-5 py-2 rounded-t-xl font-black uppercase text-sm inline-flex items-center gap-2 transition-all ${
                             ativa
                                 ? 'bg-black text-white translate-y-[2px]'
                                 : 'text-gray-400 hover:text-black hover:bg-gray-100'
                         }`}
                     >
-                        <Icone size={16} /> {rotulo}
+                        <Icone size={16} className="hidden sm:block shrink-0" /> {rotulo}
                     </Link>
                 );
             })}

@@ -10,6 +10,7 @@ import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
 import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../components/ui'
 import { checkSession } from '../lib/authSession';
+import { activeShiftLabel, type ShiftAttendanceLike } from '../lib/shiftProgress'
 
 interface ConversationItem {
     id: string;
@@ -22,6 +23,7 @@ interface ConversationItem {
     last_message_at?: string;
     unread_count: number;
     status: string;
+    attendance?: ShiftAttendanceLike;
 }
 
 interface Message {
@@ -126,6 +128,9 @@ export default function Messages() {
                     application:applications!application_uuid (
                         id,
                         status,
+                        worker_checkin_at,
+                        company_checkin_confirmed_at,
+                        company_checkout_confirmed_at,
                         worker_id,
                         job:jobs (
                             title,
@@ -156,6 +161,9 @@ export default function Messages() {
                 application: {
                     id: string;
                     status: string;
+                    worker_checkin_at?: string | null;
+                    company_checkin_confirmed_at?: string | null;
+                    company_checkout_confirmed_at?: string | null;
                     worker_id: string;
                     job: {
                         title: string;
@@ -202,6 +210,7 @@ export default function Messages() {
                 company_name: c.application?.job?.company?.name || 'Empresa',
                 company_logo: c.application?.job?.company?.logo_url ?? undefined,
                 status: c.application?.status || 'pending',
+                attendance: c.application ?? undefined,
                 last_message: undefined,
                 last_message_at: c.createdat,
                 unread_count: unreadCounts[c.id] || 0
@@ -363,7 +372,9 @@ export default function Messages() {
         }
     };
 
-    const getStatusLabel = (status: string) => {
+    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) => {
+        const turno = attendance ? activeShiftLabel(attendance) : null;
+        if (turno) return turno;
         switch (status) {
             case 'invited': return 'Convite';
             case 'hired': return 'Contratado';
@@ -445,7 +456,7 @@ export default function Messages() {
                                                     </span>
                                                 ) : (
                                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status)}
+                                                        {getStatusLabel(conv.status, conv.attendance)}
                                                     </span>
                                                 )}
                                             </div>
@@ -484,7 +495,8 @@ export default function Messages() {
                                         <button
                                             type="button"
                                             onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
-                                            className="font-bold hover:text-primary transition-colors truncate text-left"
+                                            // `truncate` só corta em caixa de bloco com largura limitada; botão é inline-block.
+                                            className="block max-w-full font-bold hover:text-primary transition-colors truncate text-left"
                                             aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
                                         >
                                             {selectedConversation.company_name}
@@ -495,7 +507,7 @@ export default function Messages() {
                                     <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
                                 </div>
                                 <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status)}
+                                    {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
                                 </span>
                             </div>
 

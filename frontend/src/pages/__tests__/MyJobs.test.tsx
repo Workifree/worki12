@@ -244,7 +244,7 @@ describe('MyJobs - Botao check-out', () => {
   // O freela que abrir o app NÃO pode ver um CTA "Check-out" ativo — se tocar, sobrescreveria o
   // worker_checkout_at, e o recibo prioriza esse campo sobre a confirmação da empresa mesmo em
   // turno já pago (ReceiptView).
-  it('esconde o CTA Check-out e mostra "Empresa registrou sua saída" quando a empresa confirmou sem o freela', async () => {
+  it('saída confirmada só pela empresa: sem CTA Check-out; o turno vai ao Histórico como "Saída confirmada"', async () => {
     const companyCheckedOutApp: ApplicationRow = {
       ...APP_IN_PROGRESS,
       worker_checkin_at: '2026-03-17T08:00:00Z',
@@ -256,12 +256,13 @@ describe('MyJobs - Botao check-out', () => {
     renderComponent()
 
     fireEvent.click(await screen.findByText('Em Andamento'))
-    await screen.findByText('Barman para Festa')
-
+    expect(screen.queryByText('Barman para Festa')).not.toBeInTheDocument()
     // Não pode existir CTA "Check-out" (button) — a empresa já fechou essa etapa.
     expect(screen.queryByRole('button', { name: 'Check-out' })).not.toBeInTheDocument()
-    // O freela vê que foi a EMPRESA quem registrou a saída, não ele.
-    expect(screen.getByText('Empresa registrou sua saída')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Histórico/i }))
+    expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
+    expect(screen.getByText('Saída confirmada')).toBeInTheDocument()
   })
 
   // Mesmo problema no check-in: empresa pode confirmar chegada sem o freela ter apertado

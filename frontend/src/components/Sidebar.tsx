@@ -17,7 +17,8 @@ interface SidebarProps {
 
 export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const [name, setName] = useState('');
-    const [isVerified, setIsVerified] = useState(false);
+    // `null` = ainda carregando: o menu não pode afirmar "Não verificado" antes de saber.
+    const [isVerified, setIsVerified] = useState<boolean | null>(null);
     interface WorkerData {
         full_name: string;
         level?: number;
@@ -256,15 +257,22 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                         )}
                     </div>
                     <div className="flex flex-col min-w-0 gap-0.5">
-                        <span className="text-sm font-semibold text-accent truncate">{name || (isCompany ? 'Carregando...' : '...')}</span>
-                        {isCompany ? (
+                        {isCompany && isVerified === null ? (
+                            <div className="space-y-1.5 animate-pulse" role="status" aria-label="Carregando dados da empresa">
+                                <div className="h-4 w-32 rounded bg-gray-200" />
+                                <div className="h-3 w-20 rounded bg-gray-200" />
+                            </div>
+                        ) : (
+                            <span className="text-sm font-semibold text-accent truncate">{name || (isCompany ? 'Empresa' : '...')}</span>
+                        )}
+                        {isCompany ? (isVerified !== null && (
                             <span className={`inline-flex items-center gap-1 text-xs font-medium ${isVerified ? 'text-blue-700' : 'text-gray-500'}`}>
                                 {isVerified
                                     ? <BadgeCheck size={14} aria-hidden="true" className="text-blue-600 shrink-0" />
                                     : <CircleDashed size={14} aria-hidden="true" className="text-gray-400 shrink-0" />}
                                 {isVerified ? 'Verificado' : 'Não verificado'}
                             </span>
-                        ) : (
+                        )) : (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600">
                                 <Zap size={12} aria-hidden="true" className="text-primary fill-primary shrink-0" />
                                 {`${workerData?.xp || 0} XP`}
