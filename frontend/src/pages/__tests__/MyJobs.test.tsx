@@ -236,7 +236,7 @@ describe('MyJobs - Botao check-out', () => {
     })
 
     // worker_checkin_at setado e worker_checkout_at null → botão Check-out visível
-    expect(screen.getByText('Check-out')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar saída' })).toBeInTheDocument()
   })
 
   // Caso central (QA pré-piloto): a empresa registrou a saída sozinha
@@ -258,7 +258,7 @@ describe('MyJobs - Botao check-out', () => {
     fireEvent.click(await screen.findByText('Em andamento'))
     expect(screen.queryByText('Barman para Festa')).not.toBeInTheDocument()
     // Não pode existir CTA "Check-out" (button) — a empresa já fechou essa etapa.
-    expect(screen.queryByRole('button', { name: 'Check-out' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Registrar saída' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: /Histórico/i }))
     expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
@@ -282,11 +282,11 @@ describe('MyJobs - Botao check-out', () => {
     fireEvent.click(await screen.findByText('Em andamento'))
     await screen.findByText('Barman para Festa')
 
-    expect(screen.queryByRole('button', { name: 'Check-in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Registrar chegada' })).not.toBeInTheDocument()
     expect(screen.getByText('Empresa registrou sua chegada')).toBeInTheDocument()
     // Check-out também não pode ficar disponível: o freela nunca chegou a fazer check-in
     // por conta própria, mas a etapa "chegada" já está fechada, então o botão de saída aparece.
-    expect(screen.getByRole('button', { name: 'Check-out' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar saída' })).toBeInTheDocument()
   })
 })
 
@@ -305,6 +305,12 @@ const APP_SCHEDULED_NO_CHECKIN: ApplicationRow = {
   status: 'in_progress',
   worker_checkin_at: null,
   company_checkin_confirmed_at: null,
+  job: {
+    ...APP_IN_PROGRESS.job!,
+    start_date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    work_start_time: null,
+    work_end_time: null,
+  },
 }
 
 describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pode ser sucesso', () => {
@@ -323,11 +329,11 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     renderComponent()
 
     fireEvent.click(await screen.findByText('Em andamento'))
-    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    const checkinButton = await screen.findByRole('button', { name: 'Registrar chegada' })
     fireEvent.click(checkinButton)
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Chegada registrada!', 'success')
     })
   })
 
@@ -346,16 +352,16 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     renderComponent()
 
     fireEvent.click(await screen.findByText('Em andamento'))
-    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    const checkinButton = await screen.findByRole('button', { name: 'Registrar chegada' })
     fireEvent.click(checkinButton)
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Não foi possível fazer check-in. Atualize a página e tente novamente.',
+        'Não foi possível registrar a chegada. Atualize a página e tente novamente.',
         'error',
       )
     })
-    expect(mockAddToast).not.toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+    expect(mockAddToast).not.toHaveBeenCalledWith('Chegada registrada!', 'success')
   })
 
   it('check-out com sucesso: UPDATE afetou 1 linha', async () => {
@@ -372,7 +378,7 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     renderComponent()
 
     fireEvent.click(await screen.findByText('Em andamento'))
-    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    const checkoutButton = await screen.findByRole('button', { name: 'Registrar saída' })
     fireEvent.click(checkoutButton)
 
     await waitFor(() => {
@@ -397,12 +403,12 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     renderComponent()
 
     fireEvent.click(await screen.findByText('Em andamento'))
-    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    const checkoutButton = await screen.findByRole('button', { name: 'Registrar saída' })
     fireEvent.click(checkoutButton)
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Não foi possível fazer check-out. Atualize a página e tente novamente.',
+        'Não foi possível registrar a saída. Atualize a página e tente novamente.',
         'error',
       )
     })

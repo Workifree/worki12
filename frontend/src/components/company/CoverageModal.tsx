@@ -155,7 +155,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
         )}
 
         <div className="flex flex-col gap-3">
-          <Button variant="dark" size="lg" fullWidth disabled={!ready} loading={busy} onClick={() => { void confirm(); }}>
+          <Button variant="dark" size="lg" fullWidth data-copilot="empresa.cobertura.confirmar" data-copilot-risk="D" disabled={!ready} loading={busy} onClick={() => { void confirm(); }}>
             Criar cobertura
           </Button>
           <Button variant="secondary" size="lg" fullWidth disabled={busy} onClick={onClose}>Voltar</Button>

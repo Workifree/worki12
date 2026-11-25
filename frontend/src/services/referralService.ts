@@ -267,13 +267,13 @@ export const ReferralService = {
 
       if (error) {
         logError('referralService.listMyReferrals', error);
-        return [];
+        throw error;
       }
 
       return (data ?? []) as WorkerReferral[];
     } catch (err) {
       logError('referralService.listMyReferrals', err);
-      return [];
+      throw err;
     }
   },
 

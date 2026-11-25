@@ -219,14 +219,28 @@ describe('OrderReportService.getReport — derivação de status e período', ()
     expect(report.summary.total).toBe(0)
   })
 
-  it('retorna vazio (sem lançar) quando a query de jobs falha', async () => {
+  it('lança quando a query de jobs falha (falha nunca vira relatório vazio)', async () => {
     routeFrom({
       jobs: makeChain({ data: null, error: { message: 'boom' } }),
     })
     const { OrderReportService } = await import('./orderReportService')
 
-    const report = await OrderReportService.getReport(PERIOD)
-    expect(report.rows).toEqual([])
+    await expect(OrderReportService.getReport(PERIOD)).rejects.toMatchObject({ message: 'boom' })
+  })
+
+  it.each(['shift_payments', 'applications'])('lança quando a query de %s falha (nunca "R$ 0 pago")', async (table) => {
+    routeFrom({
+      jobs: makeChain({
+        data: [{ id: 'j1', title: 'T', category: null, budget: 100, start_date: PERIOD.from, created_at: null, status: 'open' }],
+        error: null,
+      }),
+      shift_payments: makeChain({ data: [], error: null }),
+      applications: makeChain({ data: [], error: null }),
+      [table]: makeChain({ data: null, error: { message: 'boom' } }),
+    })
+    const { OrderReportService } = await import('./orderReportService')
+
+    await expect(OrderReportService.getReport(PERIOD)).rejects.toMatchObject({ message: 'boom' })
   })
 })
 

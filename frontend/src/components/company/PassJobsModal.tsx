@@ -82,7 +82,7 @@ export default function PassJobsModal({ jobIds, destinations, onClose, onDone }:
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        <Button variant="dark" size="lg" fullWidth disabled={!to} loading={busy} iconLeft={<Send size={18} />} onClick={() => { void confirm(); }}>
+        <Button variant="dark" size="lg" fullWidth data-copilot="empresa.passar-turnos.confirmar" data-copilot-risk="D" disabled={!to} loading={busy} iconLeft={<Send size={18} />} onClick={() => { void confirm(); }}>
           Passar {total === 1 ? 'o turno' : `os ${total} turnos`}
         </Button>
         <Button variant="secondary" size="lg" fullWidth disabled={busy} onClick={onClose}>Voltar</Button>

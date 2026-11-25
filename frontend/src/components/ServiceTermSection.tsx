@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, CheckCircle2, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react';
+import { FileText, CheckCircle2, CheckCircle, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, MessageCircle } from 'lucide-react';
 import { ServiceTermService } from '../services/serviceTermService';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
-import { Button } from './ui';
+import { Alert, Button } from './ui';
 import type { ServiceTerm, ServiceTermAcceptOutcome } from '../types';
 
 /**
@@ -27,6 +27,11 @@ interface ServiceTermSectionProps {
     workerConfirmedAt: string | null;
     /** Chamado depois de um `confirmReceiptByWorker` bem-sucedido, para o pai re-buscar o recibo. */
     onConfirmed: () => void;
+    /** Pagamento sem valor: confirmar fica bloqueado (confirmação não se desfaz). */
+    amountMissing?: boolean;
+    /** "Não recebi / valor errado": abre a conversa com a empresa do turno. */
+    onDispute?: () => void;
+    disputing?: boolean;
 }
 
 /**
@@ -71,6 +76,9 @@ export default function ServiceTermSection({
     isCompanyViewer,
     workerConfirmedAt,
     onConfirmed,
+    amountMissing = false,
+    onDispute,
+    disputing = false,
 }: ServiceTermSectionProps) {
     const { addToast } = useToast();
 
@@ -215,9 +223,11 @@ export default function ServiceTermSection({
                         `print:max-h-none` (N7, achado do evaluator): a impressão nunca trunca —
                         documento impresso tem que sair inteiro, aberto ou não na tela. */}
                     <div className="bg-gray-50 border-2 border-black rounded-xl p-4 md:p-5 mb-4">
+                        {/* Aberto, o termo rola dentro da própria caixa: o aceite e o botão ficam logo abaixo. */}
                         <p
-                            className={`whitespace-pre-wrap text-sm leading-relaxed text-gray-800 print:max-h-none ${
-                                !showFullText && !isAccepted ? 'max-h-72 overflow-hidden' : ''
+                            tabIndex={showFullText && !isAccepted ? 0 : undefined}
+                            className={`whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-800 print:max-h-none print:overflow-visible ${
+                                isAccepted ? '' : showFullText ? 'max-h-[45vh] overflow-y-auto' : 'max-h-48 overflow-hidden'
                             }`}
                         >
                             {formatCpfForDisplay(term.term_text)}
@@ -303,7 +313,7 @@ export default function ServiceTermSection({
                                         </p>
                                         <p className="text-yellow-800 text-xs font-medium mt-1">
                                             Cadastre o seu em{' '}
-                                            <Link to="/profile" className="underline font-bold">
+                                            <Link to="/profile?editar=cpf" className="underline font-bold">
                                                 Perfil
                                             </Link>{' '}
                                             e volte aqui para assinar.
@@ -402,11 +412,22 @@ export default function ServiceTermSection({
                                 </span>
                             </label>
                         )}
+                        {amountMissing && (
+                            <Alert tone="warning" title="Valor não informado">
+                                Não dá para confirmar um recebimento sem valor. Fale com a empresa pelo botão abaixo.
+                            </Alert>
+                        )}
+                        {mustReadTerm && (
+                            <p className="text-xs text-gray-600">Esta confirmação não pode ser desfeita.</p>
+                        )}
                         <Button
                             size="lg"
+                            data-copilot="freela.recibo.confirmar"
+                            data-copilot-risk="D"
                             onClick={handleConfirmReceipt}
                             loading={confirming}
                             disabled={
+                                amountMissing ||
                                 fetchFailed ||
                                 (mustReadTerm && (!showFullText || !agreedToTerm)) ||
                                 (!mustReadTerm && !confirmoRecebimento)
@@ -417,7 +438,7 @@ export default function ServiceTermSection({
                                 ? 'Confirmando...'
                                 : mustReadTerm
                                     ? 'Aceitar termo e confirmar recebimento'
-                                    : 'Confirmar Recebimento'}
+                                    : 'Confirmar recebimento'}
                         </Button>
                         {mustReadTerm && !showFullText ? (
                             <p className="text-xs text-gray-600">
@@ -428,6 +449,19 @@ export default function ServiceTermSection({
                                 Marque "Li e concordo com os termos acima" antes de confirmar o recebimento.
                             </p>
                         ) : null}
+                        {onDispute && (
+                            <Button
+                                variant="secondary"
+                                size="lg"
+                                data-copilot="freela.recibo.nao-recebi"
+                                onClick={onDispute}
+                                loading={disputing}
+                                iconLeft={<MessageCircle size={18} />}
+                                className="w-full sm:w-auto sm:ml-3"
+                            >
+                                Não recebi / valor errado
+                            </Button>
+                        )}
                     </div>
                 ) : isCompanyViewer ? (
                     <p className="text-sm font-semibold text-gray-600 bg-gray-100 px-4 py-3 rounded-xl w-fit">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check, Send } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -12,7 +12,9 @@ import WorkerCertificationsPanel from '../../components/company/WorkerCertificat
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
-import { Button, Card } from '../../components/ui';
+import { Button, Card, ErrorState } from '../../components/ui';
+import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
+import type { TeamMember } from '../../types';
 import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
 
 export default function WorkerPublicProfile() {
@@ -61,6 +63,11 @@ export default function WorkerPublicProfile() {
     const [reviews, setReviews] = useState<ReviewData[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    // Avaliações ou histórico que não carregaram não podem virar "não tem".
+    const [reviewsError, setReviewsError] = useState(false);
+    const [historyError, setHistoryError] = useState(false);
+    const [inviting, setInviting] = useState(false);
     // R1.2: application entre ESTA empresa e este freela — habilita o botão "Mensagem"
     // (a Conversation é amarrada a um application_uuid; sem application, não há para onde criar).
     const [applicationId, setApplicationId] = useState<string | null>(null);
@@ -87,7 +94,13 @@ export default function WorkerPublicProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProfile usa state setters estaveis, so precisa re-executar quando id muda
     }, [id]);
 
+    const retryProfile = () => {
+        setLoading(true);
+        void fetchProfile();
+    };
+
     const fetchProfile = async () => {
+        setLoadError(false);
         try {
             // Fetch Profile — .maybeSingle() (não .single()): desde a migration
             // 20260816120000_workers_select_by_relationship.sql a policy de SELECT em `workers`
@@ -123,11 +136,14 @@ export default function WorkerPublicProfile() {
             setProfile(mappedProfile);
 
             // Fetch Reviews
-            const { data: reviewsData } = await supabase
+            const { data: reviewsData, error: reviewsFailure } = await supabase
                 .from('reviews')
                 .select('*')
                 .eq('reviewed_id', id)
                 .order('created_at', { ascending: false });
+
+            if (reviewsFailure) logError('WorkerPublicProfile.reviews', reviewsFailure);
+            setReviewsError(!!reviewsFailure);
 
             if (reviewsData && reviewsData.length > 0) {
                 // Manually fetch company names (as per existing logic)
@@ -150,12 +166,14 @@ export default function WorkerPublicProfile() {
             }
 
             // Fetch History (Completed Jobs)
-            const { data: historyData } = await supabase
+            const { data: historyData, error: historyFailure } = await supabase
                 .from('applications')
                 .select('*, job:jobs(title, company:companies(name))')
                 .eq('worker_id', id)
                 .in('status', ['hired', 'completed'])
                 .limit(5);
+            if (historyFailure) logError('WorkerPublicProfile.history', historyFailure);
+            setHistoryError(!!historyFailure);
             setHistory(historyData || []);
 
             // R1.2/R10: application entre a empresa autenticada e este freela — sem isso o
@@ -184,6 +202,7 @@ export default function WorkerPublicProfile() {
 
         } catch (error) {
             logError('Erro ao carregar perfil do worker:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -251,6 +270,14 @@ export default function WorkerPublicProfile() {
             </div>
         </div>
     );
+    if (!profile && loadError) return (
+        <div className="max-w-4xl mx-auto p-4 sm:p-8">
+            <Button variant="ghost" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4">
+                Voltar
+            </Button>
+            <ErrorState title="Não foi possível abrir este perfil agora." onRetry={retryProfile} />
+        </div>
+    );
     if (!profile) return (
         <div className="max-w-4xl mx-auto p-8">
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
@@ -293,6 +320,18 @@ export default function WorkerPublicProfile() {
                     </div>
 
                     {/* Actions */}
+                    {hasTeamConnection && (
+                        <div className="flex justify-end pt-4 pl-28 sm:pl-40">
+                            <Button
+                                variant="dark"
+                                onClick={() => setInviting(true)}
+                                iconLeft={<Send size={16} />}
+                                data-copilot="empresa.freela.convidar-turno"
+                            >
+                                Convidar para turno
+                            </Button>
+                        </div>
+                    )}
                     {podeUsarChat && (
                         <div className="flex justify-end pt-4">
                             <div className="flex flex-col items-end gap-1">
@@ -426,7 +465,7 @@ export default function WorkerPublicProfile() {
                 <div>
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico Recente</h3>
                     <div className="space-y-3">
-                        {history.length > 0 ? history.map((h) => (
+                        {historyError ? <ErrorState title="Não foi possível carregar o histórico." onRetry={retryProfile} /> : history.length > 0 ? history.map((h) => (
                             <div key={h.id} className="p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
                                 <div className="min-w-0">
                                     <h4 className="font-bold text-sm">{h.job?.title}</h4>
@@ -444,7 +483,7 @@ export default function WorkerPublicProfile() {
                 <div>
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare size={20} /> Comentários</h3>
                     <div className="space-y-3">
-                        {reviews.length > 0 ? reviews.map((r) => (
+                        {reviewsError ? <ErrorState title="Não foi possível carregar os comentários." onRetry={retryProfile} /> : reviews.length > 0 ? reviews.map((r) => (
                             <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-200">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="font-bold text-sm">{r.company?.name || 'Empresa'}</span>
@@ -473,6 +512,14 @@ export default function WorkerPublicProfile() {
             {/* F8 — certificações auto-declaradas do freela + treinamentos internos registrados
                 pela empresa. `id` é garantido aqui: `!profile` já retornou acima. */}
             {id && <WorkerCertificationsPanel workerId={id} />}
+
+            {inviting && (
+                <InviteToShiftModal
+                    member={{ worker: { id: profile.id, full_name: profile.full_name } } as TeamMember}
+                    onClose={() => setInviting(false)}
+                    onInvited={retryProfile}
+                />
+            )}
 
         </div>
     );

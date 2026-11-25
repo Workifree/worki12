@@ -452,3 +452,40 @@ describe('ServiceTermSection', () => {
     expect(screen.queryByText(/comprovação/i)).not.toBeInTheDocument();
   });
 });
+
+describe('ServiceTermSection — "Não recebi" e valor ausente', () => {
+  function renderSection(props: { amountMissing?: boolean; onDispute?: () => void }) {
+    render(
+      <ServiceTermSection
+        shiftPaymentId="sp-1"
+        isWorkerViewer
+        isCompanyViewer={false}
+        workerConfirmedAt={null}
+        onConfirmed={mockOnConfirmed}
+        {...props}
+      />,
+    );
+  }
+
+  it('"Não recebi / valor errado" chama a disputa sem confirmar nem aceitar o termo', async () => {
+    mockGetByShiftPayment.mockResolvedValue({ term: buildTerm(), failed: false });
+    const onDispute = vi.fn();
+    renderSection({ onDispute });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Não recebi \/ valor errado/i }));
+
+    expect(onDispute).toHaveBeenCalledTimes(1);
+    expect(mockAcceptServiceTerm).not.toHaveBeenCalled();
+    expect(mockConfirmReceiptByWorker).not.toHaveBeenCalled();
+  });
+
+  it('sem valor informado, a confirmação fica bloqueada mesmo com a caixa marcada', async () => {
+    mockGetByShiftPayment.mockResolvedValue({ term: null, failed: false });
+    renderSection({ amountMissing: true });
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Confirmo que recebi/i }));
+
+    expect(screen.getByRole('button', { name: /Confirmar recebimento/i })).toBeDisabled();
+    expect(screen.getByText('Valor não informado')).toBeInTheDocument();
+  });
+});

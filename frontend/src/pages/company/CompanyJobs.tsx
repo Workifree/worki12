@@ -1,13 +1,12 @@
-import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Megaphone, Clock, Calendar, CalendarClock, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useToast } from '../../contexts/ToastContext';
-import { useCompanyTeam } from '../../hooks/useTeamConnections';
-import { useCompanyInvites } from '../../hooks/useShiftInvites';
+
 import { logError } from '../../lib/logger'
-import ErroDeCarga from '../../components/ErroDeCarga';
+
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { isGestor } from '../../services/companyScopeService';
 import { getSessionUserOrThrow } from '../../lib/authSession';
@@ -20,13 +19,12 @@ import { todayLocalDate } from '../../lib/dateUtils';
 import EditSeriesModal, { type SeriesJobSnapshot } from '../../components/company/EditSeriesModal';
 import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
-import type { TeamMember, RecurrenceType } from '../../types';
+import type { RecurrenceType } from '../../types';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
-import { Button, Card, Menu, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+import { Button, ButtonLink, Card, DialogActions, DialogHeader, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge, FIELD_CONTROL_CLASS } from '../../components/ui';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
 import { Dialog } from '../../components/ui/Dialog';
-import { roleLabel } from '../../lib/statusLabels';
 
 type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
 const FILTERS: Array<{ key: JobFilter; label: string }> = [
@@ -107,42 +105,34 @@ interface PendingCallRow {
 type CallWorker = AppRow['worker'];
 
 // Alvos sem resposta de chamados abertos e no prazo, na forma de um convite pendente. Falha de
-// leitura não derruba a agenda: só deixa de marcar "Aguardando resposta".
+// leitura LANÇA: sem ela, um turno com convite pendente apareceria como "Sem freela".
 async function fetchPendingCallRows(jobIds: string[]): Promise<PendingCallRow[]> {
     if (jobIds.length === 0) return [];
-    try {
-        const { data, error } = await supabase
-            .from('shift_calls')
-            .select('job_id, expires_at, targets:shift_call_targets(worker_id, response, worker:workers(full_name, avatar_url))')
-            .in('job_id', jobIds)
-            .eq('status', 'open');
-        if (error) {
-            logError('CompanyJobs.fetchPendingCallRows', error);
-            return [];
-        }
-        const calls = (data ?? []) as unknown as {
-            job_id: string;
-            expires_at: string;
-            targets: { worker_id: string; response: string | null; worker: CallWorker | CallWorker[] }[] | null;
-        }[];
-        const now = Date.now();
-        return calls
-            .filter((call) => !(new Date(call.expires_at).getTime() <= now))
-            .flatMap((call) => (call.targets ?? [])
-                .filter((target) => !target.response)
-                .map((target) => ({
-                    jobId: call.job_id,
-                    workerId: target.worker_id,
-                    row: {
-                        status: 'invited',
-                        invitation_expires_at: call.expires_at,
-                        worker: (Array.isArray(target.worker) ? target.worker[0] : target.worker) ?? null,
-                    },
-                })));
-    } catch (err) {
-        logError('CompanyJobs.fetchPendingCallRows', err);
-        return [];
-    }
+    const { data, error } = await supabase
+        .from('shift_calls')
+        .select('job_id, expires_at, targets:shift_call_targets(worker_id, response, worker:workers(full_name, avatar_url))')
+        .in('job_id', jobIds)
+        .eq('status', 'open');
+    if (error) throw error;
+    const calls = (data ?? []) as unknown as {
+        job_id: string;
+        expires_at: string;
+        targets: { worker_id: string; response: string | null; worker: CallWorker | CallWorker[] }[] | null;
+    }[];
+    const now = Date.now();
+    return calls
+        .filter((call) => !(new Date(call.expires_at).getTime() <= now))
+        .flatMap((call) => (call.targets ?? [])
+            .filter((target) => !target.response)
+            .map((target) => ({
+                jobId: call.job_id,
+                workerId: target.worker_id,
+                row: {
+                    status: 'invited',
+                    invitation_expires_at: call.expires_at,
+                    worker: (Array.isArray(target.worker) ? target.worker[0] : target.worker) ?? null,
+                },
+            })));
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +202,8 @@ interface JobRowProps {
     job: Job;
     bucketKey: DayBucketKey;
     navigate: NavigateFunction;
-    setInviteJobId: (id: string | null) => void;
+    /** Só uma linha da tela leva o botão primário. */
+    primary: boolean;
     handleStatusChange: (id: string, status: string) => void;
     setDeleteJobId: (id: string | null) => void;
     onEditSeries: (job: Job) => void;
@@ -220,120 +211,125 @@ interface JobRowProps {
     onInviteSeries: (seriesId: string) => void;
 }
 
+function isJobEnded(job: Job): boolean {
+    return job.concluded === true || (job.status !== 'open' && job.status !== 'paused');
+}
+
+function needsPeople(job: Job): boolean {
+    return !job.freela && !isJobEnded(job) && (job.status === 'open' || job.status === 'paused');
+}
+
+/** Ordem do dia: o que precisa de ação, depois os próximos (os encerrados vão à parte). */
+function dayRank(job: Job): number {
+    return needsPeople(job) || job.inProgress ? 0 : 1;
+}
+
 // Uma linha da agenda: horário + função + freela (nome/avatar/estado) visíveis sem clicar.
 // Turno sem freela atrelado "grita" — buraco de escala é o problema nº1 da operação diária.
-function JobRow({ job, bucketKey, navigate, setInviteJobId, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
+function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
     const timeRange = formatTimeRange(job);
     const isNearTerm = bucketKey === 'today' || bucketKey === 'tomorrow';
-    const canInvite = job.status === 'open' || job.status === 'paused';
-    const missingFreela = !job.freela;
+    const ended = isJobEnded(job);
+    const missingFreela = needsPeople(job);
     const urgentGap = missingFreela && isNearTerm;
+    const gapLabel = urgentGap ? `Sem freela · ${bucketKey === 'today' ? 'hoje' : 'amanhã'}` : 'Sem freela';
+    const presenca = `/company/jobs/${job.id}/candidates`;
 
     return (
-        <Card
-            padding="sm"
-            className={`sm:!p-5 ${urgentGap ? '!bg-amber-50' : ''}`}
-        >
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <Card padding="sm" className={ended ? 'opacity-80' : ''}>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] lg:items-center">
 
                 <div className="min-w-0">
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-bold sm:text-lg">{job.title}</h3>
+                        <h3 className="break-words text-base font-bold">{job.title}</h3>
                         {/* Turno aberto e o normal — so o desvio ganha selo. */}
                         {(job.status !== 'open' || job.concluded) && (
-                            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
-                                {job.concluded ? 'Concluído' : job.status === 'paused' ? 'Pausado' : 'Fechado'}
-                            </span>
+                            <StatusBadge domain="job" status={job.concluded ? 'completed' : job.status} />
                         )}
-                        {urgentGap && (
-                            <span className="flex items-center gap-1 rounded-full border border-amber-500 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                                <AlertTriangle size={12} /> Sem freela
-                            </span>
-                        )}
+                        {missingFreela && <StatusBadge tone={urgentGap ? 'warning' : 'neutral'}>{gapLabel}</StatusBadge>}
                         {job.series_id && (
-                            <span className="flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700" title="Este turno faz parte de uma série recorrente">
-                                <Repeat size={12} /> Série · {seriesBadgeLabel(job)}
-                            </span>
+                            <StatusBadge tone="neutral" icon={Repeat} title="Este turno faz parte de uma série recorrente">
+                                Série · {seriesBadgeLabel(job)}
+                            </StatusBadge>
                         )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 sm:text-sm">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                         {timeRange && (
-                            <span className="flex items-center gap-1 font-semibold text-black">
-                                <Clock size={14} /> {timeRange}
+                            <span className="flex items-center gap-1 font-bold tabular-nums text-black">
+                                <Clock size={14} aria-hidden="true" /> {timeRange}
                             </span>
                         )}
                         {job.start_date && !isNearTerm && (
-                            <span className="flex items-center gap-1 capitalize">
-                                <Calendar size={14} /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
+                            <span className="flex items-center gap-1 first-letter:uppercase">
+                                <Calendar size={14} aria-hidden="true" /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
                             </span>
                         )}
-                        {job.location && <span className="truncate">{job.location}</span>}
+                        {job.location && <span className="min-w-0 truncate">{job.location}</span>}
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-3 md:justify-end md:border-t-0 md:pt-0">
-                    {/* Estado do freela (modelo push) — no lugar de Candidatos/Visitas */}
-                    {job.freela ? (
-                        <button
-                            onClick={() => navigate(`/company/jobs/${job.id}/candidates`)}
-                            className="flex min-h-11 min-w-0 items-center gap-3 text-left transition-opacity hover:opacity-80"
-                        >
-                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
-                                {job.freela.avatarUrl ? (
-                                    <img src={job.freela.avatarUrl} alt={job.freela.name} className="h-full w-full object-cover" />
-                                ) : (
-                                    <div className="flex h-full w-full items-center justify-center bg-black text-sm font-bold text-white">
-                                        {job.freela.name[0]?.toUpperCase()}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="flex min-w-0 flex-col">
-                                <span className="max-w-[140px] truncate text-sm font-bold">
-                                    {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
-                                </span>
-                                <span className={`text-xs font-semibold ${job.freela.state === 'confirmed' ? 'text-green-700' :
-                                    job.freela.state === 'completed' ? 'text-gray-700' : 'text-amber-900'
-                                    }`}>
-                                    {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}
-                                </span>
-                            </div>
-                            {job.freela.state === 'confirmed' && (
-                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary-dark">
-                                    <PlayCircle size={12} /> Presença
-                                </span>
+                {job.freela ? (
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-black bg-gray-100">
+                            {job.freela.avatarUrl ? (
+                                <img src={job.freela.avatarUrl} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-black text-sm font-bold text-white">
+                                    {job.freela.name[0]?.toUpperCase()}
+                                </div>
                             )}
-                        </button>
-                    ) : canInvite ? (
+                        </div>
+                        <div className="flex min-w-0 flex-col">
+                            <span className="truncate text-sm font-bold">
+                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
+                            </span>
+                            <span className="text-xs text-gray-600">
+                                {job.freela.state === 'confirmed' ? (job.inProgress ? 'Em andamento' : 'Contratado') : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}
+                            </span>
+                        </div>
+                    </div>
+                ) : (
+                    <span className="hidden lg:block" />
+                )}
+
+                <div className="flex items-center gap-2 lg:justify-end">
+                    {missingFreela ? (
                         <Button
-                            variant="dark"
-                            onClick={(e) => { e.stopPropagation(); setInviteJobId(job.id); }}
-                            iconLeft={<UserPlus size={16} strokeWidth={2.5} />}
+                            variant={primary ? 'dark' : 'secondary'}
+                            className="flex-1 lg:flex-none"
+                            data-copilot="empresa.turnos.chamar-freelas"
+                            iconLeft={<Megaphone size={16} />}
+                            onClick={() => navigate(`${presenca}?chamar=1`)}
                         >
-                            Convidar freela
+                            Chamar freelas
                         </Button>
+                    ) : job.freela?.state === 'confirmed' ? (
+                        <ButtonLink variant="secondary" className="flex-1 lg:flex-none" to={presenca} data-copilot="empresa.turnos.marcar-presenca">
+                            Marcar presença
+                        </ButtonLink>
                     ) : (
-                        <span className="flex items-center gap-1 rounded-full border border-amber-500 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
-                            <AlertTriangle size={12} /> Sem freela
-                        </span>
+                        <ButtonLink variant="secondary" className="flex-1 lg:flex-none" to={presenca} data-copilot="empresa.turnos.ver-turno">
+                            Ver turno
+                        </ButtonLink>
                     )}
 
                     <Menu
                         label="Mais opções do turno"
                         menuLabel="Ações do turno"
                         items={[
-                            { label: 'Presença e Pagamento', icon: Users, onSelect: () => navigate(`/company/jobs/${job.id}/candidates`) },
-                            { label: 'Ver Detalhes', icon: Eye, onSelect: () => navigate(`/company/jobs/${job.id}`) },
+                            { label: 'Presença e pagamento', icon: Users, onSelect: () => navigate(presenca) },
+                            { label: 'Ver detalhes', icon: Eye, onSelect: () => navigate(`/company/jobs/${job.id}`) },
                             // Repetir reaproveita o turno inteiro; a empresa só escolhe a data nova.
                             { label: 'Repetir turno', icon: Copy, onSelect: () => navigate(`/company/create?repetir=${job.id}`) },
-                            { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${job.id}/edit`) },
+                            !ended && { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${job.id}/edit`) },
                             !!job.series_id && { label: 'Convidar para a série', icon: Repeat, onSelect: () => onInviteSeries(job.series_id!) },
                             !!job.series_id && { label: 'Editar os futuros', icon: Edit2, onSelect: () => onEditSeries(job) },
-                            {
+                            !ended && {
                                 label: job.status === 'open' ? 'Pausar' : 'Reativar',
                                 icon: job.status === 'open' ? PauseCircle : PlayCircle,
                                 onSelect: () => handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open'),
                             },
-                            !!job.series_id && { label: 'Cancelar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
+                            !!job.series_id && { label: 'Encerrar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
                             { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
                         ]}
                     />
@@ -358,8 +354,7 @@ export default function CompanyJobs() {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
-    // Vaga alvo do modal "Convidar Freela" (atrelar freela a uma vaga já criada).
-    const [inviteJobId, setInviteJobId] = useState<string | null>(null);
+
     // "Anteriores" fica recolhido por padrão — passado não deve atrapalhar a leitura do dia
     // de operação. Abre automaticamente quando a empresa escolhe o filtro "Concluídos"
     // (é exatamente o que ela pediu pra ver) e continua alternável manualmente.
@@ -371,9 +366,6 @@ export default function CompanyJobs() {
     const [cancelSeriesId, setCancelSeriesId] = useState<string | null>(null);
     const [inviteSeriesTarget, setInviteSeriesTarget] = useState<{ seriesId: string; targets: InviteSeriesTarget[] } | null>(null);
 
-    // Elenco da empresa + action de convite reaproveitados (mesmos de CompanyCreateJob).
-    const { teamMembers, loading: teamLoading } = useCompanyTeam();
-    const { invite, invitingWorkerId } = useCompanyInvites(inviteJobId);
 
     useEffect(() => {
         fetchJobs();
@@ -410,10 +402,11 @@ export default function CompanyJobs() {
             if (jobsData) {
                 // Batch fetch das candidaturas/convites (1 query) para derivar o estado do freela por vaga.
                 const jobIds = jobsData.map(j => j.id);
-                const { data: apps } = await supabase
+                const { data: apps, error: appsError } = await supabase
                     .from('applications')
                     .select('job_id, worker_id, status, worker_checkin_at, company_checkin_confirmed_at, company_checkout_confirmed_at, invitation_expires_at, invitation_response, worker:workers(full_name, avatar_url)')
                     .in('job_id', jobIds);
+                if (appsError) throw appsError;
 
                 const byJob: Record<string, AppRow[]> = {};
                 (await fillMissingWorkers(apps || [])).forEach((a) => {
@@ -502,14 +495,6 @@ export default function CompanyJobs() {
         setDeleteJobId(null);
     };
 
-    // Atrela um freela do elenco a uma vaga já criada (convite push).
-    const handleInvite = async (workerId: string) => {
-        const ok = await invite(workerId);
-        if (ok) {
-            setInviteJobId(null);
-            fetchJobs();
-        }
-    };
 
     // Ações de série (F3) — cada uma abre o modal correspondente; a lista completa dos
     // campos vem do próprio job já carregado (a query já usa `select('*')`, sem round-trip extra).
@@ -559,6 +544,25 @@ export default function CompanyJobs() {
     // aplicado depois de busca/filtro (as seções nunca ficam fora de sincronia com eles).
     const dayBuckets = groupJobsByDay(filteredJobs);
 
+    // Uma ação primária na tela: o primeiro turno (fora de "Anteriores") que precisa de gente.
+    const primaryJobId = dayBuckets.filter((b) => b.key !== 'past').flatMap((b) => b.jobs).find(needsPeople)?.id;
+    const deleteTarget = jobs.find((j) => j.id === deleteJobId);
+
+    const renderRow = (job: Job, bucketKey: DayBucketKey) => (
+        <JobRow
+            key={job.id}
+            job={job}
+            bucketKey={bucketKey}
+            navigate={navigate}
+            primary={job.id === primaryJobId}
+            handleStatusChange={handleStatusChange}
+            setDeleteJobId={setDeleteJobId}
+            onEditSeries={openEditSeries}
+            onCancelSeries={setCancelSeriesId}
+            onInviteSeries={openInviteSeries}
+        />
+    );
+
     return (
         <>
         <PageMeta title="Turnos" />
@@ -568,12 +572,14 @@ export default function CompanyJobs() {
                 onClose={() => setDeleteJobId(null)}
                 className="max-w-sm"
             >
-                    <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
-                    <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
-                    <div className="flex gap-3">
-                        <Button variant="secondary" fullWidth onClick={() => setDeleteJobId(null)}>Cancelar</Button>
-                        <Button variant="danger" fullWidth onClick={() => handleDelete(deleteJobId)}>Excluir</Button>
-                    </div>
+                    <DialogHeader titleId="excluir-turno-titulo" title="Excluir turno?" subtitle={deleteTarget?.title} />
+                    <p className="text-sm text-gray-600">
+                        O turno sai da agenda. Convites e contratações dele são encerrados e quem já foi contratado é avisado. Não dá para desfazer.
+                    </p>
+                    <DialogActions>
+                        <Button variant="secondary" data-autofocus onClick={() => setDeleteJobId(null)}>Voltar</Button>
+                        <Button variant="danger" data-copilot="empresa.turnos.excluir-confirmar" data-copilot-risk="D" onClick={() => handleDelete(deleteJobId)}>Excluir</Button>
+                    </DialogActions>
             </Dialog>
         )}
         <div className="pb-4">
@@ -597,17 +603,11 @@ export default function CompanyJobs() {
                         className={`${FIELD_CONTROL_CLASS} pl-10`}
                     />
                 </div>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar turnos">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1" role="group" aria-label="Filtrar turnos">
                     {FILTERS.map(({ key, label }) => (
-                        <button
-                            key={key}
-                            type="button"
-                            onClick={() => changeFilter(key)}
-                            aria-pressed={filter === key}
-                            className={`h-11 shrink-0 rounded-xl border-2 px-4 text-sm font-bold transition-colors ${filter === key ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-black hover:border-black'}`}
-                        >
+                        <FilterChip key={key} pressed={filter === key} onClick={() => changeFilter(key)} className="!px-3">
                             {label}
-                        </button>
+                        </FilterChip>
                     ))}
                 </div>
             </div>
@@ -615,17 +615,30 @@ export default function CompanyJobs() {
             {/* Agenda por dia */}
             <div className="space-y-8">
                 {loading ? (
-                    <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
-                        {[...Array(4)].map((_, i) => (
-                            <div key={i} className="bg-gray-200 rounded-xl h-28" />
-                        ))}
-                    </div>
+                    <SkeletonList count={4} itemClassName="h-28" />
                 ) : erroCarga && jobs.length === 0 ? (
-                    <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); void fetchJobs(); }} />
+                    <ErrorState title="Não conseguimos carregar seus turnos." onRetry={() => { setErroCarga(false); setLoading(true); void fetchJobs(); }} />
                 ) : filteredJobs.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-gray-300 py-10 text-center text-sm font-semibold text-gray-600">
-                        Nenhum turno encontrado.
-                    </div>
+                    jobs.length === 0 ? (
+                        <EmptyState
+                            size="page"
+                            icon={CalendarClock}
+                            title="Você ainda não tem turnos."
+                            description="Crie o primeiro turno e chame quem está no seu elenco."
+                            action={<Button variant="dark" data-copilot="empresa.turnos.criar-turno" onClick={() => navigate('/company/create')}>Criar turno</Button>}
+                        />
+                    ) : (
+                        <EmptyState
+                            icon={CalendarClock}
+                            title={search ? 'Nenhum turno com essa busca.' : filter === 'andamento' ? 'Nenhum turno em andamento agora.' : filter === 'open' ? 'Nenhum turno aberto agora.' : 'Nenhum turno concluído ainda.'}
+                            action={
+                                <>
+                                    <Button variant="secondary" onClick={() => { setSearch(''); changeFilter('all'); }}>Ver todos</Button>
+                                    <Button variant="dark" onClick={() => navigate('/company/create')}>Criar turno</Button>
+                                </>
+                            }
+                        />
+                    )
                 ) : (
                     dayBuckets.map((bucket) => (
                         <div key={bucket.key}>
@@ -648,112 +661,32 @@ export default function CompanyJobs() {
                                 </div>
                             )}
 
-                            {(bucket.key !== 'past' || pastExpanded) && (
-                                <div className="space-y-4">
-                                    {bucket.jobs.map((job) => (
-                                        <JobRow
-                                            key={job.id}
-                                            job={job}
-                                            bucketKey={bucket.key}
-                                            navigate={navigate}
-                                            setInviteJobId={setInviteJobId}
-                                            handleStatusChange={handleStatusChange}
-                                            setDeleteJobId={setDeleteJobId}
-                                            onEditSeries={openEditSeries}
-                                            onCancelSeries={setCancelSeriesId}
-                                            onInviteSeries={openInviteSeries}
-                                        />
-                                    ))}
-                                </div>
-                            )}
+                            {(bucket.key !== 'past' || pastExpanded) && (() => {
+                                // "Anteriores" e o filtro de concluídos mostram tudo; nos outros dias os
+                                // encerrados ficam recolhidos abaixo do que ainda pede atenção.
+                                const showAll = bucket.key === 'past' || filter === 'closed';
+                                const visible = showAll ? bucket.jobs : bucket.jobs.filter((j) => !isJobEnded(j)).sort((a, b) => dayRank(a) - dayRank(b));
+                                const ended = showAll ? [] : bucket.jobs.filter(isJobEnded);
+                                return (
+                                    <div className="space-y-3">
+                                        {visible.map((job) => renderRow(job, bucket.key))}
+                                        {ended.length > 0 && (
+                                            <details className="group">
+                                                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-gray-600">
+                                                    Encerrados ({ended.length})
+                                                </summary>
+                                                <div className="mt-2 space-y-3">{ended.map((job) => renderRow(job, bucket.key))}</div>
+                                            </details>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     ))
                 )}
             </div>
         </div>
 
-        {/* Modal "Convidar Freela" — atrela um freela do elenco a uma vaga já criada */}
-        {inviteJobId && (
-            <Dialog
-                labelledBy="convidar-freela-titulo"
-                onClose={() => setInviteJobId(null)}
-                locked={!!invitingWorkerId}
-                initialFocus="panel"
-            >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                        <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setInviteJobId(null)}
-                            aria-label="Fechar"
-                            className="w-11 shrink-0 !px-0"
-                        >
-                            <X size={20} />
-                        </Button>
-                    </div>
-                    <p className="mb-5 text-sm text-gray-600">
-                        Escolha um freela do seu elenco para atrelar a este turno.
-                    </p>
-
-                    {teamLoading && (
-                        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
-                            {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
-                        </div>
-                    )}
-
-                    {!teamLoading && teamMembers.length === 0 && (
-                        <div className="rounded-2xl border-2 border-dashed border-gray-300 py-8 text-center text-gray-600">
-                            <Users size={32} className="mx-auto mb-2 opacity-40" />
-                            <p className="text-sm font-bold">Seu elenco está vazio.</p>
-                            <p className="mt-1 text-xs">Adicione freelas em <strong>Meu Elenco</strong> antes de convidar.</p>
-                            <Button
-                                variant="dark"
-                                onClick={() => { setInviteJobId(null); navigate('/company/team'); }}
-                                className="mt-4"
-                            >
-                                Ir para Meu Elenco
-                            </Button>
-                        </div>
-                    )}
-
-                    {!teamLoading && teamMembers.length > 0 && (
-                        <div className="max-h-72 space-y-3 overflow-y-auto">
-                            {teamMembers.map((member: TeamMember) => {
-                                const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
-                                const isInviting = invitingWorkerId === member.worker.id;
-                                return (
-                                    <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border-2 border-gray-200 p-3">
-                                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
-                                            {avatarUrl ? (
-                                                <img src={avatarUrl} alt={member.worker.full_name} className="h-full w-full object-cover" />
-                                            ) : (
-                                                <div className="flex h-full w-full items-center justify-center bg-black font-bold text-white">
-                                                    {member.worker.full_name[0]?.toUpperCase()}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-bold">{member.worker.full_name}</p>
-                                            {member.worker.primary_role && (
-                                                <p className="truncate text-xs text-gray-600">{roleLabel(member.worker.primary_role)}</p>
-                                            )}
-                                        </div>
-                                        <Button
-                                            variant="dark"
-                                            onClick={() => handleInvite(member.worker.id)}
-                                            loading={isInviting}
-                                            iconLeft={!isInviting ? <Send size={14} /> : undefined}
-                                            className="shrink-0"
-                                        >
-                                            Convidar
-                                        </Button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-            </Dialog>
-        )}
 
         {/* Escala Recorrente (F3) — ações de série (R10/R11) */}
         {editSeriesJob && (

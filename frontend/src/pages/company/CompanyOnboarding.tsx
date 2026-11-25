@@ -24,6 +24,7 @@ export default function CompanyOnboarding() {
     const [userId, setUserId] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState(false);
     const [saidaArmada, setSaidaArmada] = useState(false);
+    const [erroSalvar, setErroSalvar] = useState(false);
 
     const TOTAL_STEPS = 2;
 
@@ -133,6 +134,7 @@ export default function CompanyOnboarding() {
         if (!userId) return;
 
         setLoading(true);
+        setErroSalvar(false);
         try {
             const { error } = await supabase
                 .from('companies')
@@ -160,6 +162,7 @@ export default function CompanyOnboarding() {
             window.location.href = '/company/dashboard';
         } catch (err: unknown) {
             logError('Error saving company profile:', err);
+            setErroSalvar(true);
             addToast(err instanceof Error ? err.message : 'Erro ao salvar perfil. Tente novamente.', 'error');
         } finally {
             setLoading(false);
@@ -167,11 +170,20 @@ export default function CompanyOnboarding() {
     };
 
     const stepLabels = ['Dados', 'Objetivos'];
-    const pendenciasStep2 = [
-        !formData.hiringGoal && 'o objetivo',
-        !formData.hiringVolume && 'o volume de contratação',
-        !tosAccepted && 'o aceite dos Termos',
-    ].filter(Boolean);
+    const pendencias = (step === 1
+        ? [
+            !formData.name.trim() && 'o nome da empresa',
+            !!documentoErro() && 'um CNPJ ou CPF válido',
+            !formData.companyType && 'o tipo de empresa',
+            !formData.industry && 'o setor',
+            !formData.city.trim() && 'a cidade',
+        ]
+        : [
+            !formData.hiringGoal && 'o objetivo',
+            !formData.hiringVolume && 'o volume de contratação',
+            !tosAccepted && 'o aceite dos Termos',
+        ]
+    ).filter(Boolean);
 
     return (
         <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans">
@@ -338,7 +350,7 @@ export default function CompanyOnboarding() {
                                         <legend className="text-sm font-bold mb-2">Turnos por mês (estimativa)</legend>
                                         <div className="flex gap-2" data-invalid={erros.hiringVolume ? 'true' : undefined} tabIndex={-1}>
                                             {['1-5', '6-20', '20+'].map(opt => (
-                                                <label key={opt} className={`flex-1 border-2 rounded-xl min-h-11 px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                <label key={opt} className={`min-w-0 flex-1 border-2 rounded-xl min-h-11 px-1 sm:px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input type="radio" name="volume" aria-invalid={erros.hiringVolume ? true : undefined} aria-describedby={erros.hiringVolume ? 'volume-error' : undefined} value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="sr-only" />
                                                     <span className="text-lg font-bold">{opt}</span>
                                                     <span className="text-xs uppercase tracking-wide opacity-70">Turnos</span>
@@ -370,17 +382,23 @@ export default function CompanyOnboarding() {
                             </div>
                         )}
 
-                        {step === 2 && pendenciasStep2.length > 0 && (
+                        {pendencias.length > 0 && (
                             <p
                                 role="status"
                                 aria-live="polite"
                                 className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
                             >
-                                Falta: {pendenciasStep2.join(', ')}.
+                                Falta: {pendencias.join(', ')}.
                             </p>
                         )}
 
-                        <div className="pt-5 flex justify-between items-center border-t-2 border-gray-100">
+                        {erroSalvar && (
+                            <p role="alert" className="text-sm font-bold text-red-600">
+                                Não foi possível salvar. O que você preencheu continua na tela: tente de novo.
+                            </p>
+                        )}
+
+                        <div className="pt-5 flex flex-wrap gap-2 justify-between items-center border-t-2 border-gray-100">
                             {step > 1 ? (
                                 <Button
                                     variant="ghost"
@@ -398,6 +416,7 @@ export default function CompanyOnboarding() {
                                 variant="dark"
                                 size="lg"
                                 loading={loading}
+                                data-copilot="empresa.cadastro.avancar"
                                 iconRight={<ArrowRight size={18} />}
                             >
                                 {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}

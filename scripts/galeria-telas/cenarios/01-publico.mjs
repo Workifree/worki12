@@ -15,8 +15,8 @@ export default [
   c('regulamento-trilha', 'anon', '/regulamento-trilha', 'pública, versionada', { espera: 'Regulamento' }),
   c('404', 'anon', '/rota-que-nao-existe', 'path="*"', { espera: 'não encontrada|404' }),
 
-  a('login-freela', 'anon', '/login?type=work', 'type=work', { espera: 'Começar a Trabalhar' }),
-  a('login-empresa', 'anon', '/login?type=hire', 'type=hire', { espera: 'Contratar Talentos' }),
+  a('login-freela', 'anon', '/login?type=work', 'type=work', { espera: 'Entrar como freela' }),
+  a('login-empresa', 'anon', '/login?type=hire', 'type=hire', { espera: 'Entrar como empresa' }),
   a('login-sessao-expirada', 'anon', '/login?reason=session_expired', 'reason=session_expired', { espera: 'expirou' }),
   a('cadastro', 'anon', '/login?type=work&cadastro=1', 'cadastro=1', { espera: 'Criar Conta' }),
   a('cadastro-forca-senha', 'anon', '/login?type=hire&cadastro=1', 'senha digitada mostra a força', { passos: [{ preencher: ['input[type=password]', 'abc12345'] }], espera: 'Força' }),

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Button, Card } from './ui';
+import { Card } from './ui';
+import WorkerSwitch from './WorkerSwitch';
 import { Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
@@ -103,21 +104,14 @@ export default function ReferralOptOutSection() {
         Empresas do seu elenco podem indicar você a outras empresas que confiam nelas. Você
         sempre decide: a empresa que recebe a indicação só te conhece se você aceitar.
       </p>
-      <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">
-        <span className="font-bold text-sm">
-          {accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
-        </span>
-        <Button
-          role="switch"
-          aria-checked={accepts}
-          aria-label="Aceitar indicações de empresas do meu elenco"
-          variant={accepts ? 'primary' : 'secondary'}
-          onClick={handleToggle}
-          loading={saving}
-        >
-          {accepts ? 'Ativado' : 'Desativado'}
-        </Button>
-      </div>
+      <WorkerSwitch
+        checked={accepts}
+        label="Aceitar indicações de empresas do meu elenco"
+        text={accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
+        data-copilot="freela.perfil.indicacoes"
+        onToggle={() => void handleToggle()}
+        disabled={saving}
+      />
     </Card>
   );
 }

@@ -87,7 +87,7 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
       <div className="mx-auto max-w-3xl">
         <BackToGestao />
         <Card className="text-center">
-          <h1 className="text-xl font-black">Não conseguimos abrir a trilha agora</h1>
+          <h1 className="text-xl font-bold">Não conseguimos abrir a trilha agora</h1>
           <p className="mt-2 text-sm text-gray-700">Seus marcos continuam registrados. Tente de novo em instantes.</p>
           <Button variant="dark" size="lg" className="mt-4" onClick={() => void reload()}>
             Tentar de novo
@@ -142,7 +142,7 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
 
           <section aria-labelledby="bonus-roadmap-title" className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 id="bonus-roadmap-title" className="text-xl font-black">
+              <h2 id="bonus-roadmap-title" className="text-lg font-bold">
                 Marcos
               </h2>
               <p className="text-base font-black tabular-nums" data-testid="bonus-counter">

@@ -16,11 +16,14 @@ import { useWorkerStores } from '../hooks/useTeamConnections';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { Button, Card, PageHeader } from '../components/ui';
+import { Alert, Button, Card, PageHeader, StatusBadge } from '../components/ui';
+import TodayShiftCard from '../components/TodayShiftCard';
+import { isTodayShift } from '../lib/checkinWindow';
 import { getSessionUserOrThrow } from '../lib/authSession';
 import { isOnShift, hasLeftShift } from '../lib/shiftPresence';
 
 interface NextJobData {
+    id: string;
     status: string;
     worker_checkin_at: string | null;
     worker_checkout_at: string | null;
@@ -37,6 +40,7 @@ interface NextJobData {
         work_end_time: string | null;
         location: string | null;
         company: { name: string };
+        budget?: number | null;
     };
 }
 
@@ -90,7 +94,7 @@ export default function Dashboard() {
         }
     });
 
-    const { data: nextJob, isLoading: carregandoNextJob, isError: erroNextJob, refetch: refetchNextJob } = useQuery({
+    const { data: shifts, isLoading: carregandoNextJob, isError: erroNextJob, refetch: refetchNextJob } = useQuery({
         queryKey: ['nextJob'],
         networkMode: 'always',
         queryFn: async () => {
@@ -98,17 +102,22 @@ export default function Dashboard() {
             if (!user) return null;
             const { data, error } = await supabase
                 .from('applications')
-                .select('status, worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at, job:jobs(*, company:companies(name))')
+                .select('id, status, worker_checkin_at, worker_checkout_at, company_checkin_confirmed_at, company_checkout_confirmed_at, job:jobs(*, company:companies(name))')
                 .eq('worker_id', user.id)
                 .in('status', ['hired', 'in_progress']);
             if (error) throw error;
 
-            const rows = (data as unknown as NextJobData[] | null) ?? [];
-            if (rows.length === 0) return null;
+            const rows = ((data as unknown as NextJobData[] | null) ?? []).filter((r) => !!r.job);
 
-            // Turno em andamento tem prioridade sobre qualquer "próximo" agendado.
-            const onShift = rows.find(isOnShift);
-            if (onShift) return onShift;
+            // Hoje (em curso, janela aberta ou turno do dia) vai para o cartão de presença no topo.
+            const todays = rows
+                .filter((r) => isTodayShift({
+                    ...r,
+                    startDate: r.job.start_date,
+                    startTime: r.job.work_start_time,
+                    endTime: r.job.work_end_time,
+                }))
+                .sort((a, b) => `${a.job.start_date}${a.job.work_start_time}`.localeCompare(`${b.job.start_date}${b.job.work_start_time}`));
 
             // PostgREST não ordena de forma confiável por coluna de embed (job.start_date),
             // então ordenamos no cliente e ignoramos linhas sem start_date válido.
@@ -116,16 +125,17 @@ export default function Dashboard() {
             today.setHours(0, 0, 0, 0);
 
             const upcoming = rows
+                .filter(r => !todays.includes(r))
                 // Turno com saída registrada já acabou para o freela: não é o "próximo".
                 // (`in_progress` sem carimbo nenhum segue aqui, como turno agendado.)
                 .filter(r => !hasLeftShift(r))
                 .filter(r => {
-                    const d = r.job?.start_date ? new Date(r.job.start_date) : null;
+                    const d = r.job.start_date ? new Date(r.job.start_date) : null;
                     return d instanceof Date && !isNaN(d.getTime()) && d >= today;
                 })
                 .sort((a, b) => new Date(a.job.start_date).getTime() - new Date(b.job.start_date).getTime());
 
-            return upcoming[0] ?? null;
+            return { todays, next: upcoming[0] ?? null };
         },
         enabled: !!worker
     });
@@ -198,6 +208,9 @@ export default function Dashboard() {
         { id: 2, title: 'Confirmar Email', xp: 0, done: !!authUser?.email_confirmed_at, action: '/profile' },
         { id: 3, title: 'Adicionar Especialidades', xp: 75, done: (worker.roles && worker.roles.length > 0) || !!worker.primary_role, action: '/profile' },
     ] : [];
+
+    const todays = shifts?.todays ?? [];
+    const nextJob = shifts?.next ?? null;
 
     // Unified Loading State
     const loading = isLoadingWorker;
@@ -276,6 +289,8 @@ export default function Dashboard() {
     // Uma ação primária por tela: o que está esperando o freela agora ganha o botão cheio; o convite
     // só vira secundário quando um pagamento a confirmar já ocupa o primeiro plano.
     const conviteEhPrimario = pendingReceipts.length === 0;
+    const temTurnoHoje = todays.length > 0;
+    const semPix = !String(worker.pix_key ?? '').trim();
     const parsedDate = nextJob?.job?.start_date ? new Date(nextJob.job.start_date) : null;
     const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
     const perfilIncompleto = hasNoDeclaredAvailability || completedQuests < totalQuests;
@@ -285,13 +300,43 @@ export default function Dashboard() {
             <PageMeta title="Início" />
 
             <PageHeader
-                className="!mb-0"
+                className="mb-0"
                 title={firstName ? `Fala, ${firstName}!` : 'Fala!'}
-                subtitle="Pronto para faturar hoje?"
+                subtitle={temTurnoHoje
+                    ? `Você tem ${todays.length === 1 ? '1 turno' : `${todays.length} turnos`} para agora.`
+                    : 'Seus turnos, presença e recibos.'}
             />
 
             {falhaParcial && (
                 <ErroDeCarga onRetry={tentarDeNovo} mensagem="Parte das suas informações não carregou. Tente de novo." />
+            )}
+
+            {/* --- HOJE: presença sem precisar procurar --- */}
+            {temTurnoHoje && (
+                <section aria-label="Hoje" className="flex flex-col gap-4">
+                    {todays.map((t) => (
+                        <TodayShiftCard
+                            key={t.id}
+                            heading={isOnShift(t) ? 'Você está no turno agora' : 'Próximo turno'}
+                            shift={{
+                                applicationId: t.id,
+                                status: t.status,
+                                title: t.job.title,
+                                companyName: t.job.company?.name || 'Empresa',
+                                startDate: t.job.start_date,
+                                startTime: t.job.work_start_time,
+                                endTime: t.job.work_end_time,
+                                location: t.job.location,
+                                pay: t.job.budget ?? null,
+                                worker_checkin_at: t.worker_checkin_at,
+                                worker_checkout_at: t.worker_checkout_at,
+                                company_checkin_confirmed_at: t.company_checkin_confirmed_at,
+                                company_checkout_confirmed_at: t.company_checkout_confirmed_at,
+                            }}
+                            onChanged={() => refetchNextJob()}
+                        />
+                    ))}
+                </section>
             )}
 
             {/* --- PRECISA DA SUA ATENÇÃO (ação pendente, persistente) ---
@@ -300,13 +345,13 @@ export default function Dashboard() {
             {temAtencao && (
                 <section aria-label="Precisa da sua atenção" className="flex flex-col gap-4">
                     {pendingReceipts.length > 0 && (
-                        <Card padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <Card padding="sm" className="shadow-brutal-brand flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="min-w-0">
                                 <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary-dark text-xs font-bold px-3 py-1 rounded-pill mb-2">
                                     <AlertCircle size={12} /> Pagamento para confirmar
                                 </span>
-                                <p className="text-2xl font-bold tabular-nums truncate">
-                                    {totalReceipts.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                <p className="text-2xl font-bold tabular-nums [overflow-wrap:anywhere]">
+                                    {pendingReceipts.every((r) => r.amount > 0) ? formatBRL(totalReceipts) : 'Valor não informado'}
                                 </p>
                                 <p className="text-sm text-gray-600">
                                     {pendingReceipts.length === 1
@@ -315,7 +360,8 @@ export default function Dashboard() {
                                 </p>
                             </div>
                             <Button
-                                variant="primary"
+                                variant={temTurnoHoje ? 'secondary' : 'primary'}
+                                data-copilot="freela.inicio.confirmar-recebimento"
                                 className="sm:flex-shrink-0 w-full sm:w-auto"
                                 onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
                             >
@@ -334,7 +380,8 @@ export default function Dashboard() {
                                 <p className="text-sm text-gray-600 truncate">{primaryInviteCompany} está te chamando para um turno.</p>
                             </div>
                             <Button
-                                variant={conviteEhPrimario ? 'primary' : 'secondary'}
+                                variant={conviteEhPrimario && !temTurnoHoje ? 'primary' : 'secondary'}
+                                data-copilot="freela.inicio.ver-convite"
                                 className="sm:flex-shrink-0 w-full sm:w-auto"
                                 onClick={() => navigate('/my-jobs')}
                             >
@@ -345,11 +392,30 @@ export default function Dashboard() {
                 </section>
             )}
 
+            {/* --- CHAVE PIX: sem ela a empresa não tem como pagar (vem antes de foto e XP) --- */}
+            {semPix && (
+                <Alert
+                    tone="warning"
+                    title="Cadastre sua chave PIX"
+                    action={(
+                        <Button
+                            variant="secondary"
+                            data-copilot="freela.inicio.cadastrar-pix"
+                            onClick={() => navigate('/profile?editar=pix')}
+                        >
+                            Preencher chave PIX
+                        </Button>
+                    )}
+                >
+                    As empresas pagam por fora do app, usando a chave do seu perfil.
+                </Alert>
+            )}
+
             {/* --- PRÓXIMO TURNO + GANHOS (a resposta de relance) --- */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="md:col-span-2 flex flex-col">
+                {!temTurnoHoje && <Card className="md:col-span-2 flex flex-col">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-primary" /> {nextJob && isOnShift(nextJob) ? 'Você está no turno agora' : 'Próximo turno'}
+                        <Clock size={18} className="text-primary" /> Próximo turno
                     </h2>
                     {nextJob ? (
                         <>
@@ -368,7 +434,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <span className="inline-block mb-1 bg-primary-light text-primary-dark text-xs font-bold px-2.5 py-0.5 rounded-pill">
-                                        {isOnShift(nextJob) ? 'Em andamento' : 'Agendado'}
+                                        Agendado
                                     </span>
                                     <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
                                     {nextJob.job.company?.name && (
@@ -401,9 +467,9 @@ export default function Dashboard() {
                             Sem próximos turnos marcados.
                         </div>
                     )}
-                </Card>
+                </Card>}
 
-                <Card className="flex flex-col">
+                <Card className={temTurnoHoje ? 'md:col-span-3 flex flex-col' : 'flex flex-col'}>
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                         <TrendingUp size={18} className="text-primary" /> Ganhos
                     </h2>
@@ -415,7 +481,7 @@ export default function Dashboard() {
                     </p>
                     <p className="mt-auto pt-4 inline-flex items-center gap-1.5 text-sm text-gray-700">
                         <Star size={14} className="text-yellow-500" fill="currentColor" aria-hidden="true" />
-                        <span>Sua nota: <span className="font-bold">{nota ?? '—'}</span></span>
+                        <span>{nota ? <>Sua nota: <span className="font-bold">{nota}</span></> : 'Ainda sem avaliações'}</span>
                     </p>
                 </Card>
             </section>
@@ -542,9 +608,7 @@ export default function Dashboard() {
                                 <p className="font-semibold text-sm truncate" title={h.job.title}>{h.job.title}</p>
                                 <p className="text-xs text-gray-600">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
-                            <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-pill ${h.status === 'completed' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}`}>
-                                {h.status === 'completed' ? 'Concluído' : h.status === 'rejected' ? 'Não selecionado' : 'Cancelado'}
-                            </span>
+                            <StatusBadge domain="application" status={h.status} className="flex-shrink-0" />
                         </button>
                     )) : carregandoHistory ? (
                         <div className="h-12 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>

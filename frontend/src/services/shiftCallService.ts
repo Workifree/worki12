@@ -277,7 +277,7 @@ export const ShiftCallService = {
 
       if (error) {
         logError('shiftCall.listCallsByJob', error);
-        return [];
+        throw error;
       }
       return await Promise.all(
         ((data ?? []) as ShiftCall[]).map(async (call) =>
@@ -286,7 +286,7 @@ export const ShiftCallService = {
       );
     } catch (err) {
       logError('shiftCall.listCallsByJob', err);
-      return [];
+      throw err;
     }
   },
 
@@ -379,7 +379,7 @@ export const ShiftCallService = {
         `
         id, call_id, worker_id, notified_at, responded_at, response,
         call:shift_calls (
-          id, job_id, slots, reason, message, targets_count, status, expires_at, created_at,
+          id, job_id, slots, reason, message, targets_count, status, expires_at, created_at, origin,
           job:jobs (
             id, title, description, briefing, location, start_date,
             work_start_time, work_end_time, budget, has_lunch, slots, company_id,
@@ -414,6 +414,7 @@ export const ShiftCallService = {
           slots: call.slots ?? 1,
           reason: call.reason,
           message: call.message,
+          origin: call.origin,
           job: call.job,
         };
         return invite;

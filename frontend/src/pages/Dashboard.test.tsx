@@ -217,3 +217,16 @@ describe('Dashboard — pagamento aguardando confirmação (indicador persistent
     expect(screen.queryByText('Pagamento para confirmar')).not.toBeInTheDocument()
   })
 })
+
+describe('Dashboard — aviso de chave PIX ausente', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('aparece com atalho quando o perfil não tem chave PIX', async () => {
+    setupMocks({ '1': ['tarde'] })
+    renderDashboard()
+
+    expect(await screen.findByRole('button', { name: /preencher chave pix/i })).toBeInTheDocument()
+  })
+})

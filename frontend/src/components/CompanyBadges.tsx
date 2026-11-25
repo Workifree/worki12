@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Star, EyeOff, Eye, ShieldOff } from 'lucide-react';
+import { Building2, Star, EyeOff, Eye } from 'lucide-react';
+import WorkerSwitch from './WorkerSwitch';
 import { BadgeService } from '../services/badgeService';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
@@ -181,34 +182,18 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
       </h3>
 
       {mode === 'manage' && (
-        <div className="flex items-start justify-between gap-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 mb-5">
-          <div className="flex items-start gap-2 min-w-0">
-            <ShieldOff size={18} className="mt-0.5 flex-shrink-0 text-gray-600" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900">Não exibir onde já trabalhei</p>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Chave-mestra: liga e nenhuma empresa vê seus selos (nem esta seção), mesmo com vínculo
-                ativo. Você continua vendo tudo aqui para poder desligar de novo quando quiser.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={badgesHiddenGlobal}
-            aria-label="Não exibir onde já trabalhei para outras empresas"
+        <div className="mb-5">
+          <WorkerSwitch
+            checked={!badgesHiddenGlobal}
+            label="Mostrar onde já trabalhei para outras empresas"
+            text="Mostrar onde já trabalhei"
+            data-copilot="freela.perfil.selos"
+            onToggle={() => void handleToggleGlobal()}
             disabled={savingGlobal}
-            onClick={() => void handleToggleGlobal()}
-            className={`relative flex-shrink-0 w-14 h-8 rounded-pill border-2 border-black transition-colors min-h-11 ${
-              badgesHiddenGlobal ? 'bg-black' : 'bg-gray-200'
-            } ${savingGlobal ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white border-2 border-black transition-transform ${
-                badgesHiddenGlobal ? 'translate-x-6' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          />
+          <p className="mt-2 text-xs text-gray-600">
+            Desligado, nenhuma empresa vê esta seção, mesmo as do seu elenco. Você continua vendo tudo aqui.
+          </p>
         </div>
       )}
 

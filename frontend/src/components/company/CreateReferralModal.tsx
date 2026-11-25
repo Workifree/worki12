@@ -26,7 +26,7 @@ import { Dialog } from '../ui/Dialog';
 // `.eq('id', user.id)`, o que não é o mesmo padrão. A leitura direta aqui é aprovada
 // **acoplada** ao débito #10: no dia em que `companies` deixar de ser `USING (true)`, esta
 // busca precisa virar RPC (`search_companies_for_referral`, contrato já escrito no ADR §D2)
-// NA MESMA migration — senão o campo "Empresa destino" passa a devolver 0 linhas em
+// NA MESMA migration — senão o campo "Para qual empresa" passa a devolver 0 linhas em
 // silêncio (RLS que não casa não dá erro) e a F10 fica inoperante sem aviso nenhum.
 // Endurecimentos obrigatórios já aplicados (DS-BUSCA-1/2/3): termo sanitizado (remove
 // `% _ * \`, nunca escapa — remoção não depende da semântica de ESCAPE nem da tradução
@@ -216,7 +216,7 @@ export default function CreateReferralModal({
 
           <div>
             <label htmlFor="referral-company-search" className="block text-sm font-bold text-black mb-1.5">
-              Empresa destino
+              Para qual empresa
             </label>
             <div className="relative">
               <Search size={16} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

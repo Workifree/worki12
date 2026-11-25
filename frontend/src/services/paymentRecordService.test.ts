@@ -704,15 +704,14 @@ describe('PaymentRecordService.listActivePaymentsByJob', () => {
     expect(byWorker['worker-2'].application_id).toBe('app-2')
   })
 
-  it('retorna [] em erro de query (não propaga exceção)', async () => {
+  it('lança em erro de query: leitura falha não é "ninguém foi pago"', async () => {
     routeFrom({
       shift_payments: makeChain({ data: null, error: { message: 'db error' } }),
     })
 
     const { PaymentRecordService } = await import('./paymentRecordService')
-    const result = await PaymentRecordService.listActivePaymentsByJob('job-1')
 
-    expect(result).toEqual([])
+    await expect(PaymentRecordService.listActivePaymentsByJob('job-1')).rejects.toMatchObject({ message: 'db error' })
   })
 })
 

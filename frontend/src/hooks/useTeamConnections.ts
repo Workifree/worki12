@@ -15,14 +15,15 @@ import { useToast } from '../contexts/ToastContext';
 import type { TeamConnection, TeamMember, MyStore, TeamConnectionSource } from '../types';
 import { getAuthenticatedCompanyId } from '../services/companyScopeService';
 import { checkSession } from '../lib/authSession';
+import { logError } from '../lib/logger';
 
 // ---------------------------------------------------------------------------
 // Hook para EMPRESA — gerenciar "minha equipe"
 // ---------------------------------------------------------------------------
 
 export interface UseCompanyTeamResult {
-  /** Não deu para verificar a sessão (rede): lista vazia aqui não significa Elenco vazio. */
-  erroSessao: boolean;
+  /** Sessão ou consulta falharam: lista vazia aqui não significa Elenco vazio. */
+  erroCarga: boolean;
   /** Membros aceitos (com perfil do worker). */
   teamMembers: TeamMember[];
   /** Convites de equipe pendentes (empresa enviou, aguarda worker). */
@@ -43,71 +44,62 @@ export function useCompanyTeam(): UseCompanyTeamResult {
   const [pendingConnections, setPendingConnections] = useState<TeamConnection[]>([]);
   const [companyId, setCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [erroSessao, setErroSessao] = useState(false);
+  const [erroCarga, setErroCarga] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    const session = await checkSession();
-    if (session.status === 'signed_out') {
-      navigate('/login');
-      return;
-    }
-    if (session.status === 'unavailable') {
-      setErroSessao(true);
-      setLoading(false);
-      return;
-    }
-
-    setErroSessao(false);
-    setLoading(true);
-    // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
-    // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
-    // seam) aparecesse — duas metades da mesma tela discordando sobre qual empresa e esta.
-    const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
-    if (empresaOperada) setCompanyId(empresaOperada);
-
-    const [members, all] = await Promise.all([
-      TeamConnectionService.listTeamMembers(),
-      TeamConnectionService.listAllConnections(),
-    ]);
-
-    setTeamMembers(members);
-    setPendingConnections(all.filter((c) => c.status === 'pending'));
-    setLoading(false);
-  }, [navigate]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
+  const fetchTeam = useCallback(
+    async (isActive: () => boolean = () => true) => {
       const session = await checkSession();
       if (session.status === 'signed_out') {
         navigate('/login');
         return;
       }
       if (session.status === 'unavailable') {
-        if (active) { setErroSessao(true); setLoading(false); }
+        if (!isActive()) return;
+        setErroCarga(true);
+        setLoading(false);
         return;
       }
 
       setLoading(true);
+      // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
+      // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
+      // seam) aparecesse — duas metades da mesma tela discordando sobre qual empresa e esta.
       const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
-      if (active && empresaOperada) setCompanyId(empresaOperada);
+      if (isActive() && empresaOperada) setCompanyId(empresaOperada);
 
-      const [members, all] = await Promise.all([
-        TeamConnectionService.listTeamMembers(),
-        TeamConnectionService.listAllConnections(),
-      ]);
-
-      if (!active) return;
-      setTeamMembers(members);
-      setPendingConnections(all.filter((c) => c.status === 'pending'));
+      try {
+        const [members, all] = await Promise.all([
+          TeamConnectionService.listTeamMembers(),
+          TeamConnectionService.listAllConnections(),
+        ]);
+        if (!isActive()) return;
+        setTeamMembers(members);
+        setPendingConnections(all.filter((c) => c.status === 'pending'));
+        setErroCarga(false);
+      } catch (error) {
+        if (!isActive()) return;
+        // Mantém o que já estava na tela e sinaliza a falha.
+        logError('useCompanyTeam.load', error);
+        setErroCarga(true);
+      }
       setLoading(false);
-    })();
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void fetchTeam(() => active);
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [fetchTeam]);
+
+  const load = useCallback(() => {
+    void fetchTeam();
+  }, [fetchTeam]);
 
   const addWorker = useCallback(
     async (workerId: string, source: TeamConnectionSource): Promise<boolean> => {
@@ -151,7 +143,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     [addToast, load],
   );
 
-  return { teamMembers, pendingConnections, loading, erroSessao, companyId, addWorker, removeWorker, refresh: load };
+  return { teamMembers, pendingConnections, loading, erroCarga, companyId, addWorker, removeWorker, refresh: load };
 }
 
 // ---------------------------------------------------------------------------

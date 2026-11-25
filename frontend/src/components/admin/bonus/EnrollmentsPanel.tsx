@@ -4,6 +4,7 @@ import { logError } from '../../../lib/logger';
 import type { BonusAdminAdapter, EnrollmentItem, EnrollmentStatus, NewEnrollment } from './types';
 import { blockReasonText, formatDate, PIX_MATCH_PROCEDURE } from './format';
 import { useLoad } from './useLoad';
+import { ErrorState } from '../../ui';
 
 interface Props {
     adapter: BonusAdminAdapter;
@@ -31,9 +32,9 @@ function PixMatchProcedure() {
 
 function Alerts({ adapter }: Props) {
     const fetcher = useCallback(() => adapter.getAlerts(), [adapter]);
-    const { data, loading, error } = useLoad(fetcher, 'bonus: alertas');
+    const { data, loading, error, reload } = useLoad(fetcher, 'bonus: alertas');
     if (loading) return <div className="h-16 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>;
-    if (error || !data) return <p role="alert" className="font-bold text-red-700">Não foi possível carregar os alertas. Não pague nada antes de conferir.</p>;
+    if (error || !data) return <ErrorState title="Não foi possível carregar os alertas." message="Não pague nada antes de conferir." onRetry={() => void reload()} />;
     const pixBlocked = data.items.some((a) => a.blockReason === 'pix_match');
     return (
         <section aria-labelledby="bonus-alertas" className="bg-white border-2 border-black rounded-2xl p-4 sm:p-6 space-y-3">
@@ -212,7 +213,7 @@ export default function EnrollmentsPanel({ adapter }: Props) {
             </form>
 
             {list.loading && <div className="h-24 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>}
-            {list.error && <p role="alert" className="font-bold text-red-700">{list.error}</p>}
+            {list.error && <ErrorState title={list.error} onRetry={() => void list.reload()} />}
             {list.data && list.data.length === 0 && <p className="font-bold">Nenhuma inscrição.</p>}
             {(list.data ?? []).map((item) => (
                 <EnrollmentCard key={item.enrollmentId} item={item} adapter={adapter} run={run} busy={busy} />

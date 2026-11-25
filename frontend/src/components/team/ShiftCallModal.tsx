@@ -16,7 +16,7 @@ import { DEFAULT_LINK_RISK_THRESHOLD } from '../company/seriesWeekRisk';
 import { getWeekdayIndex } from '../../lib/dateUtils';
 import { periodForTime, isWorkerAvailableFor } from '../../lib/availability';
 import { ModalShell } from './ModalShell';
-import { Button, Field } from '../ui';
+import { Alert, Button, Field, ButtonLink } from '../ui';
 import { useBusyWorkers } from '../../hooks/useBusyWorkers';
 import { buildShiftWindow } from '../../services/shiftOperationService';
 import { BusyWorkerBadge } from './BusyWorkerBadge';
@@ -90,6 +90,10 @@ export function ShiftCallModal({
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [lists, setLists] = useState<TeamListWithMembers[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
+  // Falha de leitura é diferente de elenco/listas vazios.
+  const [teamError, setTeamError] = useState(false);
+  const [listsError, setListsError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState<ShiftCallReason>('falta');
@@ -122,13 +126,15 @@ export function ShiftCallModal({
       setMembers(teamResult.status === 'fulfilled' ? teamResult.value : []);
       setLists(listsResult.status === 'fulfilled' ? listsResult.value : []);
       setRiskConfig(configResult.status === 'fulfilled' ? configResult.value : null);
+      setTeamError(teamResult.status === 'rejected');
+      setListsError(listsResult.status === 'rejected');
       setLoadingTeam(false);
     })();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadAttempt]);
 
   const excluded = useMemo(() => new Set(excludeWorkerIds), [excludeWorkerIds]);
 
@@ -418,6 +424,7 @@ export function ShiftCallModal({
             variant="dark"
             size="lg"
             fullWidth
+            data-copilot="empresa.chamado.enviar"
             onClick={() => void handleDispatch()}
             disabled={selected.size === 0}
             loading={dispatching}
@@ -539,7 +546,7 @@ export function ShiftCallModal({
           disabled={dispatching || visible.length === 0}
           className="whitespace-nowrap"
         >
-          {allVisibleSelected ? 'Limpar' : 'Todos'}
+          {allVisibleSelected ? 'Limpar' : 'Selecionar todos'}
         </Button>
       </div>
 
@@ -560,13 +567,35 @@ export function ShiftCallModal({
         </div>
       )}
 
-      {!loadingTeam && available.length === 0 && (
+      {!loadingTeam && (teamError || listsError) && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-3"
+          action={
+            <Button variant="secondary" onClick={() => setLoadAttempt((n) => n + 1)}>
+              Tentar de novo
+            </Button>
+          }
+        >
+          {teamError ? 'Não conseguimos carregar o seu elenco.' : 'Não conseguimos carregar as listas do elenco.'}
+        </Alert>
+      )}
+
+      {!loadingTeam && !teamError && available.length === 0 && (
         <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <Users size={32} className="mx-auto mb-2 text-gray-400" />
-          <p className="font-semibold text-sm">Ninguém disponível no elenco para este turno.</p>
-          <p className="text-xs mt-1">
-            Todos os seus freelas já estão neste turno ou já foram chamados.
+          <p className="font-semibold text-sm">
+            {members.length === 0 ? 'Nenhum freela apareceu no seu elenco.' : 'Ninguém disponível no elenco para este turno.'}
           </p>
+          <p className="text-xs mt-1">
+            {members.length === 0
+              ? 'Adicione freelas ao elenco. Se você já tem freelas, feche e abra esta janela de novo.'
+              : 'Todos os seus freelas já estão neste turno ou já foram chamados.'}
+          </p>
+          {members.length === 0 && (
+            <ButtonLink variant="secondary" className="mt-3" to="/company/team">Adicionar freela</ButtonLink>
+          )}
         </div>
       )}
 

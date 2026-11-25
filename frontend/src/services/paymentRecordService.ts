@@ -505,12 +505,12 @@ export const PaymentRecordService = {
 
       if (error) {
         logError('paymentRecord.listActivePaymentsByJob', error);
-        return [];
+        throw error;
       }
       return (data as ShiftPayment[]) ?? [];
     } catch (err) {
       logError('paymentRecord.listActivePaymentsByJob', err);
-      return [];
+      throw err;
     }
   },
 

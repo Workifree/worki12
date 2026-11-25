@@ -23,7 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle2, XCircle, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useNotifications } from '../contexts/NotificationContext';
-import { Button } from './ui';
+import { Alert, Button, IconButton } from './ui';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
 import { formatBRL } from '../lib/currency';
 
@@ -104,7 +104,8 @@ export default function InviteTakeover() {
   const companyLogo = companyInfo?.logo_url ?? null;
   const companyId = companyInfo?.id;
   const jobTitle = job?.title ?? 'Turno';
-  const budget = job?.budget ?? 0;
+  const budget = job?.budget && job.budget > 0 ? job.budget : null;
+  const isSos = visibleInvite.origin === 'sos';
   const startDate = job?.start_date
     ? new Date(job.start_date).toLocaleDateString('pt-BR')
     : 'Data a definir';
@@ -162,20 +163,24 @@ export default function InviteTakeover() {
       layer={MODAL_LAYER.invite}
       initialFocus="panel"
       overlayClassName="!bg-black/70"
-      className="relative !shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]"
+      className={isSos ? 'relative border-status-warning-line' : 'relative !shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]'}
     >
-        <Button
-          variant="ghost"
-          onClick={dismiss}
-          aria-label="Fechar aviso de convite"
-          className="absolute top-3 right-3 w-11 !px-0"
-        >
+        <IconButton onClick={dismiss} aria-label="Fechar aviso de convite" className="absolute top-3 right-3">
           <X size={20} />
-        </Button>
+        </IconButton>
 
         <span className="inline-block bg-primary-light text-primary-dark text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-pill border border-green-200 mb-4">
-          Convite de turno
+          {isSos ? 'Urgência (SOS)' : 'Convite de turno'}
         </span>
+
+        {isSos && (
+          <Alert tone="warning" className="mb-4">
+            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+          </Alert>
+        )}
+        {visibleInvite.disputed && (
+          <p className="mb-3 text-sm font-semibold text-gray-700">Quem aceitar primeiro fica com a vaga.</p>
+        )}
 
         {companyId ? (
           <button
@@ -187,7 +192,7 @@ export default function InviteTakeover() {
             {companyAvatar}
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-600">Empresa</p>
-              <p className="font-bold truncate group-hover:text-primary transition-colors">{companyName}</p>
+              <p className="font-bold line-clamp-2 [overflow-wrap:anywhere] group-hover:text-primary transition-colors">{companyName}</p>
             </div>
             <span className="flex items-center gap-0.5 text-xs font-semibold text-primary-dark flex-shrink-0">
               Ver perfil <ChevronRight size={16} />
@@ -203,7 +208,7 @@ export default function InviteTakeover() {
           </div>
         )}
 
-        <h2 id="invite-takeover-title" className="font-bold text-xl sm:text-2xl tracking-tight mb-3">
+        <h2 id="invite-takeover-title" className="font-bold text-xl sm:text-2xl tracking-tight mb-3 [overflow-wrap:anywhere]">
           {jobTitle}
         </h2>
 
@@ -213,7 +218,7 @@ export default function InviteTakeover() {
             {startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
           </span>
           <span className="flex items-center gap-1.5 text-xs font-semibold bg-primary-light text-primary-dark px-3 py-1.5 rounded-xl">
-            <DollarSign size={14} /> {formatBRL(budget)}
+            <DollarSign size={14} /> {budget ? formatBRL(budget) : 'Valor não informado'}
           </span>
           {location && (
             <span className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
@@ -229,9 +234,15 @@ export default function InviteTakeover() {
           </div>
         )}
 
+        <Button variant="ghost" fullWidth onClick={dismiss} className="mb-2">
+          Decidir depois
+        </Button>
+
         <div className="worki-dialog-actions flex gap-3">
           <Button
             variant="primary"
+            data-copilot="freela.convite-destaque.aceitar"
+            data-copilot-risk="D"
             size="lg"
             className="flex-1 min-w-0 !px-2 sm:!px-6"
             onClick={() => void handleRespond('accepted')}
@@ -243,6 +254,8 @@ export default function InviteTakeover() {
           </Button>
           <Button
             variant={recusaArmada ? 'danger' : 'secondary'}
+            data-copilot="freela.convite-destaque.recusar"
+            data-copilot-risk="D"
             size="lg"
             className="flex-1 min-w-0 !px-2 sm:!px-6"
             onClick={() => {

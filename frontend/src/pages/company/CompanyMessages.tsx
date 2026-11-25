@@ -22,10 +22,26 @@ interface ConversationItem {
     job_title: string;
     last_message?: string;
     last_message_at?: string;
+    /** Prévia confiável ausente: a conversa não tem mensagem alguma. */
+    no_messages?: boolean;
     unread_count: number;
     status: string;
     attendance?: ShiftAttendanceLike;
 }
+
+/** Teto da consulta de prévias: acima disso, ausência de prévia não prova conversa vazia. */
+const PREVIEW_LIMIT = 500;
+
+/** Não lidas primeiro; depois a atividade mais recente. */
+const sortConversations = (list: ConversationItem[]): ConversationItem[] =>
+    [...list].sort((a, b) =>
+        Number(b.unread_count > 0) - Number(a.unread_count > 0)
+        || new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime());
+
+const formatWhen = (iso: string): string => {
+    const date = new Date(iso);
+    return format(date, date.toDateString() === new Date().toDateString() ? 'HH:mm' : 'dd/MM');
+};
 
 interface Message {
     id: string;
@@ -65,6 +81,15 @@ export default function CompanyMessages() {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     // Falha de carga ≠ "nenhuma conversa".
     const [erroCarga, setErroCarga] = useState(false);
+    // Falha ao abrir a conversa ≠ "nenhuma mensagem".
+    const [erroMensagens, setErroMensagens] = useState(false);
+    const [messagesAttempt, setMessagesAttempt] = useState(0);
+
+    const updatePreview = (conversationId: string, content: string, at: string, mine: boolean) => {
+        setConversations(prev => sortConversations(prev.map(c => c.id === conversationId
+            ? { ...c, last_message: mine ? `Você: ${content}` : content, last_message_at: at, no_messages: false }
+            : c)));
+    };
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -172,18 +197,38 @@ export default function CompanyMessages() {
         let unreadCounts: Record<string, number> = {};
 
         if (conversationIds.length > 0) {
-            const { data: unreadData } = await supabase
+            const { data: unreadData, error: unreadError } = await supabase
                 .from('Message')
                 .select('conversationid')
                 .in('conversationid', conversationIds)
                 .neq('senderid', user.id) // Messages sent by OTHERS (workers)
                 .is('read_at', null);     // That are NOT read
 
+            if (unreadError) return falharCarga('CompanyMessages.unread', unreadError);
+
             if (unreadData) {
                 unreadCounts = unreadData.reduce((acc: Record<string, number>, curr) => {
                     acc[curr.conversationid] = (acc[curr.conversationid] || 0) + 1;
                     return acc;
                 }, {} as Record<string, number>);
+            }
+        }
+
+        // Prévia: as mensagens mais recentes destas conversas (só leitura, mesma tabela).
+        const latest = new Map<string, { content: string; senderid: string; createdat: string }>();
+        let previewsComplete = false;
+        if (conversationIds.length > 0) {
+            const { data: previewData, error: previewError } = await supabase
+                .from('Message')
+                .select('conversationid, content, senderid, createdat')
+                .in('conversationid', conversationIds)
+                .order('createdat', { ascending: false })
+                .limit(PREVIEW_LIMIT);
+            if (previewError) return falharCarga('CompanyMessages.preview', previewError);
+            const rows = (previewData ?? []) as Array<{ conversationid: string; content: string; senderid: string; createdat: string }>;
+            previewsComplete = rows.length < PREVIEW_LIMIT;
+            for (const row of rows) {
+                if (!latest.has(row.conversationid)) latest.set(row.conversationid, row);
             }
         }
 
@@ -195,12 +240,15 @@ export default function CompanyMessages() {
             job_title: c.application?.job?.title || 'Turno sem título',
             status: c.application?.status || 'pending',
             attendance: c.application,
-            last_message: undefined,
-            last_message_at: c.createdat,
+            last_message: latest.has(c.id)
+                ? `${latest.get(c.id)!.senderid === user.id ? 'Você: ' : ''}${latest.get(c.id)!.content}`
+                : undefined,
+            last_message_at: latest.get(c.id)?.createdat ?? c.createdat,
+            no_messages: previewsComplete && !latest.has(c.id),
             unread_count: unreadCounts[c.id] || 0
         }));
 
-        setConversations(convList);
+        setConversations(sortConversations(convList));
 
         if (selectedConversationId) {
             const conv = convList.find(c => c.id === selectedConversationId);
@@ -260,6 +308,9 @@ export default function CompanyMessages() {
     useEffect(() => {
         if (!selectedConversation) return;
 
+        setErroMensagens(false);
+        setMessages([]);
+
         const loadMessages = async () => {
             const { data, error } = await supabase
                 .from('Message')
@@ -269,6 +320,7 @@ export default function CompanyMessages() {
 
             if (error) {
                 logError('Error fetching messages:', error);
+                setErroMensagens(true);
                 return;
             }
 
@@ -295,6 +347,7 @@ export default function CompanyMessages() {
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
+                updatePreview(selectedConversation.id, newMsg.content, newMsg.createdat, isMine);
 
                 setMessages(prev => prev.some(m => m.id === newMsg.id)
                     ? prev
@@ -328,7 +381,7 @@ export default function CompanyMessages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser]);
+    }, [selectedConversation, currentUser, messagesAttempt]);
 
     const handleSendMessage = async () => {
         if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
@@ -360,6 +413,8 @@ export default function CompanyMessages() {
                 ? prev
                 : [...prev, { ...sent, read_at: null, is_mine: true }]);
         }
+
+        if (!error) updatePreview(sent.conversationid, sent.content, sent.createdat, true);
 
         if (error) {
             logError('Error sending message:', error);
@@ -406,11 +461,11 @@ export default function CompanyMessages() {
                 className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
-            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden max-md:-mx-4 sm:max-md:-mx-6 max-md:rounded-none max-md:border-x-0 md:shadow-brutal">
 
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{erroCarga ? 'Freelas' : `Freelas (${conversations.length})`}</h3>
+                        <h2 className="text-sm font-bold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -440,22 +495,31 @@ export default function CompanyMessages() {
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <h4 className="font-bold text-sm truncate">{conv.worker_name}</h4>
-                                                {conv.unread_count > 0 ? (
-                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white tabular-nums">
+                                            <div className="flex justify-between items-baseline gap-2">
+                                                <h3 className="font-bold text-sm truncate">{conv.worker_name}</h3>
+                                                {conv.last_message_at && !conv.no_messages && (
+                                                    <span className="shrink-0 text-xs text-gray-600 tabular-nums">{formatWhen(conv.last_message_at)}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className={`min-w-0 truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
+                                                    {conv.last_message ?? (conv.no_messages ? 'Sem mensagens ainda' : 'Abra para ver as mensagens')}
+                                                </p>
+                                                {conv.unread_count > 0 && (
+                                                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full bg-red-600 text-white tabular-nums">
                                                         {conv.unread_count}
-                                                    </span>
-                                                ) : (
-                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status, conv.attendance)}
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className={`text-xs truncate mt-1 flex items-center gap-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
-                                                <Briefcase size={10} />
-                                                {conv.job_title}
-                                            </p>
+                                            <div className="mt-1 flex items-center justify-between gap-2">
+                                                <p className="flex min-w-0 items-center gap-1 text-xs text-gray-600">
+                                                    <Briefcase size={10} aria-hidden="true" className="shrink-0" />
+                                                    <span className="truncate">{conv.job_title}</span>
+                                                </p>
+                                                <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
+                                                    {getStatusLabel(conv.status, conv.attendance)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </button>
@@ -505,7 +569,9 @@ export default function CompanyMessages() {
                                 tabIndex={0}
                                 className="flex-1 min-h-0 overflow-y-auto overscroll-contain motion-safe:scroll-smooth p-4 space-y-4 bg-gray-50"
                             >
-                                {messages.length === 0 ? (
+                                {erroMensagens ? (
+                                    <ErroDeCarga onRetry={() => setMessagesAttempt(n => n + 1)} />
+                                ) : messages.length === 0 ? (
                                     <div className="text-center py-12 text-gray-600">
                                         <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>
@@ -592,6 +658,7 @@ export default function CompanyMessages() {
                                         disabled={!newMessage.trim()}
                                         loading={sending}
                                         aria-label="Enviar mensagem"
+                                        data-copilot="empresa.mensagens.enviar"
                                         iconLeft={<Send size={18} />}
                                     >
                                         <span className="hidden sm:inline">Enviar</span>

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { checkSession } from '../lib/authSession';
+import { logError } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +15,17 @@ export default function ResetPassword() {
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
     const [mostrarSenha, setMostrarSenha] = useState(false);
+
+    // Sem a sessão que o link de recuperação abre, o formulário não tem como funcionar.
+    const [linkMorto, setLinkMorto] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        checkSession()
+            .then((session) => { if (active && session.status === 'signed_out') setLinkMorto(true); })
+            .catch((err: unknown) => logError('ResetPassword.session', err));
+        return () => { active = false; };
+    }, []);
 
     const strength = getPasswordStrength(password);
 
@@ -35,8 +48,8 @@ export default function ResetPassword() {
 
         if (updateError) {
             const msg = updateError.message || '';
-            if (msg.includes('expired') || msg.includes('Token has expired')) {
-                setError('Link expirado. Solicite um novo link de recuperação.');
+            if (msg.includes('expired') || msg.includes('session missing')) {
+                setLinkMorto(true);
             } else if (msg.includes('invalid') || msg.includes('Invalid token') || msg.includes('not found')) {
                 setError('Link inválido. Solicite um novo link de recuperação.');
             } else if (msg.includes('weak') || msg.includes('too short') || msg.includes('at least')) {
@@ -49,6 +62,27 @@ export default function ResetPassword() {
 
         setSuccess(true);
     };
+
+    if (linkMorto) {
+        return (
+            <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+                <Card padding="lg" className="max-w-md w-full text-center">
+                    <h1 className="text-2xl font-bold tracking-tight mb-2">Este link expirou</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mb-6">
+                        Links de redefinição valem por pouco tempo e só uma vez. Peça um novo.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                        <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/esqueci-senha')} data-copilot="publico.redefinir-senha.pedir-novo-link">
+                            Pedir novo link
+                        </Button>
+                        <Button variant="secondary" size="lg" fullWidth onClick={() => navigate('/login')}>
+                            Ir para o login
+                        </Button>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
 
     if (success) {
         return (
@@ -131,6 +165,7 @@ export default function ResetPassword() {
                         fullWidth
                         loading={loading}
                         disabled={!password || !confirm}
+                        data-copilot="publico.redefinir-senha.salvar"
                     >
                         Redefinir Senha
                     </Button>

@@ -83,6 +83,8 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
   }, [installDelayMs])
 
   const showUpdate = pwa.updateAvailable && !updateDismissed
+  // Telas de dinheiro: o convite de instalação não disputa com o recibo.
+  const telaDeDinheiro = pathname.startsWith('/recibo') || pathname.startsWith('/recebimentos')
 
   // Atualização tem prioridade: nunca empilha dois cartões. O convite de instalação não aparece em
   // login/convites/onboarding (fluxos com foco), nem quando o app já está instalado.
@@ -93,6 +95,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     !pwa.installed &&
     !standalone &&
     !isInstallPromptExcludedRoute(pathname) &&
+    !telaDeDinheiro &&
     (pwa.installAvailable || ios)
 
   const dismissInstall = () => {
@@ -105,11 +108,14 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     if (outcome === 'dismissed') dismissInstall()
   }
 
+  if (online && !showUpdate && !showInstall) return null
+
   return (
-    <>
+    // Tudo no fluxo (nada `fixed`): empurra o conteúdo em vez de cobrir título, botão principal ou
+    // valor. A altura somada vai para `--worki-offline-h`, que o chat desconta da tela.
+    <div ref={publishOfflineHeight}>
       {!online && (
         <div
-          ref={publishOfflineHeight}
           role="status"
           // No fluxo (não `fixed`): empurra o conteúdo em vez de cobrir cabeçalho, sino e avatar.
           className="flex items-center justify-center gap-2 bg-black px-4 pb-2 pt-[calc(0.5rem_+_env(safe-area-inset-top))] text-center text-xs font-bold text-white"
@@ -120,9 +126,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
       )}
 
       {(showUpdate || showInstall) && (
-        // No topo, abaixo do cabeçalho: a base da tela é da navegação inferior, dos toasts e das
-        // barras de ação flutuantes, que variam de altura.
-        <div className="fixed inset-x-3 top-[calc(4.75rem_+_env(safe-area-inset-top))] z-40 md:inset-x-auto md:right-6 md:top-6 md:w-96">
+        <div className="bg-canvas px-3 pb-1 pt-[calc(0.75rem_+_env(safe-area-inset-top))] md:ml-auto md:max-w-md">
           {showUpdate && (
             <Card
               padding="sm"
@@ -138,7 +142,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
                   <p className="text-sm font-bold text-black">Nova versão disponível</p>
                   <p className="mt-0.5 text-sm text-gray-600">Atualize para ter as últimas melhorias do Worki.</p>
                   <div className="mt-3 flex items-center gap-2">
-                    <Button size="md" onClick={applyPwaUpdate}>
+                    <Button size="md" variant="secondary" onClick={applyPwaUpdate}>
                       Atualizar
                     </Button>
                     <Button size="md" variant="ghost" onClick={() => setUpdateDismissed(true)}>
@@ -171,7 +175,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
                         Abra seus turnos direto da tela inicial, como um aplicativo.
                       </p>
                       <div className="mt-3">
-                        <Button size="md" iconLeft={<Download aria-hidden="true" className="h-4 w-4" />} onClick={handleInstall}>
+                        <Button size="md" variant="secondary" iconLeft={<Download aria-hidden="true" className="h-4 w-4" />} onClick={handleInstall}>
                           Instalar
                         </Button>
                       </div>
@@ -212,6 +216,6 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
           )}
         </div>
       )}
-    </>
+    </div>
   )
 }

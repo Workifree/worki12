@@ -286,7 +286,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     expect(screen.getByText(/O pagamento será liberado imediatamente ao profissional/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Cancelar'))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
       expect(screen.queryByText(/O pagamento será liberado imediatamente ao profissional/)).not.toBeInTheDocument()
@@ -532,7 +532,7 @@ describe('CompanyJobCandidates — Dispensar deste turno', () => {
     fireEvent.click(screen.getByText('Dispensar'))
     expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Cancelar'))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: /Dispensar Freela/i })).not.toBeInTheDocument()
@@ -660,6 +660,9 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
     })
 
     // Submit the review
+    // Sem nota o envio fica desabilitado (as estrelas começam vazias).
+    expect(screen.getByRole('button', { name: /Enviar Avaliação/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Nota 4 de 5' }))
     fireEvent.click(screen.getByText('Enviar Avaliação'))
 
     await waitFor(() => {
@@ -736,7 +739,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
 
     // O card inteiro também tem role="button" (clique abre o perfil) — escopar a busca a
     // ele evita casar com o nome acessível agregado do card (que inclui todo texto interno).
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
     const checkoutButton = within(card).getByRole('button', { name: /Registrar Saída/i })
     expect(checkoutButton).toBeInTheDocument()
 
@@ -774,7 +777,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
       expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
 
     await waitFor(() => {
@@ -795,7 +798,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
       expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Bruno Marcou Saída').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByRole('button', { name: /Confirmar Saída/i })).toBeInTheDocument()
   })
 })
@@ -852,7 +855,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
 
     await waitFor(() => {
@@ -873,7 +876,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
 
     await waitFor(() => {
@@ -915,7 +918,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Bruno Marcou Saída').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Confirmar Saída/i }))
 
     expect(screen.queryByRole('heading', { name: /Registrar Saída/i })).not.toBeInTheDocument()
@@ -944,7 +947,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Lia Confirmada Pela Empresa')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Lia Confirmada Pela Empresa').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Lia Confirmada Pela Empresa').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByText('Chegada registrada pela empresa')).toBeInTheDocument()
     expect(within(card).queryByText('Chegada OK')).not.toBeInTheDocument()
   })
@@ -958,7 +961,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
 
     await waitFor(() => {
@@ -982,7 +985,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByText('Chegada OK')).toBeInTheDocument()
     expect(within(card).queryByText('Chegada registrada pela empresa')).not.toBeInTheDocument()
   })
@@ -1070,8 +1073,27 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       return buildChain() as unknown as ReturnType<typeof supabase.from>
     })
 
-    return { mockNavigate }
+    return { mockNavigate, shiftPaymentsChain, paymentA }
   }
+
+  it('leitura de pagamentos falha: nenhuma ação de pagar até "Tentar de novo" confirmar', async () => {
+    const { shiftPaymentsChain, paymentA } = setupTwoFreelasMocks()
+    const order = shiftPaymentsChain.order as ReturnType<typeof vi.fn>
+    order.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } })
+    renderComponent()
+
+    await waitFor(() => expect(screen.getAllByText('Não conseguimos conferir os pagamentos')).toHaveLength(2))
+    for (const acao of ['Registrar Pagamento', 'Agendar Pagamento', 'Marcar como pago', 'Ver Recibo']) {
+      expect(screen.queryByText(acao)).not.toBeInTheDocument()
+    }
+
+    order.mockResolvedValue({ data: [paymentA], error: null })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tentar de novo' })[0])
+
+    expect(await screen.findByText('Ver Recibo')).toBeInTheDocument()
+    expect(screen.getAllByText('Registrar Pagamento')).toHaveLength(1)
+    expect(screen.queryByText('Não conseguimos conferir os pagamentos')).not.toBeInTheDocument()
+  })
 
   it('cada freela mostra o próprio estado de pagamento — A tem recibo, B ainda pode registrar', async () => {
     setupTwoFreelasMocks()
@@ -1082,8 +1104,8 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       expect(screen.getByText('Freela B')).toBeInTheDocument()
     })
 
-    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
-    const cardB = screen.getByText('Freela B').closest('[role="button"]') as HTMLElement
+    const cardA = screen.getByText('Freela A').closest('[data-testid="freela-card"]') as HTMLElement
+    const cardB = screen.getByText('Freela B').closest('[data-testid="freela-card"]') as HTMLElement
 
     // Freela A já tem marcador 'recorded' — card mostra "Ver Recibo".
     expect(within(cardA).getByText('Ver Recibo')).toBeInTheDocument()
@@ -1102,7 +1124,7 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       expect(screen.getByText('Freela A')).toBeInTheDocument()
     })
 
-    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
+    const cardA = screen.getByText('Freela A').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(cardA).getByText('Ver Recibo'))
 
     expect(mockNavigate).toHaveBeenCalledWith('/recibo/job-123?worker=worker-a')
@@ -1145,13 +1167,13 @@ describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré
       expect(screen.getByText('Igor Sem Chegada')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Igor Sem Chegada').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Igor Sem Chegada').closest('[data-testid="freela-card"]') as HTMLElement
     // Chegada ainda pendente — botão de presença disponível.
-    expect(within(card).getByRole('button', { name: /Confirmar Presença/i })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: /Registrar chegada/i })).toBeInTheDocument()
     // Saída NUNCA disponível antes da chegada confirmada — nem "Registrar" nem "Confirmar".
     expect(within(card).queryByRole('button', { name: /Registrar Saída/i })).not.toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /Confirmar Saída/i })).not.toBeInTheDocument()
-    expect(within(card).getByText('Confirme a chegada primeiro')).toBeInTheDocument()
+    expect(within(card).queryByText('Confirme a chegada primeiro')).not.toBeInTheDocument()
   })
 
   it('libera "Registrar Saída" assim que a chegada é confirmada', async () => {
@@ -1162,7 +1184,7 @@ describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré
       expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByRole('button', { name: /Registrar Saída/i })).toBeInTheDocument()
     expect(within(card).queryByText('Confirme a chegada primeiro')).not.toBeInTheDocument()
   })
@@ -1339,7 +1361,7 @@ describe('CompanyJobCandidates — handleRecordPayment: status → completed ap�
     await waitFor(() => {
       expect(screen.getByText('Rita Paga')).toBeInTheDocument()
     })
-    const card = screen.getByText('Rita Paga').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Rita Paga').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByText('Registrar Pagamento'))
 
     await waitFor(() => {
@@ -1601,7 +1623,7 @@ describe('CompanyJobCandidates — recusas do banco ao registrar presença', () 
     await waitFor(() => {
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
     await screen.findByRole('heading', { name: /Registrar Saída/i })
     return mocks

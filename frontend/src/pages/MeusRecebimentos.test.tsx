@@ -192,7 +192,7 @@ describe('MeusRecebimentos', () => {
 
     await waitFor(() => expect(screen.getByText(/Total recebido/i)).toBeInTheDocument())
     expect(screen.getAllByText('R$ 100,00').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Agendado \(promessa\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/Total previsto/i)).toBeInTheDocument()
     expect(screen.queryByText(/saldo/i)).not.toBeInTheDocument()
   })
 })

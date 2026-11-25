@@ -5,7 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import type { TeamMember } from '../../types';
 import type { WorkerHistoryWithCompany } from './types';
-import { Button, Card } from '../ui';
+import { Button, Card, IconButton, Menu } from '../ui';
 import { formatHistoryDate } from './utils';
 import { roleLabel } from '../../lib/statusLabels';
 
@@ -23,16 +23,17 @@ export interface MemberCardProps {
   restricted?: boolean;
   /** Histórico de turnos concluídos com ESTA empresa (batch, sem N+1). */
   history?: WorkerHistoryWithCompany;
+  /** A consulta do histórico falhou: não afirmar "nenhum turno". */
+  historyUnavailable?: boolean;
   /** Abre o modal "Convidar para turno" para este freela. */
   onInvite: (member: TeamMember) => void;
 }
 
-export function MemberCard({ member, onRemove, history, onInvite, restricted = false }: MemberCardProps) {
+export function MemberCard({ member, onRemove, history, historyUnavailable = false, onInvite, restricted = false }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
   const navigate = useNavigate();
-  const [linkCopied, setLinkCopied] = useState(false);
   const [pixCopied, setPixCopied] = useState(false);
 
   // Link transitivo: já tenho esse freela no elenco → posso repassar o link
@@ -41,9 +42,7 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
     const { url } = TeamConnectionService.generateWorkerInviteToken(worker.id);
     try {
       await navigator.clipboard.writeText(url);
-      setLinkCopied(true);
       addToast('Link do freela copiado! Repasse para outra empresa.', 'success');
-      setTimeout(() => setLinkCopied(false), 2500);
     } catch {
       addToast('Não foi possível copiar o link.', 'error');
     }
@@ -68,21 +67,13 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
 
   return (
     <Card
-      interactive={!restricted}
-      role={restricted ? undefined : 'button'}
-      tabIndex={restricted ? undefined : 0}
-      onClick={restricted ? undefined : goToProfile}
-      onKeyDown={restricted ? undefined : (e) => {
-        // Só o próprio card ativa a navegação: Enter/Espaço num botão interno
-        // não pode borbulhar e ter a ação cancelada pelo preventDefault.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); }
-      }}
-      className="flex flex-col gap-4 [&[role=button]]:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+      padding="sm"
+      onActivate={restricted ? undefined : goToProfile}
+      className="flex flex-col gap-3"
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+        <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
           {avatarUrl ? (
             <img src={avatarUrl} alt={worker.full_name} className="w-full h-full object-cover" />
           ) : (
@@ -116,20 +107,21 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
               </span>
             )}
             {/* Histórico com esta empresa — o dado que ajuda a decidir "chamo esse ou outro?". */}
-            {restricted ? null : history && history.count > 0 ? (
+            {restricted || historyUnavailable ? null : history && history.count > 0 ? (
               <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill">
                 <History size={12} /> {history.count} turno{history.count !== 1 ? 's' : ''} com você
                 {history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-500 px-2.5 py-1 rounded-pill">
+              <span className="flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-pill">
                 <History size={12} /> Nenhum turno ainda com você
               </span>
             )}
           </div>
 
           {/* R1.3: chave PIX — bloco com botão de copiar, pra empresa pagar por fora */}
-          {worker.pix_key && (
+          {/* Modo restrito (encarregado) não lê PII: nada de campo PIX, nem vazio. */}
+          {!restricted && worker.pix_key?.trim() && (
             <div
               onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-between gap-2 mt-3 bg-gray-50 border border-gray-200 rounded-xl pl-3 pr-1 py-1 max-w-sm"
@@ -138,52 +130,39 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
                 <Wallet size={14} className="flex-shrink-0 text-gray-500" />
                 <span className="truncate">{worker.pix_key}</span>
               </span>
-              <Button
-                variant="ghost"
+              <IconButton
                 onClick={(e) => { e.stopPropagation(); void handleCopyPix(); }}
                 aria-label={`Copiar chave PIX de ${worker.full_name}`}
                 title="Copiar chave PIX"
-                className="h-11 w-11 !px-0 flex-shrink-0"
               >
                 {pixCopied ? <Check size={14} /> : <Copy size={14} />}
-              </Button>
+              </IconButton>
             </div>
           )}
         </div>
       </div>
 
-      {/* Ação principal (convidar para turno) + ações secundárias só-ícone na mesma linha:
-          uma ação primária por card, o resto não compete com ela. */}
-      <div className="border-t-2 border-gray-100 pt-4 flex items-center gap-2">
+      {/* Uma ação por card; repassar link e remover ficam no menu, longe do toque principal. */}
+      <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
         <Button
-          variant="dark"
-          fullWidth
+          variant="secondary"
+          className="flex-1 sm:flex-none"
           onClick={(e) => { e.stopPropagation(); onInvite(member); }}
           iconLeft={<Send size={16} />}
+          data-copilot="empresa.elenco.convidar-turno"
         >
           Convidar para turno
         </Button>
         {!restricted && (
-          <>
-        <Button
-          variant="secondary"
-          onClick={(e) => { e.stopPropagation(); void handleShareLink(); }}
-          aria-label={`Repassar link do freela ${worker.full_name}`}
-          title="Repassar link deste freela para outra empresa"
-          className="h-11 w-11 !px-0 flex-shrink-0"
-        >
-          {linkCopied ? <Check size={16} /> : <Share2 size={16} />}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={(e) => { e.stopPropagation(); onRemove(member); }}
-          aria-label={`Remover freela ${worker.full_name} do elenco`}
-          title="Remover este freela do seu elenco"
-          className="h-11 w-11 !px-0 flex-shrink-0 !text-red-600"
-        >
-          <Trash2 size={16} />
-        </Button>
-          </>
+          <Menu
+            className="ml-auto"
+            label={`Mais opções de ${worker.full_name}`}
+            items={[
+              { label: 'Copiar link para outra empresa', icon: Share2, onSelect: () => void handleShareLink() },
+              // Destrutivo por último; a confirmação é o RemoveMemberDialog.
+              { label: 'Remover do elenco', icon: Trash2, onSelect: () => onRemove(member), danger: true },
+            ]}
+          />
         )}
       </div>
     </Card>

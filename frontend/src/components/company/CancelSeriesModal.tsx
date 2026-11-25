@@ -151,6 +151,8 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                             </Button>
                             <Button
                                 variant="danger"
+                                data-copilot="empresa.serie.encerrar-confirmar"
+                                data-copilot-risk="D"
                                 onClick={handleConfirm}
                                 disabled={confirmDisabled}
                                 loading={loading}

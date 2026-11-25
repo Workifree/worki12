@@ -141,7 +141,7 @@ export default function CompanyOperationAnalytics() {
         {/* Espelho do subtitulo do Relatorio de Pagamentos: cada pagina diz o que responde. */}
         <PageHeader
           title="Relatório de Operação"
-          subtitle="Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite. Somente leitura, não move saldo."
+          subtitle="Como a operação está rodando: chamados, tempo de preenchimento, presença e aceite."
           className="!mb-0"
         />
       </div>
@@ -189,9 +189,10 @@ export default function CompanyOperationAnalytics() {
 
       {loading || !analytics ? (
         <AnalyticsSkeleton rows={5} />
+      ) : analytics.hasError ? (
+        <ErrorBanner onRetry={fetchAnalytics} />
       ) : (
         <>
-          {analytics.hasError && <ErrorBanner onRetry={fetchAnalytics} />}
           {analytics.truncated && <TruncatedBanner />}
 
           {/* Métrica de topo (G2) */}

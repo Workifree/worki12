@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import AcceptManagerInvite from './AcceptManagerInvite'
 
@@ -45,6 +45,10 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+async function aceitar() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Aceitar' }))
+}
+
 describe('AcceptManagerInvite (F13, R8/R9)', () => {
   it('sem sessão: preserva o token e manda para /login?redirect=...', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null } })
@@ -78,6 +82,7 @@ describe('AcceptManagerInvite (F13, R8/R9)', () => {
     vi.mocked(acceptManagerInvite).mockResolvedValue({ outcome: 'accepted', companyId: 'comp-9' })
 
     renderWithToken('tok-abc')
+    await aceitar()
 
     await waitFor(() => {
       expect(screen.getByText('Convite Aceito!')).toBeInTheDocument()
@@ -89,6 +94,7 @@ describe('AcceptManagerInvite (F13, R8/R9)', () => {
     vi.mocked(acceptManagerInvite).mockResolvedValue({ outcome: 'expired' })
 
     renderWithToken('tok-velho')
+    await aceitar()
 
     await waitFor(() => {
       expect(screen.getByText('Convite expirado')).toBeInTheDocument()
@@ -101,14 +107,15 @@ describe('AcceptManagerInvite (F13, R8/R9)', () => {
     vi.mocked(acceptManagerInvite).mockResolvedValue({ outcome: 'token_already_used' })
 
     renderWithToken('tok-usado')
+    await aceitar()
 
     await waitFor(() => {
       expect(screen.getByText('Convite já usado')).toBeInTheDocument()
     })
   })
 
-  it('worker_cannot_be_manager: conta de freela não vira gerente', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'worker-1' } } })
+  it('worker_cannot_be_manager: conta de freela não vira gerente (sem chamar o aceite)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'worker-1', user_metadata: { user_type: 'work' } } } })
     vi.mocked(acceptManagerInvite).mockResolvedValue({ outcome: 'worker_cannot_be_manager' })
 
     renderWithToken('tok-abc')
@@ -116,5 +123,17 @@ describe('AcceptManagerInvite (F13, R8/R9)', () => {
     await waitFor(() => {
       expect(screen.getByText('Conta incompatível')).toBeInTheDocument()
     })
+    expect(acceptManagerInvite).not.toHaveBeenCalled()
+  })
+})
+
+describe('AcceptManagerInvite — consentimento', () => {
+  it('montar a página não chama o aceite; "Agora não" também não', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'm', email: 'm@x.com', user_metadata: { user_type: 'hire' } } } })
+    renderWithToken('tok-abc')
+    expect(await screen.findByRole('button', { name: 'Aceitar' })).toBeInTheDocument()
+    expect(screen.getByText('m@x.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
+    expect(acceptManagerInvite).not.toHaveBeenCalled()
   })
 })

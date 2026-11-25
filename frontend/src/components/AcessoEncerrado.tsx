@@ -14,7 +14,7 @@ import { Button, Card } from './ui';
  * a pessoa nunca teve empresa própria. O caminho de saída é sair da conta (e, se for engano, pedir
  * um novo convite ao Gestor).
  */
-export default function AcessoEncerrado() {
+export default function AcessoEncerrado({ onCreateOwnCompany }: { onCreateOwnCompany?: () => void }) {
     const [saindo, setSaindo] = useState(false);
     const tituloRef = useRef<HTMLHeadingElement>(null);
 
@@ -43,7 +43,7 @@ export default function AcessoEncerrado() {
         <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
             <PageMeta title="Acesso encerrado" noindex />
             <div className="w-full max-w-md">
-                <Card padding="lg" className="text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <Card padding="lg" className="text-center shadow-brutal-lg">
                     <div role="status">
                         <div className="w-16 h-16 border-2 border-black rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-5">
                             <DoorClosed size={30} aria-hidden="true" />
@@ -51,7 +51,7 @@ export default function AcessoEncerrado() {
                         <h1
                             ref={tituloRef}
                             tabIndex={-1}
-                            className="text-2xl font-black tracking-tight mb-3 focus:outline-none"
+                            className="text-2xl font-bold tracking-tight mb-3 focus:outline-none"
                         >
                             Seu acesso a essa empresa foi encerrado
                         </h1>
@@ -83,6 +83,11 @@ export default function AcessoEncerrado() {
                         >
                             Verificar de novo
                         </Button>
+                        {onCreateOwnCompany && (
+                            <Button variant="ghost" size="lg" fullWidth onClick={onCreateOwnCompany} data-copilot="empresa.acesso-encerrado.criar-propria-empresa">
+                                Cadastrar minha própria empresa
+                            </Button>
+                        )}
                     </div>
                 </Card>
             </div>

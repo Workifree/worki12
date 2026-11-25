@@ -42,7 +42,7 @@ export default function AguardandoConfirmacao() {
         <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
             <PageMeta title="Acesso quase pronto" noindex />
             <div className="w-full max-w-md">
-                <Card padding="lg" className="text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <Card padding="lg" className="text-center shadow-brutal-lg">
                     <div role="status">
                         <div className="w-16 h-16 border-2 border-black rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-5">
                             <Hourglass size={30} className="text-blue-600" aria-hidden="true" />
@@ -50,7 +50,7 @@ export default function AguardandoConfirmacao() {
                         <h1
                             ref={tituloRef}
                             tabIndex={-1}
-                            className="text-2xl font-black tracking-tight mb-3 focus:outline-none"
+                            className="text-2xl font-bold tracking-tight mb-3 focus:outline-none"
                         >
                             Seu acesso está quase pronto
                         </h1>
@@ -58,7 +58,7 @@ export default function AguardandoConfirmacao() {
                             O Gestor precisa liberar sua entrada. É um passo normal de segurança.
                         </p>
                         <p className="text-sm text-gray-600 mb-6">
-                            Assim que ele liberar, toque em &ldquo;Atualizar&rdquo;. Se demorar, avise o Gestor
+                            Assim que a entrada for liberada, toque em &ldquo;Atualizar&rdquo;. Se demorar, avise o Gestor
                             pelo WhatsApp.
                         </p>
                     </div>

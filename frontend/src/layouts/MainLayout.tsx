@@ -23,7 +23,7 @@ export default function MainLayout() {
             <Sidebar />
 
             {/* Mobile Header (Optional, for Logo) */}
-            <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-glass-surface/90 backdrop-blur-md z-40 border-b-2 border-black">
+            <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-white/90 backdrop-blur-md z-40 border-b-2 border-black">
                 <p className="text-xl font-bold text-primary tracking-tight">Worki.</p>
                 <div className="flex items-center gap-1">
                     <NotificationBell />

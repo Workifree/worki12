@@ -21,6 +21,7 @@ vi.mock('../lib/supabase', () => ({
 }));
 
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }));
+vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
 
 const mockGetReceipt = vi.fn();
 vi.mock('../services/paymentRecordService', () => ({

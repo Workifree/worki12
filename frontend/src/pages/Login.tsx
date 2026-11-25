@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
-import { Button, Card, Field } from '../components/ui';
+import { Alert, Button, Card, Field, FilterChip } from '../components/ui';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 import { safeInternalPath } from '../lib/safeRedirect';
@@ -54,6 +54,7 @@ export default function Login() {
     // mesmo tick (Enter repetido) passavam e geravam tres POSTs em auth/v1/token.
     const enviandoRef = useRef(false);
     const [searchParams] = useSearchParams();
+    const [, setSearchParams] = useSearchParams();
     // 'explicitType' só existe quando o usuário chegou por um link que declara a intenção
     // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
     // 'type' — nesse caso não há intenção explícita de papel a comparar (R1).
@@ -73,10 +74,24 @@ export default function Login() {
     const redirectTo = safeInternalPath(searchParams.get('redirect'));
     const navigate = useNavigate();
 
+    // Quem chegou por um link de convite precisa saber disso (a tela de login sozinha não diz).
+    const tipoDeConvite: 'elenco' | 'contato' | 'gerente' | null = destinoPendente?.startsWith('/convite-gerente/')
+        ? 'gerente'
+        : destinoPendente?.startsWith('/convite/w_')
+            ? 'contato'
+            : destinoPendente?.startsWith('/convite/') ? 'elenco' : null;
+
     // Os CTAs "Cadastrar como…" da landing e do onboarding levavam para ca em modo ENTRAR:
     // quem chegava novo digitava e recebia "Email ou senha incorretos", como se tivesse
     // errado a senha de uma conta que nem existe. O link agora declara a intencao.
-    const [isSignUp, setIsSignUp] = useState(searchParams.get('cadastro') === '1');
+    // Convidado costuma ser conta nova: o link de convite abre no cadastro (`cadastro=0` abre o login).
+    const [isSignUp, setIsSignUp] = useState(() => {
+        const cadastro = searchParams.get('cadastro');
+        return cadastro === '1' || (tipoDeConvite !== null && cadastro !== '0');
+    });
+    // Cadastro que exige confirmar o e-mail: troca o formulário por uma tela própria.
+    const [aguardandoEmail, setAguardandoEmail] = useState(false);
+    const [reenvio, setReenvio] = useState<'idle' | 'enviando' | 'enviado' | 'erro'>('idle');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -89,6 +104,31 @@ export default function Login() {
     const [roleMismatch, setRoleMismatch] = useState<{ actualType: 'work' | 'hire' } | null>(null);
 
     const isHire = type === 'hire';
+
+    const reenviarConfirmacao = async () => {
+        setReenvio('enviando');
+        const retorno = resolvePendingInviteRedirect(redirectTo);
+        try {
+            const { error: resendError } = await supabase.auth.resend({
+                type: 'signup',
+                email,
+                ...(retorno ? { options: { emailRedirectTo: `${window.location.origin}${retorno}` } } : {}),
+            });
+            if (resendError) throw resendError;
+            setReenvio('enviado');
+        } catch (err) {
+            logError('Login.reenviarConfirmacao', err);
+            setReenvio('erro');
+        }
+    };
+
+    const escolherPapel = (papel: 'work' | 'hire') => {
+        const next = new URLSearchParams(searchParams);
+        next.set('type', papel);
+        setSearchParams(next, { replace: true });
+        setError(null);
+        setRoleMismatch(null);
+    };
 
     const handleGoToCorrectDashboard = () => {
         if (!roleMismatch) return;
@@ -168,6 +208,8 @@ export default function Login() {
                 } else if (data.user) {
                     // Email confirmation required
                     setSuccessMessage('Conta criada! Verifique seu email para confirmar.');
+                    setAguardandoEmail(true);
+                    setReenvio('idle');
                 }
             } else {
                 // Sign In
@@ -231,13 +273,13 @@ export default function Login() {
                     ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
             <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
 
-            {/* Back Button */}
+            {/* Voltar no fluxo: nunca cobre o título, nem a 320px. */}
             <Button
                 variant="secondary"
                 size="md"
                 onClick={() => navigate('/')}
                 iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
-                className="absolute top-4 left-4 sm:top-6 sm:left-6"
+                className="self-start mb-4"
             >
                 Voltar
             </Button>
@@ -245,32 +287,51 @@ export default function Login() {
             {/* Main Card */}
             <Card
                 padding="lg"
-                className={`w-full max-w-md ${isHire
-                    ? 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]'
-                    : 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}
+                className={`w-full max-w-md ${isHire ? 'shadow-brutal-brand' : 'shadow-brutal-lg'}`}
             >
                 <div className="text-center mb-6">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
                         {isSignUp
-                            ? 'Criar Conta'
-                            : (isHire ? 'Contratar Talentos' : 'Começar a Trabalhar')}
+                            ? (isHire ? 'Criar conta de empresa' : 'Criar conta de freela')
+                            : (isHire ? 'Entrar como empresa' : 'Entrar como freela')}
                     </h1>
                     <p className="text-sm sm:text-base text-gray-600">
                         {isSignUp
                             ? 'Preencha os dados para se cadastrar.'
-                            : (isHire ? SUBTITULO_EMPRESA : 'Ganhe dinheiro no seu próprio horário.')}
+                            : (isHire ? SUBTITULO_EMPRESA : 'Seus turnos, presença e recibos.')}
                     </p>
                 </div>
 
+                {tipoDeConvite && !aguardandoEmail && (
+                    <Alert tone="info" title="Você recebeu um convite" className="mb-4">
+                        {tipoDeConvite === 'elenco' && 'Crie sua conta de freela (ou entre) para ver o convite de Elenco. '}
+                        {tipoDeConvite === 'contato' && 'Crie ou acesse a conta da sua empresa para usar o link do freela. '}
+                        {tipoDeConvite === 'gerente' && 'Crie ou acesse uma conta de empresa para ver o convite de Gestor. '}
+                        Nada é aceito sem você tocar no botão.
+                    </Alert>
+                )}
+
+                {!tipoDeConvite && !aguardandoEmail && (
+                    <div role="group" aria-label="Tipo de conta" className="mb-4 flex justify-center gap-2">
+                        <FilterChip pressed={!isHire} onClick={() => escolherPapel('work')}>Sou freela</FilterChip>
+                        <FilterChip pressed={isHire} onClick={() => escolherPapel('hire')}>Sou empresa</FilterChip>
+                    </div>
+                )}
+
                 {reason === 'session_expired' && !error && !successMessage && (
                     <div role="status" className="mb-4 p-3 bg-yellow-50 border-2 border-yellow-400 text-yellow-900 rounded-xl text-sm font-medium">
-                        Sua sessao expirou. Faca login novamente para continuar.
+                        Sua sessão expirou. Faça login novamente para continuar.
                     </div>
                 )}
 
                 {error && (
                     <div role="alert" className="mb-4 p-3 bg-red-50 border-2 border-red-500 text-red-700 rounded-xl text-sm font-medium">
                         {error}
+                        {error.startsWith('Por favor, verifique seu email') && (
+                            <Button variant="secondary" fullWidth className="mt-2" loading={reenvio === 'enviando'} onClick={() => void reenviarConfirmacao()}>
+                                {reenvio === 'enviado' ? 'E-mail reenviado' : 'Reenviar e-mail de confirmação'}
+                            </Button>
+                        )}
                     </div>
                 )}
 
@@ -297,6 +358,23 @@ export default function Login() {
                     </div>
                 )}
 
+                {aguardandoEmail && (
+                    <div className="space-y-3 [overflow-wrap:anywhere]">
+                        <p className="text-sm text-gray-700">
+                            Enviamos um link para <strong>{email}</strong>. Abra o e-mail e confirme. Se não chegar, confira o spam.
+                        </p>
+                        {reenvio === 'enviado' && <p role="status" className="text-sm font-bold text-primary-dark">E-mail reenviado.</p>}
+                        {reenvio === 'erro' && <p role="alert" className="text-sm font-bold text-red-600">Não foi possível reenviar agora. Aguarde um minuto e tente de novo.</p>}
+                        <Button variant={isHire ? 'dark' : 'primary'} size="lg" fullWidth loading={reenvio === 'enviando'} onClick={() => void reenviarConfirmacao()}>
+                            Reenviar e-mail
+                        </Button>
+                        <Button variant="secondary" size="lg" fullWidth onClick={() => { setAguardandoEmail(false); setSuccessMessage(null); }}>
+                            Trocar e-mail
+                        </Button>
+                    </div>
+                )}
+
+                {!aguardandoEmail && (
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     <Field label="Email">
                         <input
@@ -354,9 +432,17 @@ export default function Login() {
                         fullWidth
                         loading={loading}
                         className="mt-2"
+                        data-copilot={isSignUp ? 'publico.login.criar-conta' : 'publico.login.entrar'}
                     >
-                        {isSignUp ? 'Criar Conta' : 'Entrar'}
+                        {isSignUp ? 'Criar conta' : 'Entrar'}
                     </Button>
+
+                    {isSignUp && (
+                        <p className="text-center text-xs text-gray-600">
+                            Antes de usar, você lê e aceita os <Link to="/termos" className="font-bold underline">Termos de Uso</Link> e a{' '}
+                            <Link to="/privacidade" className="font-bold underline">Política de Privacidade</Link>.
+                        </p>
+                    )}
 
                     {!isSignUp && (
                         <div className="text-center">
@@ -366,6 +452,7 @@ export default function Login() {
                         </div>
                     )}
                 </form>
+                )}
 
                 <div className="mt-4 pt-4 border-t-2 border-gray-100 text-center text-sm text-gray-600">
                     {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}{' '}
@@ -376,6 +463,7 @@ export default function Login() {
                             setError(null);
                             setSuccessMessage(null);
                             setRoleMismatch(null);
+                            setAguardandoEmail(false);
                         }}
                         className="inline-flex items-center min-h-11 px-1 underline decoration-2 underline-offset-2 font-bold text-black hover:text-primary transition-colors"
                     >

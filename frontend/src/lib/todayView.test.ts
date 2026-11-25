@@ -61,10 +61,12 @@ describe('permissões da UI', () => {
   });
 
   it('cancelar: Gestor sempre; encarregado só o que é dele ou cobre', () => {
-    expect(canCancelJob(job(), { isGestor: true })).toBe(true);
-    expect(canCancelJob(job({ responsibleKind: 'self' }), { isGestor: false })).toBe(true);
-    expect(canCancelJob(job({ responsibleKind: 'covering' }), { isGestor: false })).toBe(true);
-    expect(canCancelJob(job({ responsibleKind: 'person' }), { isGestor: false })).toBe(false);
+    // Relógio fixo, antes do início do turno: o resultado não pode depender de quando o teste roda.
+    const antes = new Date('2026-11-24T12:00:00-03:00');
+    expect(canCancelJob(job(), { isGestor: true }, antes)).toBe(true);
+    expect(canCancelJob(job({ responsibleKind: 'self' }), { isGestor: false }, antes)).toBe(true);
+    expect(canCancelJob(job({ responsibleKind: 'covering' }), { isGestor: false }, antes)).toBe(true);
+    expect(canCancelJob(job({ responsibleKind: 'person' }), { isGestor: false }, antes)).toBe(false);
   });
 });
 

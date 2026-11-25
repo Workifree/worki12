@@ -18,27 +18,30 @@ const pedirCodigo = [{ preencher: ['input[type=email]', 'roberto@galeria.invalid
 const comCodigo = [...pedirCodigo, { preencher: ['input[inputmode=numeric]', '123456'] }, { clicar: 'Entrar na equipe' }];
 const semConta = (m) => { m.auth.verify = () => ({ body: { access_token: m.token, refresh_token: 'r', token_type: 'bearer', expires_in: 31536000, expires_at: m.expira, user: { ...m.usuarioNovo, email: 'roberto@galeria.invalid', user_metadata: { user_type: 'hire' } } } }); };
 const entrar = [marcarTos, { clicar: 'Entrar na equipe' }];
+const aceitarElenco = [{ clicar: /^Entrar no Elenco/ }];
+const convidarElenco = [{ clicar: /^Convidar para o Elenco/ }];
+const aceitarGerente = [{ clicar: /^Aceitar$/ }];
 const semVinculo = (m) => { m.db.team_connections = m.db.team_connections.filter((x) => x.worker_id !== ID.freela); };
 
 const desfechos = [['expired', 'Convite vencido'], ['revoked', 'Convite cancelado'], ['token_already_used', 'Link já usado'], ['not_found', 'Link inválido'], ['worker_cannot_be_manager', 'conta de freela'], ['use_manager_invite', 'convite é de Gestor'], ['email_not_verified', 'confirmar seu e-mail'], ['invalid_input', 'Não foi possível entrar'], ['unauthenticated', 'sessão expirou'], ['error', 'Não foi possível processar']];
 
 export default [
-  el('deslogado-vai-ao-login', 'anon', URL_EMPRESA, 'sem sessão: guarda o token e manda ao login', { espera: 'Começar a Trabalhar|Criar Conta' }),
-  el('contato-freela-deslogado', 'anon', URL_FREELA, 'token w_ deslogado: login de empresa', { espera: 'Contratar Talentos|Criar Conta' }),
-  el('processando', 'freela', URL_EMPRESA, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_company_invite_by_token'] = 'pendura'; }, carregandoEsperado: true, espera: 'Processando convite' }),
-  el('aceito', 'freela', URL_EMPRESA, 'success', { prep: semVinculo, espera: 'Convite Aceito' }),
-  el('freela-convidado', 'empresa', URL_FREELA, 'empresa abre link de contato (success)', { prep: (m) => { m.db.team_connections = []; }, espera: 'Freela Convidado' }),
-  el('ja-no-elenco', 'empresa', URL_FREELA, 'alreadyExists', { espera: 'Já está no seu elenco' }),
-  el('bloqueado', 'empresa', URL_FREELA, 'conexão blocked (mensagem neutra)', { prep: (m) => { m.db.team_connections[0].status = 'blocked'; }, espera: 'Não Foi Possível Concluir' }),
+  el('deslogado-vai-ao-login', 'anon', URL_EMPRESA, 'sem sessão: guarda o token e manda ao login', { espera: 'Entrar como freela|Criar conta de freela' }),
+  el('contato-freela-deslogado', 'anon', URL_FREELA, 'token w_ deslogado: login de empresa', { espera: 'Entrar como empresa|Criar conta de empresa' }),
+  el('processando', 'freela', URL_EMPRESA, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_company_invite_by_token'] = 'pendura'; }, carregandoEsperado: true, passos: aceitarElenco, espera: 'Convite de Elenco' }),
+  el('aceito', 'freela', URL_EMPRESA, 'success', { prep: semVinculo, passos: aceitarElenco, espera: 'Você entrou no Elenco' }),
+  el('freela-convidado', 'empresa', URL_FREELA, 'empresa abre link de contato (success)', { prep: (m) => { m.db.team_connections = []; }, passos: convidarElenco, espera: 'Convite enviado' }),
+  el('ja-no-elenco', 'empresa', URL_FREELA, 'alreadyExists', { passos: convidarElenco, espera: 'Já está no seu elenco' }),
+  el('bloqueado', 'empresa', URL_FREELA, 'conexão blocked (mensagem neutra)', { prep: (m) => { m.db.team_connections[0].status = 'blocked'; }, passos: convidarElenco, espera: 'Não foi possível concluir' }),
   el('papel-errado', 'empresa', URL_EMPRESA, 'empresa abre link de elenco (not_a_worker)', { prep: erroRpc('accept_company_invite_by_token', 'not_a_worker'), espera: 'Apenas freelas' }),
-  el('invalido', 'freela', URL_EMPRESA, 'invalid_token', { prep: erroRpc('accept_company_invite_by_token', 'invalid_token'), espera: 'inválido ou expirado' }),
-  el('empresa-inexistente', 'freela', URL_EMPRESA, 'company_not_found', { prep: erroRpc('accept_company_invite_by_token', 'company_not_found'), espera: 'não encontrada' }),
+  el('invalido', 'freela', URL_EMPRESA, 'invalid_token', { prep: erroRpc('accept_company_invite_by_token', 'invalid_token'), passos: aceitarElenco, espera: 'Link de convite inválido' }),
+  el('empresa-inexistente', 'freela', URL_EMPRESA, 'company_not_found', { prep: erroRpc('accept_company_invite_by_token', 'company_not_found'), passos: aceitarElenco, espera: 'não encontrada' }),
   el('sem-conexao', 'freela', URL_EMPRESA, 'sessão indisponível', { prep: (m) => { m.falhas['auth:user'] = 'rede'; }, erroEsperado: true, espera: 'Tentar de novo' }),
 
-  ge('deslogado-vai-ao-login', 'anon', URL_GE, 'sem sessão: login type=hire', { espera: 'Contratar Talentos|Criar Conta' }),
-  ge('processando', 'empresa', URL_GE, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_manager_invite'] = 'pendura'; }, carregandoEsperado: true, espera: 'Processando convite' }),
+  ge('deslogado-vai-ao-login', 'anon', URL_GE, 'sem sessão: login type=hire', { espera: 'Entrar como empresa|Criar conta de empresa' }),
+  ge('processando', 'empresa', URL_GE, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_manager_invite'] = 'pendura'; }, passos: aceitarGerente, carregandoEsperado: true, espera: 'Convite para ser Gestor' }),
   ...[['accepted', 'Convite Aceito'], ['already_accepted', 'já aceito'], ['token_already_used', 'já usado'], ['revoked', 'cancelado'], ['expired', 'expirado'], ['worker_cannot_be_manager', 'Conta incompatível'], ['not_found', 'Não foi possível processar']]
-    .map(([o, t]) => ge(o.replace(/_/g, '-'), 'empresa', URL_GE, `accept_manager_invite outcome=${o}`, { prep: (m) => { m.rpc.accept_manager_invite = { outcome: o }; }, espera: t })),
+    .map(([o, t]) => ge(o.replace(/_/g, '-'), 'empresa', URL_GE, `accept_manager_invite outcome=${o}`, { prep: (m) => { m.rpc.accept_manager_invite = { outcome: o }; }, passos: aceitarGerente, espera: t })),
   ge('sem-conexao', 'empresa', URL_GE, 'sessão indisponível', { prep: (m) => { m.falhas['auth:user'] = 'rede'; }, erroEsperado: true, espera: 'Tentar de novo' }),
 
   eq('abrindo', 'anon', URL_EQ, 'prévia carregando', { prep: (m) => { m.falhas['rpc:get_member_invite_preview'] = 'pendura'; }, carregandoEsperado: true, espera: 'Abrindo seu convite' }),

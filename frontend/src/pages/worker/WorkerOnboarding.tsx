@@ -88,6 +88,8 @@ export default function WorkerOnboarding() {
     const [step, setStep] = useState(1);
     const [tentou, setTentou] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+    // Erro ao salvar fica ao lado do botão; o aviso flutuante some e aparece longe dele.
+    const [erroSalvar, setErroSalvar] = useState(false);
     const [tosAccepted, setTosAccepted] = useState(false);
 
     const TOTAL_STEPS = 3;
@@ -273,6 +275,7 @@ export default function WorkerOnboarding() {
         if (!userId) return;
 
         setLoading(true);
+        setErroSalvar(false);
         try {
             const { error } = await supabase
                 .from('workers')
@@ -336,6 +339,7 @@ export default function WorkerOnboarding() {
             window.location.href = '/dashboard';
         } catch (err: unknown) {
             logError('Error saving worker profile:', err);
+            setErroSalvar(true);
             addToast(err instanceof Error ? err.message : 'Erro ao salvar perfil. Tente novamente.', 'error');
         } finally {
             setLoading(false);
@@ -576,7 +580,7 @@ export default function WorkerOnboarding() {
 
                                 <div className="space-y-5">
                                     <fieldset>
-                                        <legend className="text-sm font-bold mb-2">O que você procura como freela?</legend>
+                                        <legend className="text-sm font-bold mb-2">O que você procura como freela? <span className="font-normal text-gray-600">(opcional)</span></legend>
                                         <div className="grid grid-cols-1 gap-2">
                                             {['Renda extra com quem já confio', 'Mais turnos / mais trabalho', 'Construir minha reputação e histórico'].map(opt => (
                                                 <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
@@ -650,7 +654,13 @@ export default function WorkerOnboarding() {
                             </p>
                         )}
 
-                        <div className="pt-5 flex justify-between items-center border-t-2 border-gray-100">
+                        {erroSalvar && (
+                            <p role="alert" className="text-sm font-bold text-red-600">
+                                Não foi possível salvar. O que você preencheu continua na tela: tente de novo.
+                            </p>
+                        )}
+
+                        <div className="pt-5 flex flex-wrap gap-2 justify-between items-center border-t-2 border-gray-100">
                             {step > 1 ? (
                                 <Button
                                     variant="ghost"
@@ -666,6 +676,7 @@ export default function WorkerOnboarding() {
                             <Button
                                 type="submit"
                                 size="lg"
+                                data-copilot="freela.cadastro.avancar"
                                 loading={loading}
                                 iconRight={<ArrowRight size={18} />}
                             >

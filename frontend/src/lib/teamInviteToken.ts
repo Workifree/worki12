@@ -125,3 +125,25 @@ export function hasTeamMemberHint(uid: string | null | undefined): boolean {
     return false;
   }
 }
+
+/**
+ * "Cadastrar minha própria empresa" na tela de acesso encerrado: vence o bloqueio só desta pessoa e
+ * só nesta aba. É roteamento (abre o próprio cadastro); quem autoriza é o RLS.
+ */
+const OWN_COMPANY_INTENT_KEY = 'worki_own_company_intent';
+
+export function markOwnCompanyIntent(uid: string): void {
+  try {
+    sessionStorage.setItem(`${OWN_COMPANY_INTENT_KEY}:${uid}`, '1');
+  } catch {
+    // sem storage a pessoa volta à tela de acesso encerrado; nada é liberado por engano
+  }
+}
+
+export function hasOwnCompanyIntent(uid: string): boolean {
+  try {
+    return sessionStorage.getItem(`${OWN_COMPANY_INTENT_KEY}:${uid}`) === '1';
+  } catch {
+    return false;
+  }
+}

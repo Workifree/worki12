@@ -15,7 +15,7 @@ const faqs = [
     },
     {
         q: 'Como funciona a chegada e a saída no turno?',
-        a: 'No dia do turno, o freela faz check-in ao chegar e check-out ao sair, direto pelo app. A empresa confere a presença e confirma a conclusão do turno quando o trabalho termina.',
+        a: 'No dia do turno, o freela registra a chegada e a saída em "Meus Turnos". A empresa confere a presença e confirma a conclusão do turno quando o trabalho termina.',
     },
     {
         q: 'Como funciona o pagamento?',

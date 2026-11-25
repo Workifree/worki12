@@ -48,6 +48,7 @@ function renderGate() {
 
 async function expectError() {
     expect(await screen.findByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
+    await act(async () => {}) // deixa os efeitos (listener de `online`) assentarem
     for (const text of ['Area protegida', 'Tela de onboarding', 'Home', 'Pagina publica']) {
         expect(screen.queryByText(text)).not.toBeInTheDocument()
     }

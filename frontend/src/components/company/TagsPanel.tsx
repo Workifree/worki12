@@ -77,7 +77,7 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
         <Field label="Nova etiqueta" className="flex-1" hint="De 1 a 40 caracteres.">
           <input type="text" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
         </Field>
-        <Button type="submit" variant="dark" size="lg" disabled={!name.trim() || busy}>Criar etiqueta</Button>
+        <Button type="submit" data-copilot="empresa.etiquetas.criar" variant="dark" size="lg" disabled={!name.trim() || busy}>Criar etiqueta</Button>
       </form>
 
       <div className="mt-4">

@@ -47,7 +47,7 @@ async function percorrerAteAceitar() {
   await screen.findByText(/te convidou como Encarregado/);
   fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'Ana@Exemplo.com' } });
   fireEvent.click(screen.getByLabelText(/Li e aceito/));
-  fireEvent.click(screen.getByRole('button', { name: /Receber código por e-mail/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Aceitar e receber código/ }));
   const codigo = await screen.findByLabelText(/Código do e-mail/);
   fireEvent.change(codigo, { target: { value: '123456' } });
   fireEvent.click(screen.getByRole('button', { name: /Entrar na equipe/ }));
@@ -115,7 +115,7 @@ describe('AcceptTeamInvite — entrada por código, sem senha', () => {
     renderPage();
     await screen.findByText(/te convidou como Encarregado/);
     fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'ana@x.com' } });
-    fireEvent.click(screen.getByRole('button', { name: /Receber código por e-mail/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Aceitar e receber código/ }));
     expect(await screen.findByText(/Aceite os Termos de Uso/)).toBeInTheDocument();
     expect(mockSignInWithOtp).not.toHaveBeenCalled();
   });
@@ -185,7 +185,7 @@ describe('AcceptTeamInvite — volta pelo botão do e-mail', () => {
     await screen.findByText(/te convidou como Encarregado/);
     fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'Ana@Exemplo.com' } });
     fireEvent.click(screen.getByLabelText(/Li e aceito/));
-    fireEvent.click(screen.getByRole('button', { name: /Receber código por e-mail/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Aceitar e receber código/ }));
     await screen.findByLabelText(/Código do e-mail/);
     aba.unmount();
     sessionStorage.clear();
@@ -296,7 +296,35 @@ describe('AcceptTeamInvite — todos os outcomes do aceite', () => {
     await screen.findByText(/te convidou como Encarregado/);
     fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'ana@x.com' } });
     fireEvent.click(screen.getByLabelText(/Li e aceito/));
-    fireEvent.click(screen.getByRole('button', { name: /Receber código por e-mail/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Aceitar e receber código/ }));
     expect(await screen.findByText('Aguarde um minuto para pedir outro código.')).toBeInTheDocument();
+  });
+});
+
+describe('AcceptTeamInvite — consentimento', () => {
+  const logado = () =>
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u', email: 'ana@x.com', user_metadata: { user_type: 'hire' } } } });
+
+  it('montar a página logado, sem ter tocado em aceitar, não chama o aceite', async () => {
+    logado();
+    renderPage();
+    await screen.findByText(/ana@x.com/);
+    expect(acceptMemberInvite).not.toHaveBeenCalled();
+  });
+
+  it('quem desiste com "Agora não" depois de pedir o código não é aceito na volta', async () => {
+    const aba = renderPage();
+    await screen.findByText(/te convidou como Encarregado/);
+    fireEvent.change(screen.getByLabelText(/Seu e-mail/), { target: { value: 'ana@x.com' } });
+    fireEvent.click(screen.getByLabelText(/Li e aceito/));
+    fireEvent.click(screen.getByRole('button', { name: /Aceitar e receber código/ }));
+    await screen.findByLabelText(/Código do e-mail/);
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar e-mail' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Agora não' }));
+    aba.unmount();
+    logado();
+    renderPage();
+    await screen.findByText(/ana@x.com/);
+    expect(acceptMemberInvite).not.toHaveBeenCalled();
   });
 });

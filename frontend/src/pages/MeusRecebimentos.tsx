@@ -18,7 +18,7 @@ import ErroDeCarga from '../components/ErroDeCarga';
 import PageMeta from '../components/PageMeta';
 import type { PaymentSource } from '../types';
 import { formatDateOnly } from '../lib/dateUtils';
-import { Card, PageHeader } from '../components/ui';
+import { Button, Card, PageHeader } from '../components/ui';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -26,8 +26,9 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     other: 'Outro',
 };
 
-function formatCurrency(amount: number): string {
-    return formatBRL(amount);
+/** Valor ausente nunca vira "R$ 0,00". */
+function formatCurrency(amount: number | null): string {
+    return typeof amount === 'number' && amount > 0 ? formatBRL(amount) : 'Valor não informado';
 }
 
 // ---------------------------------------------------------------------------
@@ -58,22 +59,12 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
         if (job?.id) onOpen(job.id);
     };
 
-    // `!` nas utilidades que disputam com as do Card (borda preta / sombra de hover).
-    const stateClass = isVoided
-        ? '!border-gray-200 opacity-70 cursor-default'
-        : needsConfirmation
-            ? 'cursor-pointer shadow-[3px_3px_0px_0px_rgba(0,166,81,1)] hover:!shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]'
-            : 'cursor-pointer';
-
     return (
         <Card
             padding="sm"
-            interactive={!isVoided}
-            role={isVoided ? undefined : 'button'}
-            tabIndex={isVoided ? undefined : 0}
-            onClick={isVoided ? undefined : handleOpen}
-            onKeyDown={isVoided ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
-            className={`flex items-start gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${stateClass}`}
+            tone={isVoided ? 'nested' : needsConfirmation ? 'highlight' : 'default'}
+            onActivate={isVoided ? undefined : handleOpen}
+            className={`flex items-start gap-3 ${isVoided ? 'opacity-70' : ''}`}
         >
             <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
                 {company?.logo_url ? (
@@ -86,12 +77,15 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
             </div>
 
             <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-x-3">
                     <div className="min-w-0">
-                        <p className="font-bold text-sm sm:text-base truncate">{jobTitle}</p>
-                        <p className="text-xs text-gray-600 truncate">{companyName}</p>
+                        <p className="font-bold text-sm sm:text-base line-clamp-2 [overflow-wrap:anywhere]">{jobTitle}</p>
+                        <p className="text-xs text-gray-600 [overflow-wrap:anywhere]">
+                            {companyName}
+                            {job?.start_date ? ` · turno de ${formatDateOnly(job.start_date, 'dd/MM')}` : ''}
+                        </p>
                     </div>
-                    <p className={`font-bold text-lg tabular-nums flex-shrink-0 ${isVoided ? 'text-gray-600 line-through' : 'text-black'}`}>
+                    <p className={`font-bold text-lg tabular-nums ${isVoided ? 'text-gray-600 line-through' : 'text-black'}`}>
                         {formatCurrency(payment.amount)}
                     </p>
                 </div>
@@ -100,7 +94,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                     {isScheduled && (
                         <span className="flex items-center gap-1 text-xs font-semibold bg-yellow-50 text-yellow-700 px-2.5 py-1 rounded-pill border border-yellow-200">
                             <Clock size={12} />
-                            Promessa · {payment.scheduled_for ? formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy') : '—'}
+                            Previsto (promessa) · {payment.scheduled_for ? formatDateOnly(payment.scheduled_for, 'dd/MM/yyyy') : '—'}
                         </span>
                     )}
                     {needsConfirmation && (
@@ -135,6 +129,17 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                         </span>
                     )}
                 </div>
+                {needsConfirmation && (
+                    <Button
+                        variant="secondary"
+                        fullWidth
+                        className="mt-3"
+                        data-copilot="freela.recebimentos.confirmar"
+                        onClick={handleOpen}
+                    >
+                        Confirmar recebimento
+                    </Button>
+                )}
             </div>
         </Card>
     );
@@ -185,8 +190,8 @@ export default function MeusRecebimentos() {
 
     const totalRecorded = items
         .filter((i) => i.payment.status === 'recorded')
-        .reduce((sum, i) => sum + i.payment.amount, 0);
-    const totalScheduled = scheduled.reduce((sum, i) => sum + i.payment.amount, 0);
+        .reduce((sum, i) => sum + (i.payment.amount || 0), 0);
+    const totalScheduled = scheduled.reduce((sum, i) => sum + (i.payment.amount || 0), 0);
 
     if (loading) {
         return (
@@ -220,25 +225,24 @@ export default function MeusRecebimentos() {
                 subtitle="Histórico dos pagamentos que as empresas registraram por fora do app."
             />
 
-            {/* Resumo — NÃO é saldo: é histórico declarado pelas empresas */}
+            {/* Resumo em uma faixa — NÃO é saldo: é histórico declarado pelas empresas */}
             {!isEmpty && (
-                <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                    <Card padding="sm">
-                        <span className="block text-xs text-gray-600 mb-1">Total recebido</span>
-                        <p className="font-bold text-2xl tabular-nums text-primary">{formatCurrency(totalRecorded)}</p>
-                    </Card>
-                    <Card padding="sm">
-                        <span className="block text-xs text-gray-600 mb-1">Agendado (promessa)</span>
-                        <p className="font-bold text-2xl tabular-nums">{formatCurrency(totalScheduled)}</p>
-                    </Card>
-                    <Card
-                        padding="sm"
-                        className={pendingConfirmation.length > 0 ? 'shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]' : undefined}
-                    >
-                        <span className="block text-xs text-gray-600 mb-1">Aguardam confirmação</span>
-                        <p className="font-bold text-2xl tabular-nums">{pendingConfirmation.length}</p>
-                    </Card>
-                </section>
+                <dl className="mb-6 flex flex-wrap gap-x-6 gap-y-3 rounded-2xl border-2 border-gray-200 bg-white p-4">
+                    <div>
+                        <dt className="text-xs text-gray-600">Total recebido</dt>
+                        <dd className="text-2xl font-bold tabular-nums text-primary">{formatBRL(totalRecorded)}</dd>
+                    </div>
+                    {scheduled.length > 0 && (
+                        <div>
+                            <dt className="text-xs text-gray-600">Total previsto</dt>
+                            <dd className="text-2xl font-bold tabular-nums">{formatBRL(totalScheduled)}</dd>
+                        </div>
+                    )}
+                    <div>
+                        <dt className="text-xs text-gray-600">Aguardam confirmação</dt>
+                        <dd className="text-2xl font-bold tabular-nums">{pendingConfirmation.length}</dd>
+                    </div>
+                </dl>
             )}
 
             {/* Aguardando confirmação — destaque, exige ação do freela */}

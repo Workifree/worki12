@@ -75,6 +75,14 @@ function baseReceipt(
   }
 }
 
+/** Consulta do registro estornado: `select().eq()...order().limit()`. */
+function voidedChain(rows: unknown[]) {
+  const chain: Record<string, unknown> = {}
+  for (const method of ['select', 'eq', 'order']) chain[method] = () => chain
+  chain.limit = () => Promise.resolve({ data: rows, error: null })
+  return chain
+}
+
 function renderComponent(jobId = 'job-1') {
   return render(
     <MemoryRouter initialEntries={[`/recibo/${jobId}`]}>
@@ -161,7 +169,7 @@ describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () =>
     // O service já garante isso (não é a UI que filtra) — este teste documenta a UI honrando
     // um `null` do service como "não encontrado", sem tentar adivinhar outro recibo.
     vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(null)
-    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+    vi.mocked(supabase.from).mockImplementation(() => voidedChain([]) as unknown as ReturnType<typeof supabase.from>)
 
     render(
       <MemoryRouter initialEntries={['/recibo/job-1?worker=worker-DE-OUTRO-FREELA']}>
@@ -174,6 +182,22 @@ describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () =>
     await waitFor(() => {
       expect(screen.getByText('Recibo não encontrado')).toBeInTheDocument()
     })
+  })
+})
+
+describe('ReceiptView - registro estornado', () => {
+  it('diz que foi estornado, com valor e motivo, em vez de "não encontrado"', async () => {
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(null)
+    vi.mocked(supabase.from).mockImplementation(() => voidedChain([
+      { amount: 1500, voided_at: '2026-03-06T12:00:00Z', void_reason: 'Valor errado', company: { name: 'Bar do Zé' } },
+    ]) as unknown as ReturnType<typeof supabase.from>)
+
+    renderComponent()
+
+    expect(await screen.findByText('Este recibo foi estornado')).toBeInTheDocument()
+    expect(screen.getByText(/R\$\s*1\.500,00/)).toBeInTheDocument()
+    expect(screen.getByText(/Valor errado/)).toBeInTheDocument()
+    expect(screen.queryByText('Recibo não encontrado')).not.toBeInTheDocument()
   })
 })
 

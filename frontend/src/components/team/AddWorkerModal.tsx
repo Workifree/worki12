@@ -22,10 +22,9 @@ export interface AddWorkerModalProps {
 }
 
 export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
-  // G1: default é 'phone' (Worki ID) — NÃO monta a câmera (nem pede
-  // permissão) ao abrir o modal. QR fica como tab opt-in, só monta o
-  // scanner quando o usuário clica na aba QR.
-  const [method, setMethod] = useState<AddMethod>('phone');
+  // G1: abre em "Link" (o caminho mais fácil) — NÃO monta a câmera (nem pede permissão) ao
+  // abrir o modal. QR é opt-in: o scanner só monta quando a pessoa toca na aba.
+  const [method, setMethod] = useState<AddMethod>('link');
   const [workerId, setWorkerId] = useState('');
   const [linkInput, setLinkInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -116,9 +115,9 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
       {/* Tabs */}
       <div role="group" aria-label="Como adicionar" className="flex gap-5 mb-5 border-b-2 border-gray-200">
         {([
+          { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
           { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
           { id: 'phone' as AddMethod, icon: KeyRound, label: 'Código' },
-          { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -201,7 +200,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
               type="text"
               value={workerId}
               onChange={(e) => setWorkerId(e.target.value)}
-              placeholder="Cole o ID do freela aqui"
+              placeholder="Cole o código do freela aqui"
             />
           </Field>
           <Button

@@ -76,7 +76,7 @@ export default function ForgotPassword() {
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight mb-2">Email Enviado</h1>
                     <p className="text-sm sm:text-base text-gray-600 mb-6">
-                        Se o email <strong>{email}</strong> estiver cadastrado, voce recebera um link para redefinir sua senha.
+                        Se o e-mail <strong className="break-all">{email}</strong> estiver cadastrado, você receberá um link para redefinir sua senha.
                     </p>
                     <div className="flex flex-col gap-3">
                         <Button
@@ -114,7 +114,7 @@ export default function ForgotPassword() {
                 <PageHeader
                     as="h1"
                     title="Esqueci a Senha"
-                    subtitle="Enviaremos um link para seu email"
+                    subtitle="Enviaremos um link para seu e-mail"
                     className="sm:mb-6"
                 />
 
@@ -136,6 +136,7 @@ export default function ForgotPassword() {
                         fullWidth
                         loading={loading}
                         disabled={!email.trim() || cooldown > 0}
+                        data-copilot="publico.recuperar-senha.enviar-link"
                     >
                         {cooldown > 0 ? `Aguarde ${cooldown}s` : 'Enviar Link de Recuperação'}
                     </Button>

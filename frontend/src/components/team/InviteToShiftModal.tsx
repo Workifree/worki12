@@ -9,7 +9,7 @@ import type { TeamMember } from '../../types';
 import { formatHistoryDate } from './utils';
 import { getJobScope, canSeeJob, type JobScope } from '../../services/jobScopeService';
 import { ModalShell } from './ModalShell';
-import { Button } from '../ui';
+import { Button, ErrorState } from '../ui';
 import { useBusyWorkers } from '../../hooks/useBusyWorkers';
 import { buildShiftWindow } from '../../services/shiftOperationService';
 import { BusyWorkerBadge } from './BusyWorkerBadge';
@@ -46,6 +46,9 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<EligibleJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
+  // Falha de consulta não pode virar "nenhum turno".
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [jobsCompanyId, setJobsCompanyId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const { invite, invitingWorkerId } = useCompanyInvites(selectedJobId);
@@ -54,6 +57,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
     let active = true;
     void (async () => {
       setLoadingJobs(true);
+      setLoadFailed(false);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { if (active) setLoadingJobs(false); return; }
@@ -63,7 +67,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         try {
           scope = await getJobScope();
         } catch {
-          if (active) { setJobs([]); setLoadingJobs(false); }
+          if (active) { setLoadFailed(true); setLoadingJobs(false); }
           return;
         }
 
@@ -77,7 +81,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
 
         if (jobsErr) {
           logError('CompanyTeam.InviteToShiftModal.fetchJobs', jobsErr);
-          if (active) { setJobs([]); setLoadingJobs(false); }
+          if (active) { setLoadFailed(true); setLoadingJobs(false); }
           return;
         }
 
@@ -106,14 +110,14 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         if (active) { setJobs(eligible); setJobsCompanyId(scope.companyId); }
       } catch (err) {
         logError('CompanyTeam.InviteToShiftModal', err);
-        if (active) setJobs([]);
+        if (active) setLoadFailed(true);
       } finally {
         if (active) setLoadingJobs(false);
       }
     })();
 
     return () => { active = false; };
-  }, [member.worker.id]);
+  }, [member.worker.id, attempt]);
 
   const handleConfirmInvite = async () => {
     if (!selectedJobId) return;
@@ -153,7 +157,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
       onClose={onClose}
       locked={isInviting}
       footer={
-        !loadingJobs && jobs.length > 0 ? (
+        !loadingJobs && !loadFailed && jobs.length > 0 ? (
           <>
           {memberIsBusy && (
             <div className="mb-3" role="status">
@@ -165,6 +169,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
             variant="dark"
             size="lg"
             fullWidth
+            data-copilot="empresa.convite.confirmar"
             onClick={() => { void handleConfirmInvite(); }}
             disabled={!selectedJobId}
             loading={isInviting}
@@ -182,11 +187,15 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         </div>
       )}
 
-      {!loadingJobs && jobs.length === 0 && (
+      {!loadingJobs && loadFailed && (
+        <ErrorState title="Não conseguimos carregar os turnos." onRetry={() => setAttempt((n) => n + 1)} />
+      )}
+
+      {!loadingJobs && !loadFailed && jobs.length === 0 && (
         <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <CalendarX2 size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">Nenhum turno elegível para convidar agora.</p>
-          <p className="text-xs mt-1">Crie um turno aberto (sem esse freela atrelado e com data futura) para poder convidar.</p>
+          <p className="text-xs mt-1">Crie um turno aberto, com data futura e sem este freela, para poder convidar.</p>
           <Button
             variant="dark"
             className="mt-4"
@@ -198,7 +207,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         </div>
       )}
 
-      {!loadingJobs && jobs.length > 0 && (
+      {!loadingJobs && !loadFailed && jobs.length > 0 && (
         <div className="space-y-2" role="group" aria-label="Turnos elegíveis">
           {jobs.map((job) => {
             const selected = selectedJobId === job.id;

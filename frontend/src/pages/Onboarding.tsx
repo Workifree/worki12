@@ -25,7 +25,7 @@ export default function Onboarding() {
             Sobre
           </button>
           <Button variant="secondary" size="md" onClick={() => navigate('/login')}>
-            Login
+            Entrar
           </Button>
         </div>
       </nav>
@@ -77,22 +77,28 @@ export default function Onboarding() {
 
           {/* Card: I want to Work */}
           <button
+            type="button"
+            data-copilot="publico.entrada.escolher-freela"
             onClick={() => navigate('/login?type=work')}
             className="group relative bg-white border-2 border-black rounded-2xl p-6 sm:p-8 text-left transition-all hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >
             <div className="absolute top-4 right-4 bg-primary-dark text-white text-xs font-semibold px-2.5 py-1 rounded-full">
-              Para freelancers
+              Para freelas
             </div>
             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-white transition-colors border-2 border-black">
               <DollarSign size={22} strokeWidth={2.5} aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-1">Quero trabalhar</h3>
             <p className="text-gray-600 text-sm pr-8">Seja dono do seu trabalho. Seu histórico, sua avaliação e seu comprovante de renda — que ninguém tira de você.</p>
-            <ArrowRight className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-black bg-primary-dark px-4 text-sm font-bold text-white">
+              Entrar como freela <ArrowRight size={18} aria-hidden="true" />
+            </span>
           </button>
 
           {/* Card: I want to Hire */}
           <button
+            type="button"
+            data-copilot="publico.entrada.escolher-empresa"
             onClick={() => navigate('/login?type=hire')}
             className="group relative bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-8 text-left transition-all hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >
@@ -104,7 +110,9 @@ export default function Onboarding() {
             </div>
             <h3 className="text-xl font-bold mb-1">Quero contratar</h3>
             <p className="text-gray-300 text-sm pr-8">Monte seu elenco de freelas de confiança. Contrate direto, registre cada turno e controle o gasto — tudo num lugar só.</p>
-            <ArrowRight className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white px-4 text-sm font-bold text-black">
+              Entrar como empresa <ArrowRight size={18} aria-hidden="true" />
+            </span>
           </button>
 
         </div>
@@ -206,10 +214,10 @@ export default function Onboarding() {
 
           <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
             <Button variant="dark" size="lg" onClick={() => navigate('/login?type=work&cadastro=1')}>
-              Cadastrar como Trabalhador
+              Criar conta de freela
             </Button>
             <Button variant="secondary" size="lg" onClick={() => navigate('/login?type=hire&cadastro=1')}>
-              Cadastrar como Empresa
+              Criar conta de empresa
             </Button>
           </div>
         </div>

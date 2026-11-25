@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { Button } from './ui';
 import { Dialog } from './ui/Dialog';
@@ -16,6 +17,16 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
     const [checked, setChecked] = useState(false);
     const [loading, setLoading] = useState(false);
     const { addToast } = useToast();
+
+    // Quem não concorda não pode ficar preso no gate.
+    const sair = async () => {
+        try {
+            await supabase.auth.signOut();
+        } catch (err) {
+            logError('TosGateModal.sair', err);
+        }
+        window.location.assign('/');
+    };
 
     const handleAccept = async () => {
         if (!checked || loading) return;
@@ -103,6 +114,14 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                 >
                     Ler os Termos de Uso
                 </a>
+                <a
+                    href="/privacidade"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 block text-primary underline font-bold"
+                >
+                    Ler a Política de Privacidade
+                </a>
 
                 <div className="flex items-start gap-3 mt-5 mb-6">
                     <input
@@ -123,8 +142,12 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     onClick={handleAccept}
                     disabled={!checked}
                     loading={loading}
+                    data-copilot="publico.termos.aceitar"
                 >
                     {loading ? 'Salvando...' : 'Aceitar e Continuar'}
+                </Button>
+                <Button variant="ghost" fullWidth className="mt-2" onClick={() => void sair()}>
+                    Agora não, sair da conta
                 </Button>
         </Dialog>
     );

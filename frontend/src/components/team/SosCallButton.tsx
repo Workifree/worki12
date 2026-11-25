@@ -116,12 +116,14 @@ export function SosCallButton({ jobId, refreshKey, onDispatched }: SosCallButton
         title={!checking && !eligible ? eligibilityMessage(reasonBlocked) : undefined}
         iconLeft={<Siren size={16} />}
         className="flex-shrink-0"
+        data-copilot="empresa.presenca.sos"
       >
         SOS: fora do Elenco
       </Button>
 
+      {/* O motivo do botão apagado precisa ser visível: `title` não existe no toque. */}
       {!checking && !eligible && (
-        <p className="sr-only">{eligibilityMessage(reasonBlocked)}</p>
+        <p className="text-xs text-gray-600 sm:max-w-60">{eligibilityMessage(reasonBlocked)}</p>
       )}
 
       {modalOpen && (

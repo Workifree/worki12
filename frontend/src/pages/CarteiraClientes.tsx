@@ -1,9 +1,9 @@
-import { useState, type MouseEvent } from 'react';
+import { useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
+import { Building2, Star, MapPin, CheckCircle2, XCircle, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
-import { Button, Card, PageHeader } from '../components/ui';
+import { Button, Card, Menu, PageHeader } from '../components/ui';
 import SectionTabs from '../components/SectionTabs';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { useToast } from '../contexts/ToastContext';
@@ -31,8 +31,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
 
   // Link transitivo: já sou conectado a essa empresa → posso repassar o link
   // dela pra outro freela se conectar, sem precisar pedir à empresa.
-  const handleShareLink = async (e: MouseEvent) => {
-    e.stopPropagation();
+  const handleShareLink = async () => {
     // `connection.company_id` é a FK garantida (não-nula); `company.id` no
     // embed é opcional no tipo (CompanyProfile.id?), então preferimos a FK.
     const gerado = await TeamConnectionService.generateInviteToken(connection.company_id);
@@ -106,27 +105,15 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
         </div>
       </div>
 
-      {/* Ações: repassar link / sair-bloquear */}
-      <div className="flex flex-col gap-1 flex-shrink-0">
-        <button
-          type="button"
-          onClick={handleShareLink}
-          aria-label={`Repassar link da empresa ${name}`}
-          title="Repassar link desta empresa para outro freela"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-primary hover:bg-primary-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-        >
-          {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onLeave(connection.id); }}
-          disabled={leaving}
-          aria-label={`Sair da empresa ${name}`}
-          title="Sair / bloquear empresa"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-        >
-          {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
-        </button>
+      {/* Ações: a destrutiva fica no menu, nunca exposta no cartão. */}
+      <div className="flex-shrink-0">
+        <Menu
+          label={`Mais opções de ${name}`}
+          items={[
+            { label: 'Compartilhar link da empresa', icon: linkCopied ? Check : Share2, onSelect: () => void handleShareLink() },
+            { label: 'Sair da empresa', icon: LogOut, onSelect: () => onLeave(connection.id), danger: true, disabled: leaving },
+          ]}
+        />
       </div>
     </Card>
   );
@@ -360,16 +347,19 @@ export default function CarteiraClientes() {
             onClose={() => setConfirmLeaveId(null)}
             className="max-w-sm"
         >
-            <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2">Sair desta empresa?</h3>
+            <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2 [overflow-wrap:anywhere]">
+              Sair de {myStores.find((s) => s.connection.id === confirmLeaveId)?.company.name ?? 'esta empresa'}?
+            </h3>
             <p className="text-sm text-gray-600 mb-6">
-              Você não fará mais parte do elenco dessa empresa. Esta ação não pode ser desfeita.
+              Você deixa o elenco e não recebe novos convites dela. Seus recibos continuam em Recebimentos.
+              Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setConfirmLeaveId(null)}>
                 Voltar
               </Button>
               <Button variant="danger" className="flex-1" onClick={handleConfirmLeave}>
-                Sair
+                Sair da empresa
               </Button>
             </div>
         </Dialog>

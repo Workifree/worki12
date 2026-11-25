@@ -66,6 +66,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getSessionUserOrThrow } from '../lib/authSession';
 import { getAuthenticatedCompanyId } from './companyScopeService';
 import { roleLabel } from '../lib/statusLabels';
 
@@ -239,9 +240,8 @@ export const OrderReportService = {
     };
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Rede fora lança (a tela mostra erro); só "sem sessão" devolve o relatório vazio.
+      const user = await getSessionUserOrThrow();
       if (!user) return empty;
 
       // Empresa OPERADA pela sessão (dono, gerente, encarregado) — nunca `user.id`, que só
@@ -257,8 +257,7 @@ export const OrderReportService = {
         .neq('status', 'deleted');
 
       if (jobsErr) {
-        logError('orderReport.getReport.jobs', jobsErr);
-        return empty;
+        throw jobsErr;
       }
 
       const fromDate = startOfDayLocal(from);
@@ -297,12 +296,9 @@ export const OrderReportService = {
           .in('job_id', jobIds),
       ]);
 
-      if (paymentsResult.error) {
-        logError('orderReport.getReport.shiftPayments', paymentsResult.error);
-      }
-      if (appsResult.error) {
-        logError('orderReport.getReport.applications', appsResult.error);
-      }
+      // Sem pagamentos ou candidaturas o relatório mostraria "em aberto" e R$ 0 pago: é erro.
+      if (paymentsResult.error) throw paymentsResult.error;
+      if (appsResult.error) throw appsResult.error;
 
       const payments = (paymentsResult.data ?? []) as ShiftPaymentRow[];
       const applications = (appsResult.data ?? []) as ApplicationRow[];
@@ -439,7 +435,7 @@ export const OrderReportService = {
       return { rows, summary };
     } catch (err) {
       logError('orderReport.getReport', err);
-      return empty;
+      throw err;
     }
   },
 };

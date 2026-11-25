@@ -11,7 +11,7 @@ import { ShiftCallService } from '../../services/shiftCallService';
 import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import type { TeamMember } from '../../types';
-import { Button } from '../ui';
+import { Alert, Button } from '../ui';
 
 import {
     DEFAULT_LINK_RISK_THRESHOLD,
@@ -56,7 +56,7 @@ interface InviteSeriesModalProps {
  */
 export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSeriesModalProps) {
     const { addToast } = useToast();
-    const { teamMembers, loading: teamLoading } = useCompanyTeam();
+    const { teamMembers, loading: teamLoading, erroCarga: teamError, refresh: refreshTeam } = useCompanyTeam();
     const [inviting, setInviting] = useState(false);
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [result, setResult] = useState<{ invited: number; failed: number } | null>(null);
@@ -235,7 +235,17 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                             </div>
                         )}
 
-                        {!teamLoading && teamMembers.length === 0 && (
+                        {!teamLoading && teamError && (
+                            <Alert
+                                tone="warning"
+                                role="alert"
+                                action={<Button variant="secondary" onClick={refreshTeam}>Tentar de novo</Button>}
+                            >
+                                Não conseguimos carregar o seu elenco.
+                            </Alert>
+                        )}
+
+                        {!teamLoading && !teamError && teamMembers.length === 0 && (
                             <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Seu elenco está vazio.</p>
@@ -278,6 +288,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                 </div>
                                                 <Button
                                                     variant="dark"
+                                                    data-copilot="empresa.serie.convidar"
                                                     onClick={() => handleInvite(member.worker.id)}
                                                     disabled={inviting}
                                                     loading={inviting}

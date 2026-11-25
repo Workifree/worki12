@@ -3,6 +3,7 @@ import { logError } from '../../../lib/logger';
 import type { BonusAdminAdapter, ReviewDecision, ReviewItem } from './types';
 import { flagLabel, formatCents, formatDate } from './format';
 import { useLoad } from './useLoad';
+import { ErrorState } from '../../ui';
 
 interface Props {
     adapter: BonusAdminAdapter;
@@ -104,7 +105,7 @@ export default function ReviewQueue({ adapter, undoMs = 6000, onFlushError }: Pr
     };
 
     if (loading) return <div className="space-y-4"><div className="h-28 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div><div className="h-28 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div></div>;
-    if (error) return <p role="alert" className="font-bold text-red-700">{error}</p>;
+    if (error) return <ErrorState title={error} onRetry={() => void reload()} />;
 
     const items = data ?? [];
 

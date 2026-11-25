@@ -318,7 +318,7 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                             <Button variant="secondary" onClick={() => setPhase('form')} disabled={saving} className="flex-1">
                                 Voltar
                             </Button>
-                            <Button variant="dark" onClick={handleApply} disabled={confirmDisabled} loading={saving} className="flex-1">
+                            <Button variant="dark" data-copilot="empresa.serie.aplicar-edicao" onClick={handleApply} disabled={confirmDisabled} loading={saving} className="flex-1">
                                 {saving ? 'Aplicando...' : 'Confirmar e aplicar'}
                             </Button>
                         </div>

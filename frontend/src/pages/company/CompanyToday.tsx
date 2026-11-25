@@ -13,13 +13,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, LayoutDashboard, Plus, Repeat, Users, X, XCircle } from 'lucide-react';
+import { CalendarClock, LayoutDashboard, Megaphone, Plus, Repeat, Users, X, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import PassJobsModal, { type PassDestination } from '../../components/company/PassJobsModal';
 import CoverageModal, { type CoveragePerson } from '../../components/company/CoverageModal';
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
-import { Button, Card, PageHeader } from '../../components/ui';
+import {
+  ActionBar, Alert, Button, ButtonLink, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge,
+} from '../../components/ui';
+import { occupancy } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
 import SectionTabs from '../../components/SectionTabs';
 import TrailShortcutCard from '../../components/company/TrailShortcutCard';
@@ -59,20 +62,6 @@ interface Person {
   label: string;
 }
 
-const CHIP_BASE = 'min-h-12 rounded-xl border-2 px-5 text-base font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2';
-
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`${CHIP_BASE} ${active ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-black hover:border-black'}`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function br(dateOnly: string): string {
   const [, m, d] = dateOnly.split('-');
@@ -338,9 +327,17 @@ export default function CompanyToday() {
     reload();
   };
 
-  const subtitle = gestor
-    ? 'Os turnos de hoje e dos próximos dias, com quem responde por cada um.'
-    : 'Os seus turnos de hoje e dos próximos dias.';
+  // O subtítulo só promete o responsável quando a linha dele aparece (com equipe).
+  const subtitle = !gestor
+    ? 'Os seus turnos de hoje e dos próximos dias.'
+    : teamEnabled
+      ? 'Os turnos de hoje e dos próximos dias, com quem responde por cada um.'
+      : 'Os turnos de hoje e dos próximos dias.';
+
+  // Uma ação primária por tela: só o primeiro turno que ainda precisa de gente.
+  const firstNeedingPeople = groups
+    .flatMap((g) => g.jobs)
+    .find((j) => occupancy(j.slots, j.filled).needsPeople)?.jobId;
 
   if (sessionFailed) {
     return <ErroDeVerificacao onRetry={() => { setSessionFailed(false); setSessionAttempt((n) => n + 1); }} />;
@@ -352,7 +349,7 @@ export default function CompanyToday() {
         <PageMeta title="Hoje" description="Turnos de hoje e dos próximos dias." />
         <PageHeader title="Hoje" subtitle={subtitle} />
         <Card className="text-center">
-          <h2 className="text-xl font-black">Não encontramos uma empresa nesta conta</h2>
+          <h2 className="text-lg font-bold">Não encontramos uma empresa nesta conta</h2>
           <p className="mb-4 mt-1 text-sm text-gray-700">
             Pode ser uma falha de conexão ou a conta ainda não está ligada a uma empresa. Tente de novo ou entre com outra conta.
           </p>
@@ -366,7 +363,7 @@ export default function CompanyToday() {
   }
 
   return (
-    <div className={`max-w-3xl mx-auto ${selectedVisible.length > 0 ? 'pb-44' : 'pb-24'}`}>
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <PageMeta title="Hoje" description="Turnos de hoje e dos próximos dias." />
       {teamEnabled && <SectionTabs section="inicio" />}
       <PageHeader
@@ -377,7 +374,7 @@ export default function CompanyToday() {
           // Sem turnos, o vazio já oferece "Criar turno": não repetir no cabeçalho.
           <div className="flex flex-col-reverse gap-3 sm:flex-row">
             {canCover && (
-              <Button variant="secondary" size="lg" iconLeft={<Repeat size={18} />} onClick={() => setCoverOpen(true)}>
+              <Button variant="secondary" data-copilot="empresa.hoje.cobrir" iconLeft={<Repeat size={18} />} onClick={() => setCoverOpen(true)}>
                 {gestor ? 'Cobrir alguém' : 'Cobrir meus turnos'}
               </Button>
             )}
@@ -389,38 +386,42 @@ export default function CompanyToday() {
       <TrailShortcutCard className="mb-6" />
 
       {teamEnabled && operatorsFailed && (
-        <p role="alert" className="mb-4 rounded-xl border-2 border-black bg-yellow-50 p-3 text-sm font-semibold">
+        <Alert tone="warning" role="alert" className="mb-4">
           Não foi possível carregar quem pode receber turnos. "Passar para..." e "Cobrir" ficam indisponíveis por enquanto.
-        </p>
+        </Alert>
       )}
       {teamEnabled && sideFailed && (
-        <p role="alert" className="mb-4 rounded-xl border-2 border-black bg-yellow-50 p-3 text-sm font-semibold">
-          Não foi possível carregar as etiquetas ou as coberturas agora. Os turnos abaixo estão corretos.{' '}
-          <button type="button" className="font-black underline" onClick={reload}>Tentar de novo</button>
-        </p>
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-4"
+          action={<Button variant="secondary" onClick={reload}>Tentar de novo</Button>}
+        >
+          Não foi possível carregar as etiquetas ou as coberturas agora. Os turnos abaixo estão corretos.
+        </Alert>
       )}
 
       {showFilters && (
         <section aria-label="Filtros" className="mb-6 space-y-3">
           <div className="flex flex-wrap gap-2" role="group" aria-label="Pessoas">
-            <Chip active={!filtered} onClick={() => changeFilters(null, null)}>Todos</Chip>
+            <FilterChip pressed={!filtered} onClick={() => changeFilters(null, null)}>Todos</FilterChip>
             {gestor &&
               everyone.map((p) => (
-                <Chip
+                <FilterChip
                   key={p.userId}
-                  active={personFilter === p.userId}
+                  pressed={personFilter === p.userId}
                   onClick={() => changeFilters(personFilter === p.userId ? null : p.userId, tagFilter)}
                 >
                   {p.label}
-                </Chip>
+                </FilterChip>
               ))}
           </div>
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2" role="group" aria-label="Etiquetas">
               {tags.map((t) => (
-                <Chip key={t.id} active={tagFilter === t.id} onClick={() => changeFilters(personFilter, tagFilter === t.id ? null : t.id)}>
+                <FilterChip key={t.id} pressed={tagFilter === t.id} onClick={() => changeFilters(personFilter, tagFilter === t.id ? null : t.id)}>
                   {t.name}
-                </Chip>
+                </FilterChip>
               ))}
             </div>
           )}
@@ -429,7 +430,7 @@ export default function CompanyToday() {
 
       {coverages.length > 0 && (
         <section aria-label="Coberturas em andamento" className="mb-6 space-y-2">
-          <h2 className="text-lg font-black">Coberturas em andamento</h2>
+          <h2 className="text-lg font-bold">Coberturas em andamento</h2>
           {coverages.map((c) => {
             const canEnd = gestor || c.fromUserId === userId || c.toUserId === userId;
             const text = gestor
@@ -438,7 +439,7 @@ export default function CompanyToday() {
                 ? `Você cobre um colega de ${br(c.startsOn)} a ${br(c.endsOn)}`
                 : `Um colega cobre os seus turnos de ${br(c.startsOn)} a ${br(c.endsOn)}`;
             return (
-              <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-blue-50 p-3">
+              <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-status-info-line bg-status-info-bg p-3">
                 <p className="min-w-0 flex-1 text-sm font-bold">{text}. Termina sozinha em {br(c.endsOn)}.</p>
                 {canEnd && (
                   <Button variant="secondary" size="md" loading={endingId === c.id} iconLeft={<X size={16} />} onClick={() => { void handleEndCoverage(c); }}>
@@ -452,49 +453,44 @@ export default function CompanyToday() {
       )}
 
       {loading && (
-        <div className="space-y-4" role="status" aria-label="Carregando os turnos">
-          <div className="h-28 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
-          <div className="h-28 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
+        <div role="status" aria-label="Carregando os turnos">
+          <SkeletonList count={3} itemClassName="h-28" />
         </div>
       )}
 
       {!loading && loadError && (
-        <Card className="text-center">
-          <p className="mb-3 font-bold">Não foi possível carregar os turnos.</p>
-          <Button variant="dark" size="lg" onClick={reload}>Tentar de novo</Button>
-        </Card>
+        <ErrorState title="Não foi possível carregar os turnos." onRetry={reload} />
       )}
 
       {!loading && !loadError && jobs.length === 0 && (
-        <Card className="text-center">
-          <CalendarClock size={32} className="mx-auto mb-2 text-gray-500" aria-hidden="true" />
-          {filtered ? (
-            <>
-              <h2 className="text-xl font-black">Nenhum turno com esse filtro</h2>
-              <p className="mb-4 mt-1 text-sm text-gray-700">Não há turnos nos próximos {TODAY_RANGE_DAYS} dias para essa escolha.</p>
-              <Button variant="dark" size="lg" onClick={() => changeFilters(null, null)}>Ver todos os turnos</Button>
-            </>
-          ) : gestor ? (
-            <>
-              <h2 className="text-xl font-black">Nenhum turno nos próximos {TODAY_RANGE_DAYS} dias</h2>
-              <p className="mb-4 mt-1 text-sm text-gray-700">Crie um turno e convide quem está no seu Elenco.</p>
-              <Button variant="dark" size="lg" iconLeft={<Plus size={18} />} onClick={() => navigate('/company/create')}>Criar turno</Button>
-            </>
-          ) : (
-            <>
-              <h2 className="text-xl font-black">Você não tem turnos nos próximos {TODAY_RANGE_DAYS} dias</h2>
-              <p className="mt-1 text-sm text-gray-700">
-                Quando você criar um turno ou o Gestor passar um para você, ele aparece aqui.
-              </p>
-              <Button variant="dark" size="lg" className="mt-4" iconLeft={<Plus size={18} />} onClick={() => navigate('/company/create')}>Criar turno</Button>
-            </>
-          )}
-        </Card>
+        filtered ? (
+          <EmptyState
+            size="page"
+            icon={CalendarClock}
+            title="Nenhum turno com esse filtro"
+            description={`Não há turnos nos próximos ${TODAY_RANGE_DAYS} dias para essa escolha.`}
+            action={<Button variant="dark" onClick={() => changeFilters(null, null)}>Ver todos os turnos</Button>}
+          />
+        ) : (
+          <EmptyState
+            size="page"
+            icon={CalendarClock}
+            title={gestor ? `Nenhum turno nos próximos ${TODAY_RANGE_DAYS} dias` : `Você não tem turnos nos próximos ${TODAY_RANGE_DAYS} dias`}
+            description={gestor
+              ? 'Crie um turno e convide quem está no seu Elenco.'
+              : 'Quando você criar um turno ou o Gestor passar um para você, ele aparece aqui.'}
+            action={
+              <Button variant="dark" data-copilot="empresa.hoje.criar-turno" iconLeft={<Plus size={18} />} onClick={() => navigate('/company/create')}>
+                Criar turno
+              </Button>
+            }
+          />
+        )
       )}
 
       {!loading && !loadError && groups.map((group) => (
         <section key={group.date} aria-label={group.label} className="mb-8">
-          <h2 className="mb-3 text-xl font-black capitalize">{group.label}</h2>
+          <h2 className="mb-3 text-lg font-bold first-letter:uppercase">{group.label}</h2>
           <ul className="space-y-3">
             {group.jobs.map((job) => {
               const passable = canPassJob(job, perms);
@@ -502,58 +498,80 @@ export default function CompanyToday() {
               const cancellable = teamEnabled && cancelAvailable && canCancelJob(job, perms, new Date());
               const isSelected = selected.has(job.jobId);
               const line = responsibleLine(job);
+              const state = occupancy(job.slots, job.filled);
+              const presenca = `/company/jobs/${job.jobId}/candidates`;
               return (
                 <li key={job.jobId}>
-                  <Card>
-                    <div className="flex items-start gap-1">
-                      {passable && (
-                        <label className="-ml-2 -mt-1 flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelected(job.jobId)}
-                            aria-label={`Selecionar ${job.title} para passar`}
-                            className="h-6 w-6 accent-black"
-                          />
-                        </label>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-lg font-black">{job.title}</p>
-                        <p className="mt-0.5 text-sm text-gray-700">
-                          {job.startTime ?? 'Sem horário'}
-                          {job.slots !== null && (
-                            <>
-                              {' · '}
-                              {job.filled !== null ? `${job.filled} de ${job.slots}` : `${job.slots}`} {job.slots === 1 ? 'vaga' : 'vagas'}
-                              {job.filled !== null ? (job.slots === 1 ? ' preenchida' : ' preenchidas') : ''}
-                            </>
-                          )}
-                        </p>
-                        {teamEnabled && (
-                          <span
-                            title={line}
-                            className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-xl bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700"
-                          >
-                            <Users size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
-                            <span className="break-words">{line}</span>
-                          </span>
+                  <Card padding="sm">
+                    <div className="lg:flex lg:items-center lg:gap-4">
+                      <div className="flex min-w-0 flex-1 items-start gap-1">
+                        {passable && (
+                          <label className="-ml-2 -mt-1 flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelected(job.jobId)}
+                              aria-label={`Selecionar ${job.title} para passar`}
+                              className="h-6 w-6 accent-black"
+                            />
+                          </label>
                         )}
+                        <div className="min-w-0 flex-1">
+                          <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                          <p className="mt-1 line-clamp-3 break-words text-base font-bold">{job.title}</p>
+                          <p className="mt-0.5 text-sm text-gray-600">
+                            {job.startTime ?? 'Sem horário'}
+                            {job.slots !== null && (
+                              <>
+                                {' · '}
+                                {job.filled !== null ? `${job.filled} de ${job.slots}` : `${job.slots}`} {job.slots === 1 ? 'vaga' : 'vagas'}
+                                {job.filled !== null ? (job.slots === 1 ? ' preenchida' : ' preenchidas') : ''}
+                              </>
+                            )}
+                          </p>
+                          {teamEnabled && (
+                            <p title={line} className="mt-1 flex items-start gap-1.5 text-xs text-gray-600">
+                              <Users size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
+                              <span className="break-words">{line}</span>
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <Button variant="dark" size="lg" onClick={() => navigate(`/company/jobs/${job.jobId}/candidates`)}>
-                        Abrir turno
-                      </Button>
-                      {passable && (
-                        <Button variant="secondary" size="lg" iconLeft={<Repeat size={16} />} onClick={() => setPassIds([job.jobId])}>
-                          Passar para...
-                        </Button>
-                      )}
-                      {cancellable && (
-                        <Button variant="secondary" size="lg" iconLeft={<XCircle size={16} />} onClick={() => setCancelling(job)}>
-                          Cancelar turno
-                        </Button>
-                      )}
+                      <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:shrink-0">
+                        {state.needsPeople ? (
+                          <>
+                            <Button
+                              variant={job.jobId === firstNeedingPeople ? 'dark' : 'secondary'}
+                              className="flex-1 lg:flex-none"
+                              data-copilot="empresa.hoje.chamar-freelas"
+                              iconLeft={<Megaphone size={16} />}
+                              onClick={() => navigate(`${presenca}?chamar=1`)}
+                            >
+                              Chamar freelas
+                            </Button>
+                            <ButtonLink variant="ghost" to={presenca} data-copilot="empresa.hoje.ver-turno">
+                              Ver turno
+                            </ButtonLink>
+                          </>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className="flex-1 lg:flex-none"
+                            data-copilot="empresa.hoje.ver-turno"
+                            onClick={() => navigate(presenca)}
+                          >
+                            Ver turno
+                          </Button>
+                        )}
+                        <Menu
+                          label={`Mais opções de ${job.title}`}
+                          menuLabel="Ações do turno"
+                          items={[
+                            passable && { label: 'Passar para...', icon: Repeat, onSelect: () => setPassIds([job.jobId]) },
+                            cancellable && { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setCancelling(job) },
+                          ]}
+                        />
+                      </div>
                     </div>
                   </Card>
                 </li>
@@ -576,19 +594,6 @@ export default function CompanyToday() {
         </div>
       )}
 
-      {selectedVisible.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-4 md:bottom-6 md:left-auto md:right-6 md:w-auto md:px-0">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-black bg-white p-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <p className="text-sm font-bold">{selectedVisible.length} {selectedVisible.length === 1 ? 'turno' : 'turnos'}</p>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="lg" onClick={() => setSelected(new Set())}>Limpar seleção</Button>
-              <Button variant="dark" size="lg" iconLeft={<Repeat size={16} />} onClick={() => setPassIds(selectedVisible)}>
-                Passar para...
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {passIds && (
         <PassJobsModal
@@ -614,6 +619,18 @@ export default function CompanyToday() {
             setCoverOpen(false);
             reload();
           }}
+        />
+      )}
+
+      {selectedVisible.length > 0 && (
+        <ActionBar
+          summary={`${selectedVisible.length} ${selectedVisible.length === 1 ? 'turno' : 'turnos'}`}
+          secondary={<Button variant="secondary" onClick={() => setSelected(new Set())}>Limpar seleção</Button>}
+          primary={
+            <Button variant="dark" iconLeft={<Repeat size={16} />} onClick={() => setPassIds(selectedVisible)}>
+              Passar para...
+            </Button>
+          }
         />
       )}
 

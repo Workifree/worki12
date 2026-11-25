@@ -147,12 +147,12 @@ export const CertificationService = {
 
       if (error) {
         logError('certification.listWorkerCertifications', error);
-        return [];
+        throw error;
       }
       return (data ?? []) as WorkerCertification[];
     } catch (err) {
       logError('certification.listWorkerCertifications', err);
-      return [];
+      throw err;
     }
   },
 
@@ -357,12 +357,12 @@ export const CertificationService = {
 
       if (error) {
         logError('certification.listMyTrainings', error);
-        return [];
+        throw error;
       }
       return (data ?? []) as WorkerTraining[];
     } catch (err) {
       logError('certification.listMyTrainings', err);
-      return [];
+      throw err;
     }
   },
 
@@ -384,12 +384,12 @@ export const CertificationService = {
 
       if (error) {
         logError('certification.listCompanyTrainings', error);
-        return [];
+        throw error;
       }
       return (data ?? []) as WorkerTraining[];
     } catch (err) {
       logError('certification.listCompanyTrainings', err);
-      return [];
+      throw err;
     }
   },
 

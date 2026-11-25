@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import ErroDeCarga from '../../components/ErroDeCarga';
+
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle, Megaphone } from 'lucide-react';
+import { occupancy, shiftStep, shiftWhen, type ApplicationStepInput } from '../../lib/nextAction';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,14 +14,14 @@ import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { deleteShift } from '../../services/deleteShiftService';
 import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
-import { formatDateOnly, toBrazilDateOnly } from '../../lib/dateUtils';
+import { toBrazilDateOnly } from '../../lib/dateUtils';
 import { getAuthenticatedCompanyId, isGestor, hasTeamNav } from '../../services/companyScopeService';
 import { jobHasStarted } from '../../lib/todayView';
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { getSessionUserOrThrow } from '../../lib/authSession';
-import { Button, Card, Menu } from '../../components/ui';
+import { ActionBar, Button, ButtonLink, Card, DialogActions, DialogHeader, ErrorState, ListRow, Menu, SkeletonList, StatusBadge } from '../../components/ui';
 import { Dialog } from '../../components/ui/Dialog';
 
 
@@ -45,7 +46,7 @@ export default function CompanyJobDetails() {
         work_start_time?: string;
         work_end_time?: string;
         has_lunch?: boolean;
-        candidates_count?: number;
+        slots?: number;
     }
 
     const [job, setJob] = useState<JobDetails | null>(null);
@@ -55,7 +56,9 @@ export default function CompanyJobDetails() {
     const currentCompany = useCurrentCompany();
     // Dono único não ganha a ação (R23); sem a RPC no ambiente, o item também não aparece.
     const cancelamentoDisponivel = useCancelJobAvailable(hasTeamNav(currentCompany));
-    const [activeWorkersCount, setActiveWorkersCount] = useState(0);
+    // null = ainda não lido; falha vira aviso com "Tentar de novo", nunca "0 freelas".
+    const [apps, setApps] = useState<ApplicationStepInput[] | null>(null);
+    const [erroFreelas, setErroFreelas] = useState(false);
     const [erroCarga, setErroCarga] = useState(false);
     const [semAcesso, setSemAcesso] = useState(false);
     const { addToast } = useToast();
@@ -68,21 +71,24 @@ export default function CompanyJobDetails() {
     }, [id]);
 
     useEffect(() => {
-        if (!id) return;
-        const fetchActiveWorkers = async () => {
-            const { count, error } = await supabase
-                .from('applications')
-                .select('id', { count: 'exact', head: true })
-                .eq('job_id', id)
-                .in('status', ['hired', 'in_progress']);
-            if (error) {
-                logError('Error fetching active workers', error);
-                return;
-            }
-            setActiveWorkersCount(count ?? 0);
-        };
-        fetchActiveWorkers();
+        if (id) void fetchApplications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só re-executa quando id muda
     }, [id]);
+
+    const fetchApplications = async () => {
+        if (!id) return;
+        setErroFreelas(false);
+        const { data, error } = await supabase
+            .from('applications')
+            .select('status, company_checkin_confirmed_at, company_checkout_confirmed_at')
+            .eq('job_id', id);
+        if (error) {
+            logError('CompanyJobDetails.fetchApplications', error);
+            setErroFreelas(true);
+            return;
+        }
+        setApps((data ?? []) as ApplicationStepInput[]);
+    };
 
     const fetchJobDetails = async () => {
         // G3: guarda de id falsy — evita `jobs?id=eq.null`/`applications?job_id=eq.null`
@@ -102,13 +108,7 @@ export default function CompanyJobDetails() {
             if (error) throw error;
             if (!canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
 
-            // Fetch candidate count manually
-            const { count } = await supabase
-                .from('applications')
-                .select('id', { count: 'exact', head: true })
-                .eq('job_id', id);
-
-            setJob({ ...data, candidates_count: count || 0 });
+            setJob(data);
         } catch (error) {
             // Falha de rede/RLS nao pode se disfarcar de "turno nao existe" mandando pra lista
             // em silencio — a pessoa perde o contexto sem saber por que (Nielsen #1).
@@ -179,14 +179,23 @@ export default function CompanyJobDetails() {
             >
                 Voltar aos turnos
             </Button>
-            <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
+            <ErrorState onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
         </div>
     );
 
     if (!job) return null;
 
     const unidadePreco = job.budget_type === 'hourly' ? '/ hora' : job.budget_type === 'daily' ? '/ dia' : 'total';
-    const statusLabel = job.status === 'open' ? 'Turno ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado';
+
+    const slots = job.slots ?? 1;
+    const filled = apps === null ? null : apps.filter((a) => ['hired', 'in_progress', 'completed'].includes(a.status)).length;
+    const state = occupancy(slots, filled);
+    const step = apps === null ? null : shiftStep(slots, apps);
+    const presenca = `/company/jobs/${id}/candidates`;
+    const temGente = (filled ?? 0) > 0 || (apps ?? []).some((a) => a.status === 'invited');
+    // Um só gesto de encerrar: turno com gente em equipe usa "Cancelar turno"; o resto, "Excluir".
+    const usaCancelar = podeCancelarTurno && temGente;
+    const encerrado = (job.status !== 'open' && job.status !== 'paused') || (filled !== null && filled >= slots && (apps ?? []).filter((a) => a.status === 'completed').length >= slots);
 
     return (
         <>
@@ -214,15 +223,17 @@ export default function CompanyJobDetails() {
                 onClose={() => setShowDeleteConfirm(false)}
                 className="max-w-sm"
             >
-                    <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
-                    <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
-                    <div className="flex gap-3">
-                        <Button variant="secondary" fullWidth onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
-                        <Button variant="danger" fullWidth onClick={handleDelete}>Excluir</Button>
-                    </div>
+                    <DialogHeader titleId="excluir-turno-titulo" title="Excluir turno?" subtitle={job.title} />
+                    <p className="text-sm text-gray-600">
+                        O turno sai da agenda. Convites e contratações dele são encerrados e quem já foi contratado é avisado. Não dá para desfazer.
+                    </p>
+                    <DialogActions>
+                        <Button variant="secondary" data-autofocus onClick={() => setShowDeleteConfirm(false)}>Voltar</Button>
+                        <Button variant="danger" data-copilot="empresa.turno.excluir-confirmar" data-copilot-risk="D" onClick={handleDelete}>Excluir</Button>
+                    </DialogActions>
             </Dialog>
         )}
-        <div className="max-w-4xl mx-auto pb-20">
+        <div className="mx-auto max-w-4xl lg:max-w-5xl">
             {/* Barra superior: voltar + menu de ações do turno */}
             <div className="mb-4 flex items-center justify-between">
                 <Button
@@ -238,106 +249,98 @@ export default function CompanyJobDetails() {
                     label="Mais opções do turno"
                     menuLabel="Ações do turno"
                     items={[
-                        { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${id}/edit`) },
-                        {
+                        !encerrado && { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${id}/edit`) },
+                        !encerrado && {
                             label: job.status === 'open' ? 'Pausar' : 'Reativar',
                             icon: job.status === 'open' ? PauseCircle : PlayCircle,
                             onSelect: () => handleStatusChange(job.status === 'open' ? 'paused' : 'open'),
                         },
-                        podeCancelarTurno && { label: 'Cancelar turno', icon: XCircle, onSelect: () => setShowCancelJob(true) },
-                        { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
+                        usaCancelar
+                            ? { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setShowCancelJob(true) }
+                            : { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
                     ]}
                 />
             </div>
 
             <Card padding="lg">
-                {/* Cabeçalho do turno: status, título, meta e valor */}
+                {/* Cabeçalho do turno: o que decide (quando e onde) vem antes do resto. */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                        <span className={`mb-3 inline-block rounded-full border border-black px-3 py-1 text-xs font-semibold ${job.status === 'open' ? 'bg-primary-light text-primary-dark' : 'bg-gray-100 text-gray-700'}`}>
-                            {statusLabel}
-                        </span>
-                        <h1 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                            <span className="flex items-center gap-1.5"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
-                            <span className="flex items-center gap-1.5 font-semibold capitalize text-black">
-                                <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
-                            </span>
-                            <span className="flex items-center gap-1.5"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
+                        <div className="mb-3 flex flex-wrap gap-2">
+                            <StatusBadge domain="job" status={job.status} />
+                            {filled !== null && !encerrado && <StatusBadge tone={state.tone}>{state.label}</StatusBadge>}
                         </div>
+                        <h1 className="mb-2 break-words text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
+                        <p className="flex items-center gap-1.5 text-base font-bold">
+                            <Calendar size={16} aria-hidden="true" /> {shiftWhen(job.start_date, job.work_start_time, job.work_end_time)}
+                            {job.has_lunch && <span className="text-sm font-normal text-gray-600">(1h de intervalo)</span>}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
+                            <MapPin size={16} aria-hidden="true" /> {job.location || 'Local a combinar'}
+                        </p>
                     </div>
                     <div className="shrink-0 sm:text-right">
-                        <div className="text-2xl font-bold tabular-nums">{formatBRL(job.budget)}</div>
-                        <div className="text-xs text-gray-600">{unidadePreco}</div>
+                        <span className="text-2xl font-bold tabular-nums">{formatBRL(job.budget)}</span>
+                        <span className="ml-1 text-xs text-gray-600">{unidadePreco}</span>
                     </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 gap-8 border-t-2 border-gray-100 pt-6 md:grid-cols-3">
-                    <div className="space-y-6 md:col-span-2">
+                <div className="mt-6 grid grid-cols-1 gap-6 border-t-2 border-gray-100 pt-6 lg:grid-cols-3">
+                    <aside className="h-fit rounded-xl border-2 border-gray-200 bg-gray-50 p-2 lg:order-2">
+                        {erroFreelas ? (
+                            <ErrorState title="Não conseguimos conferir os freelas deste turno." onRetry={() => { void fetchApplications(); }} />
+                        ) : filled === null ? (
+                            <SkeletonList count={1} itemClassName="h-16" />
+                        ) : (
+                            <ListRow
+                                leading={<Users size={20} aria-hidden="true" />}
+                                title={`Freelas · ${filled} de ${slots} ${slots === 1 ? 'vaga' : 'vagas'}`}
+                                meta={filled === 0 ? 'Ninguém neste turno ainda.' : 'Presença, pagamento e recibos'}
+                                to={presenca}
+                            />
+                        )}
+                    </aside>
+                    <div className="space-y-6 lg:order-1 lg:col-span-2">
                         {job.description && (
                             <section>
                                 <h2 className="mb-2 text-lg font-bold">Descrição</h2>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.description}</p>
+                                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700">{job.description}</p>
                             </section>
                         )}
 
                         {job.requirements && (
                             <section>
                                 <h2 className="mb-2 text-lg font-bold">Requisitos</h2>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.requirements}</p>
+                                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700">{job.requirements}</p>
                             </section>
                         )}
-
-                        {(job.work_start_time || job.work_end_time) && (
-                            <section>
-                                <h2 className="mb-2 text-lg font-bold">Horário</h2>
-                                <p className="inline-block rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold tabular-nums">
-                                    {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
-                                    {job.has_lunch && <span className="ml-2 font-normal text-gray-600">(1h almoço)</span>}
-                                </p>
-                            </section>
-                        )}
+                        <p className="text-xs text-gray-600">Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</p>
                     </div>
-
-                    {/* Resumo + a ação principal do turno */}
-                    <aside className="h-fit rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
-                        <h2 className="mb-3 text-lg font-bold">Resumo do turno</h2>
-                        <div className="space-y-2">
-                            {(job.candidates_count || 0) > 0 ? (
-                                <button
-                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
-                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
-                                >
-                                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
-                                    <span className="text-xl font-bold tabular-nums">{job.candidates_count}</span>
-                                </button>
-                            ) : (
-                                <div>
-                                    <span className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
-                                    <p className="mb-3 text-sm text-gray-600">Ninguém convidado para este turno ainda.</p>
-                                    <Button variant="dark" fullWidth onClick={() => navigate('/company/team')}>
-                                        Convidar freelas do elenco
-                                    </Button>
-                                </div>
-                            )}
-                            {activeWorkersCount > 0 ? (
-                                <button
-                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
-                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
-                                >
-                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
-                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
-                                </button>
-                            ) : (
-                                <div className="flex min-h-11 items-center justify-between">
-                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
-                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
-                                </div>
-                            )}
-                        </div>
-                    </aside>
                 </div>
             </Card>
+
+            {/* A ação principal do turno segue o estado; chamar mantém o contexto DESTE turno. */}
+            {step && (
+                <ActionBar
+                    primary={
+                        step.kind === 'call' && !encerrado ? (
+                            <Button
+                                variant="dark"
+                                size="lg"
+                                iconLeft={<Megaphone size={18} />}
+                                data-copilot="empresa.turno.chamar-freelas"
+                                onClick={() => navigate(`${presenca}?chamar=1`)}
+                            >
+                                Chamar freelas
+                            </Button>
+                        ) : (
+                            <ButtonLink variant="dark" size="lg" to={presenca} data-copilot="empresa.turno.abrir-presenca">
+                                {step.kind === 'view' || step.kind === 'call' ? 'Presença e pagamento' : step.label}
+                            </ButtonLink>
+                        )
+                    }
+                />
+            )}
         </div>
         </>
     );

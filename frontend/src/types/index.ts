@@ -616,6 +616,8 @@ export interface PendingInvite {
   slots: number;
   reason?: ShiftCallReason;
   message?: string | null;
+  /** 'sos' = chamado de urgência fora do Elenco (só em source='call'). */
+  origin?: ShiftCallOrigin;
   job?: Partial<Job>;
 }
 

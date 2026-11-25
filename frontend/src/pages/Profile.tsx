@@ -3,13 +3,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, HelpCircle } from 'lucide-react';
-import { Button, Card, Field } from '../components/ui';
+import { ActionBar, Alert, Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
 import CompanyBadges from '../components/CompanyBadges';
 import ReferralOptOutSection from '../components/ReferralOptOutSection';
 import SosDiscoverySection from '../components/SosDiscoverySection';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength, validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../lib/validation';
@@ -145,6 +145,8 @@ async function somarHorasRegistradas(workerId: string): Promise<number | null> {
 
 export default function Profile() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const campoPedido = searchParams.get('editar');
     const { signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [salvando, setSalvando] = useState(false);
@@ -333,6 +335,24 @@ export default function Profile() {
 
         fetchProfile();
     }, [navigate, reloadKey]);
+
+    const [campoFoco, setCampoFoco] = useState<string | null>(null);
+    const abrirEdicao = (campo: string) => {
+        setIsEditing(true);
+        setCampoFoco(campo);
+    };
+
+    useEffect(() => {
+        if (!loading && (campoPedido === 'pix' || campoPedido === 'cpf')) abrirEdicao(campoPedido);
+    }, [loading, campoPedido]);
+
+    useEffect(() => {
+        if (!isEditing || !campoFoco) return;
+        const campo = document.getElementById(`perfil-campo-${campoFoco}`);
+        campo?.scrollIntoView?.({ block: 'center' });
+        campo?.focus();
+        setCampoFoco(null);
+    }, [isEditing, campoFoco]);
 
     // Best-effort: recomputa XP/nível/ganhos/turnos via RPC (recompute_my_aggregates,
     // SECURITY DEFINER, usa auth.uid()) e mescla o resultado no state do perfil, para a
@@ -630,67 +650,12 @@ export default function Profile() {
         </div>
     );
 
-    // Pares Cancelar/Salvar: UMA definição, renderizada no hero (desktop) e na barra fixa (mobile).
-    // CTA único de salvar — mesmo texto, mesma variante, mesmo estado de loading nos dois lugares.
-    const editActions = (
-        <>
-            <Button variant="secondary" onClick={handleCancelEdit} iconLeft={<X size={16} />}>
-                Cancelar
-            </Button>
-            <Button variant="primary" onClick={handleSave} loading={salvando} iconLeft={<Save size={16} />}>
-                Salvar
-            </Button>
-        </>
-    );
-
     const nivel = levelProgress(profile.xp || 0);
     const gradeDeclarada = Object.keys(profile.availability_days ?? {}).length > 0;
 
     return (
         <>
         <div className="mx-auto max-w-3xl space-y-6 pb-12 font-sans text-accent">
-            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
-                do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
-            {!isEditing && (
-                <Card
-                    as="section"
-                    aria-label="Compartilhar meu perfil com empresas"
-                    className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
-                >
-                    <div className="flex items-start gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
-                            <Link2 size={20} />
-                        </span>
-                        <div className="min-w-0">
-                            <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
-                            <p className="mt-1 text-sm text-gray-600">
-                                Link: a empresa abre e te adiciona. Código: ela digita no app.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <Button
-                            variant="primary"
-                            onClick={handleCopyMyLink}
-                            disabled={!workerId}
-                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                            className="w-full sm:w-auto"
-                        >
-                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={handleCopyWorkiId}
-                            disabled={!workerId}
-                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
-                            className="w-full sm:w-auto"
-                        >
-                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
-                        </Button>
-                    </div>
-                </Card>
-            )}
-
             {/* Identidade: capa + avatar + nome. Em edicao, nome/cidade viram campos na secao "Dados". */}
             <Card as="section" padding="none" aria-label="Identidade" className="overflow-hidden">
                 <div className="relative h-28 bg-gray-900 sm:h-36">
@@ -770,11 +735,8 @@ export default function Profile() {
                         </div>
                     </div>
 
-                    <div className={isEditing ? 'mt-4 hidden gap-2 sm:flex' : 'mt-4 flex gap-2'}>
-                        {isEditing ? (
-                            editActions
-                        ) : (
-                            <>
+                    {!isEditing && (
+                    <div className="mt-4 flex gap-2">
                                 <Button
                                     variant="secondary"
                                     onClick={() => setIsEditing(true)}
@@ -791,11 +753,94 @@ export default function Profile() {
                                 >
                                     QR
                                 </Button>
-                            </>
-                        )}
                     </div>
+                    )}
                 </div>
             </Card>
+
+            {/* Pendências: o que impede de receber ou de ser chamado vem antes do resto. */}
+            {!isEditing && (!profile.pix_key || !cpfJaCadastrado || !profile.phone) && (
+                <section aria-label="Pendências do perfil" className="space-y-3">
+                    {!profile.pix_key && (
+                        <Alert
+                            tone="warning"
+                            title="Falta a chave PIX"
+                            action={(
+                                <Button variant="secondary" data-copilot="freela.perfil.cadastrar-pix" data-copilot-risk="D" onClick={() => abrirEdicao('pix')}>
+                                    Adicionar chave PIX
+                                </Button>
+                            )}
+                        >
+                            Sem ela a empresa não sabe para onde pagar.
+                        </Alert>
+                    )}
+                    {!cpfJaCadastrado && (
+                        <Alert
+                            tone="warning"
+                            title="Falta o CPF"
+                            action={(
+                                <Button variant="secondary" data-copilot="freela.perfil.cadastrar-cpf" data-copilot-risk="D" onClick={() => abrirEdicao('cpf')}>
+                                    Cadastrar CPF
+                                </Button>
+                            )}
+                        >
+                            Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
+                        </Alert>
+                    )}
+                    {!profile.phone && (
+                        <Alert
+                            tone="info"
+                            title="Falta o telefone"
+                            action={<Button variant="secondary" onClick={() => abrirEdicao('telefone')}>Adicionar telefone</Button>}
+                        >
+                            É por ele que a empresa fala com você fora do app.
+                        </Alert>
+                    )}
+                </section>
+            )}
+
+            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
+                do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
+            {!isEditing && (
+                <Card
+                    as="section"
+                    aria-label="Compartilhar meu perfil com empresas"
+                    padding="sm"
+                >
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+                            <Link2 size={20} />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
+                            <p className="mt-1 text-sm text-gray-600">
+                                Link: a empresa abre e te adiciona. Código: ela digita no app.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                            variant="secondary"
+                            data-copilot="freela.perfil.copiar-link"
+                            onClick={handleCopyMyLink}
+                            disabled={!workerId}
+                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleCopyWorkiId}
+                            disabled={!workerId}
+                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
+                        </Button>
+                    </div>
+                </Card>
+            )}
 
             {/* Resumo: nivel + numeros que importam + atalho dos recebimentos */}
             <Card as="section" aria-label="Resumo">
@@ -820,13 +865,19 @@ export default function Profile() {
                         <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
-                        <dd className="text-xl font-bold tabular-nums">{formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
+                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked === null ? 'Indisponível' : formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
                         <dd className="flex items-center justify-center gap-1 text-xl font-bold tabular-nums">
-                            <Star size={16} className="text-yellow-500" fill="currentColor" />
-                            {profile.rating_average || '-'}
+                            {profile.rating_average ? (
+                                <>
+                                    <Star size={16} className="text-yellow-500" fill="currentColor" />
+                                    {profile.rating_average}
+                                </>
+                            ) : (
+                                <span className="text-sm">Sem notas</span>
+                            )}
                         </dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Avaliação</dt>
                     </div>
@@ -876,6 +927,7 @@ export default function Profile() {
                         </Field>
                         <Field label="Telefone">
                             <input
+                                id="perfil-campo-telefone"
                                 type="tel"
                                 value={formData.phone}
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -892,17 +944,18 @@ export default function Profile() {
                                     {formatCpfCnpj(String(profile.cpf))}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                    Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
-                                    termos que já assinou.
+                                    O CPF identifica você nos termos assinados e não muda por aqui. Se estiver
+                                    errado, avise a empresa do turno antes de assinar um novo termo.
                                 </p>
                             </div>
                         ) : (
                             <Field
                                 label="CPF"
                                 error={formData.cpf.trim() && !cpfValido ? 'CPF inválido.' : undefined}
-                                hint="Necessário para assinar o termo de prestação e receber o recibo do turno. Depois de salvo, só o suporte consegue alterar."
+                                hint="Necessário para assinar o termo do turno. Confira bem: depois de salvo, não dá para alterar por aqui."
                             >
                                 <input
+                                    id="perfil-campo-cpf"
                                     type="text"
                                     inputMode="numeric"
                                     value={formData.cpf}
@@ -935,6 +988,7 @@ export default function Profile() {
                             hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
                         >
                             <input
+                                id="perfil-campo-pix"
                                 type="text"
                                 value={formData.pix_key}
                                 onChange={(e) => setFormData({ ...formData, pix_key: formatPixKey(pixKeyType, e.target.value) })}
@@ -1002,32 +1056,24 @@ export default function Profile() {
                                     <>
                                         {formatCpfCnpj(String(profile.cpf))}
                                         <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
-                                            termos que já assinou.
+                                            Se estiver errado, <Link to="/messages" className="font-bold underline">fale com a empresa</Link> antes
+                                            de assinar um novo termo.
                                         </span>
                                     </>
                                 ) : (
                                     <>
                                         Não informado
-                                        <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
-                                        </span>
-                                        <Button
-                                            variant="secondary"
-                                            onClick={() => setIsEditing(true)}
-                                            className="mt-3"
-                                        >
-                                            Cadastrar CPF
-                                        </Button>
                                     </>
                                 )}
                             </DataRow>
-                            <DataRow label="Experiência">{profile.experience_years || 'Iniciante'}</DataRow>
-                            <DataRow label="Regime">
+                            {profile.experience_years && (
+                                <DataRow label="Experiência">{profile.experience_years}</DataRow>
+                            )}
+                            {!!profile.availability?.length && <DataRow label="Regime">
                                 <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
-                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || 'Não informado')}
+                                    {Array.isArray(profile.availability) ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : profile.availability}
                                 </span>
-                            </DataRow>
+                            </DataRow>}
                         </dl>
 
                         <div>
@@ -1039,16 +1085,18 @@ export default function Profile() {
                                     </span>
                                 ))}
                                 {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
-                                    <span className="text-sm italic text-gray-600">Nenhuma especialidade listada.</span>
+                                    <Button variant="secondary" onClick={() => setIsEditing(true)}>Adicionar especialidades</Button>
                                 )}
                             </div>
                         </div>
 
                         <div>
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Sobre</h3>
-                            <p className="mt-2 text-sm leading-relaxed text-gray-700 sm:text-base">
-                                {profile.bio || 'Este profissional ainda não adicionou uma biografia.'}
-                            </p>
+                            {profile.bio ? (
+                                <p className="mt-2 text-sm leading-relaxed text-gray-700 [overflow-wrap:anywhere] sm:text-base">{profile.bio}</p>
+                            ) : (
+                                <Button variant="secondary" className="mt-2" onClick={() => setIsEditing(true)}>Contar sobre você</Button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1134,34 +1182,25 @@ export default function Profile() {
                 )}
             </Card>
 
-            {/* CERTIFICAÇÕES — F8: o freela cadastra/edita/remove a própria certificação externa.
-                v1 SEM ARQUIVO (ADR-20260821) — só metadado + número de registro. */}
-            <MyCertificationsSection />
+            {/* Seções secundárias recolhidas: a tela abre curta. */}
+            <ProfileSection title="Certificações e cursos">
+                <MyCertificationsSection />
+            </ProfileSection>
 
-            {/* Avaliações recebidas de empresas */}
-            {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
+            {workerId && (
+                <ProfileSection title="Avaliações das empresas">
+                    <ProfileReviews reviewedId={workerId} reviewerRole="company" />
+                </ProfileSection>
+            )}
 
-            {/* PREFERÊNCIAS — como você aparece e como pode ser encontrado. Cada bloco é um
-                opt-in/opt-out independente (F10 indicação, F11 SOS, F12 selos). */}
-            <section aria-labelledby="perfil-preferencias" className="space-y-6">
-                <div className="mt-2">
-                    <h2 id="perfil-preferencias" className="text-lg font-bold">Preferências</h2>
-                    <p className="mt-1 text-sm text-gray-600">
-                        Você decide como aparece para as empresas e quando pode ser chamado.
-                    </p>
+            {/* PREFERÊNCIAS — cada bloco é um opt-in/opt-out independente (F10, F11, F12). */}
+            <ProfileSection title="Preferências e privacidade">
+                <div className="space-y-6">
+                    <ReferralOptOutSection />
+                    <SosDiscoverySection />
+                    {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
                 </div>
-
-                {/* F10 — opt-out de indicação entre empresas (workers.accepts_referrals). */}
-                <ReferralOptOutSection />
-
-                {/* F11 — opt-in de descoberta em urgência (workers.discoverable_for_sos).
-                    Adjacente à Disponibilidade (F7): só aparece com availability_days
-                    declarado — ver ddl-aprovado.md §5. */}
-                <SosDiscoverySection />
-
-                {/* F12 — selos das empresas onde já trabalhou (o dono gerencia visibilidade). */}
-                {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
-            </section>
+            </ProfileSection>
 
             {/* ATALHOS — paridade de navegacao mobile (R6): destinos que o BottomNav nao comporta. */}
             <nav aria-labelledby="perfil-atalhos" className="border-t-2 border-gray-200 pt-6">
@@ -1291,18 +1330,22 @@ export default function Profile() {
                 )}
             </section>
 
-        </div>
 
-        {isEditing && (
-            /* Barra de acao fixa no mobile: os campos editaveis longos (especialidades, bio,
-               grade de disponibilidade) ficam muito abaixo do par Salvar/Cancelar do hero —
-               no celular a pessoa terminava a edicao e nao tinha como salvar dali (KLM/Fitts).
-               z-[60] fica ACIMA do BottomNav (z-50); com z-40 a barra nascia escondida atras dele.
-               So mobile: no desktop o par do hero ja fica visivel. */
-            <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[60] flex gap-3 border-t-2 border-black bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] [&>*]:flex-1">
-                {editActions}
-            </div>
-        )}
+            {isEditing && (
+                <ActionBar
+                    secondary={(
+                        <Button variant="secondary" onClick={handleCancelEdit} iconLeft={<X size={16} />}>
+                            Cancelar
+                        </Button>
+                    )}
+                    primary={(
+                        <Button variant="primary" size="lg" onClick={handleSave} loading={salvando} iconLeft={<Save size={16} />}>
+                            Salvar
+                        </Button>
+                    )}
+                />
+            )}
+        </div>
 
         {/* Modal QR de identidade */}
         {qrModalOpen && workerId && (
@@ -1408,6 +1451,19 @@ export default function Profile() {
             </Dialog>
         )}
         </>
+    );
+}
+
+/** Seção recolhível do perfil (`<details>` nativo: teclado e leitor de tela de graça). */
+function ProfileSection({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <details className="group rounded-2xl border-2 border-gray-200 bg-white">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black [&::-webkit-details-marker]:hidden">
+                {title}
+                <ChevronRight size={18} aria-hidden="true" className="shrink-0 group-open:rotate-90" />
+            </summary>
+            <div className="border-t-2 border-gray-200 p-3 sm:p-4">{children}</div>
+        </details>
     );
 }
 

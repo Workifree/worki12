@@ -4,21 +4,23 @@ import LocalDoTurno from '../components/LocalDoTurno';
 import { supabase } from '../lib/supabase';
 import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
-import { CheckCircle2, Clock, XCircle, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
-import { Button, Card, PageHeader } from '../components/ui';
+import { CheckCircle2, Clock, XCircle, DollarSign, Star, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt, ChevronRight, History } from 'lucide-react';
+import { Alert, Button, Card, DialogActions, EmptyState, IconButton, PageHeader, SkeletonList, StatusBadge, Tabs } from '../components/ui';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import RateModal from '../components/RateModal';
-import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useWorkerInvites, EVENTO_CONVITES, type ConvitesMudaramDetail } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
-import { isOnShift, hasLeftShift } from '../lib/shiftPresence';
+import { hasArrived, hasLeftShift } from '../lib/shiftPresence';
+import TodayShiftCard, { type TodayShift } from '../components/TodayShiftCard';
+import { attendanceGuardMessage, checkinWindow, checkinWindowMessage, isTodayShift } from '../lib/checkinWindow';
+import { openShiftConversation } from '../lib/shiftChat';
 import type {
     ReviewDirection,
     ShiftAttendanceConfirmation,
@@ -26,7 +28,6 @@ import type {
     AttendanceConfirmationOutcome,
 } from '../types';
 import { Dialog } from '../components/ui/Dialog';
-import { nextTabIndex } from '../lib/tabsKeyboard';
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
 // 'confirmed'/'cannot_attend'/'already_responded'/'unauthenticated' têm tratamento dedicado no handler;
@@ -87,7 +88,8 @@ export interface JobApplication {
     company_id: string;
     company_name: string;
     company_logo: string | null;
-    pay: number;
+    /** null = valor não informado (nunca vira R$ 0,00). */
+    pay: number | null;
     date: string;
     raw_date: string | null;
     time: string;
@@ -102,50 +104,6 @@ export interface JobApplication {
     created_at?: string;
 }
 
-/**
- * Traduz a recusa do guard de `applications` (migration 20261125000200,
- * `applications_update_guard`) em frase clara. Devolve `null` para qualquer outro erro.
- * O texto cru do banco nunca chega à tela.
- */
-function attendanceGuardMessage(
-    error: unknown,
-    startDate: string | null | undefined,
-    startTime: string | null | undefined,
-): string | null {
-    const raw = (error as { message?: unknown } | null)?.message;
-    if (typeof raw !== 'string' || !raw.includes('applications_update_guard')) return null;
-    if (raw.includes('este turno foi cancelado')) return 'Este turno foi cancelado.';
-    if (raw.includes('horario de presenca no futuro')) return 'O horário não pode ser no futuro.';
-    if (raw.includes('ainda nao e possivel registrar a chegada')) {
-        const opens = checkinOpensAt(startDate, startTime);
-        return opens
-            ? `Só dá para registrar a chegada a partir de ${opens}.`
-            : 'Ainda não dá para registrar a chegada neste turno.';
-    }
-    if (raw.includes('registro de presenca ja gravado')) {
-        return 'Essa presença já foi registrada. Atualize a página.';
-    }
-    return 'Não foi possível fazer isso agora. Atualize a página e tente novamente.';
-}
-
-/**
- * Abertura da janela de chegada, igual ao banco: 12h antes da data do turno (em São Paulo) com
- * `work_start_time`; sem horário válido, 00:00. São Paulo é UTC-3 (sem horário de verão).
- */
-function checkinOpensAt(startDate: string | null | undefined, startTime: string | null | undefined): string | null {
-    if (!startDate) return null;
-    const start = new Date(startDate);
-    if (Number.isNaN(start.getTime())) return null;
-    const zone = 'America/Sao_Paulo';
-    const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(start).split('-').map(Number);
-    const time = /^([01]\d|2[0-3]):[0-5]\d/.test(startTime ?? '') ? (startTime as string).slice(0, 5) : '00:00';
-    const [h, min] = time.split(':').map(Number);
-    const opens = new Date(Date.UTC(y, m - 1, d, h + 3 - 12, min));
-    const day = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, day: '2-digit', month: '2-digit' }).format(opens);
-    const hour = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, hour: '2-digit', minute: '2-digit' }).format(opens);
-    return `${day} às ${hour}`;
-}
-
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
 
 /** Selo do Histórico para turno com saída registrada que a empresa ainda não fechou. */
@@ -154,13 +112,6 @@ function awaitingLabel(job: JobApplication): string | null {
     return job.company_checkout_confirmed_at ? 'Saída confirmada' : 'Aguardando confirmação';
 }
 
-function AwaitingBadge({ label }: { label: string }) {
-    return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-800 bg-yellow-50 border border-yellow-300 px-2.5 py-1 rounded-pill">
-            <Clock size={12} /> {label}
-        </span>
-    );
-}
 
 // Rotulo de "quando" para o card de confirmacao de vespera.
 // O texto era chumbado em "amanha", mas `request_attendance_confirmation` aceita turno de ate
@@ -189,51 +140,75 @@ function fmtTime(iso: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Peças visuais locais (só desta tela): chip de meta, linha de status, estado vazio.
+// Peças visuais e ordenação locais (só desta tela).
 // ---------------------------------------------------------------------------
 
 type ChipTone = 'neutral' | 'brand' | 'info';
 
 const CHIP_TONES: Record<ChipTone, string> = {
     neutral: 'bg-gray-100 text-gray-700',
-    brand: 'bg-primary-light text-primary',
+    brand: 'bg-primary-light text-primary-dark',
     info: 'bg-blue-50 text-blue-700',
 };
 
 function Chip({ tone = 'neutral', children }: { tone?: ChipTone; children: ReactNode }) {
     return (
-        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl ${CHIP_TONES[tone]}`}>
+        <span className={`inline-flex max-w-full items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl [overflow-wrap:anywhere] ${CHIP_TONES[tone]}`}>
             {children}
         </span>
     );
 }
 
-type StatusTone = 'success' | 'info' | 'waiting' | 'neutral';
-
-const STATUS_TONES: Record<StatusTone, string> = {
-    success: 'bg-green-50 text-green-800',
-    info: 'bg-blue-50 text-blue-700',
-    waiting: 'bg-yellow-50 text-yellow-800',
-    neutral: 'bg-gray-100 text-gray-700',
-};
-
-function StatusLine({ tone, icon, children }: { tone: StatusTone; icon: ReactNode; children: ReactNode }) {
-    return (
-        <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${STATUS_TONES[tone]}`}>
-            {icon}
-            {children}
-        </div>
-    );
+function payLabel(pay: number | null): string {
+    return pay ? formatBRL(pay) : 'Valor não informado';
 }
 
-function EmptyState({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
-    return (
-        <div className="text-center py-12 px-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            {icon && <div className="mb-3 flex justify-center text-gray-300">{icon}</div>}
-            <p className="font-semibold text-gray-700">{title}</p>
-            {description && <p className="text-sm text-gray-600 mt-1">{description}</p>}
-        </div>
-    );
+/** Data e hora do turno, comparáveis como texto. Sem data vai para o fim. */
+function shiftKey(job: JobApplication, missing: string): string {
+    return `${job.raw_date?.slice(0, 10) ?? missing} ${job.time}`;
+}
+
+const byShiftDate = (a: JobApplication, b: JobApplication) => shiftKey(a, '9999').localeCompare(shiftKey(b, '9999'));
+const byShiftDateDesc = (a: JobApplication, b: JobApplication) => shiftKey(b, '0000').localeCompare(shiftKey(a, '0000'));
+
+function weekdayDate(job: JobApplication): string {
+    if (!job.raw_date) return job.date;
+    const parsed = new Date(job.raw_date.length === 10 ? `${job.raw_date}T12:00:00` : job.raw_date);
+    const weekday = parsed.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+    return `${weekday} ${job.date.slice(0, 5)}`;
+}
+
+function scheduleOf(job: JobApplication) {
+    return { startDate: job.raw_date, startTime: job.time, endTime: job.end_time };
+}
+
+function toTodayShift(job: JobApplication): TodayShift {
+    return {
+        applicationId: job.id,
+        status: job.status,
+        title: job.title,
+        companyName: job.company_name,
+        startDate: job.raw_date,
+        startTime: /^\d/.test(job.time) ? job.time : null,
+        endTime: job.end_time,
+        location: job.location,
+        pay: job.pay,
+        worker_checkin_at: job.worker_checkin_at,
+        worker_checkout_at: job.worker_checkout_at,
+        company_checkin_confirmed_at: job.company_checkin_confirmed_at,
+        company_checkout_confirmed_at: job.company_checkout_confirmed_at,
+    };
+}
+
+function isTodayJob(job: JobApplication): boolean {
+    return isTodayShift({ ...job, ...scheduleOf(job) });
+}
+
+function HistoryStatus({ job }: { job: JobApplication }) {
+    const waiting = awaitingLabel(job);
+    return waiting
+        ? <StatusBadge tone="warning" icon={Clock}>{waiting}</StatusBadge>
+        : <StatusBadge domain="application" status={job.status} />;
 }
 
 export default function MyJobs() {
@@ -256,7 +231,8 @@ export default function MyJobs() {
         if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
         recusaTimerRef.current = setTimeout(() => setRecusaArmada(null), 4000);
     };
-    const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
+    // Sem escolha da pessoa, abre a primeira aba que tem o que fazer (ver `activeTab`).
+    const [chosenTab, setActiveTab] = useState<ActiveTab | null>(null);
     const [jobs, setJobs] = useState<{
         in_progress: JobApplication[],
         scheduled: JobApplication[],
@@ -267,7 +243,6 @@ export default function MyJobs() {
     const [rateModalOpen, setRateModalOpen] = useState(false);
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
     const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
@@ -379,8 +354,6 @@ export default function MyJobs() {
             const history: JobApplication[] = [];
             const awaiting: JobApplication[] = [];
 
-            const now = new Date();
-
             interface ApplicationRow {
                 id: string;
                 status: string;
@@ -416,7 +389,7 @@ export default function MyJobs() {
                     company_id: app.job.company?.id || '',
                     company_name: app.job.company?.name || 'Empresa',
                     company_logo: app.job.company?.logo_url ?? null,
-                    pay: app.job.budget || 0,
+                    pay: app.job.budget > 0 ? app.job.budget : null,
                     date: app.job.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
                     raw_date: app.job.start_date ?? null,
                     time: app.job.work_start_time || 'Horário a definir',
@@ -431,32 +404,10 @@ export default function MyJobs() {
                     created_at: app.created_at
                 };
 
-                const isJobToday = application.raw_date && isToday(parseISO(application.raw_date));
-                let isWithinWorkHours = false;
-
-                if (isJobToday && application.time && application.end_time) {
-                    try {
-                        const [startH, startM] = application.time.split(':').map(Number);
-                        const [endH, endM] = application.end_time.split(':').map(Number);
-
-                        const todayDate = new Date();
-                        const startTime = setMinutes(setHours(todayDate, startH), startM);
-                        let endTime = setMinutes(setHours(todayDate, endH), endM);
-
-                        if (endTime.getTime() <= startTime.getTime()) {
-                            endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
-                        }
-
-                        const startBuffer = new Date(startTime.getTime() - 30 * 60 * 1000);
-                        const endBuffer = new Date(endTime.getTime() + 60 * 60 * 1000);
-
-                        isWithinWorkHours = isWithinInterval(now, { start: startBuffer, end: endBuffer });
-                    } catch (e) {
-                        logError('Error parsing work hours:', e);
-                    }
-                }
-
-                const isInProgress = (app.status === 'hired' && isJobToday && isWithinWorkHours) || app.status === 'in_progress';
+                // "Em andamento" = em curso, ou contratado com a chegada liberada agora.
+                const isInProgress = app.status === 'in_progress'
+                    || (app.status === 'hired'
+                        && (hasArrived(application) || checkinWindow(scheduleOf(application)).state === 'open'));
 
                 // Saída já registrada: o turno acabou para o freela, mesmo antes de a empresa
                 // fechar. Vai para o Histórico como "aguardando", nunca para "Em Andamento".
@@ -472,6 +423,10 @@ export default function MyJobs() {
             });
 
             // Quem ainda espera a empresa vem primeiro.
+            in_progress.sort(byShiftDate);
+            scheduled.sort(byShiftDate);
+            history.sort(byShiftDateDesc);
+            awaiting.sort(byShiftDateDesc);
             setJobs({ in_progress, scheduled, history: [...awaiting, ...history] });
             setLoading(false);
             return { in_progress, scheduled };
@@ -580,69 +535,6 @@ export default function MyJobs() {
         }
     }, [jobs.history, reviewedJobIds, loading]);
 
-    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
-    // RLS negado silenciosamente): sob RLS um UPDATE cuja linha não casa mais com a policy
-    // USING retorna 0 linhas sem erro (PostgREST 204). Sem checar `data`, a UI diria "check-in
-    // realizado" com o banco intocado.
-    /** Frase clara para a recusa do banco, com a janela de chegada do turno certo. */
-    const guardMessageFor = (appId: string, error: unknown): string | null => {
-        const job = [...jobs.in_progress, ...jobs.scheduled].find((j) => j.id === appId);
-        return attendanceGuardMessage(error, job?.raw_date, job?.time);
-    };
-
-    const handleCheckin = async (appId: string) => {
-        setActionLoading(appId);
-        try {
-            const { data, error } = await supabase
-                .from('applications')
-                .update({
-                    worker_checkin_at: new Date().toISOString(),
-                    status: 'in_progress'
-                })
-                .eq('id', appId)
-                .select('id');
-
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                addToast('Não foi possível fazer check-in. Atualize a página e tente novamente.', 'error');
-                return;
-            }
-            addToast('Check-in realizado com sucesso!', 'success');
-            await fetchJobs();
-        } catch (err) {
-            logError('Error checking in:', err);
-            addToast(guardMessageFor(appId, err) ?? 'Erro ao fazer check-in. Tente novamente.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    const handleCheckout = async (appId: string) => {
-        setActionLoading(appId);
-        try {
-            const { data, error } = await supabase
-                .from('applications')
-                .update({ worker_checkout_at: new Date().toISOString() })
-                .eq('id', appId)
-                .select('id');
-
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                addToast('Não foi possível fazer check-out. Atualize a página e tente novamente.', 'error');
-                return;
-            }
-            addToast('Check-out registrado! A empresa confirma a saída.', 'success');
-            await fetchJobs();
-            // O turno saiu de "Em Andamento": mostra para onde ele foi, em vez de sumir.
-            setActiveTab('history');
-        } catch (err) {
-            logError('Error checking out:', err);
-            addToast(guardMessageFor(appId, err) ?? 'Erro ao fazer check-out. Tente novamente.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
     // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
     // trigger só dispara se a linha realmente mudou. Sob RLS um UPDATE que não casa com o
@@ -670,7 +562,7 @@ export default function MyJobs() {
             await fetchJobs();
         } catch (err) {
             logError('Error cancelling shift:', err);
-            addToast(attendanceGuardMessage(err, null, null) ?? 'Erro ao cancelar turno. Tente novamente.', 'error');
+            addToast(attendanceGuardMessage(err) ?? 'Erro ao cancelar turno. Tente novamente.', 'error');
         } finally {
             setCancelLoading(false);
         }
@@ -682,23 +574,7 @@ export default function MyJobs() {
     const handleChat = async (job: JobApplication) => {
         setChattingId(job.id);
         try {
-            const { data: existingConvs } = await supabase
-                .from('Conversation')
-                .select('id')
-                .eq('application_uuid', job.id)
-                .limit(1);
-
-            if (existingConvs && existingConvs.length > 0) {
-                navigate(`/messages?conversation=${existingConvs[0].id}`);
-            } else {
-                const newConvId = crypto.randomUUID();
-                const { error } = await supabase
-                    .from('Conversation')
-                    .insert({ id: newConvId, application_uuid: job.id, islocked: false });
-
-                if (error) throw error;
-                navigate(`/messages?conversation=${newConvId}`);
-            }
+            navigate(`/messages?conversation=${await openShiftConversation(job.id)}`);
         } catch (err) {
             logError('MyJobs: handleChat', err);
             addToast('Erro ao iniciar conversa.', 'error');
@@ -758,36 +634,53 @@ export default function MyJobs() {
     );
 
     if (loading) return (
-        <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse" role="status"><span className="sr-only">Carregando</span>
-            <div className="h-9 bg-gray-200 rounded-xl w-1/3" />
-            <div className="flex gap-2">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-11 bg-gray-200 rounded-xl w-24" />)}
-            </div>
-            <div className="space-y-4">
-                {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
-                ))}
-            </div>
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+            <SkeletonList count={4} itemClassName="h-28" />
         </div>
     );
 
-    const tabs: { id: ActiveTab; label: string; count: number; tone: 'brand' | 'dark' | 'neutral' }[] = [
-        { id: 'invites', label: 'Convites', count: pendingInvites.length, tone: 'brand' },
-        { id: 'in_progress', label: 'Em andamento', count: jobs.in_progress.length, tone: 'dark' },
-        { id: 'scheduled', label: 'Agendados', count: jobs.scheduled.length, tone: 'neutral' },
-        { id: 'history', label: 'Histórico', count: jobs.history.length, tone: 'neutral' },
+    // Turnos de hoje ficam no topo, com as ações; não se repetem nas abas.
+    const todayJobs = [...jobs.in_progress, ...jobs.scheduled].filter(isTodayJob).sort(byShiftDate);
+    const todayIds = new Set(todayJobs.map((j) => j.id));
+    const inProgressList = jobs.in_progress.filter((j) => !todayIds.has(j.id));
+    const scheduledList = jobs.scheduled.filter((j) => !todayIds.has(j.id));
+
+    const activeTab: ActiveTab = chosenTab ?? (
+        inProgressList.length > 0 ? 'in_progress'
+            : invitesLoading || invitesError || pendingInvites.length > 0 ? 'invites'
+                : scheduledList.length > 0 ? 'scheduled'
+                    : jobs.history.length > 0 ? 'history'
+                        : 'invites'
+    );
+
+    const tabs: { id: ActiveTab; label: string; count: number }[] = [
+        { id: 'invites', label: 'Convites', count: pendingInvites.length },
+        { id: 'in_progress', label: 'Em andamento', count: inProgressList.length },
+        { id: 'scheduled', label: 'Agendados', count: scheduledList.length },
+        { id: 'history', label: 'Histórico', count: jobs.history.length },
     ];
-    const TAB_COUNT_TONES = {
-        brand: 'bg-primary-dark text-white',
-        dark: 'bg-black text-white',
-        neutral: 'bg-gray-200 text-gray-700',
-    } as const;
 
     return (
-        <div className="flex flex-col gap-6 pb-24 font-sans text-accent max-w-4xl mx-auto">
+        <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-4xl mx-auto">
             <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
 
-            <PageHeader title="Meus Turnos" className="!mb-0" />
+            <PageHeader title="Meus Turnos" className="mb-0" />
+
+            {todayJobs.length > 0 && (
+                <section aria-label="Hoje" className="grid grid-cols-1 gap-4">
+                    {todayJobs.map((job) => (
+                        <TodayShiftCard
+                            key={job.id}
+                            heading="Hoje"
+                            shift={toTodayShift(job)}
+                            steps={hasArrived(job) ? computeWorkerSteps(job) : undefined}
+                            onChanged={fetchJobs}
+                            onCheckedOut={() => setActiveTab('history')}
+                            onCancel={() => setCancelJob(job)}
+                        />
+                    ))}
+                </section>
+            )}
 
             {/* Confirmação de véspera (D-1) — card destacado, resposta em UM toque, sempre visível
                 no topo (fora das abas): o turno é amanhã, não pode depender do freela estar na aba certa.
@@ -808,7 +701,7 @@ export default function MyJobs() {
                         return (
                             <Card
                                 key={confirmation.id}
-                                className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
+                                className="shadow-brutal-brand"
                             >
                                 <div className="flex items-center gap-2 mb-3">
                                     <CalendarClock size={18} className="text-primary" />
@@ -872,53 +765,20 @@ export default function MyJobs() {
                 <ErroDeCarga onRetry={() => { void fetchConfirmations(); }} mensagem="Não foi possível verificar pedidos de confirmação de presença." />
             )}
 
-            {/* Tabs — Convites PRIMEIRO */}
-            <div
-                role="tablist"
-                aria-label="Seções dos seus turnos"
-                // No celular as quatro abas ficam em 2 colunas: rolagem sem barra escondia o Histórico.
-                className="grid grid-cols-2 sm:flex gap-1 border-b-2 border-gray-200"
-            >
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        id={`meus-turnos-tab-${tab.id}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === tab.id}
-                        aria-controls="meus-turnos-painel"
-                        tabIndex={activeTab === tab.id ? 0 : -1}
-                        onClick={() => setActiveTab(tab.id)}
-                        onKeyDown={(e) => {
-                            const next = nextTabIndex(e.key, tabs.findIndex((t) => t.id === tab.id), tabs.length);
-                            if (next === null) return;
-                            e.preventDefault();
-                            setActiveTab(tabs[next].id);
-                            document.getElementById(`meus-turnos-tab-${tabs[next].id}`)?.focus();
-                        }}
-                        className={`
-                            min-h-11 justify-center px-2 sm:px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
-                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black rounded-t-xl
-                            ${activeTab === tab.id
-                                ? 'border-black text-black'
-                                : 'border-transparent text-gray-500 hover:text-black hover:bg-gray-100'}
-                        `}
-                    >
-                        {tab.label}
-                        {tab.count > 0 && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${TAB_COUNT_TONES[tab.tone]}`}>
-                                {tab.count}
-                            </span>
-                        )}
-                    </button>
-                ))}
-            </div>
+            <Tabs
+                label="Seções dos seus turnos"
+                tabs={tabs}
+                value={activeTab}
+                onChange={setActiveTab}
+                panelId="meus-turnos-painel"
+                className="[&>button]:px-1.5"
+            />
 
             {/* Content */}
             <div
                 id="meus-turnos-painel"
                 role="tabpanel"
-                aria-labelledby={`meus-turnos-tab-${activeTab}`}
+                aria-label={tabs.find((t) => t.id === activeTab)?.label}
                 // `grid-cols-1` = minmax(0,1fr): sem isso a coluna cresce até o maior título (`truncate`
                 // não quebra linha) e o card do Histórico sai da tela a 320px.
                 className="grid grid-cols-1 gap-4"
@@ -939,7 +799,7 @@ export default function MyJobs() {
 
                         {!invitesLoading && !invitesError && pendingInvites.length === 0 && (
                             <EmptyState
-                                icon={<Bell size={40} />}
+                                icon={Bell}
                                 title="Nenhum convite pendente."
                                 description="Quando uma empresa te convidar para um turno, aparecerá aqui."
                             />
@@ -952,7 +812,8 @@ export default function MyJobs() {
                             const companyLogo = companyInfo?.logo_url ?? null;
                             const companyId = companyInfo?.id;
                             const jobTitle = job?.title ?? 'Turno';
-                            const budget = job?.budget ?? 0;
+                            const budget = job?.budget && job.budget > 0 ? job.budget : null;
+                            const isSos = invite.origin === 'sos';
                             const startDate = job?.start_date
                                 ? new Date(job.start_date).toLocaleDateString('pt-BR')
                                 : 'Data a definir';
@@ -974,13 +835,18 @@ export default function MyJobs() {
                                     </span>
                                     <span className="block min-w-0">
                                         <span className="block text-xs text-gray-600">Convite de</span>
-                                        <span className={`block font-bold truncate ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
+                                        <span className={`block font-bold line-clamp-2 [overflow-wrap:anywhere] ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
                                     </span>
                                 </>
                             );
 
                             return (
-                                <Card key={invite.id} className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                                <Card key={invite.id} className={isSos ? 'border-status-warning-line' : undefined}>
+                                    {isSos && (
+                                        <Alert tone="warning" title="Urgência (SOS)" className="mb-4">
+                                            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+                                        </Alert>
+                                    )}
                                     {/* Empresa */}
                                     <div className="flex items-center gap-3 mb-4">
                                         {companyId ? (
@@ -1017,7 +883,7 @@ export default function MyJobs() {
                                             <Clock size={14} /> {startDate}{startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
                                         </Chip>
                                         <Chip tone="brand">
-                                            <DollarSign size={14} /> {formatBRL(budget)}
+                                            <DollarSign size={14} /> {payLabel(budget)}
                                         </Chip>
                                         {location && (
                                             <Chip tone="info">
@@ -1055,6 +921,8 @@ export default function MyJobs() {
                                             variant="primary"
                                             size="lg"
                                             className="flex-1"
+                                            data-copilot="freela.convite.aceitar"
+                                            data-copilot-risk="D"
                                             onClick={() => respond(invite.id, 'accepted')}
                                             disabled={isResponding}
                                             loading={isResponding}
@@ -1066,6 +934,8 @@ export default function MyJobs() {
                                             variant={recusaArmada === invite.id ? 'danger' : 'secondary'}
                                             size="lg"
                                             className="flex-1"
+                                            data-copilot="freela.convite.recusar"
+                                            data-copilot-risk="D"
                                             onClick={() => armarOuRecusar(invite.id, () => respond(invite.id, 'declined'))}
                                             disabled={isResponding}
                                             iconLeft={<XCircle size={18} />}
@@ -1083,255 +953,137 @@ export default function MyJobs() {
                 )}
 
                 {/* ── ABA EM ANDAMENTO ── */}
-                {activeTab === 'in_progress' && jobs.in_progress.length === 0 && (
+                {activeTab === 'in_progress' && inProgressList.length === 0 && (
                     <EmptyState
-                        icon={<AlertCircle size={40} />}
+                        icon={AlertCircle}
                         title="Nenhum trabalho em andamento."
-                        description="Trabalhos agendados para hoje aparecerão aqui durante o horário de trabalho."
+                        description={todayJobs.length > 0
+                            ? 'O turno de hoje está no cartão no topo da tela.'
+                            : 'A chegada é liberada 2h antes do início do turno.'}
+                        action={scheduledList.length > 0
+                            ? <Button variant="secondary" onClick={() => setActiveTab('scheduled')}>Ver agendados</Button>
+                            : undefined}
                     />
                 )}
-                {activeTab === 'in_progress' && jobs.in_progress.map((job) => (
-                    <Card key={job.id} className="flex flex-col gap-4 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
-                        <div>
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h3 className="font-bold text-lg">{job.title}</h3>
-                                    <p className="text-sm text-gray-600">{job.company_name}</p>
-                                </div>
-                                {isOnShift(job) && (
-                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
-                                        <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                <Chip>
-                                    <Clock size={14} /> {job.time}{job.end_time ? ` - ${job.end_time}` : ''}
-                                </Chip>
-                                <Chip tone="brand">
-                                    <DollarSign size={14} /> {formatBRL(job.pay)}
-                                </Chip>
-                                <Chip tone="info">
-                                    <LocalDoTurno location={job.location} />
-                                </Chip>
-                            </div>
-                            {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
-                                em andamento — promessa de escrow que o produto não cumpre. O piloto é
-                                100% modo A: o dinheiro nunca passa pelo Worki, não há nada em garantia.
-                                Este turno, conferido no banco, tem zero linhas em escrow_transactions.
-                                Prometer custódia de dinheiro que ninguém segura é a pior classe de copy
-                                errado: o freela decide confiar com base nela. */}
-                            {job.status === 'in_progress' && (
-                                <p className="text-xs text-gray-600 mt-3">
-                                    Pagamento combinado direto com a empresa — o Worki registra o recibo
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="border-t-2 border-gray-100 pt-4">
-                            <JobLifecycleStepper steps={computeWorkerSteps(job)} />
-                        </div>
-
-                        {/* A empresa pode registrar chegada/saída sem o freela tocar no app
-                            (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
-                            `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
-                            ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
-                            o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
-                            quando presente, mesmo em turno já pago). */}
-                        <div className="flex flex-col gap-3">
-                            {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
-                                <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
-                                    onClick={() => handleCheckin(job.id)}
-                                    loading={actionLoading === job.id}
-                                    iconLeft={<Play size={18} />}
-                                >
-                                    Check-in
-                                </Button>
-                            ) : job.worker_checkin_at ? (
-                                <StatusLine tone="success" icon={<CheckCircle2 size={16} />}>
-                                    Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
-                                </StatusLine>
-                            ) : (
-                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                    Empresa registrou sua chegada
-                                </StatusLine>
-                            )}
-
-                            {job.worker_checkin_at && (
-                                job.company_checkin_confirmed_at ? (
-                                    <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                        Empresa confirmou chegada
-                                    </StatusLine>
-                                ) : (
-                                    <StatusLine tone="waiting" icon={<Clock size={16} />}>
-                                        Aguardando confirmação da empresa
-                                    </StatusLine>
-                                )
-                            )}
-
-                            {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
-                                <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
-                                    onClick={() => handleCheckout(job.id)}
-                                    loading={actionLoading === job.id}
-                                    iconLeft={<Square size={18} />}
-                                >
-                                    Check-out
-                                </Button>
-                            )}
-
-                            {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
-                            <Button
-                                variant="secondary"
-                                fullWidth
-                                onClick={() => handleChat(job)}
-                                loading={chattingId === job.id}
-                                iconLeft={<MessageCircle size={18} />}
-                            >
-                                Falar com a empresa
-                            </Button>
-                        </div>
-                    </Card>
+                {activeTab === 'in_progress' && inProgressList.map((job) => (
+                    <TodayShiftCard
+                        key={job.id}
+                        heading={job.date}
+                        shift={toTodayShift(job)}
+                        onChanged={fetchJobs}
+                        onCheckedOut={() => setActiveTab('history')}
+                    />
                 ))}
 
                 {/* ── ABA AGENDADOS ── */}
-                {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
-                    <EmptyState title="Nenhum turno agendado no momento." />
+                {activeTab === 'scheduled' && scheduledList.length === 0 && (
+                    <EmptyState
+                        icon={CalendarClock}
+                        title="Nenhum turno agendado no momento."
+                        description={todayJobs.length > 0 ? 'O turno de hoje está no cartão no topo da tela.' : undefined}
+                    />
                 )}
-                {activeTab === 'scheduled' && jobs.scheduled.map((job) => (
-                    <Card
-                        key={job.id}
-                        className="flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]"
-                    >
-                        <div className="flex gap-4 items-center min-w-0">
-                            <div className="bg-black text-white px-3 py-2 rounded-xl min-w-[64px] text-center flex-shrink-0">
-                                <span className="block text-xs font-semibold uppercase">{job.month}</span>
-                                <span className="block text-2xl font-bold">{job.day}</span>
+                {activeTab === 'scheduled' && scheduledList.map((job) => (
+                    <Card key={job.id} padding="sm" className="flex flex-col gap-3">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                <h3 className="min-w-0 text-base font-bold [overflow-wrap:anywhere]">{job.title}</h3>
+                                <span className="font-bold tabular-nums text-primary-dark">{payLabel(job.pay)}</span>
                             </div>
-                            <div className="min-w-0">
-                                <h3 className="font-bold text-lg mb-1.5">{job.title}</h3>
-                                <Chip>
-                                    <Clock size={14} /> {job.date} • {job.time}
-                                </Chip>
-                                <p className="text-sm text-gray-600 flex items-center gap-1 mt-2">
-                                    <LocalDoTurno location={job.location} />
-                                </p>
-                            </div>
+                            <p className="text-sm text-gray-700 [overflow-wrap:anywhere]">{job.company_name}</p>
+                            <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-700 tabular-nums">
+                                <Clock size={14} aria-hidden="true" /> {weekdayDate(job)} · {job.time}{job.end_time ? `–${job.end_time}` : ''}
+                            </p>
+                            <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-700 [overflow-wrap:anywhere]">
+                                <LocalDoTurno location={job.location} />
+                            </p>
+                            <p className="mt-2 text-xs text-gray-600">{checkinWindowMessage(checkinWindow(scheduleOf(job)))}</p>
                         </div>
-                        <div className="flex flex-col gap-4 border-t-2 border-gray-100 md:border-t-0 md:border-l-2 pt-4 md:pt-0 md:pl-6 w-full md:w-56 flex-shrink-0">
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <span className="block text-xs text-gray-600">Receber</span>
-                                    <span className="block text-2xl font-bold tabular-nums text-primary">{formatBRL(job.pay)}</span>
-                                </div>
-                                <span className="bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200">Contratado</span>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Button
-                                    variant="secondary"
-                                    fullWidth
-                                    onClick={() => handleChat(job)}
-                                    loading={chattingId === job.id}
-                                    iconLeft={<MessageCircle size={16} />}
-                                >
-                                    Falar com a empresa
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    fullWidth
-                                    className="!text-red-600 enabled:hover:bg-red-50"
-                                    onClick={() => setCancelJob(job)}
-                                    iconLeft={<XCircle size={16} />}
-                                >
-                                    Cancelar turno
-                                </Button>
-                            </div>
+                        <div className="flex flex-col gap-2 border-t-2 border-gray-200 pt-3 sm:flex-row sm:justify-between">
+                            <Button
+                                variant="secondary"
+                                data-copilot="freela.turno.falar-empresa"
+                                onClick={() => handleChat(job)}
+                                loading={chattingId === job.id}
+                                iconLeft={<MessageCircle size={16} />}
+                            >
+                                Falar com a empresa
+                            </Button>
+                            <Button
+                                variant="dangerOutline"
+                                data-copilot="freela.turnos.cancelar"
+                                data-copilot-risk="D"
+                                onClick={() => setCancelJob(job)}
+                                iconLeft={<XCircle size={16} />}
+                            >
+                                Cancelar turno
+                            </Button>
                         </div>
                     </Card>
                 ))}
 
                 {/* ── ABA HISTÓRICO ── */}
                 {activeTab === 'history' && jobs.history.length === 0 && (
-                    <EmptyState title="Seu histórico está vazio." />
+                    <EmptyState icon={History} title="Seu histórico está vazio." />
                 )}
-                {activeTab === 'history' && jobs.history.map((job) => (
-                    <Card
-                        key={job.id}
-                        padding="sm"
-                        interactive
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setDetailJob(job)}
-                        onKeyDown={(e) => {
-                            // Só o próprio card abre o detalhe: Enter/Espaço em "Recibo"/"Avaliar" seguem a ação do botão.
-                            if (e.target !== e.currentTarget) return;
-                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailJob(job); }
-                        }}
-                        className="cursor-pointer !bg-gray-50 !border-gray-200 hover:!border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-                    >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <h3 className="font-semibold text-gray-800 truncate">{job.title}</h3>
-                                <p className="text-sm text-gray-600">{job.date} • {job.company_name}</p>
+                {activeTab === 'history' && jobs.history.map((job) => {
+                    const waiting = awaitingLabel(job);
+                    const dropped = !waiting && job.status !== 'completed';
+                    return (
+                        <Card key={job.id} padding="sm" tone="nested" onActivate={() => setDetailJob(job)}>
+                            <div className="flex items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="font-semibold text-gray-800 line-clamp-2 [overflow-wrap:anywhere]">{job.title}</h3>
+                                    <p className="text-sm text-gray-600 [overflow-wrap:anywhere]">{job.date} • {job.company_name}</p>
+                                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                                        <HistoryStatus job={job} />
+                                        <span className={`font-bold tabular-nums ${dropped ? 'text-gray-600 line-through' : 'text-gray-800'}`}>
+                                            {payLabel(job.pay)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} aria-hidden="true" className="mt-1 shrink-0 text-gray-400" />
                             </div>
-                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                                <span className="font-bold tabular-nums text-gray-800">{formatBRL(job.pay)}</span>
-                                {awaitingLabel(job) ? (
-                                    <AwaitingBadge label={awaitingLabel(job)!} />
-                                ) : job.status === 'completed' ? (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-pill">
-                                        <CheckCircle2 size={12} /> Concluído
-                                    </span>
-                                ) : (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2.5 py-1 rounded-pill">
-                                        <XCircle size={12} /> {job.status === 'declined' ? 'Recusado' : 'Cancelado'}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        {awaitingLabel(job) && (
-                            <div className="mt-3 pt-3 border-t border-gray-200">
-                                <Button
-                                    variant="secondary"
-                                    onClick={(e) => { e.stopPropagation(); void handleChat(job); }}
-                                    loading={chattingId === job.id}
-                                    iconLeft={<MessageCircle size={14} />}
-                                >
-                                    Falar com a empresa
-                                </Button>
-                            </div>
-                        )}
-                        {job.status === 'completed' && (
-                            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                                <Button
-                                    variant="secondary"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
-                                    iconLeft={<Receipt size={14} />}
-                                >
-                                    Recibo
-                                </Button>
-                                {!reviewedJobIds.has(job.job_id) ? (
+                            {waiting && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <p className="mb-2 text-xs text-gray-600">Falta a empresa fechar o turno.</p>
                                     <Button
-                                        variant="primary"
-                                        onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                        iconLeft={<Star size={14} />}
+                                        variant="secondary"
+                                        onClick={(e) => { e.stopPropagation(); void handleChat(job); }}
+                                        loading={chattingId === job.id}
+                                        iconLeft={<MessageCircle size={14} />}
                                     >
-                                        Avaliar
+                                        Falar com a empresa
                                     </Button>
-                                ) : (
-                                    <span className="text-xs text-gray-600 flex items-center gap-1">
-                                        <Star size={12} fill="currentColor" /> Avaliado
-                                    </span>
-                                )}
-                            </div>
-                        )}
-                    </Card>
-                ))}
+                                </div>
+                            )}
+                            {job.status === 'completed' && (
+                                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                                    <Button
+                                        variant="secondary"
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
+                                        iconLeft={<Receipt size={14} />}
+                                    >
+                                        Recibo
+                                    </Button>
+                                    {!reviewedJobIds.has(job.job_id) ? (
+                                        <Button
+                                            variant="secondary"
+                                            onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
+                                            iconLeft={<Star size={14} />}
+                                        >
+                                            Avaliar
+                                        </Button>
+                                    ) : (
+                                        <span className="text-xs text-gray-600 flex items-center gap-1">
+                                            <Star size={12} fill="currentColor" /> Avaliado
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </Card>
+                    );
+                })}
             </div>
 
             <RateModal
@@ -1365,29 +1117,14 @@ export default function MyJobs() {
                                     <p className="text-sm text-gray-600 truncate">{detailJob.company_name}</p>
                                 </div>
                             </div>
-                            <Button
-                                variant="ghost"
-                                onClick={() => setDetailJob(null)}
-                                aria-label="Fechar"
-                                className="w-11 !px-0 flex-shrink-0"
-                            >
+                            <IconButton aria-label="Fechar" onClick={() => setDetailJob(null)} className="flex-shrink-0">
                                 <X size={20} />
-                            </Button>
+                            </IconButton>
                         </div>
 
                         {/* Status */}
                         <div className="mb-5">
-                            {awaitingLabel(detailJob) ? (
-                                <AwaitingBadge label={awaitingLabel(detailJob)!} />
-                            ) : detailJob.status === 'completed' ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-pill">
-                                    <CheckCircle2 size={14} /> Concluído
-                                </span>
-                            ) : (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-3 py-1.5 rounded-pill">
-                                    <XCircle size={14} /> {detailJob.status === 'declined' ? 'Recusado' : 'Cancelado'}
-                                </span>
-                            )}
+                            <HistoryStatus job={detailJob} />
                         </div>
 
                         {/* Grid de infos */}
@@ -1398,11 +1135,11 @@ export default function MyJobs() {
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1">Valor</p>
-                                <p className="font-bold text-sm tabular-nums text-primary-dark">{formatBRL(detailJob.pay)}</p>
+                                <p className="font-bold text-sm tabular-nums text-primary-dark">{payLabel(detailJob.pay)}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
-                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkin_at)}</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkin_at ?? detailJob.company_checkin_confirmed_at)}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
@@ -1416,24 +1153,36 @@ export default function MyJobs() {
                             <Clock size={16} /> {detailJob.time}{detailJob.end_time ? ` - ${detailJob.end_time}` : ''}
                         </div>
 
-                        {/* Avaliação */}
-                        {detailJob.status === 'completed' && (
-                            reviewedJobIds.has(detailJob.job_id) ? (
-                                <div className="flex items-center gap-2 text-sm text-gray-600 border-t-2 border-gray-100 pt-4">
-                                    <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
-                                </div>
-                            ) : (
+                        {detailJob.status === 'completed' && reviewedJobIds.has(detailJob.job_id) && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600 border-t-2 border-gray-100 pt-4">
+                                <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
+                            </div>
+                        )}
+
+                        <DialogActions stacked>
+                            <Button
+                                variant="secondary"
+                                onClick={() => handleChat(detailJob)}
+                                loading={chattingId === detailJob.id}
+                                iconLeft={<MessageCircle size={16} />}
+                            >
+                                Falar com a empresa
+                            </Button>
+                            {detailJob.status === 'completed' && !reviewedJobIds.has(detailJob.job_id) && (
                                 <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
+                                    variant="secondary"
                                     onClick={() => { const j = detailJob; setDetailJob(null); handleOpenRateModal(j); }}
                                     iconLeft={<Star size={16} />}
                                 >
                                     Avaliar esta empresa
                                 </Button>
-                            )
-                        )}
+                            )}
+                            {detailJob.status === 'completed' && (
+                                <Button onClick={() => navigate(`/recibo/${detailJob.job_id}`)} iconLeft={<Receipt size={16} />}>
+                                    Ver recibo
+                                </Button>
+                            )}
+                        </DialogActions>
                 </Dialog>
             )}
 
@@ -1452,7 +1201,7 @@ export default function MyJobs() {
                             <div>
                                 <h3 id="cancelar-turno-titulo" className="text-lg font-bold tracking-tight">Cancelar este turno?</h3>
                                 <p className="text-sm text-gray-600 mt-1">
-                                    A empresa será avisada e o turno volta a ficar disponível.
+                                    A empresa será avisada e poderá chamar outra pessoa. Você não volta a este turno.
                                 </p>
                             </div>
                         </div>

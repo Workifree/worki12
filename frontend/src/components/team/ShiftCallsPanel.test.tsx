@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { ShiftCallsPanel } from './ShiftCallsPanel';
 import type { ShiftCall } from '../../types';
 
@@ -98,7 +98,7 @@ describe('ShiftCallsPanel — chamado vencido nao se apresenta como aberto', () 
 
     expect(screen.getByText(/Chamado expirou/i)).toBeInTheDocument()
     expect(screen.getByText(/Expirou às .* sem ninguém aceitar/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /cancelar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /encerrar chamado/i })).not.toBeInTheDocument()
   })
 
   it('status=open com expires_at no FUTURO segue aberto e cancelavel', () => {
@@ -107,7 +107,7 @@ describe('ShiftCallsPanel — chamado vencido nao se apresenta como aberto', () 
 
     expect(screen.getByText(/Chamado aberto/i)).toBeInTheDocument()
     expect(screen.getByText(/Ninguém aceitou ainda · expira/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /cancelar/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /encerrar chamado/i })).toBeInTheDocument()
   })
 })
 
@@ -212,9 +212,9 @@ describe('ShiftCallsPanel — cancelar pede confirmação', () => {
     const onCancel = vi.fn()
     render(<ShiftCallsPanel calls={aberto()} loading={false} cancellingId={null} onCancel={onCancel} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar chamado' }))
     expect(onCancel).not.toHaveBeenCalled()
-    const confirmar = screen.getByRole('button', { name: 'Sim, cancelar o chamado' })
+    const confirmar = within(screen.getByRole('dialog')).getByRole('button', { name: 'Encerrar chamado' })
     act(() => {
       confirmar.click()
       confirmar.click()
@@ -226,8 +226,8 @@ describe('ShiftCallsPanel — cancelar pede confirmação', () => {
     const onCancel = vi.fn()
     render(<ShiftCallsPanel calls={aberto()} loading={false} cancellingId={null} onCancel={onCancel} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Manter o chamado' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar chamado' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
     expect(onCancel).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })

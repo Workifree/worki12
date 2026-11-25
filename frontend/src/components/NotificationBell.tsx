@@ -10,7 +10,7 @@ import { Button } from './ui';
 import { safeInternalPath } from '../lib/safeRedirect';
 
 export default function NotificationBell({ className = "" }: { className?: string }) {
-    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+    const { notifications, unreadCount, carregando, erroCarga, markAsRead, markAllAsRead } = useNotifications();
     const { user } = useAuth();
     const userType = user?.user_metadata?.user_type as string | undefined;
     const notificationsPath = userType === 'hire' ? '/company/notifications' : '/notifications';
@@ -99,7 +99,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 aria-haspopup="true"
                 aria-expanded={isOpen}
             >
-                <Bell size={22} className={unreadCount > 0 ? "text-primary" : "currentColor"} aria-hidden="true" />
+                <Bell size={22} className={unreadCount > 0 ? (userType === 'hire' ? "text-blue-600" : "text-primary") : "currentColor"} aria-hidden="true" />
                 {unreadCount > 0 && (
                     <span className="absolute top-0.5 right-0.5 h-5 w-5 bg-red-600 text-white text-xs font-bold tabular-nums rounded-full flex items-center justify-center border-2 border-white">
                         {unreadCount > 9 ? '9+' : unreadCount}
@@ -131,7 +131,11 @@ export default function NotificationBell({ className = "" }: { className?: strin
                         {notifications.length === 0 ? (
                             <div className="p-8 text-center text-gray-600">
                                 <Bell size={32} className="mx-auto mb-2 opacity-20" />
-                                <p className="text-sm">Nenhuma notificação.</p>
+                                <p className="text-sm">
+                                    {erroCarga
+                                        ? 'Não foi possível carregar. Abra "Ver todas" para tentar de novo.'
+                                        : carregando ? 'Carregando...' : 'Nenhuma notificação.'}
+                                </p>
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-200">

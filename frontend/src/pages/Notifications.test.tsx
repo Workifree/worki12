@@ -8,6 +8,16 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotifications: vi.fn(),
 }))
 
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: () => ({
+        in: () => Promise.resolve({ data: [{ id: '11111111-1111-1111-1111-111111111111', title: 'Garçom no salão', start_date: '2026-11-27' }], error: null }),
+      }),
+    })),
+  },
+}))
+
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: vi.fn(() => ({ user: { user_metadata: { user_type: 'work' } } })),
 }))
@@ -149,5 +159,26 @@ describe('Notifications page', () => {
     expect(screen.getByText(/Próxima/)).toBeInTheDocument()
     // "Página anterior" should be disabled
     expect(screen.getByText(/Página anterior/)).toBeDisabled()
+  })
+
+  it('agrupa avisos iguais, diz o turno e marca todos do grupo como lidos', async () => {
+    const markAsRead = vi.fn().mockResolvedValue(undefined)
+    const link = '/company/jobs/11111111-1111-1111-1111-111111111111/candidates'
+    vi.mocked(useNotifications).mockReturnValue({
+      notifications: [
+        makeNotification({ id: 'a', title: 'Vaga preenchida no turno', link }),
+        makeNotification({ id: 'b', title: 'Vaga preenchida no turno', link }),
+      ],
+      unreadCount: 2, carregando: false, erroCarga: false, markAsRead, markAllAsRead: vi.fn(),
+    })
+
+    renderComponent()
+
+    expect(screen.getAllByText('Vaga preenchida no turno')).toHaveLength(1)
+    expect(screen.getByText(/2 avisos iguais/)).toBeInTheDocument()
+    expect(await screen.findByText('Turno: Garçom no salão · 27/11')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Vaga preenchida no turno'))
+    expect(markAsRead).toHaveBeenCalledWith('a')
+    expect(markAsRead).toHaveBeenCalledWith('b')
   })
 })

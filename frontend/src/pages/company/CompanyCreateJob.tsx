@@ -23,7 +23,7 @@ import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services/shiftOperationService';
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, Field, PageHeader, ActionBar } from '../../components/ui';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
@@ -130,8 +130,10 @@ export default function CompanyCreateJob() {
     });
 
     // Hooks de equipe e convites — carregados após criação do job
-    const { teamMembers, loading: teamLoading } = useCompanyTeam();
-    const { invite, invitingWorkerId, invitedWorkerIds } = useCompanyInvites(createdJobId ?? '');
+    const { teamMembers, loading: teamLoading, erroCarga: teamError, refresh: refreshTeam } = useCompanyTeam();
+    const {
+        invite, invitingWorkerId, invitedWorkerIds, loadError: invitesError, refresh: refreshInvites,
+    } = useCompanyInvites(createdJobId ?? '');
 
     // Etapa 2 — divulgacao progressiva (NN/g): dos quatro campos da tela, so a DESCRICAO e
     // obrigatoria, mas os quatro apareciam com o mesmo peso visual — e o botao desabilitado nao
@@ -602,7 +604,7 @@ export default function CompanyCreateJob() {
     }
 
     return (
-        <div className="max-w-3xl mx-auto pb-20">
+        <div className="max-w-3xl mx-auto">
             <Button
                 variant="ghost"
                 onClick={() => navigate(-1)}
@@ -613,7 +615,7 @@ export default function CompanyCreateJob() {
             </Button>
             <PageHeader
                 title={isEditing ? 'Editar turno' : 'Criar turno'}
-                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto — o Worki registra e emite o recibo.'}
+                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Worki registra e emite o recibo.'}
             />
 
             {erroCarga && (
@@ -629,12 +631,14 @@ export default function CompanyCreateJob() {
                         <h2 className="text-sm font-bold">Comece de um turno anterior</h2>
                         <p className="mt-0.5 mb-3 text-xs text-gray-600">Preenche tudo pra você — só escolha a nova data.</p>
                         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0">
-                            {modelos.map((mo) => (
+                            {modelos.map((mo, indice) => (
                                 <button
                                     key={mo.id}
                                     type="button"
                                     onClick={() => { void fetchJobData(mo.id, 'repetir'); }}
-                                    className="min-h-11 w-56 shrink-0 rounded-xl border-2 border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto"
+                                    data-copilot="empresa.turno-criar.usar-modelo"
+                                    // No desktop, no máximo duas linhas curtas antes do formulário.
+                                    className={`min-h-11 w-56 shrink-0 rounded-xl border-2 border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto ${indice > 3 ? 'sm:hidden' : ''}`}
                                 >
                                     <span className="block truncate text-sm font-bold">{mo.title}</span>
                                     <span className="block truncate text-xs text-gray-600">
@@ -749,7 +753,7 @@ export default function CompanyCreateJob() {
                                 checked={formData.has_lunch}
                                 onChange={(e) => setFormData({ ...formData, has_lunch: e.target.checked })}
                             />
-                            Intervalo de almoço (1h)
+                            Intervalo (1h)
                         </label>
                         {duracaoTurno && (
                             <p className="text-xs text-gray-600">
@@ -937,7 +941,7 @@ export default function CompanyCreateJob() {
 
                                 <Field
                                     label="Briefing do turno (opcional)"
-                                    hint="Regras da casa, cardápio, dress code — o freela vê isso no convite."
+                                    hint="Regras da casa, cardápio e roupa. O freela vê isso no convite."
                                 >
                                     <textarea
                                         id="briefing"
@@ -953,7 +957,7 @@ export default function CompanyCreateJob() {
                                     nunca filtra nem desabilita a selecao de ninguem. */}
                                 <Field
                                     label="Certificação exigida (opcional)"
-                                    hint="Ex.: CREF válido, curso de manipulação de alimentos. É só um aviso — não filtra nem bloqueia freelas."
+                                    hint="Ex.: CREF válido, curso de manipulação de alimentos. É só um aviso: não filtra nem bloqueia freelas."
                                 >
                                     <input
                                         id="certification-requirement"
@@ -970,24 +974,32 @@ export default function CompanyCreateJob() {
                     )}
                 </section>
 
-                {/* CTA unico. Diz o que falta, em vez de so desabilitar o botao. */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-gray-600" role="status">
-                        {!podeEnviar ? `Falta preencher: ${faltas.join(', ')}.` : ''}
-                    </p>
-                    <Button
-                        variant="dark"
-                        size="lg"
-                        type="submit"
-                        loading={loading}
-                        disabled={erroCarga?.modo === 'editar'}
-                        title={podeEnviar ? undefined : 'Falta preencher: ' + faltas.join(', ')}
-                        iconRight={!loading ? <Check size={18} /> : undefined}
-                        className="w-full sm:w-auto"
-                    >
-                        {loading ? 'Salvando...' : rotuloEnviar}
-                    </Button>
-                </div>
+                {/* CTA unico, sempre à mão acima da barra inferior. Enviar incompleto marca os campos e
+                    leva ao primeiro (handleFormSubmit). */}
+                <ActionBar
+                    summary={
+                        <p role="status">
+                            {!podeEnviar
+                                ? `Falta preencher: ${faltas.slice(0, 3).join(', ')}${faltas.length > 3 ? ` e mais ${faltas.length - 3}` : ''}.`
+                                : [duracaoTrabalho, formData.budget ? formatBRL(Number(formData.budget)) : null].filter(Boolean).join(' · ')}
+                        </p>
+                    }
+                    secondary={isEditing ? <Button variant="secondary" onClick={() => navigate(-1)}>Voltar</Button> : undefined}
+                    primary={
+                        <Button
+                            variant="dark"
+                            size="lg"
+                            type="submit"
+                            data-copilot="empresa.turno-criar.enviar"
+                            loading={loading}
+                            disabled={erroCarga?.modo === 'editar'}
+                            iconRight={!loading ? <Check size={18} /> : undefined}
+                            className="whitespace-nowrap"
+                        >
+                            {rotuloEnviar}
+                        </Button>
+                    }
+                />
             </form>
 
             {/* Resumo pós-criação de série (R9) — NÃO abre o painel de convite (que assume 1
@@ -1034,7 +1046,7 @@ export default function CompanyCreateJob() {
                         </div>
 
                         <p className="mb-5 text-sm text-gray-600">
-                            Turno criado! Para confirmar, convide pelo menos um freela do seu elenco — sem convite,
+                            Turno criado! Para confirmar, convide pelo menos um freela do seu elenco. Sem convite,
                             o turno fica parado esperando.
                         </p>
 
@@ -1044,11 +1056,25 @@ export default function CompanyCreateJob() {
                             </div>
                         )}
 
-                        {!teamLoading && teamMembers.length === 0 && (
+                        {!teamLoading && (teamError || invitesError) && (
+                            <Alert
+                                tone="warning"
+                                role="alert"
+                                action={
+                                    <Button variant="secondary" onClick={() => { refreshTeam(); refreshInvites(); }}>
+                                        Tentar de novo
+                                    </Button>
+                                }
+                            >
+                                {teamError ? 'Não conseguimos carregar o seu elenco.' : 'Não conseguimos conferir quem já foi convidado.'}
+                            </Alert>
+                        )}
+
+                        {!teamLoading && !teamError && teamMembers.length === 0 && (
                             <div className="rounded-2xl border-2 border-dashed border-gray-300 py-8 text-center text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-40" />
                                 <p className="text-sm font-bold">Seu elenco está vazio.</p>
-                                <p className="mt-1 text-xs">Adicione freelas em <strong>Meu Elenco</strong> antes de criar turnos.</p>
+                                <p className="mt-1 text-xs">O turno já foi criado. Adicione freelas em <strong>Meu Elenco</strong> para poder chamar.</p>
                                 <Button variant="dark" onClick={() => navigate('/company/team')} className="mt-4">
                                     Ir para Meu Elenco
                                 </Button>
@@ -1068,7 +1094,7 @@ export default function CompanyCreateJob() {
                                 iconLeft={<Megaphone size={18} />}
                                 className="mb-4"
                             >
-                                Chamar vários de uma vez — 1º que aceitar fica
+                                Chamar vários: o 1º que aceitar fica
                             </Button>
                             <p className="mb-3 text-center text-xs text-gray-600">ou convide um a um</p>
 
@@ -1121,7 +1147,7 @@ export default function CompanyCreateJob() {
                                     onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
                                     className="mt-5"
                                 >
-                                    Concluir — {invitedWorkerIds.length} convite{invitedWorkerIds.length > 1 ? 's' : ''} enviado{invitedWorkerIds.length > 1 ? 's' : ''}
+                                    Concluir: {invitedWorkerIds.length} convite{invitedWorkerIds.length > 1 ? 's' : ''} enviado{invitedWorkerIds.length > 1 ? 's' : ''}
                                 </Button>
                             ) : (
                                 <p className="mt-5 text-center text-xs text-gray-600">

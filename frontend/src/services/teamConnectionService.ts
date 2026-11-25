@@ -567,7 +567,7 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listTeamMembers', error);
-        return [];
+        throw error;
       }
 
       // Encarregado: o embed volta `null` (RLS de PII). Os cartões sem PII preenchem; quem não
@@ -594,7 +594,7 @@ export const TeamConnectionService = {
       );
     } catch (err) {
       logError('teamConnection.listTeamMembers', err);
-      return [];
+      throw err;
     }
   },
 
@@ -616,21 +616,18 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listAllConnections', error);
-        return [];
+        throw error;
       }
 
       const result = data as { outcome: string; items?: TeamConnection[] } | null;
       if (!result || result.outcome !== 'ok') {
-        if (result && result.outcome !== 'ok') {
-          logError('teamConnection.listAllConnections', new Error(`outcome=${result.outcome}`));
-        }
-        return [];
+        throw new Error(`outcome=${result?.outcome ?? 'sem_resposta'}`);
       }
 
       return result.items ?? [];
     } catch (err) {
       logError('teamConnection.listAllConnections', err);
-      return [];
+      throw err;
     }
   },
 

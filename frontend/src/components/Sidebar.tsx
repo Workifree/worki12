@@ -117,7 +117,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // Acabamento refinado (11/2026): moldura brutalista (borda 2px + sombra offset) mantida,
     // mas estática (sem "pulo" no hover do menu inteiro) e com tipografia contida.
     const activeNavClass = isCompany
-        ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]'
+        ? 'bg-black text-white border-black shadow-brutal-sm'
         : 'bg-primary text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
 
     return (

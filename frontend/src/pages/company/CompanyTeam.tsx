@@ -16,7 +16,7 @@ import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
 import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
-import { Button, Card, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
 import { Dialog } from '../../components/ui/Dialog';
 
@@ -29,7 +29,7 @@ import { Dialog } from '../../components/ui/Dialog';
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, erroSessao, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, erroCarga, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const { addToast } = useToast();
   // Encarregado: lê o Elenco e traz freelas (R7/R10b); remover, listas e histórico são do Gestor.
   // Falha ao saber o papel = modo restrito.
@@ -48,9 +48,13 @@ export default function CompanyTeam() {
   const [invitingMember, setInvitingMember] = useState<TeamMember | null>(null);
   const [historyByWorker, setHistoryByWorker] = useState<Record<string, WorkerHistoryWithCompany>>({});
 
+  const [historyError, setHistoryError] = useState(false);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+
   // F2: Listas salvas do elenco — CRUD organizacional, não toca team_connections/saldo.
   const [lists, setLists] = useState<TeamListWithMembers[]>([]);
   const [loadingLists, setLoadingLists] = useState(true);
+  const [listsError, setListsError] = useState(false);
   const [showListModal, setShowListModal] = useState(false);
   const [editingList, setEditingList] = useState<TeamListWithMembers | null>(null);
   const [deletingList, setDeletingList] = useState<TeamListWithMembers | null>(null);
@@ -58,8 +62,13 @@ export default function CompanyTeam() {
 
   const refreshLists = useCallback(async () => {
     setLoadingLists(true);
-    const data = await TeamListService.listLists();
-    setLists(data);
+    try {
+      setLists(await TeamListService.listLists());
+      setListsError(false);
+    } catch (error) {
+      logError('CompanyTeam.refreshLists', error);
+      setListsError(true);
+    }
     setLoadingLists(false);
   }, []);
 
@@ -110,9 +119,11 @@ export default function CompanyTeam() {
 
       if (error) {
         logError('CompanyTeam.fetchHistory', error);
+        if (active) setHistoryError(true);
         return;
       }
       if (!active) return;
+      setHistoryError(false);
 
       const map: Record<string, WorkerHistoryWithCompany> = {};
       interface CompletedRow {
@@ -130,7 +141,7 @@ export default function CompanyTeam() {
       setHistoryByWorker(map);
     })();
     return () => { active = false; };
-  }, [companyId, teamMembers, roleResolved, restricted]);
+  }, [companyId, teamMembers, roleResolved, restricted, historyAttempt]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -186,7 +197,7 @@ export default function CompanyTeam() {
     );
   }
 
-  if (erroSessao && teamMembers.length === 0) {
+  if (erroCarga && teamMembers.length === 0 && pendingConnections.length === 0) {
     return (
       <div className="max-w-4xl mx-auto pb-20">
         <ErroDeCarga onRetry={refresh} />
@@ -203,7 +214,7 @@ export default function CompanyTeam() {
           pendingConnections.length > 0 ? ` · ${pendingConnections.length} aguardando aceite` : ''
         }`}
         action={
-          <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>
+          <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />} data-copilot="empresa.elenco.adicionar-freela">
             Adicionar Freela
           </Button>
         }
@@ -221,6 +232,7 @@ export default function CompanyTeam() {
           variant="secondary"
           size="md"
           onClick={handleCopyTeamLink}
+          data-copilot="empresa.elenco.copiar-link"
           disabled={!companyId}
           iconLeft={linkCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
         >
@@ -238,12 +250,32 @@ export default function CompanyTeam() {
       </Card>
 
       {/* Elenco aceito */}
+      {erroCarga && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-4"
+          action={<Button variant="secondary" onClick={refresh}>Tentar de novo</Button>}
+        >
+          Não conseguimos atualizar o elenco. O que está abaixo pode estar desatualizado.
+        </Alert>
+      )}
+
       {teamMembers.length > 0 && (
         <section className="mb-8">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <Users size={20} aria-hidden="true" /> Elenco ativo
           </h2>
-          <div className="grid grid-cols-1 gap-4">
+          {historyError && !restricted && (
+            <Alert
+              tone="warning"
+              className="mb-3"
+              action={<Button variant="secondary" onClick={() => setHistoryAttempt((n) => n + 1)}>Tentar de novo</Button>}
+            >
+              Não foi possível carregar o histórico de turnos com você.
+            </Alert>
+          )}
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {teamMembers.map((member) => (
               <MemberCard
                 key={member.connection.id}
@@ -252,6 +284,7 @@ export default function CompanyTeam() {
                 onRemove={(m) => setRemovingMember(m)}
                 onInvite={(m) => setInvitingMember(m)}
                 history={historyByWorker[member.worker.id]}
+                historyUnavailable={historyError}
               />
             ))}
           </div>
@@ -259,7 +292,7 @@ export default function CompanyTeam() {
       )}
 
       {/* Listas do Elenco (F2) — atalhos por função pra chamar o grupo inteiro de uma vez */}
-      {(!restricted || lists.length > 0) && (
+      {(!restricted || lists.length > 0 || listsError) && (
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-bold flex items-center gap-2">
@@ -278,6 +311,17 @@ export default function CompanyTeam() {
               <div key={i} className="h-20 bg-gray-200 rounded-2xl" />
             ))}
           </div>
+        )}
+
+        {!loadingLists && listsError && (
+          <Alert
+            tone="warning"
+            role="alert"
+            className="mb-4"
+            action={<Button variant="secondary" onClick={() => void refreshLists()}>Tentar de novo</Button>}
+          >
+            Não conseguimos carregar as listas do elenco.
+          </Alert>
         )}
 
         {/* Grid diverge de propósito do "Elenco Ativo" (grid-cols-1 puro): card de lista é
@@ -322,7 +366,7 @@ export default function CompanyTeam() {
           </div>
         )}
 
-        {!loadingLists && lists.length === 0 && (
+        {!loadingLists && !listsError && lists.length === 0 && (
           <p className="text-sm text-gray-600">
             Nenhuma lista ainda. Crie atalhos por função (ex.: "Cozinha", "Salão") para chamar o time
             inteiro de uma vez ao abrir um turno.

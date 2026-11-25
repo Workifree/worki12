@@ -17,6 +17,8 @@ import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 import { getSessionUserOrThrow } from '../lib/authSession';
 import { formatBRL, formatWorkedTime } from '../lib/currency';
+import { openShiftConversation, type MessagesLocationState } from '../lib/shiftChat';
+import { useToast } from '../contexts/ToastContext';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -34,6 +36,31 @@ type AttendanceSource = 'worker' | 'company';
  * é documento de conferência: não pode omitir o horário, mas também não pode apresentar um dado
  * confirmado pela empresa como se fosse marcação do freela — por isso a origem é rastreada.
  */
+interface VoidedPayment {
+    amount: number | null;
+    voided_at: string | null;
+    void_reason: string | null;
+    company: { name: string | null } | null;
+}
+
+/** `null` de valor nunca vira "R$ 0,00". */
+function amountLabel(amount: number | null | undefined): string {
+    return typeof amount === 'number' && amount > 0 ? formatBRL(amount) : 'Valor não informado';
+}
+
+/** Registro estornado do turno (o recibo ativo não o enxerga). Lança quando a consulta falha. */
+async function fetchVoided(jobId: string, workerId: string | null): Promise<VoidedPayment | null> {
+    let query = supabase
+        .from('shift_payments')
+        .select('amount, voided_at, void_reason, company:companies(name)')
+        .eq('job_id', jobId)
+        .eq('status', 'voided');
+    if (workerId) query = query.eq('worker_id', workerId);
+    const { data, error } = await query.order('voided_at', { ascending: false }).limit(1);
+    if (error) throw error;
+    return (data?.[0] as unknown as VoidedPayment | undefined) ?? null;
+}
+
 interface ShiftAttendance {
     checkin: string | null;
     checkinSource: AttendanceSource | null;
@@ -58,6 +85,10 @@ export default function ReceiptView() {
     // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
     const [attendance, setAttendance] = useState<ShiftAttendance | null>(null);
 
+    const [voided, setVoided] = useState<VoidedPayment | null>(null);
+    const [disputing, setDisputing] = useState(false);
+    const { addToast } = useToast();
+
     useEffect(() => {
         if (jobId) fetchReceipt();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId/worker mudam
@@ -81,6 +112,7 @@ export default function ReceiptView() {
                 );
                 data = { ...data, worker: filled.worker };
             }
+            setVoided(data ? null : await fetchVoided(jobId, workerIdParam));
             setReceipt(data);
 
             // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte
@@ -139,6 +171,33 @@ export default function ReceiptView() {
         );
     }
 
+    if (!receipt && voided) {
+        return (
+            <div className="max-w-2xl mx-auto p-4 md:p-8">
+                <PageMeta title="Registro estornado" />
+                <Button variant="ghost" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />} className="mb-6">
+                    Voltar
+                </Button>
+                <Card padding="lg" className="[overflow-wrap:anywhere]">
+                    <AlertTriangle size={40} aria-hidden="true" className="mx-auto mb-4 text-yellow-700" />
+                    <h1 className="text-lg font-bold mb-2 text-center">Este recibo foi estornado</h1>
+                    <p className="text-sm text-gray-700 text-center">
+                        {voided.company?.name || 'A empresa'} cancelou o registro de {amountLabel(voided.amount)}
+                        {voided.voided_at ? ` em ${format(new Date(voided.voided_at), 'dd/MM/yyyy', { locale: ptBR })}` : ''}.
+                        {' '}Se você não concorda, fale com a empresa.
+                    </p>
+                    {voided.void_reason && (
+                        <p className="mt-3 text-sm text-gray-700 text-center">Motivo informado: {voided.void_reason}</p>
+                    )}
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                        <Button variant="secondary" onClick={() => navigate('/messages')}>Falar com a empresa</Button>
+                        <Button onClick={() => navigate('/recebimentos')}>Ver recebimentos</Button>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
     if (!receipt) {
         return (
             <div className="max-w-2xl mx-auto p-4 md:p-8">
@@ -163,8 +222,58 @@ export default function ReceiptView() {
     const shortId = payment.id.slice(0, 8).toUpperCase();
     const isScheduled = payment.status === 'scheduled';
 
+    const amountMissing = !(typeof payment.amount === 'number' && payment.amount > 0);
+    const needsConfirmation = !isScheduled && isWorkerViewer && !payment.worker_confirmed_at;
+
+    // Abre a conversa do turno com o texto pronto no campo. Quem envia é a pessoa.
+    const handleDispute = async () => {
+        setDisputing(true);
+        try {
+            let applicationId = payment.application_id;
+            if (!applicationId) {
+                const { data, error } = await supabase
+                    .from('applications')
+                    .select('id')
+                    .eq('job_id', payment.job_id)
+                    .eq('worker_id', payment.worker_id)
+                    .maybeSingle();
+                if (error) throw error;
+                applicationId = data?.id ?? null;
+            }
+            if (!applicationId) {
+                addToast('Não achamos a conversa deste turno. Procure a empresa em Mensagens.', 'error');
+                return;
+            }
+            const conversationId = await openShiftConversation(applicationId);
+            const when = job?.start_date ? ` de ${formatDateOnly(job.start_date, 'dd/MM')}` : '';
+            const state: MessagesLocationState = {
+                draft: `Olá! Sobre o turno "${job?.title || 'Turno'}"${when}: o recibo ${shortId} registra ${amountLabel(payment.amount)}. Não recebi ou o valor está errado. `,
+            };
+            navigate(`/messages?conversation=${conversationId}`, { state });
+        } catch (error) {
+            logError('ReceiptView: handleDispute', error);
+            addToast('Não foi possível abrir a conversa. Tente novamente.', 'error');
+        } finally {
+            setDisputing(false);
+        }
+    };
+
+    // Uma única instância: no topo quando o freela precisa agir, no corpo do recibo nos demais casos.
+    const termSection = !isScheduled && (
+        <ServiceTermSection
+            shiftPaymentId={payment.id}
+            isWorkerViewer={isWorkerViewer}
+            isCompanyViewer={isCompanyViewer}
+            workerConfirmedAt={payment.worker_confirmed_at ?? null}
+            onConfirmed={fetchReceipt}
+            amountMissing={amountMissing}
+            onDispute={isWorkerViewer ? () => void handleDispute() : undefined}
+            disputing={disputing}
+        />
+    );
+
     return (
-        <div className="max-w-2xl mx-auto p-4 md:p-8 pb-20">
+        <div className="max-w-2xl mx-auto p-4 md:p-8 pb-20 [overflow-wrap:anywhere]">
             <PageMeta title={isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'} />
 
             {/* Barra de ações — não imprime */}
@@ -181,6 +290,21 @@ export default function ReceiptView() {
                     Imprimir
                 </Button>
             </div>
+
+            {needsConfirmation && (
+                <Card as="section" tone="highlight" padding="md" aria-label="Confirmar recebimento" className="mb-6 print:border-0 print:p-0 print:shadow-none">
+                    <h2 className="text-lg font-bold print:hidden">
+                        {amountMissing
+                            ? 'Pagamento sem valor informado'
+                            : `Você recebeu ${amountLabel(payment.amount)} de ${company?.name || 'uma empresa'}?`}
+                    </h2>
+                    <p className="mt-1 mb-4 text-sm text-gray-700 print:hidden">
+                        A empresa registrou um pagamento por fora do app. Se recebeu, confirme aqui.
+                        Quando há termo do turno, o aceite é feito no mesmo passo.
+                    </p>
+                    {termSection}
+                </Card>
+            )}
 
             {/* Recibo */}
             <Card
@@ -285,7 +409,7 @@ export default function ReceiptView() {
                         <span className="block text-xs font-semibold text-gray-600 mb-1">
                             {isScheduled ? 'Valor previsto' : 'Valor pago'}
                         </span>
-                        <p className="font-bold text-2xl tabular-nums">{formatBRL(payment.amount)}</p>
+                        <p className="font-bold text-2xl tabular-nums">{amountLabel(payment.amount)}</p>
                     </div>
                     <div className="bg-gray-50 rounded-xl p-4">
                         <span className="block text-xs font-semibold text-gray-600 mb-1">Forma</span>
@@ -321,15 +445,7 @@ export default function ReceiptView() {
                     ('recorded'); o trigger de geração não dispara em 'scheduled' (A8), e a
                     confirmação de recebimento também não faz sentido para uma promessa ainda
                     não paga. */}
-                {!isScheduled && (
-                    <ServiceTermSection
-                        shiftPaymentId={payment.id}
-                        isWorkerViewer={isWorkerViewer}
-                        isCompanyViewer={isCompanyViewer}
-                        workerConfirmedAt={payment.worker_confirmed_at ?? null}
-                        onConfirmed={fetchReceipt}
-                    />
-                )}
+                {!needsConfirmation && termSection}
 
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 border-t-2 border-black pt-4">
                     <span>Registro Nº {shortId}</span>

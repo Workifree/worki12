@@ -83,6 +83,12 @@ function renderPage() {
   );
 }
 
+/** "Passar para..." e "Cancelar turno" moram no menu "..." do cartão. */
+async function chooseFromMenu(name: string, jobTitle = 'Garçom de salão') {
+  fireEvent.click(screen.getByRole('button', { name: `Mais opções de ${jobTitle}` }));
+  fireEvent.click(await screen.findByRole('menuitem', { name }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockToday = '2026-11-23';
@@ -147,7 +153,8 @@ describe('CompanyToday — Gestor', () => {
     renderPage();
     await screen.findByText('Garçom de salão');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Passar para...' }));
+    await screen.findByRole('button', { name: 'Mais opções de Garçom de salão' });
+    await chooseFromMenu('Passar para...');
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Beto' }));
     expect(within(dialog).getByText(/será notificada/)).toBeInTheDocument();
@@ -165,7 +172,8 @@ describe('CompanyToday — Gestor', () => {
   it('Gestor pode passar "para mim"', async () => {
     renderPage();
     await screen.findByText('Garçom de salão');
-    fireEvent.click(screen.getByRole('button', { name: 'Passar para...' }));
+    await screen.findByRole('button', { name: 'Mais opções de Garçom de salão' });
+    await chooseFromMenu('Passar para...');
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'Ana' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Para mim' })).toBeInTheDocument();
@@ -181,7 +189,8 @@ describe('CompanyToday — Gestor', () => {
     });
     renderPage();
     await screen.findByText('Garçom de salão');
-    fireEvent.click(screen.getByRole('button', { name: 'Passar para...' }));
+    await screen.findByRole('button', { name: 'Mais opções de Garçom de salão' });
+    await chooseFromMenu('Passar para...');
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'Ana (1)' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Ana (2)' })).toBeInTheDocument();
@@ -223,8 +232,9 @@ describe('CompanyToday — Gestor', () => {
     vi.mocked(ops.isCancelJobAvailable).mockResolvedValue(false);
     renderPage();
     await screen.findByText('Garçom de salão');
-    await screen.findByRole('button', { name: 'Passar para...' });
-    expect(screen.queryByRole('button', { name: 'Cancelar turno' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais opções de Garçom de salão' }));
+    expect(await screen.findByRole('menuitem', { name: 'Passar para...' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Cancelar turno' })).not.toBeInTheDocument();
   });
 
   it('cancelar turno recusado por pagamento ativo mostra o motivo e não fecha a lista', async () => {
@@ -232,9 +242,10 @@ describe('CompanyToday — Gestor', () => {
     renderPage();
     await screen.findByText('Garçom de salão');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar turno' }));
+    await screen.findByRole('button', { name: /Cobrir alguém/ });
+    await chooseFromMenu('Cancelar turno');
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar o turno' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar turno' }));
 
     expect(await within(dialog).findByText(/pagamento agendado ou registrado/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Nada foi alterado/)).toBeInTheDocument();
@@ -246,9 +257,10 @@ describe('CompanyToday — Gestor', () => {
     renderPage();
     await screen.findByText('Garçom de salão');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar turno' }));
+    await screen.findByRole('button', { name: /Cobrir alguém/ });
+    await chooseFromMenu('Cancelar turno');
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar o turno' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar turno' }));
 
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('Turno cancelado. 1 pessoa foi avisada.', 'success'));
     await waitFor(() => expect(ops.listJobsByResponsible).toHaveBeenCalledTimes(2));
@@ -304,7 +316,12 @@ describe('CompanyToday — encarregado', () => {
   it('cancela os próprios e os cobertos, sem filtro de pessoa', async () => {
     renderPage();
     await screen.findByText('Turno meu');
-    expect(await screen.findAllByRole('button', { name: 'Cancelar turno' })).toHaveLength(2);
+    for (const title of ['Turno meu', 'Turno coberto']) {
+      const trigger = await screen.findByRole('button', { name: `Mais opções de ${title}` });
+      fireEvent.click(trigger);
+      expect(await screen.findByRole('menuitem', { name: 'Cancelar turno' })).toBeInTheDocument();
+      fireEvent.click(trigger);
+    }
     expect(screen.queryByRole('button', { name: 'Todos' })).toBeInTheDocument(); // há etiqueta: filtro de etiqueta
     expect(screen.queryByRole('button', { name: 'Ana' })).not.toBeInTheDocument();
   });
@@ -312,7 +329,11 @@ describe('CompanyToday — encarregado', () => {
   it('vê "Passar para..." só nos próprios turnos e "Cobrir meus turnos", com a lista de operadores (sem listar a equipe)', async () => {
     renderPage();
     await screen.findByText('Turno meu');
-    expect(screen.getAllByRole('button', { name: 'Passar para...' })).toHaveLength(1);
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais opções de Turno meu' }));
+    expect(await screen.findByRole('menuitem', { name: 'Passar para...' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções de Turno meu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções de Turno coberto' }));
+    expect(screen.queryByRole('menuitem', { name: 'Passar para...' })).not.toBeInTheDocument();
     expect(ops.listCompanyOperators).toHaveBeenCalledWith('c1');
     expect(listMembers).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Cobrir meus turnos' }));
@@ -324,7 +345,7 @@ describe('CompanyToday — encarregado', () => {
   it('abrir o turno leva aos candidatos', async () => {
     renderPage();
     await screen.findByText('Turno meu');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Abrir turno' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver turno' })[0]);
     expect(await screen.findByTestId('candidatos')).toBeInTheDocument();
   });
 });

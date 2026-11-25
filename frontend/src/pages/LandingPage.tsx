@@ -113,10 +113,10 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button variant="dark" size="lg" onClick={() => navigate('/login?type=hire&cadastro=1')}>
-              Cadastrar como Empresa
+              Criar conta de empresa
             </Button>
             <Button variant="secondary" size="lg" onClick={() => navigate('/login?type=work&cadastro=1')}>
-              Cadastrar como Profissional
+              Criar conta de freela
             </Button>
           </div>
         </div>

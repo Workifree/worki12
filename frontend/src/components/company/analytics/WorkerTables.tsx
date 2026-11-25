@@ -15,9 +15,9 @@ import { formatPercent } from './format';
 
 function Panel({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4">
+    <div className="bg-white border-2 border-black rounded-2xl p-5 flex flex-col gap-4">
       <div>
-        <p className="text-xs font-black uppercase text-gray-500">{title}</p>
+        <h2 className="text-base font-bold">{title}</h2>
         {note && <p className="text-xs text-gray-600 font-bold mt-0.5">{note}</p>}
       </div>
       {children}
@@ -34,11 +34,11 @@ export function WorkerAcceptancePanel({ block }: { block: WorkerAcceptanceBlock 
             <table className="w-full text-sm min-w-[520px]">
               <thead>
                 <tr className="border-b-2 border-black text-left">
-                  <th className="py-2 pr-3 font-black uppercase text-xs">Freela</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Recebidos</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Aceitos</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Recusados</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">% Aceite</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600">Freela</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Recebidos</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Aceitos</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Recusados</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">% Aceite</th>
                 </tr>
               </thead>
               <tbody>
@@ -48,7 +48,7 @@ export function WorkerAcceptancePanel({ block }: { block: WorkerAcceptanceBlock 
                     <td className="py-2 pr-3 text-right tabular-nums">{row.received}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{row.accepted}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{row.declined}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums font-black">
+                    <td className="py-2 pr-3 text-right tabular-nums font-bold">
                       {row.acceptanceRate === null ? '—' : formatPercent(row.acceptanceRate)}
                     </td>
                   </tr>
@@ -74,12 +74,12 @@ export function WorkerAttendancePanel({ block }: { block: WorkerAttendanceBlock 
             <table className="w-full text-sm min-w-[620px]">
               <thead>
                 <tr className="border-b-2 border-black text-left">
-                  <th className="py-2 pr-3 font-black uppercase text-xs">Freela</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">No-show</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Cancelamentos</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Pontual</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Atrasos</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">% Pontualidade</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600">Freela</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">No-show</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Cancelamentos</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Pontual</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Atrasos</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">% Pontualidade</th>
                 </tr>
               </thead>
               <tbody>
@@ -97,7 +97,7 @@ export function WorkerAttendancePanel({ block }: { block: WorkerAttendanceBlock 
                     <td className="py-2 pr-3 text-right tabular-nums">{row.cancelledCount}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{row.punctualCount}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{row.lateCount}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums font-black">
+                    <td className="py-2 pr-3 text-right tabular-nums font-bold">
                       {row.punctualityRate === null ? '—' : formatPercent(row.punctualityRate)}
                     </td>
                   </tr>
@@ -115,7 +115,7 @@ export function WorkerPerformancePanel({ block }: { block: WorkerPerformanceBloc
   return (
     <Panel
       title="Desempenho por freela"
-      note="Métricas lado a lado — não combinadas em score. Ordem alfabética, não é ranking."
+      note="Avaliação geral considera todas as empresas. Ordem alfabética, não é ranking."
     >
       <MetricStateWrapper block={block} emptyMessage="Nenhum turno concluído com freelas neste período.">
         {(data) => (
@@ -123,11 +123,11 @@ export function WorkerPerformancePanel({ block }: { block: WorkerPerformanceBloc
             <table className="w-full text-sm min-w-[480px]">
               <thead>
                 <tr className="border-b-2 border-black text-left">
-                  <th className="py-2 pr-3 font-black uppercase text-xs">Freela</th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">
-                    Avaliação (global — todas as empresas)
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600">Freela</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">
+                    Avaliação geral
                   </th>
-                  <th className="py-2 pr-3 font-black uppercase text-xs text-right">Concluídos com você</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-gray-600 text-right">Concluídos com você</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,7 +137,7 @@ export function WorkerPerformancePanel({ block }: { block: WorkerPerformanceBloc
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {row.ratingAverage === null ? '—' : row.ratingAverage.toFixed(1)}
                     </td>
-                    <td className="py-2 pr-3 text-right tabular-nums font-black">{row.completedWithCompanyCount}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums font-bold">{row.completedWithCompanyCount}</td>
                   </tr>
                 ))}
               </tbody>

@@ -9,7 +9,7 @@ import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { ReferralService } from '../../services/referralService';
 import type { WorkerReferral, WorkerReferralCard } from '../../types';
 import CreateReferralModal from '../../components/company/CreateReferralModal';
-import { Button, Card, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, EmptyState, ErrorState, IconButton, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
 import { roleLabel } from '../../lib/statusLabels';
 
@@ -109,7 +109,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
 export default function CompanyReferrals() {
   const navigate = useNavigate();
   const { addToast } = useToast();
-  const { teamMembers, companyId } = useCompanyTeam();
+  const { teamMembers, companyId, erroCarga: erroElenco, refresh: recarregarElenco } = useCompanyTeam();
 
   const [tab, setTab] = useState<Tab>('received');
   const [received, setReceived] = useState<WorkerReferralCard[]>([]);
@@ -117,30 +117,42 @@ export default function CompanyReferrals() {
   const [sent, setSent] = useState<SentReferralRow[]>([]);
   const [loadingSent, setLoadingSent] = useState(true);
   const [erroSent, setErroSent] = useState(false);
+  const [erroReceived, setErroReceived] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const loadReceived = useCallback(async () => {
     setLoadingReceived(true);
+    setErroReceived(false);
     const result = await ReferralService.listReceivedCards();
     if (result.outcome === 'unauthenticated') {
       if ((await checkSession()).status === 'signed_out') {
         navigate('/login');
         return;
       }
-      addToast('Não foi possível carregar as indicações. Verifique sua conexão e recarregue.', 'error');
+      setErroReceived(true);
       setLoadingReceived(false);
       return;
     }
+    // Qualquer resultado diferente de "ok" é falha: lista vazia aqui não é "nenhuma indicação".
+    if (result.outcome !== 'ok') setErroReceived(true);
     setReceived(result.items);
     setLoadingReceived(false);
-  }, [navigate, addToast]);
+  }, [navigate]);
 
   const loadSent = useCallback(async () => {
     if (!companyId) return;
     setLoadingSent(true);
     setErroSent(false);
-    const rows = await ReferralService.listMyReferrals(companyId);
+    let rows: Awaited<ReturnType<typeof ReferralService.listMyReferrals>>;
+    try {
+      rows = await ReferralService.listMyReferrals(companyId);
+    } catch (error) {
+      logError('CompanyReferrals.loadSent', error);
+      setErroSent(true);
+      setLoadingSent(false);
+      return;
+    }
 
     const companyIds = Array.from(new Set(rows.map((r) => r.requesting_company_id)));
     let names: Record<string, string> = {};
@@ -192,11 +204,22 @@ export default function CompanyReferrals() {
         title="Indicações"
         subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."
         action={
-          <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)}>
+          <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)} data-copilot="empresa.indicacoes.indicar">
             Indicar Freela
           </Button>
         }
       />
+
+      {erroElenco && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-4"
+          action={<Button variant="secondary" onClick={recarregarElenco}>Tentar de novo</Button>}
+        >
+          Não conseguimos carregar o seu elenco.
+        </Alert>
+      )}
 
       <div className="flex gap-6 mb-6 border-b-2 border-black">
         {([
@@ -226,10 +249,14 @@ export default function CompanyReferrals() {
               ))}
             </div>
           )}
-          {!loadingReceived && received.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
-              <p className="text-sm font-semibold text-gray-600">Nenhuma indicação recebida ainda.</p>
-            </div>
+          {!loadingReceived && erroReceived && (
+            <ErrorState title="Não foi possível carregar as indicações." onRetry={() => void loadReceived()} />
+          )}
+          {!loadingReceived && !erroReceived && received.length === 0 && (
+            <EmptyState
+              title="Nenhuma indicação recebida ainda."
+              description="Quando outra empresa indicar um freela para você, ele aparece aqui."
+            />
           )}
           <div className="grid grid-cols-1 gap-4">
             {received.map((item) => (
@@ -249,12 +276,7 @@ export default function CompanyReferrals() {
             </div>
           )}
           {!loadingSent && erroSent && (
-            <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
-              <p className="text-sm font-semibold text-red-600 mb-3">Não foi possível carregar suas indicações.</p>
-              <Button variant="dark" onClick={() => void loadSent()}>
-                Tentar de novo
-              </Button>
-            </div>
+            <ErrorState title="Não foi possível carregar suas indicações." onRetry={() => void loadSent()} />
           )}
           {!loadingSent && !erroSent && sent.length === 0 && (
             <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
@@ -276,16 +298,14 @@ export default function CompanyReferrals() {
                 <div className="flex items-center gap-3">
                   <StatusBadge status={r.status} />
                   {r.status === 'awaiting_worker' && (
-                    <Button
+                    <IconButton
                       variant="secondary"
                       aria-label="Cancelar indicação"
                       onClick={() => void handleCancel(r.id)}
                       disabled={cancellingId === r.id}
-                      loading={cancellingId === r.id}
-                      className="w-11 !px-0"
                     >
-                      {cancellingId !== r.id && <X size={16} />}
-                    </Button>
+                      <X size={16} />
+                    </IconButton>
                   )}
                 </div>
               </Card>

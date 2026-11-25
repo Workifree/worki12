@@ -106,6 +106,8 @@ function setupMocks() {
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
     if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+    // Chamados abertos do turno: a leitura é obrigatória (falha vira erro de carga).
+    if (table === 'shift_calls') return { select: () => ({ in: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) }) } as unknown as ReturnType<typeof supabase.from>
     return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis() } as unknown as ReturnType<typeof supabase.from>
   })
 

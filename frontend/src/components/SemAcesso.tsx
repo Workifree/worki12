@@ -15,7 +15,7 @@ export default function SemAcesso({
             <PageMeta title="Sem acesso" noindex />
             <Card padding="lg" className="text-center">
                 <Lock size={36} className="mx-auto mb-3 text-gray-500" aria-hidden="true" />
-                <h1 className="mb-2 text-xl font-black">Você não tem acesso a esta tela</h1>
+                <h1 className="mb-2 text-xl font-bold">Você não tem acesso a esta tela</h1>
                 <p className="mb-5 text-sm text-gray-700">{mensagem}</p>
                 <Button variant="dark" size="lg" fullWidth onClick={() => navigate(voltarPara)}>{rotulo}</Button>
             </Card>

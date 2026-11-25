@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { BonusAdminAdapter } from './types';
 import { formatCents, formatDate, formatNumber } from './format';
 import { useLoad } from './useLoad';
+import { ErrorState } from '../../ui';
 
 interface Props {
     adapter: BonusAdminAdapter;
@@ -18,10 +19,10 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function TrackingPanel({ adapter }: Props) {
     const fetcher = useCallback(() => adapter.getTracking(), [adapter]);
-    const { data, loading, error } = useLoad(fetcher, 'bonus: acompanhamento');
+    const { data, loading, error, reload } = useLoad(fetcher, 'bonus: acompanhamento');
 
     if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div></div>;
-    if (error || !data) return <p role="alert" className="font-bold text-red-700">{error || 'Sem dados.'}</p>;
+    if (error || !data) return <ErrorState title={error || 'Sem dados.'} onRetry={() => void reload()} />;
 
     return (
         <section aria-labelledby="bonus-acomp" className="space-y-6">

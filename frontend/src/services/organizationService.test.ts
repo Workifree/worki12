@@ -103,15 +103,14 @@ describe('organizationService', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('devolve lista vazia (sem lançar) quando a query falha', async () => {
+    it('lança quando a query falha (falha não é "sem gerentes")', async () => {
       const mockOrder = vi.fn().mockResolvedValue({ data: null, error: { message: 'boom' } });
       const mockNeq = vi.fn(() => ({ order: mockOrder }));
       const mockEq = vi.fn(() => ({ neq: mockNeq }));
       const mockSelect = vi.fn(() => ({ eq: mockEq }));
       mockFrom.mockReturnValue({ select: mockSelect });
 
-      const result = await listCompanyManagers('comp-1');
-      expect(result).toEqual([]);
+      await expect(listCompanyManagers('comp-1')).rejects.toMatchObject({ message: 'boom' });
     });
   });
 });

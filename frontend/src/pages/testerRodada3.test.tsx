@@ -87,12 +87,12 @@ describe('M-2 — Mensagens da empresa: falha não é lista vazia', () => {
 
     const retry = await screen.findByRole('button', { name: /tentar de novo/i })
     expect(screen.queryByText('Nenhuma conversa ainda.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Freelas (0)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Conversas (0)')).not.toBeInTheDocument()
 
     falha = false
     fireEvent.click(retry)
     expect(await screen.findByText('Worker Teste')).toBeInTheDocument()
-    expect(screen.getByText('Freelas (1)')).toBeInTheDocument()
+    expect(screen.getByText('Conversas (1)')).toBeInTheDocument()
   })
 
   it('falha ao resolver a empresa também vira erro, sem carregamento eterno', async () => {

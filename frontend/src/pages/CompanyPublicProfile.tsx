@@ -191,7 +191,7 @@ export default function CompanyPublicProfile() {
                 </div>
 
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8">
-                    <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem]">
+                    <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem] [&+h1]:[overflow-wrap:anywhere]">
                         <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden">
                             {company.logo_url ? (
                                 <img src={company.logo_url} alt={company.name} className="w-full h-full object-cover" />
@@ -219,8 +219,12 @@ export default function CompanyPublicProfile() {
                         )}
                         <span className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-xl">
                             <Star size={16} className={hasRating ? 'fill-yellow-500' : ''} />
-                            {hasRating ? Number(company.rating_average).toFixed(1) : '—'}
-                            <span className="text-yellow-600 font-medium">({company.reviews_count ?? 0})</span>
+                            {hasRating ? (
+                                <>
+                                    <span>{Number(company.rating_average).toFixed(1)}</span>
+                                    <span className="font-medium">({company.reviews_count})</span>
+                                </>
+                            ) : 'Sem avaliações ainda'}
                         </span>
                         {websiteHref && (
                             <a

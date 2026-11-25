@@ -10,6 +10,10 @@
  * empresa, sem onboarding de CNPJ. Se o Gestor ainda não confirmou, o ProtectedRoute mostra a tela de
  * espera (R22).
  *
+ * CONSENTIMENTO: abrir o link nunca aceita. A retomada automática depois do código só existe quando
+ * a pessoa já tocou em "Aceitar e receber código" nesta mesma jornada (marca por token+e-mail, 1h,
+ * uso único; apagada em "Agora não" e na troca de e-mail).
+ *
  * O botão do e-mail volta para ESTA rota (`emailRedirectTo`): o token vai no caminho, então sobrevive
  * a uma aba nova; com a sessão aberta e os Termos já marcados antes do envio, o aceite se conclui.
  *
@@ -19,7 +23,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, Building2, CheckCircle2, Loader2, Mail, XCircle } from 'lucide-react';
+import { ArrowRight, Building2, Loader2, Mail, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
@@ -105,6 +109,14 @@ export default function AcceptTeamInvite() {
   const [formError, setFormError] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
   const [terminal, setTerminal] = useState<TerminalOutcome | null>(null);
+  // Segundos até poder pedir outro código.
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
 
   const loadPreview = useCallback(async () => {
     if (!token) {
@@ -176,8 +188,8 @@ export default function AcceptTeamInvite() {
     return () => { active = false; };
   }, [loadPreview, finish, token]);
 
-  const sendCode = async (e: FormEvent) => {
-    e.preventDefault();
+  const sendCode = async (e?: FormEvent) => {
+    e?.preventDefault();
     setFormError(undefined);
     const clean = email.trim().toLowerCase();
     if (!clean || !clean.includes('@')) {
@@ -213,6 +225,7 @@ export default function AcceptTeamInvite() {
       return;
     }
     rememberTeamInviteTos(token, clean);
+    setCooldown(60);
     setEmail(clean);
     setCode('');
     setStep('code');
@@ -248,7 +261,16 @@ export default function AcceptTeamInvite() {
     await finish();
   };
 
+  /** Desiste: apaga a marca do aceite pendente e o token guardado. Nada é gravado no banco. */
+  const agoraNao = () => {
+    const dono = email || sessionEmail;
+    if (token && dono) consumeTeamInviteTos(token, dono);
+    clearStoredToken();
+    navigate('/');
+  };
+
   const trocarDeEmail = async () => {
+    if (token && email) consumeTeamInviteTos(token, email);
     try {
       await supabase.auth.signOut();
     } catch (err) {
@@ -269,27 +291,27 @@ export default function AcceptTeamInvite() {
     <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
       <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Worki." noindex />
       <div className="w-full max-w-md">
-        <Card padding="lg" className="shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <Card padding="lg" className="shadow-brutal-lg [overflow-wrap:anywhere]">
           {children}
         </Card>
       </div>
     </div>
   );
 
-  const alerta = (tone: 'error' | 'ok', title: string, body: string) => (
+  const alerta = (tone: 'error' | 'neutral', title: string, body: string) => (
     <div className="text-center" role="alert">
       <div
         className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${
-          tone === 'ok' ? 'bg-blue-600' : 'bg-red-50'
+          tone === 'neutral' ? 'bg-blue-50' : 'bg-gray-100'
         }`}
       >
-        {tone === 'ok' ? (
-          <CheckCircle2 size={28} className="text-white" aria-hidden="true" />
+        {tone === 'neutral' ? (
+          <Building2 size={28} className="text-blue-600" aria-hidden="true" />
         ) : (
           <XCircle size={28} className="text-red-500" aria-hidden="true" />
         )}
       </div>
-      <h1 className="text-2xl font-black tracking-tight mb-2">{title}</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-2">{title}</h1>
       <p className="text-base text-gray-700 mb-6">{body}</p>
     </div>
   );
@@ -335,7 +357,7 @@ export default function AcceptTeamInvite() {
     const copy = OUTCOME_COPY[terminal];
     return frame(
       <>
-        {alerta('error', copy.title, copy.body)}
+        {alerta(terminal === 'use_manager_invite' ? 'neutral' : 'error', copy.title, copy.body)}
         {terminal === 'use_manager_invite' && token ? (
           <Button
             variant="dark"
@@ -376,7 +398,7 @@ export default function AcceptTeamInvite() {
       <div className="w-14 h-14 border-2 border-black rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
         <Building2 size={28} className="text-blue-600" aria-hidden="true" />
       </div>
-      <h1 className="text-2xl font-black tracking-tight">
+      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-balance">
         {company} te convidou como {roleLabel}
       </h1>
       <p className="text-sm text-gray-600 mt-2">
@@ -407,6 +429,18 @@ export default function AcceptTeamInvite() {
         .
       </label>
     </div>
+  );
+
+  const oQueAEmpresaVe = (
+    <p className="rounded-xl border-2 border-gray-200 p-3 text-sm text-gray-700">
+      Ao aceitar, você entra na equipe e a empresa passa a ver seu e-mail e o que você fizer em nome dela.
+    </p>
+  );
+
+  const naoAgora = (
+    <Button variant="secondary" size="lg" fullWidth onClick={agoraNao}>
+      Agora não
+    </Button>
   );
 
   const errorLine = formError ? (
@@ -450,9 +484,12 @@ export default function AcceptTeamInvite() {
           <p className="text-sm text-gray-800">
             Você está com a conta <strong>{sessionEmail}</strong>.
           </p>
+          {oQueAEmpresaVe}
           {termsBox}
           {errorLine}
+          {!acceptedTos && <p className="text-sm text-gray-600">Marque os Termos acima para aceitar.</p>}
           <Button
+            data-copilot="publico.convite-equipe.entrar"
             variant="dark"
             size="lg"
             fullWidth
@@ -462,6 +499,7 @@ export default function AcceptTeamInvite() {
           >
             Entrar na equipe
           </Button>
+          {naoAgora}
           <Button variant="ghost" size="lg" fullWidth onClick={() => void trocarDeEmail()}>
             Não sou eu — usar outro e-mail
           </Button>
@@ -476,7 +514,7 @@ export default function AcceptTeamInvite() {
         {header}
         <form onSubmit={(e) => void verifyCode(e)} className="space-y-4" noValidate>
           <p className="text-sm text-gray-800">
-            Enviamos um código para <strong>{email}</strong>. Digite abaixo.
+            Enviamos um código para <strong>{email}</strong>. Digite abaixo. Se não chegar, confira o spam.
           </p>
           <Field label="Código do e-mail" required>
             <input
@@ -486,21 +524,27 @@ export default function AcceptTeamInvite() {
               maxLength={10}
               value={code}
               onChange={(e) => { setCode(e.target.value.replace(/[^\d\s]/g, '')); setFormError(undefined); }}
-              className="text-center text-2xl font-black tracking-[0.3em] h-14"
+              className="text-center text-2xl font-bold tracking-[0.3em] h-14"
             />
           </Field>
           {errorLine}
-          <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconRight={<ArrowRight size={18} />}>
+          <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconRight={<ArrowRight size={18} />} data-copilot="publico.convite-equipe.confirmar-codigo">
             Entrar na equipe
           </Button>
+          <Button variant="secondary" size="lg" fullWidth disabled={cooldown > 0 || sending} onClick={() => void sendCode()}>
+            {cooldown > 0 ? `Pedir novo código em ${cooldown}s` : 'Pedir novo código'}
+          </Button>
           <Button
-            type="button"
             variant="ghost"
             size="lg"
             fullWidth
-            onClick={() => { setStep('form'); setFormError(undefined); }}
+            onClick={() => {
+              if (token) consumeTeamInviteTos(token, email);
+              setStep('form');
+              setFormError(undefined);
+            }}
           >
-            Trocar e-mail ou pedir novo código
+            Trocar e-mail
           </Button>
         </form>
       </>,
@@ -520,11 +564,13 @@ export default function AcceptTeamInvite() {
             onChange={(e) => { setEmail(e.target.value); setFormError(undefined); }}
           />
         </Field>
+        {oQueAEmpresaVe}
         {termsBox}
         {errorLine}
-        <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconLeft={<Mail size={18} />}>
-          Receber código por e-mail
+        <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconLeft={<Mail size={18} />} data-copilot="publico.convite-equipe.aceitar">
+          Aceitar e receber código
         </Button>
+        {naoAgora}
       </form>
     </>,
   );

@@ -14,6 +14,8 @@ export interface MenuItem {
   /** Destrutivo: vermelho, separado dos demais. Declare por último. */
   danger?: boolean
   disabled?: boolean
+  /** Âncoras estáveis (`data-copilot`, `data-copilot-risk`), repassadas ao botão do item. */
+  [dataAttr: `data-${string}`]: string | undefined
 }
 
 export interface MenuProps {
@@ -24,6 +26,12 @@ export interface MenuProps {
   items: Array<MenuItem | false | null | undefined>
   triggerVariant?: IconButtonVariant
   className?: string
+}
+
+function dataAttributes(item: MenuItem): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(item).filter(([key]) => key.startsWith('data-')),
+  ) as Record<string, string | undefined>
 }
 
 const ENABLED_ITEMS = '[role="menuitem"]:not(:disabled)'
@@ -167,6 +175,7 @@ export function Menu({ label, menuLabel, items, triggerVariant = 'ghost', classN
           {visible.map((item, index) => (
             <button
               key={item.label}
+              {...dataAttributes(item)}
               type="button"
               role="menuitem"
               tabIndex={-1}

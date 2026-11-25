@@ -7,7 +7,14 @@ import { Loader2 } from 'lucide-react';
 import TosGateModal from './TosGateModal';
 import AguardandoConfirmacao from './AguardandoConfirmacao';
 import AcessoEncerrado from './AcessoEncerrado';
-import { hasTeamMemberHint, readPendingTeamInviteToken } from '../lib/teamInviteToken';
+import {
+    clearTeamMemberHint,
+    hasOwnCompanyIntent,
+    hasTeamMemberHint,
+    markOwnCompanyIntent,
+    readPendingTeamInviteToken,
+} from '../lib/teamInviteToken';
+import { getMyAccessState } from '../services/accessStateService';
 import ErroDeVerificacao from './ErroDeVerificacao';
 import { checkStoredSession } from '../lib/authSession';
 import { isAuthLockAbort, reloadOnceForAuthLock } from '../lib/authLock';
@@ -30,6 +37,15 @@ function RoleRedirect({ to }: { to: string }) {
 }
 
 const VERIFICATION_TIMEOUT_MS = 20_000;
+
+/**
+ * Ex-membro sem nenhum vínculo e sem empresa própria, segundo o banco (vale em qualquer aparelho).
+ * `null` (não deu para saber) não decide nada: segue o comportamento sem essa leitura.
+ */
+async function accessWasEnded(): Promise<boolean> {
+    const state = await getMyAccessState();
+    return !!state && state.removed && !state.hasActive && !state.ownsCompany;
+}
 
 export default function ProtectedRoute() {
     const [loading, setLoading] = useState(true);
@@ -147,6 +163,10 @@ export default function ProtectedRoute() {
                     // pode "escapar" da tela de espera por esta rota (R22) — confere o papel antes.
                     try {
                         const atual = pickCurrentCompany(await getMyCompanies());
+                        const semEmpresaPronta = !atual || (atual.role === 'owner' && !atual.onboarding_completed);
+                        if (semEmpresaPronta && !hasOwnCompanyIntent(authUser.id) && await accessWasEnded()) {
+                            setAccessEnded(true);
+                        }
                         if (atual) {
                             setCompanyRole(atual.role);
                             setAwaitingConfirmation(isUnconfirmedEncarregado(atual));
@@ -167,14 +187,17 @@ export default function ProtectedRoute() {
                     const companies = await getMyCompanies();
                     const current = pickCurrentCompany(companies);
 
+                    const querEmpresaPropria = hasOwnCompanyIntent(authUser.id);
                     if (!current) {
                         const tokenPendente = readPendingTeamInviteToken();
-                        if (hasTeamMemberHint(authUser.id)) {
+                        if (!querEmpresaPropria && hasTeamMemberHint(authUser.id)) {
                             // Era da equipe e ficou sem empresa: acesso encerrado, não onboarding de CNPJ.
                             setAccessEnded(true);
                         } else if (tokenPendente) {
                             // Está no meio do convite de equipe: volta para terminá-lo.
                             setOnboardingRedirect(`/convite-equipe/${tokenPendente}`);
+                        } else if (!querEmpresaPropria && await accessWasEnded()) {
+                            setAccessEnded(true);
                         } else {
                             setOnboardingRedirect('/company/onboarding');
                         }
@@ -188,6 +211,11 @@ export default function ProtectedRoute() {
                             setOnboardingRedirect(null);
                             setTosAccepted(true);
                         } else {
+                            // Casca de empresa sem cadastro concluído não é "empresa própria".
+                            if (current.role === 'owner' && !current.onboarding_completed
+                                && !querEmpresaPropria && await accessWasEnded()) {
+                                setAccessEnded(true);
+                            }
                             setOnboardingRedirect(current.onboarding_completed ? null : '/company/onboarding');
                             setTosAccepted(current.accepted_tos === true);
                         }
@@ -248,7 +276,18 @@ export default function ProtectedRoute() {
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
     if (awaitingConfirmation) return <AguardandoConfirmacao />;
-    if (accessEnded) return <AcessoEncerrado />;
+    if (accessEnded) {
+        return (
+            <AcessoEncerrado
+                onCreateOwnCompany={() => {
+                    markOwnCompanyIntent(user.id);
+                    clearTeamMemberHint(user.id);
+                    // Carga nova: o gate reavalia tudo já com a escolha registrada.
+                    window.location.assign('/company/onboarding');
+                }}
+            />
+        );
+    }
 
     // Redirect to onboarding if not completed, but only if not already on the onboarding page
     if (onboardingRedirect && location.pathname !== onboardingRedirect) {

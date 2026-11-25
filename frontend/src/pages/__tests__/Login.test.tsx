@@ -203,7 +203,7 @@ describe('Login — destino de redirect', () => {
   )
 
   it('respeita o redirect interno do convite', async () => {
-    expect(await entrar('/login?redirect=%2Fconvite%2Fabc123')).toBe('/convite/abc123')
+    expect(await entrar('/login?cadastro=0&redirect=%2Fconvite%2Fabc123')).toBe('/convite/abc123')
   })
 
   async function cadastrar(entry: string) {
@@ -214,7 +214,9 @@ describe('Login — destino de redirect', () => {
       error: null,
     } as unknown as Awaited<ReturnType<typeof supabase.auth.signUp>>)
     renderLogin(entry)
-    await user.click(screen.getByText('Cadastre-se'))
+    // Link de convite já abre no cadastro; os demais precisam alternar.
+    const alternar = screen.queryByText('Cadastre-se')
+    if (alternar) await user.click(alternar)
     await user.type(screen.getByLabelText('Email'), 'novo@exemplo.com')
     await user.type(screen.getByLabelText('Senha'), 'senhaSegura123')
     await user.click(screen.getByRole('button', { name: /criar conta/i }))
@@ -237,5 +239,18 @@ describe('Login — destino de redirect', () => {
   it('link de contato de freela cria conta de empresa', async () => {
     const args = await cadastrar('/login?redirect=%2Fconvite%2Fw_abc')
     expect(args.options?.data).toEqual({ user_type: 'hire' })
+  })
+})
+
+describe('Login — contexto de convite', () => {
+  it('link de convite abre no cadastro certo, com a faixa de convite', () => {
+    renderLogin('/login?redirect=%2Fconvite%2Fabc123')
+    expect(screen.getByText('Você recebeu um convite')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Criar conta de freela' })).toBeInTheDocument()
+  })
+
+  it('convite de Gestor abre no cadastro de empresa', () => {
+    renderLogin('/login?type=hire&redirect=%2Fconvite-gerente%2Ftok')
+    expect(screen.getByRole('heading', { name: 'Criar conta de empresa' })).toBeInTheDocument()
   })
 })

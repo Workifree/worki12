@@ -30,7 +30,7 @@ export default [
   g('passar-turnos', 'empresa', '/company/hoje', 'PassJobsModal', { prep: comEquipe(), passos: [{ clicar: 'Passar para' }], espera: 'Roberto Dias' }),
   g('cobrir', 'empresa', '/company/hoje', 'CoverageModal', { prep: comEquipe((m) => { m.rpc.list_company_operators = [...m.rpc.list_company_operators, { user_id: id(76, 40), label: 'Sabrina Teixeira', role: 'encarregado' }]; }), passos: [{ clicar: /^Cobrir alguém|^Cobrir meus turnos/ }], espera: 'cobertura' }),
   g('cobertura-ativa', 'empresa', '/company/hoje', 'coberturas em andamento', { prep: comEquipe(comCobertura), espera: 'Coberturas em andamento' }),
-  g('cancelar-turno', 'empresa', '/company/hoje', 'CancelJobModal na Hoje', { prep: comEquipe(), passos: [{ clicar: /^Cancelar turno/ }], espera: 'Manter o turno' }),
+  g('cancelar-turno', 'empresa', '/company/hoje', 'CancelJobModal na Hoje', { prep: comEquipe(), passos: [{ clicar: /^Cancelar turno/ }], espera: 'Cancelar este turno' }),
   g('hoje-filtro-vazio', 'empresa', '/company/hoje', 'filtro sem resultado', { prep: comEquipe((m) => { m.rpc.list_jobs_by_responsible = (args) => ({ outcome: 'ok', truncated: false, items: [] }); }), espera: 'Nenhum turno|não tem turnos' }),
   g('hoje-erro', 'empresa', '/company/hoje', 'falha de carga', { prep: comEquipe((m) => { m.falhas['rpc:list_jobs_by_responsible'] = 'erro'; m.falhas['rest:jobs'] = 'erro'; }), erroEsperado: true, espera: 'Tentar de novo' }),
   g('etiquetas', 'empresa', '/company/profile', 'TagsPanel (empresa com equipe)', { prep: comEquipe(), passos: [{ clicar: /Etiquetas|Configurações|Segurança|Conta/ }], espera: 'Momentos Doces' }),

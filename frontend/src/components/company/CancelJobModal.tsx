@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { AlertTriangle, XCircle } from 'lucide-react';
-import ModalShell from '../ModalShell';
-import { Button, Field } from '../ui';
+import { Alert, Button, DialogActions, DialogHeader, Field } from '../ui';
+import { Dialog } from '../ui/Dialog';
 import {
   cancelJob,
   cancelJobMessage,
@@ -43,31 +42,26 @@ export default function CancelJobModal({ job, role = 'gestor', onClose, onCancel
   };
 
   return (
-    <ModalShell labelledBy="cancel-job-title" onClose={() => { if (!busy) onClose(); }} focusKey={refusal ? 'recusa' : 'confirmar'}>
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-red-50">
-          <XCircle size={20} aria-hidden="true" />
-        </div>
-        <div className="min-w-0">
-          <h2 id="cancel-job-title" className="text-xl font-black">Cancelar turno</h2>
-          <p className="mt-1 text-sm font-bold break-words">{job.title}{job.dateLabel ? ` · ${job.dateLabel}` : ''}</p>
-        </div>
-      </div>
+    <Dialog labelledBy="cancel-job-title" onClose={() => { if (!busy) onClose(); }} locked={busy} focusKey={refusal ? 'recusa' : 'confirmar'} initialFocus="panel">
+      <DialogHeader
+        titleId="cancel-job-title"
+        title="Cancelar este turno?"
+        subtitle={`${job.title}${job.dateLabel ? ` · ${job.dateLabel}` : ''}`}
+      />
 
       {refusal ? (
-        <div className="mt-4 space-y-4">
-          <div role="alert" className="flex items-start gap-3 rounded-xl border-2 border-black bg-yellow-50 p-4">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <p className="text-sm font-semibold">{cancelJobMessage(refusal, role)}</p>
-          </div>
+        <div className="space-y-3">
+          <Alert tone="warning" role="alert">{cancelJobMessage(refusal, role)}</Alert>
           {cancelJobWasRefused(refusal.outcome) && (
             <p className="text-xs text-gray-600">Nada foi alterado: o turno continua como estava.</p>
           )}
-          <Button variant="dark" size="lg" fullWidth data-autofocus onClick={onClose}>Entendi</Button>
+          <DialogActions>
+            <Button variant="dark" data-autofocus onClick={onClose}>Entendi</Button>
+          </DialogActions>
         </div>
       ) : (
-        <div className="mt-4 space-y-4">
-          <ul className="space-y-2 text-sm text-gray-800">
+        <div className="space-y-4">
+          <ul className="space-y-2 text-sm text-gray-700">
             <li>Quem está no turno, convidado ou contratado, é avisado do cancelamento.</li>
             <li>Chamados abertos para esse turno são encerrados.</li>
             <li>O Elenco não muda: ninguém é penalizado por causa do cancelamento.</li>
@@ -83,16 +77,16 @@ export default function CancelJobModal({ job, role = 'gestor', onClose, onCancel
               placeholder="Ex.: evento remarcado"
             />
           </Field>
-          <div className="flex flex-col gap-3">
-            <Button variant="danger" size="lg" fullWidth loading={busy} onClick={() => { void confirm(); }}>
-              Cancelar o turno
+          <DialogActions>
+            <Button variant="secondary" disabled={busy} onClick={onClose}>
+              Voltar
             </Button>
-            <Button variant="secondary" size="lg" fullWidth disabled={busy} onClick={onClose} data-autofocus>
-              Manter o turno
+            <Button variant="danger" data-copilot="empresa.turno.cancelar-confirmar" data-copilot-risk="D" loading={busy} onClick={() => { void confirm(); }}>
+              Cancelar turno
             </Button>
-          </div>
+          </DialogActions>
         </div>
       )}
-    </ModalShell>
+    </Dialog>
   );
 }

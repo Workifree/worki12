@@ -29,8 +29,8 @@ function DeltaBadge({ delta }: { delta: { current: number; previous: number | nu
 
 function CardShell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="bg-white border-2 border-black rounded-2xl p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2 min-h-[140px]">
-      <p className="text-xs font-black uppercase text-gray-500 tracking-tight">{label}</p>
+    <div className="bg-white border-2 border-black rounded-2xl p-5 flex flex-col gap-2 min-h-[140px]">
+      <p className="text-sm font-bold text-gray-700">{label}</p>
       {children}
     </div>
   );
@@ -45,7 +45,7 @@ export function SpendCard({ block }: { block: SpendSummaryBlock }) {
       >
         {(data) => (
           <div className="flex flex-col gap-1">
-            <p className="text-2xl font-black tabular-nums">{formatBRL(data.totalAmount)}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatBRL(data.totalAmount)}</p>
             <DeltaBadge delta={data.delta} />
             {data.conflictingRowsCount > 0 && (
               <p className="text-xs font-bold text-yellow-700">
@@ -66,9 +66,9 @@ export function HiresCard({ block }: { block: HiresSummaryBlock }) {
       <MetricStateWrapper block={block} emptyMessage="Nenhum turno programado para este período.">
         {(data) => (
           <div className="flex flex-col gap-1">
-            <p className="text-2xl font-black tabular-nums">{data.count}</p>
+            <p className="text-2xl font-bold tabular-nums">{data.count}</p>
             <DeltaBadge delta={data.delta} />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600">
               de {data.jobsCreatedCount} turno(s) no período
             </p>
           </div>
@@ -84,10 +84,16 @@ export function CostPerHourCard({ block }: { block: CostPerHourSummaryBlock }) {
       <MetricStateWrapper block={block} emptyMessage="Nenhum turno concluído neste período.">
         {(data) => (
           <div className="flex flex-col gap-1">
-            <p className="text-2xl font-black tabular-nums">
+            <p className="text-2xl font-bold tabular-nums">
               {data.costPerHour === null ? '—' : `${formatBRL(data.costPerHour)}/h`}
             </p>
-            <DeltaBadge delta={data.delta} />
+            {data.costPerHour === null ? (
+              <p className="text-xs text-gray-600">
+                Horas insuficientes para calcular. Registre a chegada e a saída dos turnos.
+              </p>
+            ) : (
+              <DeltaBadge delta={data.delta} />
+            )}
             {data.estimatedHoursShiftsCount > 0 && (
               <p className="text-xs font-bold text-yellow-700">
                 {data.estimatedHoursShiftsCount} de {data.shiftsCount} turno(s) usaram a hora ESTIMADA
@@ -119,11 +125,11 @@ export function HoursRatioCard({ block }: { block: HoursRatioSummaryBlock }) {
       <MetricStateWrapper block={block} emptyMessage="Nenhum turno concluído neste período.">
         {(data) => (
           <div className="flex flex-col gap-1">
-            <p className="text-2xl font-black tabular-nums">
+            <p className="text-2xl font-bold tabular-nums">
               {data.ratio === null ? '—' : formatPercent(data.ratio)}
             </p>
             <DeltaBadge delta={data.delta} />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600">
               {data.realizedHours > 0 || data.estimatedHours > 0
                 ? `${formatHours(data.realizedHours)} realizadas de ${formatHours(data.estimatedHours)} previstas`
                 : 'Sem horas registradas no período'}

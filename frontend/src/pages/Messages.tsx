@@ -2,7 +2,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { MessageSquare, Send, ArrowLeft, Briefcase, Check, CheckCheck } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import type { MessagesLocationState } from '../lib/shiftChat';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
@@ -44,6 +45,8 @@ export default function Messages() {
 
     const [loading, setLoading] = useState(true);
     const [erroCarga, setErroCarga] = useState(false);
+    // Falha ao contar não lidas não pode parecer "nenhuma mensagem nova".
+    const [erroNaoLidas, setErroNaoLidas] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -51,7 +54,9 @@ export default function Messages() {
     const [reloadMensagens, setReloadMensagens] = useState(0);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
     const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
-    const [newMessage, setNewMessage] = useState('');
+    // Texto pronto vindo de outra tela (ex.: "Não recebi" no recibo): só preenche, quem envia é a pessoa.
+    const draft = (useLocation().state as MessagesLocationState | null)?.draft ?? '';
+    const [newMessage, setNewMessage] = useState(draft);
     const [sending, setSending] = useState(false);
     // Trava do envio por ref: o campo NÃO é desabilitado (desabilitar fecha o teclado no celular).
     const sendingRef = useRef(false);
@@ -191,12 +196,17 @@ export default function Messages() {
             let unreadCounts: Record<string, number> = {};
 
             if (conversationIds.length > 0) {
-                const { data: unreadData } = await supabase
+                const { data: unreadData, error: unreadError } = await supabase
                     .from('Message')
                     .select('conversationid')
                     .in('conversationid', conversationIds)
                     .neq('senderid', user.id) // Messages sent by OTHERS
                     .is('read_at', null);     // That are NOT read
+
+                if (unreadError) {
+                    logError('Messages.unread', unreadError);
+                }
+                setErroNaoLidas(!!unreadError);
 
                 if (unreadData) {
                     unreadCounts = unreadData.reduce((acc: Record<string, number>, curr: { conversationid: string }) => {
@@ -357,6 +367,8 @@ export default function Messages() {
     };
 
     const handleSelectConversation = (conv: ConversationItem) => {
+        // O texto pronto fala de UM turno: não pode ir junto para outra conversa.
+        if (draft) setNewMessage((atual) => (atual === draft ? '' : atual));
         setSelectedConversation(conv);
         navigate(`/messages?conversation=${conv.id}`, { replace: true });
     };
@@ -397,6 +409,12 @@ export default function Messages() {
                     <div className="px-4 py-3 border-b-2 border-gray-100">
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h3>
                     </div>
+
+                    {erroNaoLidas && (
+                        <p role="status" className="px-4 py-2 text-xs text-status-warning-fg bg-status-warning-bg">
+                            Não foi possível verificar as mensagens não lidas.
+                        </p>
+                    )}
 
                     <div className="flex-1 overflow-y-auto">
                         {erroCarga ? (
@@ -592,6 +610,7 @@ export default function Messages() {
                                         disabled={!newMessage.trim()}
                                         loading={sending}
                                         aria-label="Enviar mensagem"
+                                        data-copilot="freela.mensagens.enviar"
                                         iconLeft={<Send size={18} />}
                                     >
                                         <span className="hidden sm:inline">Enviar</span>

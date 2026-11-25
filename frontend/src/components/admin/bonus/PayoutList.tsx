@@ -4,6 +4,7 @@ import type { BonusAdminAdapter } from './types';
 import { formatCents, formatDate, isPayable, payoutHoldMessage } from './format';
 import { downloadCsv, payoutsToCsv } from './csv';
 import { useLoad } from './useLoad';
+import { ErrorState } from '../../ui';
 
 interface Props {
     adapter: BonusAdminAdapter;
@@ -47,7 +48,7 @@ export default function PayoutList({ adapter }: Props) {
     };
 
     if (loading) return <div className="space-y-4"><div className="h-32 bg-gray-200 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div></div>;
-    if (error) return <p role="alert" className="font-bold text-red-700">{error}</p>;
+    if (error) return <ErrorState title={error} onRetry={() => void reload()} />;
 
     const items = data ?? [];
     const payableItems = items.filter(isPayable);

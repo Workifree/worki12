@@ -217,8 +217,9 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
       expect(screen.getByText('Confirma seu turno de amanhã?')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Garçom para Evento')).toBeInTheDocument()
-    expect(screen.getByText('Divino Fogão')).toBeInTheDocument()
+    // O mesmo turno também aparece na lista de agendados.
+    expect(screen.getAllByText('Garçom para Evento').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Divino Fogão').length).toBeGreaterThan(0)
     expect(screen.getByText('Sim, vou')).toBeInTheDocument()
     expect(screen.getByText('Não vou poder')).toBeInTheDocument()
   })
@@ -310,11 +311,13 @@ describe('MyJobs — recusas do banco no check-in', () => {
   it.each([
     [
       'applications_update_guard: ainda nao e possivel registrar a chegada neste turno.',
-      // 12/08 às 18:00 (São Paulo) menos 12h
-      'Só dá para registrar a chegada a partir de 12/08 às 06:00.',
+      // 12/08 às 18:00 (São Paulo) menos 2h
+      'Só dá para registrar a chegada a partir de 12/08 às 16:00.',
     ],
     ['applications_update_guard: este turno foi cancelado.', 'Este turno foi cancelado.'],
   ])('traduz "%s" sem mostrar o erro cru', async (raw, esperado) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-08-12T18:30:00-03:00'))
     const { mockAddToast } = setupMocks('2026-08-12T15:00:00+00:00')
     const row = {
       ...APPLICATION_ROW,
@@ -332,9 +335,9 @@ describe('MyJobs — recusas do banco no check-in', () => {
     mockGetMyPendingConfirmations.mockResolvedValue([])
     renderComponent()
 
-    fireEvent.click(await screen.findByRole('tab', { name: /Em Andamento/i }))
-    fireEvent.click(await screen.findByRole('button', { name: /^Check-in$/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar chegada' }))
 
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(esperado, 'error'))
+    vi.useRealTimers()
   })
 })

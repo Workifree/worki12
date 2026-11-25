@@ -12,7 +12,7 @@ import { TeamConnectionService } from '../../services/teamConnectionService';
 import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
-import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import { Button, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
 import BackToGestao from '../../components/company/BackToGestao';
 import { Dialog } from '../../components/ui/Dialog';
 
@@ -50,6 +50,8 @@ export default function CompanyProfile() {
     const { signOut } = useAuth();
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [companyId, setCompanyId] = useState<string | null>(null);
@@ -123,11 +125,14 @@ export default function CompanyProfile() {
                 }
                 setCompanyId(current.company_id);
 
-                const { data } = await supabase
+                const { data, error } = await supabase
                     .from('companies')
                     .select('*')
                     .eq('id', current.company_id)
                     .single();
+
+                if (error) throw error;
+                setLoadError(false);
 
                 if (data) {
                     setCompany(data);
@@ -135,14 +140,14 @@ export default function CompanyProfile() {
                 }
             } catch (error: unknown) {
                 logError('Error loading profile:', error);
-                addToast('Erro ao carregar perfil.', 'error');
+                setLoadError(true);
             } finally {
                 setLoading(false);
             }
         };
 
         getProfile();
-    }, [addToast]);
+    }, [addToast, loadAttempt]);
 
     const handleSave = async () => {
         if (!companyId) return;
@@ -381,6 +386,15 @@ export default function CompanyProfile() {
         );
     }
 
+    if (loadError) {
+        return (
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+                <BackToGestao />
+                <ErrorState onRetry={() => { setLoading(true); setLoadAttempt((n) => n + 1); }} />
+            </div>
+        );
+    }
+
     return (
         <>
         <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
@@ -391,7 +405,7 @@ export default function CompanyProfile() {
                 subtitle="Gerencie as informações públicas da sua organização."
                 action={
                     !isEditing ? (
-                        <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />}>
+                        <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />} data-copilot="empresa.dados.editar">
                             Editar Perfil
                         </Button>
                     ) : undefined

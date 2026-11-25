@@ -28,7 +28,7 @@ import PageMeta from '../../components/PageMeta';
 import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { Button, Card, ErrorState, Field, PageHeader } from '../../components/ui';
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
@@ -382,7 +382,7 @@ export default function CompanyTeamMembers() {
         title="Equipe e acessos"
         subtitle="Pessoas que operam a empresa com você. Seus freelas ficam em Meu Elenco."
         action={
-          <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>
+          <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />} data-copilot="empresa.equipe.convidar" data-copilot-risk="D">
             Convidar pessoa
           </Button>
         }
@@ -396,30 +396,25 @@ export default function CompanyTeamMembers() {
       )}
 
       {!loading && loadError && (
-        <Card className="text-center">
-          <p className="font-bold mb-3">Não foi possível carregar a equipe.</p>
-          <Button variant="dark" onClick={() => void retryLoad()} iconLeft={<RefreshCw size={16} />}>
-            Tentar de novo
-          </Button>
-        </Card>
+        <ErrorState title="Não foi possível carregar a equipe." onRetry={() => void retryLoad()} />
       )}
 
       {!loading && !loadError && (
         <>
           {linkRotationPending && (
-            <Card className="mb-6 border-yellow-500 shadow-[6px_6px_0px_0px_rgba(234,179,8,1)]">
+            <Card className="mb-6">
               <div role="status">
-                <h2 className="text-xl font-black">Gere um novo link do Elenco</h2>
+                <h2 className="text-lg font-bold">Gere um novo link do Elenco</h2>
                 <p className="text-sm text-gray-700 mt-1">
                   Alguém que saiu da equipe pode ter guardado o link antigo. Ao gerar um novo, o antigo deixa
                   de valer.
                 </p>
               </div>
               <Button
-                variant="dark"
-                size="lg"
-                fullWidth
+                variant="secondary"
                 className="mt-4"
+                data-copilot="empresa.equipe.novo-link-elenco"
+                data-copilot-risk="D"
                 onClick={() => void handleRotateLink()}
                 loading={rotating}
                 iconLeft={<RefreshCw size={18} />}
@@ -430,14 +425,14 @@ export default function CompanyTeamMembers() {
           )}
           {awaiting.length > 0 && (
             <section aria-labelledby="equipe-confirmar" className="mb-6 space-y-3">
-              <h2 id="equipe-confirmar" className="text-xl font-black">Precisa da sua confirmação</h2>
+              <h2 id="equipe-confirmar" className="text-xl font-bold">Precisa da sua confirmação</h2>
               {awaiting.map((m) => (
                 <Card
                   key={m.memberId}
                   className="border-yellow-500 shadow-[6px_6px_0px_0px_rgba(234,179,8,1)]"
                   aria-label={`${m.displayName ?? 'Pessoa'} aguardando confirmação`}
                 >
-                  <p className="text-lg font-black">
+                  <p className="text-lg font-bold">
                     {m.displayName ?? 'Alguém'} entrou. É a pessoa certa?
                   </p>
                   <p className="text-sm text-gray-700 mt-1">
@@ -475,7 +470,7 @@ export default function CompanyTeamMembers() {
 
           {members.length === 0 ? (
             <Card className="text-center">
-              <h2 className="text-xl font-black mb-2">Ninguém na equipe ainda</h2>
+              <h2 className="text-xl font-bold mb-2">Ninguém na equipe ainda</h2>
               <p className="text-sm text-gray-700 mb-5">
                 Convide quem toca o dia a dia (um encarregado, por exemplo). A pessoa entra por um link no
                 WhatsApp, sem criar senha.
@@ -487,7 +482,7 @@ export default function CompanyTeamMembers() {
           ) : (
             others.length > 0 && (
               <section aria-labelledby="equipe-lista" className="space-y-3">
-                <h2 id="equipe-lista" className="text-xl font-black">Pessoas</h2>
+                <h2 id="equipe-lista" className="text-xl font-bold">Pessoas</h2>
                 <ul className="space-y-3">
                   {others.map((m) => {
                     const badge = STATE_BADGE[m.state];
@@ -497,7 +492,7 @@ export default function CompanyTeamMembers() {
                       <li key={m.memberId}>
                         <Card>
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-lg font-black">{m.displayName ?? 'Sem nome'}</p>
+                            <p className="text-lg font-bold">{m.displayName ?? 'Sem nome'}</p>
                             <span className="rounded-pill bg-gray-100 text-gray-700 px-3 py-1 text-xs font-bold">
                               {ROLE_LABEL[m.role]}
                             </span>
@@ -585,7 +580,7 @@ export default function CompanyTeamMembers() {
             {!share ? (
               <form onSubmit={(e) => void submitInvite(e)} className="space-y-4" noValidate>
                 <div className="flex items-start justify-between gap-3">
-                  <h2 id="convidar-titulo" className="text-2xl font-black">Convidar pessoa</h2>
+                  <h2 id="convidar-titulo" className="text-2xl font-bold">Convidar pessoa</h2>
                   <button
                     type="button"
                     onClick={closeInvite}
@@ -614,7 +609,7 @@ export default function CompanyTeamMembers() {
                     aria-label="Papel Encarregado"
                     className="rounded-2xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]"
                   >
-                    <p className="font-black">Encarregado</p>
+                    <p className="font-bold">Encarregado</p>
                     <p className="text-sm text-gray-700 mt-1">
                       Cuida do dia a dia dos turnos. Você continua no comando da empresa.
                     </p>
@@ -643,7 +638,7 @@ export default function CompanyTeamMembers() {
             ) : (
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                  <h2 id="convidar-titulo" className="text-2xl font-black">Convite pronto</h2>
+                  <h2 id="convidar-titulo" className="text-2xl font-bold">Convite pronto</h2>
                   <button
                     type="button"
                     onClick={closeInvite}
@@ -689,7 +684,7 @@ export default function CompanyTeamMembers() {
       {removing && (
         <ModalShell labelledBy="remover-titulo" onClose={() => { if (!removeBusy) setRemoving(null); }}>
           <>
-            <h2 id="remover-titulo" className="text-2xl font-black mb-3">
+            <h2 id="remover-titulo" className="text-2xl font-bold mb-3">
               Remover {removing.member.displayName ?? 'esta pessoa'}?
             </h2>
             <ul className="space-y-2 text-sm text-gray-800 mb-5 list-disc pl-5">
@@ -729,11 +724,11 @@ export default function CompanyTeamMembers() {
       {confirming && (
         <ModalShell labelledBy="confirmar-titulo" onClose={() => { if (!confirmBusy) setConfirming(null); }}>
           <form onSubmit={(e) => void submitConfirm(e)} className="space-y-4" noValidate>
-            <h2 id="confirmar-titulo" className="text-2xl font-black">Confirmar acesso</h2>
+            <h2 id="confirmar-titulo" className="text-2xl font-bold">Confirmar acesso</h2>
             <dl className="rounded-xl border-2 border-black bg-gray-50 p-3 text-sm space-y-2">
               <div>
                 <dt className="text-xs font-bold uppercase text-gray-600">Nome no convite</dt>
-                <dd className="font-black">{confirming.displayName ?? 'Sem nome'}</dd>
+                <dd className="font-bold">{confirming.displayName ?? 'Sem nome'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase text-gray-600">E-mail verificado</dt>
@@ -781,7 +776,7 @@ export default function CompanyTeamMembers() {
       {rejecting && (
         <ModalShell labelledBy="rejeitar-titulo" onClose={() => setRejecting(null)}>
           <>
-            <h2 id="rejeitar-titulo" className="text-2xl font-black mb-3">
+            <h2 id="rejeitar-titulo" className="text-2xl font-bold mb-3">
               Cortar o acesso de {rejecting.displayName ?? 'quem entrou'}?
             </h2>
             <p className="text-sm text-gray-800 mb-5">

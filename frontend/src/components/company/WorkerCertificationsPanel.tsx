@@ -14,7 +14,7 @@ import { logError } from '../../lib/logger';
 import { isCertificationExpired, formatDateOnly, todayLocalDate } from '../../lib/dateUtils';
 import { CertificationService } from '../../services/certificationService';
 import type { WorkerCertification, WorkerTraining } from '../../types';
-import { Button, Card, Field } from '../ui';
+import { Button, Card, ErrorState, Field } from '../ui';
 import { Dialog } from '../ui/Dialog';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,8 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const [certifications, setCertifications] = useState<WorkerCertification[]>([]);
   const [certLoading, setCertLoading] = useState(true);
+  const [certError, setCertError] = useState(false);
+  const [trainingsError, setTrainingsError] = useState(false);
   const [verifierNames, setVerifierNames] = useState<Record<string, string>>({});
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [unverifyingId, setUnverifyingId] = useState<string | null>(null);
@@ -63,7 +65,16 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const loadCertifications = async () => {
     setCertLoading(true);
-    const list = await CertificationService.listWorkerCertifications(workerId);
+    let list: WorkerCertification[];
+    try {
+      list = await CertificationService.listWorkerCertifications(workerId);
+    } catch (error) {
+      logError('WorkerCertificationsPanel.loadCertifications', error);
+      setCertError(true);
+      setCertLoading(false);
+      return;
+    }
+    setCertError(false);
     setCertifications(list);
 
     const companyIds = [
@@ -92,8 +103,13 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const loadTrainings = async () => {
     setTrainingsLoading(true);
-    const list = await CertificationService.listCompanyTrainings(workerId);
-    setTrainings(list);
+    try {
+      setTrainings(await CertificationService.listCompanyTrainings(workerId));
+      setTrainingsError(false);
+    } catch (error) {
+      logError('WorkerCertificationsPanel.loadTrainings', error);
+      setTrainingsError(true);
+    }
     setTrainingsLoading(false);
   };
 
@@ -204,7 +220,11 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
           </div>
         )}
 
-        {!certLoading && certifications.length === 0 && (
+        {!certLoading && certError && (
+          <ErrorState className="mb-3" title="Não conseguimos carregar as certificações." onRetry={() => void loadCertifications()} />
+        )}
+
+        {!certLoading && !certError && certifications.length === 0 && (
           <p className="text-gray-600 text-sm">
             Este freela ainda não cadastrou certificações.
           </p>
@@ -298,7 +318,11 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
           </div>
         )}
 
-        {!trainingsLoading && trainings.length === 0 && (
+        {!trainingsLoading && trainingsError && (
+          <ErrorState className="mb-3" title="Não conseguimos carregar os treinamentos." onRetry={() => void loadTrainings()} />
+        )}
+
+        {!trainingsLoading && !trainingsError && trainings.length === 0 && (
           <p className="text-gray-600 text-sm">
             Sua empresa ainda não registrou nenhum treinamento para este freela.
           </p>
