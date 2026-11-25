@@ -28,6 +28,8 @@ import ErroDeCarga from '../../components/ErroDeCarga';
 import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
+import { roleLabel } from '../../lib/statusLabels';
+import { formatBRL } from '../../lib/currency';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -600,7 +602,7 @@ export default function CompanyCreateJob() {
     }
 
     return (
-        <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-3xl mx-auto pb-20">
             <Button
                 variant="ghost"
                 onClick={() => navigate(-1)}
@@ -636,7 +638,7 @@ export default function CompanyCreateJob() {
                                 >
                                     <span className="block truncate text-sm font-bold">{mo.title}</span>
                                     <span className="block truncate text-xs text-gray-600">
-                                        {mo.budget ? `R$ ${mo.budget}` : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
+                                        {mo.budget ? formatBRL(Number(mo.budget)) : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
                                         {/* recencia = confianca de que e o turno certo ("e o do sabado passado mesmo") */}
                                         {mo.created_at ? ` · ${formatDistanceToNow(new Date(mo.created_at), { addSuffix: true, locale: ptBR })}` : ''}
                                     </span>
@@ -1088,7 +1090,7 @@ export default function CompanyCreateJob() {
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-sm font-bold">{member.worker.full_name}</p>
                                                 {member.worker.primary_role && (
-                                                    <p className="truncate text-xs text-gray-600">{member.worker.primary_role}</p>
+                                                    <p className="truncate text-xs text-gray-600">{roleLabel(member.worker.primary_role)}</p>
                                                 )}
                                             </div>
                                             {invitedWorkerIds.includes(member.worker.id) ? (

@@ -162,7 +162,7 @@ export default function AcceptManagerInvite() {
       : 'Voltar ao Login';
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
       <PageMeta
         title="Convite de Gerente"
         description="Aceite o convite para operar uma unidade no Worki."

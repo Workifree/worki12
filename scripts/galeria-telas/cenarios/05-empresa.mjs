@@ -16,6 +16,25 @@ const semNada = (m) => {
   Object.assign(m.rpc, { list_worker_referral_cards: { outcome: 'ok', items: [] }, get_profile_reviews: [] });
 };
 const menuTurno = { css: aria('Mais opções do turno') };
+/** Cada item do menu aberto precisa estar na tela, acima da barra inferior e receber o toque. */
+const menuAlcancavel = `(() => {
+  const itens = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+  if (!itens.length) return 'menu não abriu';
+  const menu = itens[0].closest('[role="menu"]');
+  const nav = document.querySelector('[data-bottom-nav]')?.getBoundingClientRect();
+  const limite = nav && nav.height ? nav.top : innerHeight;
+  const m = menu.getBoundingClientRect();
+  if (m.top < 0 || m.left < 0 || m.right > innerWidth || m.bottom > limite + 1) return 'menu fora da área útil ' + JSON.stringify([m.top, m.bottom, limite]);
+  for (const item of itens) {
+    item.scrollIntoView({ block: 'nearest' });
+    const r = item.getBoundingClientRect();
+    const alvo = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!item.contains(alvo)) return 'item coberto: ' + item.textContent;
+  }
+  menu.scrollTop = 0;
+  return '';
+})()`;
+const abrirUltimoMenu = { avaliar: `window.scrollTo(0, document.documentElement.scrollHeight); [...document.querySelectorAll('[aria-label="Mais opções do turno"]')].at(-1).click()` };
 /** Só a candidatura `n` no turno, para o botão certo ser o primeiro. */
 const soCand = (n, extra = {}) => (m) => { const a = m.app(n); m.db.applications = [Object.assign(a, extra)]; };
 const semPagamento = (m) => { soCand(4)(m); m.db.shift_payments = []; };
@@ -54,7 +73,10 @@ export default [
   t('menu', 'empresa', '/company/jobs', 'menu de ações do turno', { passos: [menuTurno], espera: 'Excluir|Editar' }),
   t('menu-serie', 'empresa', '/company/jobs', 'menu de ocorrência de série', { prep: (m) => { m.db.jobs = [m.job(4), m.job(5)]; }, passos: [menuTurno], espera: 'série' }),
   t('excluir', 'empresa', '/company/jobs', 'confirmar exclusão (menu do primeiro turno da lista cheia)', { passos: [menuTurno, { clicar: /^Excluir/ }], espera: 'Excluir turno' }),
-  t('menu-coberto', 'empresa', '/company/jobs', 'um único turno (DEFEITO no celular: menu abre sob a barra inferior e o botão Criar turno; a página não rola e Excluir fica inalcançável)', { prep: (m) => { m.db.jobs = [m.job(1)]; m.db.applications = []; m.db.shift_calls = []; }, passos: [menuTurno], espera: 'Ver Detalhes' }),
+  t('menu-coberto', 'empresa', '/company/jobs', 'um único turno: todos os itens do menu "..." alcançáveis', { prep: (m) => { m.db.jobs = [m.job(1)]; m.db.applications = []; m.db.shift_calls = []; }, passos: [menuTurno], espera: 'Ver Detalhes', dobra: true, verificar: menuAlcancavel }),
+  t('menu-fim-da-lista', 'empresa', '/company/jobs', 'último menu com a página rolada até o fim: vira para cima', { passos: [abrirUltimoMenu], espera: 'Ver Detalhes', dobra: true, verificar: menuAlcancavel }),
+  t('detalhe-menu-dobra', 'empresa', turno(1), 'menu do detalhe na janela real', { passos: [menuTurno], espera: 'Excluir', dobra: true, verificar: menuAlcancavel }),
+  t('lista-fim', 'empresa', '/company/jobs', 'fim da lista na janela real: nada cobre os cartões', { passos: [{ avaliar: 'window.scrollTo(0, document.documentElement.scrollHeight)' }], espera: 'Turnos', dobra: true }),
   t('serie-editar', 'empresa', '/company/jobs', 'EditSeriesModal', { prep: (m) => { m.db.jobs = [m.job(4), m.job(5)]; }, passos: [menuTurno, { clicar: /Editar.*(série|seguintes|futur)/i }], espera: 'série' }),
   t('serie-cancelar', 'empresa', '/company/jobs', 'CancelSeriesModal com prévia', { prep: (m) => { m.db.jobs = [m.job(4), m.job(5)]; m.rpc.stop_job_series = { outcome: 'ok', affected: 6, with_commitments: 1, kept: 1, workers: 2 }; }, passos: [menuTurno, { clicar: /(Cancelar|Encerrar|Parar).*série/i }], espera: 'série' }),
   t('serie-convidar', 'empresa', '/company/jobs', 'InviteSeriesModal', { prep: (m) => { m.db.jobs = [m.job(4), m.job(5)]; }, passos: [menuTurno, { clicar: /Convidar.*série/i }], espera: 'série' }),

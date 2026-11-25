@@ -11,6 +11,7 @@ import type { WorkerReferral, WorkerReferralCard } from '../../types';
 import CreateReferralModal from '../../components/company/CreateReferralModal';
 import { Button, Card, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // "Indicações" (F10) — lado da empresa. Duas caixas:
@@ -76,7 +77,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
             <p className="font-bold text-base">{item.card.full_name}</p>
             {item.card.primary_role && (
               <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-pill text-xs font-semibold inline-block mt-1">
-                {item.card.primary_role}
+                {roleLabel(item.card.primary_role)}
               </span>
             )}
             {typeof item.card.rating_average === 'number' && (
@@ -185,7 +186,7 @@ export default function CompanyReferrals() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-4xl mx-auto pb-20">
       <SectionTabs section="elenco" />
       <PageHeader
         title="Indicações"

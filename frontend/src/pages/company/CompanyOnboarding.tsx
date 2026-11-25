@@ -174,7 +174,7 @@ export default function CompanyOnboarding() {
     ].filter(Boolean);
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans">
+        <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
@@ -228,7 +228,7 @@ export default function CompanyOnboarding() {
 
                         {/* Step 1: Company Data */}
                         {step === 1 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Sobre a empresa</h2>
 
                                 <div className="space-y-4">
@@ -307,7 +307,7 @@ export default function CompanyOnboarding() {
 
                         {/* Step 2: Goals */}
                         {step === 2 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Como você usa freelas</h2>
 
                                 <div className="space-y-5">

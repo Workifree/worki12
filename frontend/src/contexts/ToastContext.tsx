@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import { useTopDialogElement } from '../hooks/useModalDismiss';
 import { pushToast, toastDuration } from '../lib/toastTiming';
 import type { ToastType } from '../lib/toastTiming';
@@ -33,11 +33,38 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     const paused = hovered || focused;
     const duration = toastDuration(toast.type, toast.message);
     const remaining = useRef(duration);
+    const itemRef = useRef<HTMLDivElement>(null);
+    const [closing, setClosing] = useState(false);
+
+    // Saída: marca `data-closing` e só desmonta quando a transição termina (teto de 2s). Sem
+    // transição (jsdom, navegador antigo) remove na hora.
+    const dismiss = useCallback(() => {
+        if (typeof itemRef.current?.getAnimations !== 'function') onRemove(toast.id);
+        else setClosing(true);
+    }, [toast.id, onRemove]);
+
+    useEffect(() => {
+        if (!closing) return;
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            onRemove(toast.id);
+        };
+        const animations = itemRef.current?.getAnimations() ?? [];
+        if (animations.length === 0) {
+            finish();
+            return;
+        }
+        const ceiling = setTimeout(finish, 2000);
+        void Promise.allSettled(animations.map((a) => a.finished)).then(finish);
+        return () => clearTimeout(ceiling);
+    }, [closing, toast.id, onRemove]);
 
     useEffect(() => {
         if (paused || remaining.current === null) return;
         const startedAt = Date.now();
-        const timer = setTimeout(() => onRemove(toast.id), remaining.current);
+        const timer = setTimeout(dismiss, remaining.current);
         return () => {
             clearTimeout(timer);
             // Ao retomar, sobra no mínimo 2s: sumir assim que o ponteiro sai parece falha.
@@ -45,10 +72,12 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
                 remaining.current = Math.max(2000, remaining.current - (Date.now() - startedAt));
             }
         };
-    }, [paused, toast.id, onRemove]);
+    }, [paused, dismiss]);
 
     return (
         <div
+            ref={itemRef}
+            data-closing={closing || undefined}
             role={toast.type === 'error' ? 'alert' : undefined}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
@@ -56,9 +85,9 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
             onBlur={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
             }}
-            className={`pointer-events-auto flex w-full md:w-auto md:max-w-md items-center gap-3 px-4 py-3 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${STYLE[toast.type]}`}
+            className={`worki-toast pointer-events-auto flex w-full md:w-auto md:max-w-md items-center gap-3 px-4 py-3 rounded-xl border-2 border-black shadow-brutal-sm ${STYLE[toast.type]}`}
         >
-            {toast.type === 'success' && <CheckCircle size={20} aria-hidden="true" className="shrink-0 text-green-600" />}
+            {toast.type === 'success' && <CheckCircle2 size={20} aria-hidden="true" className="shrink-0 text-green-600" />}
             {toast.type === 'error' && <AlertCircle size={20} aria-hidden="true" className="shrink-0 text-red-600" />}
             {toast.type === 'info' && <Info size={20} aria-hidden="true" className="shrink-0 text-blue-600" />}
 
@@ -66,7 +95,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
 
             <button
                 type="button"
-                onClick={() => onRemove(toast.id)}
+                onClick={dismiss}
                 aria-label="Fechar aviso"
                 className="-my-2 -mr-2 ml-1 min-h-11 min-w-11 inline-flex items-center justify-center flex-shrink-0 hover:bg-black/5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
             >

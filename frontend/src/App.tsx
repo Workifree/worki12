@@ -65,7 +65,7 @@ const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
-  <div className="h-screen w-full bg-[#F4F4F0] animate-pulse" role="status">
+  <div className="h-screen w-full bg-canvas animate-pulse" role="status">
     <span className="sr-only">Carregando</span>
     <div className="flex flex-col md:flex-row max-w-7xl mx-auto min-h-screen">
       <div className="hidden md:block w-64 p-6 space-y-4">

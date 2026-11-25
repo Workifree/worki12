@@ -37,7 +37,7 @@ export default function HomeRedirect() {
 
     if (status === 'unavailable') return <ErroDeVerificacao onRetry={retry} />;
     if (status === 'checking') {
-        return <div className="h-screen flex items-center justify-center bg-[#F4F4F0] animate-pulse" role="status"><span className="sr-only">Carregando</span><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
+        return <div className="h-screen flex items-center justify-center bg-canvas animate-pulse" role="status"><span className="sr-only">Carregando</span><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
     }
     return <Onboarding />;
 }

@@ -231,7 +231,7 @@ describe('CompanyJobCandidates — renderiza candidatos com status in_progress',
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
     expect(screen.getAllByText('Contratado').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Em Andamento')).not.toBeInTheDocument()
+    expect(screen.queryByText('Em andamento')).not.toBeInTheDocument()
   })
 
   it('D-14: com a saída confirmada mostra "Saída confirmada"', async () => {
@@ -244,7 +244,7 @@ describe('CompanyJobCandidates — renderiza candidatos com status in_progress',
     await waitFor(() => {
       expect(screen.getByText('Saída confirmada')).toBeInTheDocument()
     })
-    expect(screen.queryByText('Em Andamento')).not.toBeInTheDocument()
+    expect(screen.queryByText('Em andamento')).not.toBeInTheDocument()
   })
 
   it('exibe candidato com status Em Andamento', async () => {
@@ -255,7 +255,7 @@ describe('CompanyJobCandidates — renderiza candidatos com status in_progress',
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Em Andamento')).toBeInTheDocument()
+    expect(screen.getByText('Em andamento')).toBeInTheDocument()
   })
 })
 

@@ -16,7 +16,8 @@ export interface IconButtonProps
 
 const BASE =
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 select-none ' +
-  'transition-colors duration-150 motion-reduce:transition-none ' +
+  'transition-[transform,background-color,color] duration-fast ease-standard motion-reduce:transition-none ' +
+  'motion-safe:enabled:active:scale-95 enabled:active:bg-gray-200 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black ' +
   'disabled:cursor-not-allowed disabled:opacity-50'
 

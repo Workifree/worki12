@@ -25,6 +25,7 @@ import type {
 } from '../types';
 import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 import { getSessionUserOrThrow } from '../lib/authSession';
+import { formatBRL } from '../lib/currency';
 
 // ---------------------------------------------------------------------------
 // Tipos do resultado estruturado de autorização de pagamento
@@ -836,7 +837,7 @@ export function buildShiftInviteWhatsAppMessage(params: ShiftInviteWhatsAppMessa
 
   const valueLabel =
     typeof amount === 'number' && amount > 0
-      ? `Valor: R$ ${amount.toFixed(2).replace('.', ',')}`
+      ? `Valor: ${formatBRL(amount).replace(/\s/g, ' ')}`
       : null;
 
   const lines = [

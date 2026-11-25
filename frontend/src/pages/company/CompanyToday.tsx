@@ -20,6 +20,7 @@ import CoverageModal, { type CoveragePerson } from '../../components/company/Cov
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { Button, Card, PageHeader } from '../../components/ui';
+import CreateShiftLink from '../../components/company/CreateShiftLink';
 import SectionTabs from '../../components/SectionTabs';
 import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { useToast } from '../../contexts/ToastContext';
@@ -365,18 +366,23 @@ export default function CompanyToday() {
   }
 
   return (
-    <div className={`max-w-3xl mx-auto animate-in fade-in duration-300 ${selectedVisible.length > 0 ? 'pb-44' : 'pb-24'}`}>
+    <div className={`max-w-3xl mx-auto ${selectedVisible.length > 0 ? 'pb-44' : 'pb-24'}`}>
       <PageMeta title="Hoje" description="Turnos de hoje e dos próximos dias." />
       {teamEnabled && <SectionTabs section="inicio" />}
       <PageHeader
         title="Hoje"
         subtitle={subtitle}
+        inlineAction={!canCover}
         action={
-          canCover ? (
-            <Button variant="secondary" size="lg" iconLeft={<Repeat size={18} />} onClick={() => setCoverOpen(true)}>
-              {gestor ? 'Cobrir alguém' : 'Cobrir meus turnos'}
-            </Button>
-          ) : undefined
+          // Sem turnos, o vazio já oferece "Criar turno": não repetir no cabeçalho.
+          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+            {canCover && (
+              <Button variant="secondary" size="lg" iconLeft={<Repeat size={18} />} onClick={() => setCoverOpen(true)}>
+                {gestor ? 'Cobrir alguém' : 'Cobrir meus turnos'}
+              </Button>
+            )}
+            {!loading && jobs.length > 0 && <CreateShiftLink />}
+          </div>
         }
       />
 

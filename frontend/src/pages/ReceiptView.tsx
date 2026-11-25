@@ -16,6 +16,7 @@ import { Button, Card } from '../components/ui';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 import { getSessionUserOrThrow } from '../lib/authSession';
+import { formatBRL, formatWorkedTime } from '../lib/currency';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -38,16 +39,6 @@ interface ShiftAttendance {
     checkinSource: AttendanceSource | null;
     checkout: string | null;
     checkoutSource: AttendanceSource | null;
-}
-
-/** Formata horas decimais como "7h30", "8h" ou "45min" (pt-BR, sem casas decimais soltas). */
-function formatWorkedHours(hours: number): string {
-    const totalMinutes = Math.round(hours * 60);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    if (h === 0) return `${m}min`;
-    if (m === 0) return `${h}h`;
-    return `${h}h${String(m).padStart(2, '0')}`;
 }
 
 export default function ReceiptView() {
@@ -278,7 +269,9 @@ export default function ReceiptView() {
                                 <p className="font-semibold text-sm">
                                     {(() => {
                                         const hours = calculateWorkedHours(attendance.checkin, attendance.checkout);
-                                        return hours !== null ? formatWorkedHours(hours) : 'Não registrado';
+                                        return hours !== null
+                                            ? formatWorkedTime(hours, 'Horário não registrado corretamente')
+                                            : 'Não registrado';
                                     })()}
                                 </p>
                             </div>
@@ -292,7 +285,7 @@ export default function ReceiptView() {
                         <span className="block text-xs font-semibold text-gray-600 mb-1">
                             {isScheduled ? 'Valor previsto' : 'Valor pago'}
                         </span>
-                        <p className="font-bold text-2xl tabular-nums">R$ {payment.amount.toFixed(2).replace('.', ',')}</p>
+                        <p className="font-bold text-2xl tabular-nums">{formatBRL(payment.amount)}</p>
                     </div>
                     <div className="bg-gray-50 rounded-xl p-4">
                         <span className="block text-xs font-semibold text-gray-600 mb-1">Forma</span>

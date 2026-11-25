@@ -25,6 +25,7 @@ import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useNotifications } from '../contexts/NotificationContext';
 import { Button } from './ui';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
+import { formatBRL } from '../lib/currency';
 
 // Deve espelhar o título usado em ShiftInviteService.inviteWorkerToShift (notificação in-app).
 const SHIFT_INVITE_NOTIFICATION_TITLE = 'Novo convite de turno';
@@ -212,7 +213,7 @@ export default function InviteTakeover() {
             {startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
           </span>
           <span className="flex items-center gap-1.5 text-xs font-semibold bg-primary-light text-primary-dark px-3 py-1.5 rounded-xl">
-            <DollarSign size={14} /> R$ {budget.toFixed(2).replace('.', ',')}
+            <DollarSign size={14} /> {formatBRL(budget)}
           </span>
           {location && (
             <span className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">

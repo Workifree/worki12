@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Clock } from 'lucide-react';
 import type { TeamConnection } from '../../types';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de conexão pendente
@@ -35,7 +36,7 @@ export function PendingCard({ connection, restricted = false }: PendingCardProps
       <div className="flex-1 min-w-0">
         <p className="font-bold text-sm truncate">{name}</p>
         {workerData?.primary_role && (
-          <p className="text-xs text-gray-600 truncate">{workerData.primary_role}</p>
+          <p className="text-xs text-gray-600 truncate">{roleLabel(workerData.primary_role)}</p>
         )}
       </div>
       <div className="flex items-center gap-1 text-xs font-semibold text-yellow-700 bg-yellow-50 px-2.5 py-1 rounded-pill shrink-0">

@@ -13,6 +13,7 @@ import { Button } from '../ui';
 import { useBusyWorkers } from '../../hooks/useBusyWorkers';
 import { buildShiftWindow } from '../../services/shiftOperationService';
 import { BusyWorkerBadge } from './BusyWorkerBadge';
+import { formatBRL } from '../../lib/currency';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Convidar para turno" — a partir de um freela do elenco,
@@ -220,7 +221,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
                     <span>Sem data definida</span>
                   )}
                   {job.work_start_time && <span>· {job.work_start_time.slice(0, 5)}{job.work_end_time ? `–${job.work_end_time.slice(0, 5)}` : ''}</span>}
-                  {typeof job.budget === 'number' && <span>· R$ {job.budget.toFixed(2).replace('.', ',')}</span>}
+                  {typeof job.budget === 'number' && <span>· {formatBRL(job.budget)}</span>}
                 </div>
               </button>
             );

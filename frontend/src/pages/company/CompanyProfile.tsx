@@ -383,7 +383,7 @@ export default function CompanyProfile() {
 
     return (
         <>
-        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
             {/* Page Header — a única ação primária da tela é "Editar Perfil" */}
             <BackToGestao />
             <PageHeader
@@ -496,7 +496,7 @@ export default function CompanyProfile() {
 
                     {/* Barra de edição: só Cancelar (secundário) e Salvar (primário) */}
                     {isEditing && (
-                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                             <Button
                                 variant="secondary"
                                 onClick={() => {
@@ -767,7 +767,7 @@ export default function CompanyProfile() {
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
-                    para o seu elenco sem precisar de QR ou Worki ID.
+                    para o seu elenco sem precisar de QR ou código.
                 </p>
                 <Button
                     variant="secondary"

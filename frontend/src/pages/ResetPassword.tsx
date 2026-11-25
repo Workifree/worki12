@@ -52,7 +52,7 @@ export default function ResetPassword() {
 
     if (success) {
         return (
-            <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+            <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
                 <Card padding="lg" className="max-w-md w-full text-center">
                     <div className="w-14 h-14 bg-green-100 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-4">
                         <CheckCircle size={28} className="text-green-600" />
@@ -68,7 +68,7 @@ export default function ResetPassword() {
     }
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
             <Card padding="lg" className="max-w-md w-full">
                 <PageHeader
                     as="h1"

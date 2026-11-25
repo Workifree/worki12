@@ -195,7 +195,7 @@ export default function CompanyTeam() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-4xl mx-auto pb-20">
       {!restricted && <SectionTabs section="elenco" />}
       <PageHeader
         title="Meu Elenco"
@@ -351,7 +351,7 @@ export default function CompanyTeam() {
           <Users size={44} className="mx-auto mb-4 text-gray-300" aria-hidden="true" />
           <h3 className="text-lg font-bold mb-2">Elenco vazio</h3>
           <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">
-            Adicione freelas pelo QR de identidade, Worki ID ou pelo link de perfil que eles te enviarem.
+            Adicione freelas pelo QR de identidade, pelo código ou pelo link de perfil que eles te enviarem.
             Eles aparecerão aqui após aceitarem.
           </p>
           <Button variant="dark" size="lg" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>

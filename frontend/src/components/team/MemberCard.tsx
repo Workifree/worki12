@@ -7,6 +7,7 @@ import type { TeamMember } from '../../types';
 import type { WorkerHistoryWithCompany } from './types';
 import { Button, Card } from '../ui';
 import { formatHistoryDate } from './utils';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de membro da equipe
@@ -95,7 +96,7 @@ export function MemberCard({ member, onRemove, history, onInvite, restricted = f
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-base truncate">{worker.full_name}</h3>
           {worker.primary_role && (
-            <p className="text-sm text-gray-600 truncate">{worker.primary_role}</p>
+            <p className="text-sm text-gray-600 truncate">{roleLabel(worker.primary_role)}</p>
           )}
           <div className="flex flex-wrap gap-2 mt-2">
             {typeof worker.rating_average === 'number' && (

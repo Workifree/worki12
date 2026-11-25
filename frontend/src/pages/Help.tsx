@@ -7,7 +7,7 @@ import { getContactEmail } from '../lib/contact';
 const faqs = [
     {
         q: 'Como monto meu elenco e convido para um turno?',
-        a: 'Em Elenco > Meu Elenco você adiciona freelas de confiança à sua lista (por QR, Worki ID ou link de perfil). Depois de aceito, ele passa a fazer parte do elenco: ao criar um turno, você convida diretamente quem já está lá, sem precisar abrir vaga pública nem esperar candidaturas.',
+        a: 'Em Elenco > Meu Elenco você adiciona freelas de confiança à sua lista (por QR, código do freela ou link de perfil). Depois de aceito, ele passa a fazer parte do elenco: ao criar um turno, você convida diretamente quem já está lá, sem precisar abrir vaga pública nem esperar candidaturas.',
     },
     {
         q: 'Como o freela aceita ou recusa um convite de turno?',

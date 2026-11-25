@@ -1,9 +1,11 @@
 import { extendTailwindMerge } from 'tailwind-merge'
 
-// tailwind-merge 3.x: a config padrão resolve corretamente as utilities do Tailwind 3.4 usadas aqui
-// (px/h/text/bg/shadow arbitrário, modificadores). Único ajuste: o raio custom `rounded-pill`
-// (tailwind.config.js) precisa ser declarado para conflitar com `rounded-xl` etc.
-const twMerge = extendTailwindMerge({ extend: { theme: { radius: ['pill'] } } })
+// tailwind-merge 3.x: a config padrão resolve corretamente as utilities do Tailwind 3.4 usadas aqui.
+// Ajustes: o raio custom `rounded-pill` e as sombras do tema (sem isto `shadow-brutal` seria lida
+// como COR de sombra e não conflitaria com `shadow-none`).
+const twMerge = extendTailwindMerge({
+  extend: { theme: { radius: ['pill'], shadow: ['brutal', 'brutal-sm', 'brutal-lg', 'brutal-brand'] } },
+})
 
 /**
  * Junta classes ignorando falsy e RESOLVE conflitos do Tailwind: o último vence

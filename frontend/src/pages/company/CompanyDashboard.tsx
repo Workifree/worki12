@@ -17,6 +17,7 @@ import { useCompanyNavContext } from '../../hooks/useCompanyNavContext';
 import SectionTabs from '../../components/SectionTabs';
 import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { Button, Card, PageHeader } from '../../components/ui';
+import CreateShiftLink from '../../components/company/CreateShiftLink';
 import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -277,7 +278,7 @@ export default function CompanyDashboard() {
     const hasActivityError = isErrorJobs && isErrorApps;
 
     return (
-        <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="max-w-7xl mx-auto">
             <PageMeta title={pageTitle} />
             {hasTeam && <SectionTabs section="inicio" />}
             {/* Critical error: company profile failed */}
@@ -290,7 +291,7 @@ export default function CompanyDashboard() {
                 </div>
             )}
 
-            <PageHeader title={pageTitle} subtitle={companyName ? `Bem-vindo de volta, ${companyName}` : loading ? 'Bem-vindo de volta' : 'Bem-vindo de volta, Empresa'} />
+            <PageHeader title={pageTitle} subtitle={companyName ? `Bem-vindo de volta, ${companyName}` : loading ? 'Bem-vindo de volta' : 'Bem-vindo de volta, Empresa'} action={<CreateShiftLink />} inlineAction />
 
             <div className="space-y-8">
                 <TrailShortcutCard />
@@ -563,7 +564,7 @@ export default function CompanyDashboard() {
                                         </div>
                                     )}
                                     {activities.map((activity, i) => (
-                                        <div key={i} className="flex gap-3 items-start animate-in fade-in slide-in-from-right-4" style={{ animationDelay: `${i * 100}ms` }}>
+                                        <div key={i} className="flex gap-3 items-start">
                                             <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${activity.type === 'job_created' ? 'bg-blue-500' : 'bg-green-500'}`} aria-hidden="true" />
                                             <div>
                                                 <p className="text-sm font-semibold leading-snug">{activity.text}</p>

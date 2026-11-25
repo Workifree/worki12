@@ -191,7 +191,7 @@ describe('MyJobs - Tabs de status', () => {
       expect(screen.getByText('Convites')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Em Andamento')).toBeInTheDocument()
+    expect(screen.getByText('Em andamento')).toBeInTheDocument()
     expect(screen.getByText('Agendados')).toBeInTheDocument()
     expect(screen.getByText(/Histórico/)).toBeInTheDocument()
     // Aba "Candidaturas" foi removida no pivô push (invite-only).
@@ -206,8 +206,8 @@ describe('MyJobs - Tabs de status', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    // Em Andamento
-    fireEvent.click(screen.getByText('Em Andamento'))
+    // Em andamento
+    fireEvent.click(screen.getByText('Em andamento'))
     await waitFor(() => {
       expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
     })
@@ -229,7 +229,7 @@ describe('MyJobs - Botao check-out', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Em Andamento'))
+    fireEvent.click(screen.getByText('Em andamento'))
 
     await waitFor(() => {
       expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
@@ -255,7 +255,7 @@ describe('MyJobs - Botao check-out', () => {
     setupMocks([companyCheckedOutApp])
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     expect(screen.queryByText('Barman para Festa')).not.toBeInTheDocument()
     // Não pode existir CTA "Check-out" (button) — a empresa já fechou essa etapa.
     expect(screen.queryByRole('button', { name: 'Check-out' })).not.toBeInTheDocument()
@@ -279,7 +279,7 @@ describe('MyJobs - Botao check-out', () => {
     setupMocks([companyCheckedInApp])
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     await screen.findByText('Barman para Festa')
 
     expect(screen.queryByRole('button', { name: 'Check-in' })).not.toBeInTheDocument()
@@ -297,7 +297,7 @@ describe('MyJobs - Botao check-out', () => {
 // banco intocado.
 // ---------------------------------------------------------------------------
 
-// status='in_progress' (não 'hired') para cair de forma determinística na aba "Em Andamento"
+// status='in_progress' (não 'hired') para cair de forma determinística na aba "Em andamento"
 // (isInProgress = app.status === 'in_progress', sem depender de data/horário do turno).
 const APP_SCHEDULED_NO_CHECKIN: ApplicationRow = {
   ...APP_IN_PROGRESS,
@@ -322,7 +322,7 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
     fireEvent.click(checkinButton)
 
@@ -345,7 +345,7 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
     fireEvent.click(checkinButton)
 
@@ -371,7 +371,7 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
     fireEvent.click(checkoutButton)
 
@@ -396,7 +396,7 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
     fireEvent.click(checkoutButton)
 
@@ -479,7 +479,7 @@ describe('MyJobs - computeWorkerSteps (lógica pura)', () => {
 })
 
 describe('MyJobs - Estado vazio por tab', () => {
-  it('exibe estado vazio na tab Em Andamento quando nao ha turnos', async () => {
+  it('exibe estado vazio na tab Em andamento quando nao ha turnos', async () => {
     setupMocks([])
     renderComponent()
 
@@ -487,7 +487,7 @@ describe('MyJobs - Estado vazio por tab', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Em Andamento'))
+    fireEvent.click(screen.getByText('Em andamento'))
 
     await waitFor(() => {
       expect(screen.getByText('Nenhum trabalho em andamento.')).toBeInTheDocument()
@@ -544,14 +544,14 @@ describe('MyJobs - Erro de autenticacao', () => {
 })
 
 describe('MyJobs - Falar com a empresa', () => {
-  it('cria a Conversation e navega ao clicar em "Falar com a empresa" (Em Andamento)', async () => {
+  it('cria a Conversation e navega ao clicar em "Falar com a empresa" (Em andamento)', async () => {
     const { mockNavigate, conversationChain } = setupMocks([APP_IN_PROGRESS], {
       limit: vi.fn().mockResolvedValue({ data: [], error: null }), // nenhuma Conversation existente ainda
       insert: vi.fn().mockResolvedValue({ data: null, error: null }),
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
     fireEvent.click(chatButton)
 
@@ -571,7 +571,7 @@ describe('MyJobs - Falar com a empresa', () => {
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
     fireEvent.click(chatButton)
 

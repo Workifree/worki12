@@ -476,7 +476,7 @@ export default function Dashboard() {
             {/* --- COMPLETAR PERFIL (disponibilidade F7 + quests; um bloco só, sem competir com o resto) --- */}
             {perfilIncompleto && (
                 <section aria-label="Complete seu perfil">
-                    <Card padding="sm" className="bg-[#F4F4F0] flex flex-col gap-4">
+                    <Card padding="sm" className="bg-canvas flex flex-col gap-4">
                         <h2 className="text-lg font-bold flex items-center gap-2">
                             <AlertCircle size={18} className="text-primary" /> Complete seu perfil
                         </h2>

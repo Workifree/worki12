@@ -55,9 +55,6 @@ export function isGestorOnlyPath(pathname: string): boolean {
 /** Ação primária da empresa (não é item de navegação). */
 export const COMPANY_CREATE_ACTION = { label: 'Criar turno', path: '/company/create' } as const;
 
-/** Telas em que o "Criar turno" flutua no celular. */
-export const COMPANY_FAB_PATHS: readonly string[] = ['/company/dashboard', '/company/hoje', '/company/jobs'];
-
 /** Perfil do freela: cartão no rodapé da lateral e avatar no cabeçalho do celular. */
 export const WORKER_PROFILE_LINK = { label: 'Meu perfil', path: '/profile' } as const;
 

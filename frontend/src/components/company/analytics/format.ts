@@ -4,9 +4,7 @@
  */
 import type { PeriodDelta } from '../../../types';
 
-export function formatBRL(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+export { formatBRL } from '../../../lib/currency';
 
 export function formatHours(value: number): string {
   return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 0 })}h`;

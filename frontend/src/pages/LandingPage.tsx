@@ -75,14 +75,14 @@ export default function LandingPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0]">
+    <div className="min-h-screen bg-canvas">
       <PageMeta
         title="Confiança e registro para o trabalho freela"
         description="Empresa organiza e registra sua equipe de freelas de confiança. Freela constrói uma carreira que é sua — histórico, avaliação e comprovante de renda. Sem vínculo, sem bagunça."
       />
 
       {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-[#F4F4F0]/95 backdrop-blur-sm border-b-2 border-black/10 px-4 py-3">
+      <nav className="sticky top-0 z-50 bg-canvas/95 backdrop-blur-sm border-b-2 border-black/10 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={() => navigate('/')}

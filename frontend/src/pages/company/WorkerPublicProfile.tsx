@@ -264,7 +264,7 @@ export default function WorkerPublicProfile() {
     );
 
     return (
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-4xl mx-auto pb-20">
             <PageMeta
               title={profile ? profile.full_name : 'Perfil do Profissional'}
               description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Worki.` : undefined}
@@ -319,7 +319,9 @@ export default function WorkerPublicProfile() {
 
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
                             <span className="flex items-center gap-2"><MapPin size={18} /> {profile.location || 'Localização não definida'}</span>
-                            <span className="flex items-center gap-2"><Calendar size={18} /> Desde {profile.joined_at ? format(new Date(profile.joined_at), 'MMMM yyyy', { locale: ptBR }) : 'N/A'}</span>
+                            {profile.joined_at && (
+                                <span className="flex items-center gap-2"><Calendar size={18} /> Desde {format(new Date(profile.joined_at), 'MMMM yyyy', { locale: ptBR })}</span>
+                            )}
                         </div>
                     </div>
 

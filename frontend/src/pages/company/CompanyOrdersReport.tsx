@@ -22,6 +22,8 @@ import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
 import PageMeta from '../../components/PageMeta';
 import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { roleLabel } from '../../lib/statusLabels';
+import { formatBRL } from '../../lib/currency';
 
 // ---------------------------------------------------------------------------
 // Helpers de data/format
@@ -53,10 +55,6 @@ function formatDDMMYYYY(value: string): string {
   }
   const dt = new Date(value);
   return dt.toLocaleDateString('pt-BR');
-}
-
-function formatBRL(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 type PresetKey = 'hoje' | 'semana' | 'mes' | 'custom';
@@ -312,7 +310,7 @@ export default function CompanyOrdersReport() {
                 {rows.map((row) => (
                   <tr key={`${row.jobId}:${row.workerId ?? 'none'}`} className="border-b border-gray-200 last:border-0">
                     <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
-                    <td className="px-4 py-3 font-medium">{row.category ?? row.title}</td>
+                    <td className="px-4 py-3 font-medium">{roleLabel(row.category) || row.title}</td>
                     <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>
                     <td className="px-4 py-3 font-bold tabular-nums text-right whitespace-nowrap">{formatBRL(row.amount)}</td>
                     <td className="px-4 py-3">{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</td>
@@ -357,7 +355,7 @@ function OrderCard({ row }: { row: OrderRow }) {
     <Card padding="sm" className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-sm truncate">{row.category ?? row.title}</p>
+          <p className="font-bold text-sm truncate">{roleLabel(row.category) || row.title}</p>
           <p className="text-xs text-gray-600">{row.date ? formatDDMMYYYY(row.date) : '—'}</p>
         </div>
         <StatusBadge status={row.status} />

@@ -15,7 +15,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     const navItems = toBottomNav(isCompany ? getCompanyNav(companyNav) : getWorkerNav());
 
     return (
-        <nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
+        <nav data-bottom-nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
             <div className="flex items-stretch h-16">
                 {navItems.map((item) => {
                     const isActive = isNavActive(pathname, item);
@@ -28,7 +28,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                             aria-current={isActive ? 'page' : undefined}
                             className={`
                  relative flex flex-col items-center justify-center flex-auto min-w-11 min-h-11 gap-1 py-2 px-px
-                 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
+                 transition-colors duration-fast active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
                                     ? (isCompany ? 'text-blue-600' : 'text-primary')
                                     : 'text-gray-500 hover:text-black'}

@@ -16,16 +16,29 @@ export default {
             },
             colors: {
                 primary: {
-                    DEFAULT: '#00A651', // Strong Professional Green
-                    dark: '#008840', // texto branco = 4,57:1 (AA); #008a42 dava 4,45:1
+                    DEFAULT: '#00A651', // verde de marca: preenchimento, barra e borda (nunca texto)
+                    dark: '#008840', // fundo de botão: texto branco = 4,57:1 (AA)
                     light: '#e6f6ec',
+                    ink: '#006b33', // texto e ícone verdes: 6,66:1 no branco; 5,95:1 no primary-light
                 },
                 accent: '#111111', // Brutalist Black
                 border: 'rgba(0, 0, 0, 0.1)', // Subtle border
+                canvas: '#F4F4F0', // fundo do app
+                // Status semântico (lib/statusLabels.ts). Pares fg/bg entre 6,6:1 e 9,4:1.
+                status: {
+                    neutral: { bg: '#f3f4f6', fg: '#374151', line: '#d1d5db' },
+                    info: { bg: '#eff6ff', fg: '#1e40af', line: '#bfdbfe' },
+                    success: { bg: '#f0fdf4', fg: '#166534', line: '#bbf7d0' },
+                    warning: { bg: '#fefce8', fg: '#854d0e', line: '#fde047' },
+                    danger: { bg: '#fef2f2', fg: '#991b1b', line: '#fecaca' },
+                },
                 glass: {
-                    surface: 'rgba(255, 255, 255, 0.75)',
-                    border: 'rgba(255, 255, 255, 0.5)',
-                }
+                    surface: 'rgba(255, 255, 255, 0.75)', // legado: só o cabeçalho do MainLayout
+                },
+            },
+            // `text-primary` e `text-primary-dark` viram o tom AA; bg e border seguem a marca.
+            textColor: {
+                primary: { DEFAULT: '#006b33', dark: '#006b33' },
             },
             borderRadius: {
                 'xl': '16px',
@@ -33,10 +46,19 @@ export default {
                 '3xl': '32px',
                 'pill': '999px',
             },
+            // 3 níveis + destaque do freela. Card em repouso não tem sombra.
             boxShadow: {
-                'glass': '0 4px 30px rgba(0, 0, 0, 0.03)',
-                'float': '0 10px 40px -10px rgba(0,0,0,0.08)',
-            }
+                'brutal-sm': '3px 3px 0 0 #000', // controles, toast
+                'brutal': '4px 4px 0 0 #000', // hover de controle, card em destaque, menu
+                'brutal-lg': '6px 6px 0 0 #000', // dialog
+                'brutal-brand': '4px 4px 0 0 #00A651', // destaque do freela (convite)
+            },
+            transitionDuration: { press: '80ms', fast: '150ms', base: '200ms', exit: '150ms' },
+            transitionTimingFunction: {
+                standard: 'cubic-bezier(.2,0,0,1)',
+                enter: 'cubic-bezier(0,0,0,1)',
+                exit: 'cubic-bezier(.3,0,1,1)',
+            },
         },
     },
     plugins: [],

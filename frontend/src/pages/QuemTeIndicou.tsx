@@ -154,7 +154,7 @@ export default function QuemTeIndicou() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-2xl mx-auto pb-20">
       <SectionTabs section="empresas" role="worker" />
       <PageHeader
         title="Quem te indicou"

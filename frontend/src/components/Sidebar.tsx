@@ -240,7 +240,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             </span>
                         )) : (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600">
-                                <Zap size={12} aria-hidden="true" className="text-primary fill-primary shrink-0" />
+                                <Zap size={12} aria-hidden="true" className="text-primary-ink fill-primary shrink-0" />
                                 {`${workerData?.xp || 0} XP`}
                             </span>
                         )}

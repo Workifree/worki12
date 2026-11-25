@@ -773,7 +773,7 @@ export default function MyJobs() {
 
     const tabs: { id: ActiveTab; label: string; count: number; tone: 'brand' | 'dark' | 'neutral' }[] = [
         { id: 'invites', label: 'Convites', count: pendingInvites.length, tone: 'brand' },
-        { id: 'in_progress', label: 'Em Andamento', count: jobs.in_progress.length, tone: 'dark' },
+        { id: 'in_progress', label: 'Em andamento', count: jobs.in_progress.length, tone: 'dark' },
         { id: 'scheduled', label: 'Agendados', count: jobs.scheduled.length, tone: 'neutral' },
         { id: 'history', label: 'Histórico', count: jobs.history.length, tone: 'neutral' },
     ];

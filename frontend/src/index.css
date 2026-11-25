@@ -5,21 +5,14 @@
 @layer base {
   html {
     font-family: 'Inter', sans-serif;
-    background-color: #F5F7F5;
-    /* Gentle professional background */
-    background-image:
-      radial-gradient(at 0% 0%, rgba(0, 166, 81, 0.03) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(33, 150, 243, 0.03) 0px, transparent 50%);
-    background-attachment: fixed;
+    background-color: #F4F4F0; /* token canvas */
   }
-}
 
-/* Glassmorphism Utilities if needed globally */
-.glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  /* Anel de foco único. :where() tem especificidade zero: o primitivo pode especializar. */
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
+  }
 }
 
 @keyframes slideIn {
@@ -119,8 +112,12 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
     scroll-padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
     scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
-  html:has(.worki-fab) {
-    scroll-padding-bottom: calc(9rem + env(safe-area-inset-bottom, 0px));
+  html:has(.worki-action-bar) {
+    scroll-padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* Altura ocupada pela barra inferior: a ActionBar gruda logo acima dela. */
+  .worki-layout {
+    --worki-nav-h: calc(4rem + 2px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -158,3 +155,90 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
 
 /* O h1 recebe foco por código ao trocar de tela (RouteFocus): não é um controle, sem anel. */
 h1[tabindex='-1']:focus { outline: none; }
+
+/* ── Movimento ─────────────────────────────────────────────────────────────────────────────
+   Tokens: press 80ms · fast 150ms (hover/foco) · base 200ms (entrada) · exit 150ms.
+   Sem mola, sem bounce em ação operacional, sem animação de entrada de página. */
+
+/* Dialog: só entrada (a saída exigiria adiar o desmonte). Sem @starting-style, abre seco. */
+dialog.worki-dialog {
+  opacity: 0;
+  transition: opacity 150ms cubic-bezier(0.3, 0, 1, 1), display 150ms, overlay 150ms;
+  transition-behavior: allow-discrete;
+}
+dialog.worki-dialog[open] {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+@starting-style {
+  dialog.worki-dialog[open] { opacity: 0; }
+}
+
+/* Toast: entra de cima no celular e de baixo no desktop; sai ao receber data-closing. */
+.worki-toast {
+  opacity: 1;
+  transition: opacity 200ms cubic-bezier(0, 0, 0, 1), translate 200ms cubic-bezier(0, 0, 0, 1);
+}
+.worki-toast[data-closing] {
+  opacity: 0;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.3, 0, 1, 1);
+}
+@starting-style {
+  .worki-toast { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .worki-dialog-panel {
+    translate: 0 0;
+    transition: translate 200ms cubic-bezier(0, 0, 0, 1);
+  }
+  @starting-style {
+    dialog.worki-dialog[open] .worki-dialog-panel { translate: 0 12px; }
+  }
+  .worki-toast { translate: 0 0; }
+  .worki-toast[data-closing] { translate: 0 -8px; }
+  @starting-style {
+    .worki-toast { translate: 0 -8px; }
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 768px) {
+  .worki-toast[data-closing] { translate: 0 8px; }
+  @starting-style {
+    .worki-toast { translate: 0 8px; }
+  }
+}
+
+/* Letreiro da entrada: pausável (botão) e parado para quem pede menos movimento. */
+@keyframes worki-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: worki-marquee 20s linear infinite; }
+.animate-marquee[data-paused='true'] { animation-play-state: paused; }
+
+/* Movimento reduzido, caso a caso (sem reset global): fade fica curto, giro desacelera,
+   pulso, quique e deslocamento desligam; o estado final continua visível. */
+@media (prefers-reduced-motion: reduce) {
+  dialog.worki-dialog,
+  dialog.worki-dialog[open],
+  .worki-toast,
+  .worki-toast[data-closing] { transition-duration: 100ms; }
+  .animate-spin { animation-duration: 6s; }
+  .animate-pulse,
+  .animate-bounce,
+  .animate-marquee { animation: none; }
+  .animate-slide-in { animation: none; opacity: 1; }
+}
+
+/* <progress> do ProgressBar */
+.worki-progress {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: #e5e7eb;
+  color: #00a651;
+}
+.worki-progress::-webkit-progress-bar { background: #e5e7eb; }
+.worki-progress::-webkit-progress-value { background: currentColor; border-radius: 999px; }
+.worki-progress::-moz-progress-bar { background: currentColor; border-radius: 999px; }

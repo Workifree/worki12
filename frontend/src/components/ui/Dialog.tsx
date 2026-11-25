@@ -142,7 +142,7 @@ export function Dialog({
         ref={panelRef}
         tabIndex={-1}
         className={cx(
-          'worki-dialog-panel w-full max-w-md rounded-2xl border-2 border-black bg-white p-5 sm:p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] focus:outline-none',
+          'worki-dialog-panel w-full max-w-md rounded-2xl border-2 border-black bg-white p-5 sm:p-6 shadow-brutal-lg focus:outline-none',
           className,
         )}
       >

@@ -124,7 +124,9 @@ export function HoursRatioCard({ block }: { block: HoursRatioSummaryBlock }) {
             </p>
             <DeltaBadge delta={data.delta} />
             <p className="text-xs text-gray-500">
-              {formatHours(data.realizedHours)} realizadas de {formatHours(data.estimatedHours)} previstas
+              {data.realizedHours > 0 || data.estimatedHours > 0
+                ? `${formatHours(data.realizedHours)} realizadas de ${formatHours(data.estimatedHours)} previstas`
+                : 'Sem horas registradas no período'}
             </p>
             {(data.excludedNoEstimateCount > 0 || data.excludedNoAttendanceCount > 0) && (
               <p className="text-xs font-bold text-yellow-700">

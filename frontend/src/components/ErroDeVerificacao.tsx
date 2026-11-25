@@ -16,7 +16,7 @@ export default function ErroDeVerificacao({ onRetry }: { onRetry: () => void }) 
     };
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
             <PageMeta title="Sem conexão" noindex />
             <div className="w-full max-w-md space-y-3">
                 <ErroDeCarga

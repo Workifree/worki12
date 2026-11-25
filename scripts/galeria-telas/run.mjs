@@ -146,10 +146,15 @@ try {
       Object.assign(info, await page.evaluate(medir, { toque: vp !== '1440' }));
       if (info.carregando && !cen.carregandoEsperado) info.falhas.push('foto com carregamento ainda na tela');
       if (info.vazia) info.falhas.push('tela em branco');
+      if (cen.verificar) {
+        const erro = await page.evaluate(cen.verificar);
+        if (erro) info.falhas.push(`verificação: ${erro}`);
+      }
       const nome = `${cen.id}__${vp}.png`;
       // Página inteira: em vez de `fullPage` (que deixa a navegação fixa no meio da foto), a janela
       // cresce até a altura do documento. As medidas acima já foram tiradas no tamanho real.
-      if (!info.temDialogo) {
+      // `dobra`: fotografa a janela real (sobreposição de menu, barra fixa, rolagem).
+      if (!info.temDialogo && !cen.dobra) {
         const { width, height } = VIEWPORTS[vp].viewport;
         const total = await page.evaluate(() => document.documentElement.scrollHeight);
         if (total > height + 4) { await page.setViewportSize({ width, height: Math.min(total, 14000) }); await page.waitForTimeout(150); }

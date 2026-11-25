@@ -1,13 +1,15 @@
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Briefcase, Users, DollarSign, UserPlus, CalendarCheck, Receipt } from 'lucide-react';
-import { Button } from '../components/ui';
+import { ArrowRight, Briefcase, Users, DollarSign, UserPlus, CalendarCheck, Receipt, Pause, Play } from 'lucide-react';
+import { Button, IconButton } from '../components/ui';
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const [marqueePaused, setMarqueePaused] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] font-sans text-accent overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-canvas font-sans text-accent overflow-hidden flex flex-col">
 
       {/* Header / Nav */}
       <nav className="flex items-center justify-between p-6 md:px-12 z-10 border-b-2 border-black/5">
@@ -29,12 +31,25 @@ export default function Onboarding() {
       </nav>
 
       {/* Faixa de marca — discreta, sem rotação */}
-      <div className="relative w-full overflow-hidden bg-accent py-2.5 my-8" aria-hidden="true">
-        <div className="whitespace-nowrap animate-marquee flex gap-8 text-white font-semibold text-sm uppercase tracking-widest">
+      <div className="relative my-8 flex w-full items-center bg-accent">
+        <div className="min-w-0 flex-1 overflow-hidden py-2.5" aria-hidden="true">
+        <div
+          data-paused={marqueePaused}
+          className="whitespace-nowrap animate-marquee flex gap-8 text-white font-semibold text-sm uppercase tracking-widest"
+        >
           {Array(20).fill("WORKI • SEU ELENCO DE CONFIANÇA • CONVIDE PRO TURNO • PAGUE E REGISTRE • ").map((text, i) => (
             <span key={i}>{text}</span>
           ))}
         </div>
+        </div>
+        {/* Movimento acima de 5s precisa de pausa (WCAG 2.2.2). Com movimento reduzido ele já nasce parado. */}
+        <IconButton
+          aria-label={marqueePaused ? 'Retomar letreiro' : 'Pausar letreiro'}
+          onClick={() => setMarqueePaused((paused) => !paused)}
+          className="mr-1 text-white enabled:hover:bg-white/15 enabled:active:bg-white/25 focus-visible:ring-white focus-visible:ring-offset-0 motion-reduce:hidden"
+        >
+          {marqueePaused ? <Play size={20} /> : <Pause size={20} />}
+        </IconButton>
       </div>
 
       {/* Main Content */}
@@ -97,7 +112,7 @@ export default function Onboarding() {
       </main>
 
       {/* Como Funciona — honesto, sem números inventados (piloto: convite push) */}
-      <section className="py-16 sm:py-20 px-6 bg-[#F4F4F0] border-y-2 border-black/10">
+      <section className="py-16 sm:py-20 px-6 bg-canvas border-y-2 border-black/10">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Como funciona</h2>
@@ -146,7 +161,7 @@ export default function Onboarding() {
 
             {/* Para Freelas */}
             <div className="bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-8">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-primary">
+              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-green-400">
                 <Users size={20} strokeWidth={2.5} aria-hidden="true" /> Para freelas
               </h3>
               <ol className="space-y-5">
@@ -199,17 +214,6 @@ export default function Onboarding() {
           </div>
         </div>
       </section>
-
-      {/* Simple Marquee Animation Style */}
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 20s linear infinite;
-        }
-      `}</style>
     </div>
   );
 }

@@ -53,7 +53,7 @@ const STATE_BADGE: Record<TeamMemberState, { label: string; className: string }>
   invited: { label: 'Convite enviado', className: 'bg-blue-50 text-blue-700' },
   invite_expired: { label: 'Venceu', className: 'bg-red-50 text-red-700' },
   awaiting_confirmation: { label: 'Aguardando confirmação', className: 'bg-yellow-100 text-yellow-800' },
-  pending_expired: { label: 'Expirou', className: 'bg-red-50 text-red-700' },
+  pending_expired: { label: 'Expirado', className: 'bg-red-50 text-red-700' },
   active: { label: 'Ativo', className: 'bg-primary-light text-primary-dark' },
   removed: { label: 'Removido', className: 'bg-gray-100 text-gray-700' },
 };

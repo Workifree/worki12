@@ -144,14 +144,14 @@ describe('CompanyTeamMembers', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('pending_expired: rótulo "Expirou", sem Confirmar, e "Convidar de novo" gera link', async () => {
+  it('pending_expired: rótulo "Expirado", sem Confirmar, e "Convidar de novo" gera link', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
       outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ state: 'pending_expired', confirmed: false })],
     });
     vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'invited', inviteToken: 'tok-novo' });
     renderPage();
-    expect(await screen.findByText('Expirou')).toBeInTheDocument();
+    expect(await screen.findByText('Expirado')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Convidar de novo/ }));
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('tok-novo');

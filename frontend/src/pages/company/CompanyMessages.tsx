@@ -12,6 +12,7 @@ import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui'
 import ErroDeCarga from '../../components/ErroDeCarga'
 import { checkSession } from '../../lib/authSession'
 import { activeShiftLabel, type ShiftAttendanceLike } from '../../lib/shiftProgress'
+import { TONE_CLASS, getStatus, statusLabel } from '../../lib/statusLabels';
 
 interface ConversationItem {
     id: string;
@@ -376,34 +377,10 @@ export default function CompanyMessages() {
         navigate(`/company/messages?conversation=${conv.id}`, { replace: true });
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'hired':
-            case 'in_progress':
-                return 'bg-green-100 text-green-700';
-            case 'declined':
-            case 'rejected':
-                return 'bg-red-100 text-red-700';
-            case 'completed':
-                return 'bg-blue-100 text-blue-700';
-            default:
-                return 'bg-yellow-100 text-yellow-700';
-        }
-    };
+    const getStatusColor = (status: string) => TONE_CLASS[getStatus('application', status).tone];
 
-    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) => {
-        const turno = attendance ? activeShiftLabel(attendance) : null;
-        if (turno) return turno;
-        switch (status) {
-            case 'invited': return 'Convidado';
-            case 'hired': return 'Contratado';
-            case 'in_progress': return 'Em Andamento';
-            case 'completed': return 'Concluído';
-            case 'declined':
-            case 'rejected': return 'Recusado';
-            default: return status;
-        }
-    };
+    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) =>
+        (attendance ? activeShiftLabel(attendance) : null) ?? statusLabel('application', status);
 
     if (loading) {
         return (

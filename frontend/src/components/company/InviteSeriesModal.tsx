@@ -20,6 +20,7 @@ import {
     type InviteSeriesTarget,
 } from './seriesWeekRisk';
 import { Dialog } from '../ui/Dialog';
+import { roleLabel } from '../../lib/statusLabels';
 
 // Re-exportado para quem já importa o tipo a partir do componente (ex.: CompanyJobs.tsx).
 export type { InviteSeriesTarget } from './seriesWeekRisk';
@@ -272,7 +273,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                         da F7 (spec pronta, ainda não construída). O selo de risco de
                                                         vínculo (amarelo) NÃO entra aqui, de propósito. */}
                                                     {member.worker.primary_role && (
-                                                        <p className="text-xs text-gray-600 truncate">{member.worker.primary_role}</p>
+                                                        <p className="text-xs text-gray-600 truncate">{roleLabel(member.worker.primary_role)}</p>
                                                     )}
                                                 </div>
                                                 <Button

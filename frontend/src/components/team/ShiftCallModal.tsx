@@ -20,6 +20,7 @@ import { Button, Field } from '../ui';
 import { useBusyWorkers } from '../../hooks/useBusyWorkers';
 import { buildShiftWindow } from '../../services/shiftOperationService';
 import { BusyWorkerBadge } from './BusyWorkerBadge';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -634,7 +635,7 @@ export function ShiftCallModal({
                   <div className="flex items-center gap-2 min-w-0">
                     {member.worker.primary_role && (
                       <p className="text-xs text-gray-600 truncate">
-                        {member.worker.primary_role}
+                        {roleLabel(member.worker.primary_role)}
                       </p>
                     )}
                     {/* F7 — contêiner de sinais da linha secundária: vazio quando não há

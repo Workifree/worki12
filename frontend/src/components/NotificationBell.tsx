@@ -111,7 +111,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 <div
                     ref={panelRef}
                     style={{ position: 'fixed', top: coords.top, right: coords.right }}
-                    className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] border-2 border-black z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right"
+                    className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] border-2 border-black z-[100] overflow-hidden origin-top-right"
                 >
                     <div className="px-4 py-2 border-b-2 border-black flex justify-between items-center gap-2 bg-white">
                         <h3 className="font-bold text-base">Notificações</h3>

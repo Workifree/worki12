@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, lazy, Suspense } from 'react';
-import { Link2, Phone, QrCode, UserPlus } from 'lucide-react';
+import { Link2, KeyRound, QrCode, UserPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { UUID_RE, extractInviteToken } from './utils';
@@ -64,7 +64,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
       if (resolved) {
         target = resolved;
       } else {
-        addToast('Worki ID inválido. Cole o Worki ID do freela (Perfil → "Meu QR de Identidade" → "Copiar Worki ID") ou use a aba Link.', 'error');
+        addToast('Código inválido. Cole o código do freela (Perfil → "Meu QR de Identidade" → "Copiar meu código") ou use a aba Link.', 'error');
         return;
       }
     }
@@ -110,14 +110,14 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
   return (
     <ModalShell
       title="Adicionar freela"
-      subtitle="Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou."
+      subtitle="Adicione um freela pelo QR, pelo código ou pelo link de perfil que ele te enviou."
       onClose={onClose}
     >
       {/* Tabs */}
       <div role="group" aria-label="Como adicionar" className="flex gap-5 mb-5 border-b-2 border-gray-200">
         {([
           { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
-          { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
+          { id: 'phone' as AddMethod, icon: KeyRound, label: 'Código' },
           { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
         ] as const).map((tab) => (
           <button
@@ -192,10 +192,10 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
       {method === 'phone' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Digite o <span className="font-bold text-black">ID do worker</span> (Worki ID) para adicionar diretamente.
-            Peça o Worki ID ao freela (Perfil dele → "Meu QR de Identidade" → "Copiar Worki ID").
+            Cole o <span className="font-bold text-black">código do freela</span> para adicionar direto.
+            Ele encontra em Perfil → "Meu QR de Identidade" → "Copiar meu código".
           </p>
-          <Field label="Worki ID do freela">
+          <Field label="Código do freela">
             <input
               id="phone-input"
               type="text"
@@ -215,7 +215,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
             {loading ? 'Enviando...' : 'Enviar Convite'}
           </Button>
           <p className="text-xs text-gray-600">
-            Ainda não é possível buscar por CPF ou telefone — peça o Worki ID ao freela.
+            Ainda não é possível buscar por CPF ou telefone. Peça o código ao freela.
           </p>
         </div>
       )}

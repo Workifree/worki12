@@ -40,7 +40,7 @@ export default function CompanyGestao() {
     });
 
     return (
-        <div className="mx-auto max-w-4xl pb-6 animate-in fade-in duration-300">
+        <div className="mx-auto max-w-4xl pb-6">
             <PageMeta title="Gestão" description="Pessoas, dados da empresa e suporte." />
             <PageHeader title="Gestão" subtitle="Pessoas, dados da empresa e suporte." />
 

@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2, XCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
+import { formatBRL } from '../../lib/currency';
 import { logError } from '../../lib/logger';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
@@ -19,10 +20,9 @@ import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { getSessionUserOrThrow } from '../../lib/authSession';
-import { Button, Card } from '../../components/ui';
+import { Button, Card, Menu } from '../../components/ui';
 import { Dialog } from '../../components/ui/Dialog';
 
-const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -50,7 +50,6 @@ export default function CompanyJobDetails() {
 
     const [job, setJob] = useState<JobDetails | null>(null);
     const [loading, setLoading] = useState(true);
-    const [openMenu, setOpenMenu] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showCancelJob, setShowCancelJob] = useState(false);
     const currentCompany = useCurrentCompany();
@@ -62,14 +61,6 @@ export default function CompanyJobDetails() {
     const { addToast } = useToast();
 
     // Esc fecha o menu de ações (o clique fora é a camada transparente z-10 abaixo do menu).
-    useEffect(() => {
-        if (!openMenu) return;
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpenMenu(false);
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [openMenu]);
 
     useEffect(() => {
         if (id) fetchJobDetails();
@@ -141,7 +132,6 @@ export default function CompanyJobDetails() {
         } else {
             fetchJobDetails();
         }
-        setOpenMenu(false);
     };
 
     const handleDelete = async () => {
@@ -232,7 +222,7 @@ export default function CompanyJobDetails() {
                     </div>
             </Dialog>
         )}
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-4xl mx-auto pb-20">
             {/* Barra superior: voltar + menu de ações do turno */}
             <div className="mb-4 flex items-center justify-between">
                 <Button
@@ -244,56 +234,20 @@ export default function CompanyJobDetails() {
                     Voltar
                 </Button>
 
-                <div className="relative">
-                    <Button
-                        variant="ghost"
-                        onClick={() => setOpenMenu(!openMenu)}
-                        aria-label="Mais opções do turno"
-                        aria-haspopup="menu"
-                        aria-expanded={openMenu}
-                        className="w-11 !px-0"
-                    >
-                        <MoreHorizontal size={20} />
-                    </Button>
-                    {openMenu && (
-                        <>
-                        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(false)} aria-hidden="true" />
-                        <div role="menu" aria-label="Ações do turno" className="absolute right-0 top-full z-20 mt-2 w-52 divide-y divide-gray-100 overflow-hidden rounded-xl border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                            <button
-                                role="menuitem"
-                                onClick={() => navigate(`/company/jobs/${id}/edit`)}
-                                className={MENU_ITEM}
-                            >
-                                <Edit2 size={16} /> Editar
-                            </button>
-                            <button
-                                role="menuitem"
-                                onClick={() => handleStatusChange(job.status === 'open' ? 'paused' : 'open')}
-                                className={MENU_ITEM}
-                            >
-                                {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-                                {job.status === 'open' ? 'Pausar' : 'Reativar'}
-                            </button>
-                            {podeCancelarTurno && (
-                                <button
-                                    role="menuitem"
-                                    onClick={() => { setOpenMenu(false); setShowCancelJob(true); }}
-                                    className={MENU_ITEM}
-                                >
-                                    <XCircle size={16} /> Cancelar turno
-                                </button>
-                            )}
-                            <button
-                                role="menuitem"
-                                onClick={() => { setOpenMenu(false); setShowDeleteConfirm(true); }}
-                                className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
-                            >
-                                <Trash2 size={16} /> Excluir
-                            </button>
-                        </div>
-                        </>
-                    )}
-                </div>
+                <Menu
+                    label="Mais opções do turno"
+                    menuLabel="Ações do turno"
+                    items={[
+                        { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${id}/edit`) },
+                        {
+                            label: job.status === 'open' ? 'Pausar' : 'Reativar',
+                            icon: job.status === 'open' ? PauseCircle : PlayCircle,
+                            onSelect: () => handleStatusChange(job.status === 'open' ? 'paused' : 'open'),
+                        },
+                        podeCancelarTurno && { label: 'Cancelar turno', icon: XCircle, onSelect: () => setShowCancelJob(true) },
+                        { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
+                    ]}
+                />
             </div>
 
             <Card padding="lg">
@@ -313,7 +267,7 @@ export default function CompanyJobDetails() {
                         </div>
                     </div>
                     <div className="shrink-0 sm:text-right">
-                        <div className="text-2xl font-bold tabular-nums">R$ {job.budget}</div>
+                        <div className="text-2xl font-bold tabular-nums">{formatBRL(job.budget)}</div>
                         <div className="text-xs text-gray-600">{unidadePreco}</div>
                     </div>
                 </div>

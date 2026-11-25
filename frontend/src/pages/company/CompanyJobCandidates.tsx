@@ -1,4 +1,4 @@
-import { isShiftInProgress } from '../../lib/shiftProgress';
+import { activeShiftLabel } from '../../lib/shiftProgress';
 import { createContext, useContext, useEffect, useId, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
@@ -36,6 +36,7 @@ import type {
 } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
+import { roleLabel, statusLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Confirmação de véspera (D-1) — helpers puros (module scope, sem estado de componente),
@@ -1310,7 +1311,7 @@ export default function CompanyJobCandidates() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-4xl mx-auto pb-20">
             {/* Header */}
             <Button
                 variant="ghost"
@@ -1592,7 +1593,7 @@ export default function CompanyJobCandidates() {
                                                                 'info'
                                             }
                                         >
-                                            {(app.status === 'hired' || app.status === 'in_progress') && app.company_checkout_confirmed_at ? 'Saída confirmada' : app.status === 'interview' ? 'Em Entrevista' : isShiftInProgress(app) ? 'Em Andamento' : app.status === 'hired' || app.status === 'in_progress' ? 'Contratado' : app.status === 'completed' ? 'Finalizado' : app.status === 'cancelled' ? 'Dispensado' : app.status === 'declined' ? 'Recusou' : app.status === 'expired' ? 'Expirou' : 'Descartado'}
+                                            {activeShiftLabel(app) ?? statusLabel('application', app.status)}
                                         </StatusChip>
                                     )}
 
@@ -1896,7 +1897,7 @@ export default function CompanyJobCandidates() {
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
                                             {member.worker.primary_role && (
-                                                <p className="text-xs text-gray-600 truncate">{member.worker.primary_role}</p>
+                                                <p className="text-xs text-gray-600 truncate">{roleLabel(member.worker.primary_role)}</p>
                                             )}
                                         </div>
                                         <Button

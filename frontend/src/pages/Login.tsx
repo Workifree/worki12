@@ -228,7 +228,7 @@ export default function Login() {
 
     return (
         <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
-                    ${isHire ? 'bg-accent' : 'bg-[#F4F4F0]'}`}>
+                    ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
             <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
 
             {/* Back Button */}

@@ -1,4 +1,4 @@
-import { Search, MoreHorizontal, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Send, X, UserPlus, Clock, Calendar, AlertTriangle, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -22,19 +22,20 @@ import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
-import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+import { Button, Card, Menu, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+import CreateShiftLink from '../../components/company/CreateShiftLink';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
 import { Dialog } from '../../components/ui/Dialog';
+import { roleLabel } from '../../lib/statusLabels';
 
 type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
 const FILTERS: Array<{ key: JobFilter; label: string }> = [
     { key: 'all', label: 'Todos' },
     { key: 'open', label: 'Abertos' },
     { key: 'andamento', label: 'Em andamento' },
-    { key: 'closed', label: 'Finalizados' },
+    { key: 'closed', label: 'Concluídos' },
 ];
 
-const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1). Selo discreto na agenda
 // ("Série · toda quinta") deriva o dia da própria `series_occurrence_date` da ocorrência — uma
@@ -210,8 +211,6 @@ function futureOpenSeriesTargets(jobs: Job[], seriesId: string): InviteSeriesTar
 interface JobRowProps {
     job: Job;
     bucketKey: DayBucketKey;
-    openMenu: string | null;
-    setOpenMenu: (id: string | null) => void;
     navigate: NavigateFunction;
     setInviteJobId: (id: string | null) => void;
     handleStatusChange: (id: string, status: string) => void;
@@ -223,7 +222,7 @@ interface JobRowProps {
 
 // Uma linha da agenda: horário + função + freela (nome/avatar/estado) visíveis sem clicar.
 // Turno sem freela atrelado "grita" — buraco de escala é o problema nº1 da operação diária.
-function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobId, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
+function JobRow({ job, bucketKey, navigate, setInviteJobId, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
     const timeRange = formatTimeRange(job);
     const isNearTerm = bucketKey === 'today' || bucketKey === 'tomorrow';
     const canInvite = job.status === 'open' || job.status === 'paused';
@@ -295,7 +294,7 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                                 <span className={`text-xs font-semibold ${job.freela.state === 'confirmed' ? 'text-green-700' :
                                     job.freela.state === 'completed' ? 'text-gray-700' : 'text-amber-900'
                                     }`}>
-                                    {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Finalizado' : 'Aguardando resposta'}
+                                    {job.freela.state === 'confirmed' ? 'Confirmado' : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}
                                 </span>
                             </div>
                             {job.freela.state === 'confirmed' && (
@@ -318,103 +317,26 @@ function JobRow({ job, bucketKey, openMenu, setOpenMenu, navigate, setInviteJobI
                         </span>
                     )}
 
-                    <div className="relative shrink-0" data-job-menu>
-                        <Button
-                            variant="ghost"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenu(openMenu === job.id ? null : job.id);
-                            }}
-                            className="w-11 !px-0"
-                            aria-label="Mais opções do turno"
-                            aria-haspopup="menu"
-                            aria-expanded={openMenu === job.id}
-                        >
-                            <MoreHorizontal size={20} className="text-gray-600" />
-                        </Button>
-
-                        {openMenu === job.id && (
-                            <div role="menu" aria-label="Ações do turno" className="absolute right-0 top-full z-10 mt-2 w-52 divide-y divide-gray-100 overflow-hidden rounded-xl border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/candidates`); }}
-                                    className={MENU_ITEM}
-                                >
-                                    <Users size={16} /> Presença e Pagamento
-                                </button>
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}`); }}
-                                    className={MENU_ITEM}
-                                >
-                                    <Eye size={16} /> Ver Detalhes
-                                </button>
-                                {/* Repetir: a empresa refaz o MESMO tipo de turno o tempo todo. Aqui ela
-                                    reaproveita o turno inteiro e so escolhe a data nova. */}
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/create?repetir=${job.id}`); }}
-                                    className={MENU_ITEM}
-                                >
-                                    <Copy size={16} /> Repetir turno
-                                </button>
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/company/jobs/${job.id}/edit`); }}
-                                    className={MENU_ITEM}
-                                >
-                                    <Edit2 size={16} /> Editar
-                                </button>
-                                {job.series_id && (
-                                    <>
-                                        <button
-                                    role="menuitem"
-                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onInviteSeries(job.series_id!); }}
-                                            className={MENU_ITEM}
-                                        >
-                                            <Repeat size={16} /> Convidar para a série
-                                        </button>
-                                        <button
-                                    role="menuitem"
-                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onEditSeries(job); }}
-                                            className={MENU_ITEM}
-                                        >
-                                            <Edit2 size={16} /> Editar os futuros
-                                        </button>
-                                        <button
-                                    role="menuitem"
-                                            onClick={(e) => { e.stopPropagation(); setOpenMenu(null); onCancelSeries(job.series_id!); }}
-                                            className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
-                                        >
-                                            <XCircle size={16} /> Cancelar a série
-                                        </button>
-                                    </>
-                                )}
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open');
-                                    }}
-                                    className={MENU_ITEM}
-                                >
-                                    {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-                                    {job.status === 'open' ? 'Pausar' : 'Reativar'}
-                                </button>
-                                <button
-                                    role="menuitem"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenu(null);
-                                        setDeleteJobId(job.id);
-                                    }}
-                                    className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
-                                >
-                                    <Trash2 size={16} /> Excluir
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <Menu
+                        label="Mais opções do turno"
+                        menuLabel="Ações do turno"
+                        items={[
+                            { label: 'Presença e Pagamento', icon: Users, onSelect: () => navigate(`/company/jobs/${job.id}/candidates`) },
+                            { label: 'Ver Detalhes', icon: Eye, onSelect: () => navigate(`/company/jobs/${job.id}`) },
+                            // Repetir reaproveita o turno inteiro; a empresa só escolhe a data nova.
+                            { label: 'Repetir turno', icon: Copy, onSelect: () => navigate(`/company/create?repetir=${job.id}`) },
+                            { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${job.id}/edit`) },
+                            !!job.series_id && { label: 'Convidar para a série', icon: Repeat, onSelect: () => onInviteSeries(job.series_id!) },
+                            !!job.series_id && { label: 'Editar os futuros', icon: Edit2, onSelect: () => onEditSeries(job) },
+                            {
+                                label: job.status === 'open' ? 'Pausar' : 'Reativar',
+                                icon: job.status === 'open' ? PauseCircle : PlayCircle,
+                                onSelect: () => handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open'),
+                            },
+                            !!job.series_id && { label: 'Cancelar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
+                            { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
+                        ]}
+                    />
                 </div>
 
             </div>
@@ -435,36 +357,14 @@ export default function CompanyJobs() {
     const [filter, setFilter] = useState<'all' | 'open' | 'closed' | 'andamento'>(initialFilter);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
     // Vaga alvo do modal "Convidar Freela" (atrelar freela a uma vaga já criada).
     const [inviteJobId, setInviteJobId] = useState<string | null>(null);
     // "Anteriores" fica recolhido por padrão — passado não deve atrapalhar a leitura do dia
-    // de operação. Abre automaticamente quando a empresa escolhe o filtro "Finalizados"
+    // de operação. Abre automaticamente quando a empresa escolhe o filtro "Concluídos"
     // (é exatamente o que ela pediu pra ver) e continua alternável manualmente.
     const [pastExpanded, setPastExpanded] = useState(initialFilter === 'closed');
     const { addToast } = useToast();
-
-    // Menu de ações do turno: fecha com Esc e com clique/toque fora (o gatilho e o menu
-    // levam `data-job-menu`, então tocar no gatilho continua alternando normalmente).
-    useEffect(() => {
-        if (openMenu === null) return;
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpenMenu(null);
-        };
-        const onPointerDown = (e: MouseEvent | TouchEvent) => {
-            if (e.target instanceof Element && e.target.closest('[data-job-menu]')) return;
-            setOpenMenu(null);
-        };
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('mousedown', onPointerDown);
-        document.addEventListener('touchstart', onPointerDown);
-        return () => {
-            document.removeEventListener('keydown', onKeyDown);
-            document.removeEventListener('mousedown', onPointerDown);
-            document.removeEventListener('touchstart', onPointerDown);
-        };
-    }, [openMenu]);
 
     // Ações de série (F3, R11/R10) — cada uma abre seu próprio modal de confirmação.
     const [editSeriesJob, setEditSeriesJob] = useState<SeriesJobSnapshot | null>(null);
@@ -575,7 +475,6 @@ export default function CompanyJobs() {
     };
 
     const handleStatusChange = async (id: string, newStatus: string) => {
-        setOpenMenu(null);
         // .select('id') obrigatório (patterns.md — DELETE/UPDATE sob RLS negado em silêncio):
         // RLS de `jobs` foi ligada nesta revisão — um UPDATE negado devolve 204 sem erro.
         const { data, error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', id).select('id');
@@ -677,10 +576,12 @@ export default function CompanyJobs() {
                     </div>
             </Dialog>
         )}
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
+        <div className="pb-4">
             <PageHeader
                 title="Turnos"
                 subtitle="Sua agenda, dia a dia."
+                action={<CreateShiftLink />}
+                inlineAction
             />
 
             {/* Busca + filtros: uma linha de controles, o ativo em preto */}
@@ -732,7 +633,7 @@ export default function CompanyJobs() {
                                 <button
                                     onClick={() => setPastExpanded(v => !v)}
                                     aria-expanded={pastExpanded}
-                                    className="-mx-4 mb-3 flex min-h-11 w-full items-center justify-between gap-2 border-b-2 border-black/10 bg-[#F4F4F0]/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0"
+                                    className="-mx-4 mb-3 flex min-h-11 w-full items-center justify-between gap-2 border-b-2 border-black/10 bg-canvas/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0"
                                 >
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-600">
                                         {bucket.label}
@@ -741,7 +642,7 @@ export default function CompanyJobs() {
                                     {pastExpanded ? <ChevronUp size={18} className="text-gray-600" /> : <ChevronDown size={18} className="text-gray-600" />}
                                 </button>
                             ) : (
-                                <div className="-mx-4 mb-3 flex items-center gap-2 border-b-2 border-black/10 bg-[#F4F4F0]/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0">
+                                <div className="-mx-4 mb-3 flex items-center gap-2 border-b-2 border-black/10 bg-canvas/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0">
                                     <h2 className="text-sm font-bold text-gray-600">{bucket.label}</h2>
                                     <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">{bucket.jobs.length}</span>
                                 </div>
@@ -754,8 +655,6 @@ export default function CompanyJobs() {
                                             key={job.id}
                                             job={job}
                                             bucketKey={bucket.key}
-                                            openMenu={openMenu}
-                                            setOpenMenu={setOpenMenu}
                                             navigate={navigate}
                                             setInviteJobId={setInviteJobId}
                                             handleStatusChange={handleStatusChange}
@@ -836,7 +735,7 @@ export default function CompanyJobs() {
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-bold">{member.worker.full_name}</p>
                                             {member.worker.primary_role && (
-                                                <p className="truncate text-xs text-gray-600">{member.worker.primary_role}</p>
+                                                <p className="truncate text-xs text-gray-600">{roleLabel(member.worker.primary_role)}</p>
                                             )}
                                         </div>
                                         <Button

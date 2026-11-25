@@ -67,6 +67,7 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { getAuthenticatedCompanyId } from './companyScopeService';
+import { roleLabel } from '../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -464,7 +465,7 @@ export function toCSV(report: OrderReport): string {
     const paidAtStr = row.paidAt ? formatDDMMYYYY(row.paidAt) : '';
     const valorStr = row.amount.toFixed(2).replace('.', ',');
     const formaStr = row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—';
-    const funcaoStr = row.category ?? row.title;
+    const funcaoStr = roleLabel(row.category) || row.title;
     const statusStr = ORDER_STATUS_LABELS[row.status];
 
     lines.push(

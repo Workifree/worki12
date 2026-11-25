@@ -201,8 +201,8 @@ describe('ReceiptView - Horas trabalhadas', () => {
       expect(screen.getByText('18:10')).toBeInTheDocument()
     })
     expect(screen.getByText('01:00')).toBeInTheDocument()
-    // 18h10 -> 01h00 (dia seguinte) = 6h50 trabalhadas
-    expect(screen.getByText('6h50')).toBeInTheDocument()
+    // 18h10 -> 01h00 (dia seguinte) = 6h 50min trabalhadas
+    expect(screen.getByText('6h 50min')).toBeInTheDocument()
   })
 
   it('calcula corretamente um turno dentro do mesmo dia (08h00 -> 16h30)', async () => {
@@ -225,7 +225,7 @@ describe('ReceiptView - Horas trabalhadas', () => {
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText('8h30')).toBeInTheDocument()
+      expect(screen.getByText('8h 30min')).toBeInTheDocument()
     })
   })
 
@@ -303,7 +303,7 @@ describe('ReceiptView - Fallback para confirmação da empresa (freela não usou
     })
     expect(screen.getByText('01:00')).toBeInTheDocument()
     // Cálculo de horas continua correto sobre os timestamps absolutos (cruza a meia-noite).
-    expect(screen.getByText('6h50')).toBeInTheDocument()
+    expect(screen.getByText('6h 50min')).toBeInTheDocument()
     // Origem honesta: os dois horários vieram da empresa, não do freela.
     expect(screen.getAllByText('Confirmado pela empresa')).toHaveLength(2)
   })

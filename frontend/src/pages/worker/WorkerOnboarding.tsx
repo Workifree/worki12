@@ -359,7 +359,7 @@ export default function WorkerOnboarding() {
     );
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
+        <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
@@ -410,7 +410,7 @@ export default function WorkerOnboarding() {
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Quem é você?</h2>
 
                                 <div className="space-y-4">
@@ -516,7 +516,7 @@ export default function WorkerOnboarding() {
 
                         {/* Step 2: Professional */}
                         {step === 2 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Profissão</h2>
 
                                 <div className="space-y-4">
@@ -571,7 +571,7 @@ export default function WorkerOnboarding() {
 
                         {/* Step 3: Goals & Availability */}
                         {step === 3 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Objetivos</h2>
 
                                 <div className="space-y-5">

@@ -510,7 +510,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                 <p className="text-xs text-gray-500 mb-3">Saldos rastreados pelo sistema. Devem bater com o Asaas em producao.</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <StatCard icon={<DollarSign size={18} />} label="Saldo Empresas" value={formatMoney(stats?.companyBalances || 0)} color="blue" />
-                    <StatCard icon={<DollarSign size={18} />} label="Saldo Workers" value={formatMoney(stats?.workerBalances || 0)} color="green" />
+                    <StatCard icon={<DollarSign size={18} />} label="Saldo Freelas" value={formatMoney(stats?.workerBalances || 0)} color="green" />
                     <StatCard icon={<Lock size={18} />} label="Em Escrow" value={formatMoney(stats?.totalEscrowReserved || 0)} color="orange" />
                     <StatCard icon={<DollarSign size={18} />} label="Total DB" value={formatMoney(stats?.dbTotalBalance || 0)} color="gray" />
                 </div>
@@ -518,7 +518,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
 
             {/* Plataforma */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <StatCard icon={<Users size={20} />} label="Workers" value={stats?.totalWorkers || 0} color="green" />
+                <StatCard icon={<Users size={20} />} label="Freelas" value={stats?.totalWorkers || 0} color="green" />
                 <StatCard icon={<Briefcase size={20} />} label="Empresas" value={stats?.totalCompanies || 0} color="blue" />
                 <StatCard icon={<Briefcase size={20} />} label="Vagas" value={stats?.totalJobs || 0} color="purple" />
                 <StatCard icon={<DollarSign size={20} />} label="Escrow Liberado" value={formatMoney(stats?.totalEscrowReleased || 0)} color="green" />
@@ -613,7 +613,7 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                         className="text-xs font-bold border-2 border-gray-300 rounded-lg px-2 py-1 focus:border-black focus:outline-none"
                     >
                         <option value="all">Todos</option>
-                        <option value="worker">Workers</option>
+                        <option value="worker">Freelas</option>
                         <option value="company">Empresas</option>
                         <option value="hire">Empresa (hire)</option>
                     </select>
@@ -716,7 +716,7 @@ function EscrowsTab({ escrows }: { escrows: RichEscrow[] }) {
                                 <th className="text-left py-2 font-black uppercase text-xs">Data</th>
                                 <th className="text-left py-2 font-black uppercase text-xs">Vaga</th>
                                 <th className="text-left py-2 font-black uppercase text-xs">Empresa (pagou)</th>
-                                <th className="text-left py-2 font-black uppercase text-xs">Worker (recebe)</th>
+                                <th className="text-left py-2 font-black uppercase text-xs">Freela (recebe)</th>
                                 <th className="text-right py-2 font-black uppercase text-xs">Valor</th>
                                 <th className="text-left py-2 font-black uppercase text-xs">Status</th>
                                 <th className="text-left py-2 font-black uppercase text-xs">Liberado em</th>

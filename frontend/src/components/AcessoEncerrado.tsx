@@ -40,7 +40,7 @@ export default function AcessoEncerrado() {
     };
 
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
             <PageMeta title="Acesso encerrado" noindex />
             <div className="w-full max-w-md">
                 <Card padding="lg" className="text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">

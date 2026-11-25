@@ -178,7 +178,7 @@ export default function Organization() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8">
       <PageMeta title="Unidades" description="Unidades da sua organização no Worki." />
       <BackToGestao />
 

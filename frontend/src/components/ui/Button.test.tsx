@@ -29,7 +29,7 @@ describe('Button', () => {
     render(<Button variant="dark">Ok</Button>)
     const btn = screen.getByRole('button')
     expect(btn).toHaveClass('border-2', 'border-black', 'rounded-xl', 'font-bold')
-    expect(btn.className).toContain('shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]')
+    expect(btn).toHaveClass('shadow-brutal-sm')
   })
 
   it('tamanho md (padrão) tem min-h-11 = alvo de toque 44px', () => {

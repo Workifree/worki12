@@ -120,7 +120,7 @@ describe('N-4 — nome da empresa no chat do freela trunca antes do selo', () =>
 
 describe('B-1 — depois da saída, nada diz "Em Andamento"', () => {
   it('a regra do selo', () => {
-    expect(activeShiftLabel({ status: 'in_progress', worker_checkin_at: CHECKIN })).toBe('Em Andamento')
+    expect(activeShiftLabel({ status: 'in_progress', worker_checkin_at: CHECKIN })).toBe('Em andamento')
     expect(activeShiftLabel({ status: 'hired' })).toBe('Contratado')
     expect(
       activeShiftLabel({ status: 'in_progress', worker_checkin_at: CHECKIN, company_checkout_confirmed_at: CHECKOUT }),
@@ -140,7 +140,7 @@ describe('B-1 — depois da saída, nada diz "Em Andamento"', () => {
     })
     render(<MemoryRouter>{tela}</MemoryRouter>)
     expect(await screen.findByText('Saída confirmada')).toBeInTheDocument()
-    expect(screen.queryByText('Em Andamento')).not.toBeInTheDocument()
+    expect(screen.queryByText('Em andamento')).not.toBeInTheDocument()
   })
 
   it('Meus Turnos: saída registrada pelo freela sai de "Em Andamento" e aguarda no Histórico', async () => {

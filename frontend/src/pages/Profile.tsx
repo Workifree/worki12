@@ -22,6 +22,8 @@ import { SHIFT_CATEGORIES } from '../components/company/shiftCategories';
 import { checkSession } from '../lib/authSession';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { Dialog } from '../components/ui/Dialog';
+import { roleLabel } from '../lib/statusLabels';
+import { formatWorkedTime } from '../lib/currency';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -135,7 +137,7 @@ async function somarHorasRegistradas(workerId: string): Promise<number | null> {
             return total + (saida - entrada);
         }, 0);
 
-        return Math.floor(ms / 3_600_000);
+        return ms / 3_600_000;
     } catch {
         return null;
     }
@@ -274,10 +276,10 @@ export default function Profile() {
         try {
             await navigator.clipboard.writeText(workerId);
             setIdCopied(true);
-            addToast('Worki ID copiado! Envie para a empresa te adicionar ao elenco.', 'success');
+            addToast('Código copiado! Envie para a empresa te adicionar ao elenco.', 'success');
             setTimeout(() => setIdCopied(false), 2500);
         } catch {
-            addToast('Não foi possível copiar o Worki ID.', 'error');
+            addToast('Não foi possível copiar o código.', 'error');
         }
     }, [workerId, addToast]);
 
@@ -662,7 +664,7 @@ export default function Profile() {
                         <div className="min-w-0">
                             <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
                             <p className="mt-1 text-sm text-gray-600">
-                                Link: a empresa abre e te adiciona. Worki ID: ela digita no app.
+                                Link: a empresa abre e te adiciona. Código: ela digita no app.
                             </p>
                         </div>
                     </div>
@@ -683,7 +685,7 @@ export default function Profile() {
                             iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
                             className="w-full sm:w-auto"
                         >
-                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
                         </Button>
                     </div>
                 </Card>
@@ -818,7 +820,7 @@ export default function Profile() {
                         <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
-                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked === null ? '—' : `${stats.hoursWorked}h`}</dd>
+                        <dd className="text-xl font-bold tabular-nums">{formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
@@ -964,7 +966,7 @@ export default function Profile() {
                                 {formData.primary_role
                                     && !SHIFT_CATEGORIES.some(c => c.name === formData.primary_role) && (
                                     <option value={formData.primary_role}>
-                                        {formData.primary_role} (atual)
+                                        {roleLabel(formData.primary_role)} (atual)
                                     </option>
                                 )}
                             </select>
@@ -1023,7 +1025,7 @@ export default function Profile() {
                             <DataRow label="Experiência">{profile.experience_years || 'Iniciante'}</DataRow>
                             <DataRow label="Regime">
                                 <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
-                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || 'N/A')}
+                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || 'Não informado')}
                                 </span>
                             </DataRow>
                         </dl>
@@ -1033,7 +1035,7 @@ export default function Profile() {
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
                                     <span key={i} className="inline-flex h-8 items-center rounded-pill border-2 border-black bg-white px-3 text-sm font-semibold">
-                                        {role}
+                                        {roleLabel(role)}
                                     </span>
                                 ))}
                                 {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
@@ -1321,7 +1323,7 @@ export default function Profile() {
                         </button>
                     </div>
                     <p className="mb-5 text-sm text-gray-600">
-                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu Worki ID.
+                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu código.
                     </p>
                     <div className="mb-5 flex justify-center">
                         <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -1334,7 +1336,7 @@ export default function Profile() {
                         </div>
                     </div>
                     <div className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Worki ID</p>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Seu código</p>
                         <p className="break-all font-mono text-xs font-bold text-gray-700">{workerId}</p>
                     </div>
                     <div className="mt-4 flex flex-col gap-2">
@@ -1344,7 +1346,7 @@ export default function Profile() {
                             onClick={handleCopyWorkiId}
                             iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
                         >
-                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
                         </Button>
                         <Button
                             variant="secondary"
@@ -1356,7 +1358,7 @@ export default function Profile() {
                         </Button>
                     </div>
                     <p className="mt-3 text-center text-xs text-gray-600">
-                        Cole o <span className="font-bold">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
+                        Envie o <span className="font-bold">código</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
                     </p>
             </Dialog>
         )}

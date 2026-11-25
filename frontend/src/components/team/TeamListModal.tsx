@@ -5,6 +5,7 @@ import { TeamListService } from '../../services/teamListService';
 import type { TeamMember, TeamListWithMembers } from '../../types';
 import { ModalShell } from './ModalShell';
 import { Button, Field } from '../ui';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Modal "Nova lista" / "Editar lista" (F2 — Listas salvas do elenco).
@@ -207,7 +208,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
               <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
               {member.worker.primary_role && (
                 <p className="text-xs text-gray-600 truncate">
-                  {member.worker.primary_role}
+                  {roleLabel(member.worker.primary_role)}
                 </p>
               )}
             </div>

@@ -170,7 +170,7 @@ export default function CompanyPublicProfile() {
     const websiteHref = toSafeWebsiteHref(company.website);
 
     return (
-        <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">
+        <div className="max-w-4xl mx-auto pb-24 font-sans text-accent">
             <PageMeta
                 title={company.name}
                 description={company.description || `Conheça ${company.name} na Worki antes de aceitar o convite.`}
