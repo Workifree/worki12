@@ -9,8 +9,8 @@ interface TrailNumbersProps {
 function Big({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
   return (
     <Card padding="sm" as="li" className="list-none">
-      <p className="text-xs font-black uppercase tracking-wide text-gray-600">{label}</p>
-      <p className="mt-1 text-3xl font-black tabular-nums">{value}</p>
+      <p className="text-xs font-bold text-gray-600">{label}</p>
+      <p className="mt-1 text-3xl font-bold tabular-nums">{value}</p>
       {children && <p className="mt-1 text-sm text-gray-600">{children}</p>}
     </Card>
   )

@@ -106,7 +106,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
     };
 
     return (
-        <Card as="article" className="flex flex-col gap-4 shadow-brutal-brand">
+        <Card as="article" padding="sm" className="flex flex-col gap-3 shadow-brutal-brand">
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h2 className="text-lg font-bold">{heading}</h2>
@@ -176,9 +176,10 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                     </Button>
                 )}
 
+                <div className="flex flex-wrap gap-2 [&>*]:flex-1">
                 <Button
                     variant="secondary"
-                    fullWidth
+                    className="!px-3"
                     data-copilot="freela.turno.falar-empresa"
                     onClick={() => void chat()}
                     loading={chatting}
@@ -190,7 +191,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                 {onCancel && shift.status === 'hired' && !arrived && (
                     <Button
                         variant="dangerOutline"
-                        fullWidth
+                        className="!px-3"
                         data-copilot="freela.turnos.cancelar"
                         data-copilot-risk="D"
                         onClick={onCancel}
@@ -199,6 +200,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                         Cancelar turno
                     </Button>
                 )}
+                </div>
 
                 {onShift && (
                     <p className="text-xs text-gray-600">

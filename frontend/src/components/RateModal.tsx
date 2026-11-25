@@ -115,6 +115,9 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                 >
                     {submitting ? 'Enviando...' : rating === 0 ? 'Toque nas estrelas para avaliar' : 'Enviar avaliação'}
                 </Button>
+                <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting} className="mt-2">
+                    Agora não
+                </Button>
                 </div>
         </Dialog>
     );

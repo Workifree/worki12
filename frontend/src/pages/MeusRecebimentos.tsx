@@ -48,6 +48,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
     const needsConfirmation = payment.status === 'recorded' && !payment.worker_confirmed_at;
     const isVoided = payment.status === 'voided';
     const isScheduled = payment.status === 'scheduled';
+    const amountMissing = !(Number(payment.amount) > 0);
 
     // Cartão cancelado ('voided') não navega: o recibo (`/recibo/:jobId`) resolve pelo
     // marcador ATIVO do turno (scheduled|recorded), não pelo id deste registro estornado.
@@ -100,7 +101,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                     {needsConfirmation && (
                         <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill border border-green-200">
                             <AlertTriangle size={12} />
-                            Confirme o recebimento
+                            {amountMissing ? 'Valor não informado' : 'Confirme o recebimento'}
                         </span>
                     )}
                     {payment.status === 'recorded' && payment.worker_confirmed_at && (
@@ -137,7 +138,7 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                         data-copilot="freela.recebimentos.confirmar"
                         onClick={handleOpen}
                     >
-                        Confirmar recebimento
+                        {amountMissing ? 'Ver recibo' : 'Confirmar recebimento'}
                     </Button>
                 )}
             </div>

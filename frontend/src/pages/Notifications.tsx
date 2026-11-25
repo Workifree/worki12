@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, CreditCard, Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle2, XCircle, Bell, MessageSquare, CreditCard, Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import type { Notification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +23,10 @@ const FILTERS: { id: FilterType; label: string }[] = [
 
 const PAGE_SIZE = 20;
 
-function getIcon(type: string) {
+function getIcon(type: string, title: string) {
+    // O tipo "status_change" cobre aceite e cancelamento: o título decide o ícone.
+    if (/cancel|estorn|recus|dispens/i.test(title)) return <XCircle size={20} className="text-red-600" />;
+    if (/preenchida|aceit|confirm/i.test(title) && type !== 'payment') return <CheckCircle2 size={20} className="text-green-700" />;
     switch (type) {
         case 'message': return <MessageSquare size={20} className="text-blue-500" />;
         case 'payment': return <CreditCard size={20} className="text-green-500" />;
@@ -136,7 +139,7 @@ export default function Notifications() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 pb-24">
+        <div className="max-w-2xl mx-auto pb-4">
             <PageHeader
                 title="Notificações"
                 action={unreadCount > 0 ? (
@@ -192,7 +195,7 @@ export default function Notifications() {
                                         className={`flex w-full gap-3 p-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-blue-50' : 'bg-white'}`}
                                     >
                                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                                            {getIcon(n.type)}
+                                            {getIcon(n.type, n.title)}
                                         </span>
                                         <span className="min-w-0 flex-1 break-words">
                                             <span className={`block text-sm ${unread ? 'font-bold text-black' : 'font-semibold text-gray-700'}`}>

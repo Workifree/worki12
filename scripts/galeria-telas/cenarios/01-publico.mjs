@@ -33,5 +33,5 @@ export default [
   a('redefinir-senha', 'freela', '/redefinir-senha', 'link de recuperação (sessão)', { espera: 'senha' }),
   a('redefinir-senha-diferentes', 'freela', '/redefinir-senha', 'confirmação não bate', { passos: novaSenha('SenhaNova#123', 'SenhaOutra#123'), espera: 'não coincidem' }),
   a('redefinir-senha-ok', 'freela', '/redefinir-senha', 'updateUser ok', { passos: novaSenha('SenhaNova#123', 'SenhaNova#123'), espera: 'Senha Redefinida' }),
-  a('redefinir-senha-link-expirado', 'freela', '/redefinir-senha', 'updateUser: token expirado', { prep: (m) => { m.auth.user = (corpo) => (corpo ? { status: 422, body: { msg: 'Token has expired', message: 'Token has expired' } } : { body: m.sessao }); }, passos: novaSenha('SenhaNova#123', 'SenhaNova#123'), espera: 'expirado' }),
+  a('redefinir-senha-link-expirado', 'freela', '/redefinir-senha', 'updateUser: token expirado', { prep: (m) => { m.auth.user = (corpo) => (corpo ? { status: 422, body: { msg: 'Token has expired', message: 'Token has expired' } } : { body: m.sessao }); }, passos: novaSenha('SenhaNova#123', 'SenhaNova#123'), espera: 'link expirou' }),
 ];

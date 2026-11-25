@@ -30,7 +30,7 @@ export default function BonusRules() {
 
           {BONUS_RULES_SECTIONS.map((section) => (
             <section key={section.id} aria-labelledby={`regra-${section.id}`} className="space-y-2">
-              <h2 id={`regra-${section.id}`} className="text-lg font-black mt-6">
+              <h2 id={`regra-${section.id}`} className="text-lg font-bold mt-6">
                 {section.title}
               </h2>
               {section.paragraphs.map((text) => (
@@ -40,12 +40,12 @@ export default function BonusRules() {
           ))}
 
           <section aria-labelledby="regra-marcos" className="space-y-3">
-            <h2 id="regra-marcos" className="text-lg font-black mt-6">
+            <h2 id="regra-marcos" className="text-lg font-bold mt-6">
               Os marcos e os valores
             </h2>
             {BONUS_RULES_MILESTONE_GROUPS.map((group) => (
               <div key={group.name}>
-                <h3 className="text-sm font-black uppercase tracking-wide text-gray-600">{group.name}</h3>
+                <h3 className="text-sm font-bold text-gray-600">{group.name}</h3>
                 <ul className="mt-1 divide-y divide-gray-200 border-2 border-black rounded-xl">
                   {group.items.map((item) => (
                     <li key={item.title} className="flex items-center justify-between gap-3 px-3 py-2">

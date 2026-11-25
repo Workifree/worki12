@@ -28,5 +28,5 @@ export default [
   x('qr-camera-negada', 'empresa', '/company/team', 'leitor de QR sem permissão de câmera', { init: () => { if (navigator.mediaDevices) { navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('negado', 'NotAllowedError')); navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]); } }, passos: [{ clicar: 'Adicionar Freela' }, { clicar: /QR|c[aâ]mera/i }], espera: 'câmera' }),
   x('admin-email-sem-permissao', 'empresa', '/admin', 'tentativa de login com e-mail fora da lista (espera progressiva)', { passos: [{ preencher: ['input[type=email]', 'outra@galeria.invalid'] }, { preencher: ['input[type=password]', 'SenhaDeMentira#1'] }, { css: 'form button[type=submit]' }], espera: 'não tem permissão' }),
   x('sino-vazio', 'empresa', '/company/dashboard', 'dropdown sem notificações', { prep: (m) => { m.db.notifications = []; }, passos: [{ css: 'button[aria-label*="otifica" i]' }], espera: 'Nenhuma|sem notifica' }),
-  x('redefinir-senha-sem-sessao', 'anon', '/redefinir-senha', 'link aberto sem sessão de recuperação', { espera: 'senha' }),
+  x('redefinir-senha-sem-sessao', 'anon', '/redefinir-senha', 'link aberto sem sessão de recuperação', { espera: 'link expirou' }),
 ];

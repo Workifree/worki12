@@ -157,6 +157,8 @@ interface Job {
     freela?: FreelaSummary | null;
     /** Alguém já chegou e a saída ainda não foi confirmada. */
     inProgress?: boolean;
+    /** Há convite ou contratação: o gesto é "Cancelar turno", como em Hoje. */
+    hasPeople?: boolean;
     /** `status` ainda 'open', mas todas as vagas já foram concluídas. */
     concluded?: boolean;
     // Escala Recorrente (F3) — presentes quando o turno é uma ocorrência de série.
@@ -330,7 +332,7 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
                                 onSelect: () => handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open'),
                             },
                             !!job.series_id && { label: 'Encerrar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
-                            { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
+                            { label: job.hasPeople ? 'Cancelar turno' : 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
                         ]}
                     />
                 </div>
@@ -453,6 +455,7 @@ export default function CompanyJobs() {
                     ...job,
                     freela: summarizeFreela(byJob[job.id] || []),
                     inProgress: (byJob[job.id] || []).some(isShiftInProgress),
+                    hasPeople: (byJob[job.id] || []).some((a) => ['invited', 'hired', 'in_progress', 'completed'].includes(a.status)),
                     concluded: job.status === 'open' && isJobConcluded(job.slots, byJob[job.id]),
                     seriesRecurrenceType: job.series_id ? (seriesTypeById[job.series_id] ?? null) : null,
                 }));
@@ -572,13 +575,13 @@ export default function CompanyJobs() {
                 onClose={() => setDeleteJobId(null)}
                 className="max-w-sm"
             >
-                    <DialogHeader titleId="excluir-turno-titulo" title="Excluir turno?" subtitle={deleteTarget?.title} />
+                    <DialogHeader titleId="excluir-turno-titulo" title={deleteTarget?.hasPeople ? 'Cancelar este turno?' : 'Excluir turno?'} subtitle={deleteTarget?.title} />
                     <p className="text-sm text-gray-600">
                         O turno sai da agenda. Convites e contratações dele são encerrados e quem já foi contratado é avisado. Não dá para desfazer.
                     </p>
                     <DialogActions>
                         <Button variant="secondary" data-autofocus onClick={() => setDeleteJobId(null)}>Voltar</Button>
-                        <Button variant="danger" data-copilot="empresa.turnos.excluir-confirmar" data-copilot-risk="D" onClick={() => handleDelete(deleteJobId)}>Excluir</Button>
+                        <Button variant="danger" data-copilot="empresa.turnos.excluir-confirmar" data-copilot-risk="D" onClick={() => handleDelete(deleteJobId)}>{deleteTarget?.hasPeople ? 'Cancelar turno' : 'Excluir'}</Button>
                     </DialogActions>
             </Dialog>
         )}

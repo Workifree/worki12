@@ -298,7 +298,7 @@ export default function CompanyJobCandidates() {
         }
     }, []);
 
-    // "Cancelar Convite" — invited sem resposta, libera o slot (onda 3).
+    // "Cancelar convite" — invited sem resposta, libera o slot (onda 3).
     const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);
 
     // "Dispensar deste turno" — hired/in_progress, exige confirmação explícita (onda 3).
@@ -449,7 +449,7 @@ export default function CompanyJobCandidates() {
             setCandidates(await fillMissingWorkers(data || [], id));
 
             // Fetch escrow kind per application for this job (só o kind é usado para ramificar
-            // Confirmar Entrega vs Registrar Pagamento — ver `renderCompletionAction`).
+            // Confirmar entrega vs Registrar pagamento — ver `renderCompletionAction`).
             const { data: escrowRows, error: escrowError } = await supabase
                 .from('escrow_transactions')
                 .select('application_id, kind')
@@ -552,11 +552,11 @@ export default function CompanyJobCandidates() {
         }
         setConfirmDeliveryApp(null);
         setReleasing(false);
-        addToast('Entrega confirmada! Pagamento liberado ao profissional.', 'success');
+        addToast('Entrega confirmada. O pagamento é feito por fora do Worki.', 'success');
         fetchCandidates();
     };
 
-    // "Cancelar Convite" (onda 3) — invited sem resposta, libera o slot para convidar outro
+    // "Cancelar convite" (onda 3) — invited sem resposta, libera o slot para convidar outro
     // membro da equipe. Sem notificação simétrica ao freela (ver comentário do service).
     const handleCancelInvite = async (app: Application) => {
         setCancelInviteId(app.id);
@@ -694,7 +694,7 @@ export default function CompanyJobCandidates() {
     // O service valida o SINAL REAL de conclusão (chegada + saída confirmadas), não o
     // status='completed' — por isso registramos o pagamento PRIMEIRO e só marcamos o
     // turno como concluído DEPOIS que o INSERT tem sucesso. Se o registro falhar (rede/
-    // RLS/timeout), a application permanece como estava e o botão "Registrar Pagamento"
+    // RLS/timeout), a application permanece como estava e o botão "Registrar pagamento"
     // continua disponível — nunca fica em dead-end (status='completed' sem recibo).
     const handleRecordPayment = async () => {
         if (!paymentModalApp) return;
@@ -951,8 +951,8 @@ export default function CompanyJobCandidates() {
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
     };
 
-    // R1.4: copiar a chave PIX do freela — mostrada nos modais "Registrar Pagamento" e
-    // "Agendar Pagamento" (modo A: a empresa paga por fora e precisa da chave à mão).
+    // R1.4: copiar a chave PIX do freela — mostrada nos modais "Registrar pagamento" e
+    // "Agendar pagamento" (modo A: a empresa paga por fora e precisa da chave à mão).
     const handleCopyPix = async (pixKey: string) => {
         try {
             await navigator.clipboard.writeText(pixKey);
@@ -1017,7 +1017,7 @@ export default function CompanyJobCandidates() {
                 addToast('Não foi possível confirmar a saída deste freela.', 'error');
                 return;
             }
-            // Este gesto destrava "Registrar Pagamento" — merece confirmação visível, não só
+            // Este gesto destrava "Registrar pagamento" — merece confirmação visível, não só
             // um refetch silencioso (a empresa precisa saber que já pode seguir o fluxo).
             addToast('Saída confirmada!', 'success');
             fetchCandidates();
@@ -1030,7 +1030,7 @@ export default function CompanyJobCandidates() {
     };
 
     // Abre o modal de horário manual — usado quando o freela NÃO marcou a chegada/saída no
-    // app (o botão vira "Confirmar Presença"/"Registrar Saída"). Pré-preenche com o horário
+    // app (o botão vira "Confirmar presença"/"Registrar saída"). Pré-preenche com o horário
     // PLANEJADO do turno (`work_start_time`/`work_end_time`), nunca com `now()`: é o melhor
     // palpite (é o que quase sempre aconteceu) e o gerente confirma ou ajusta.
     const openManualAttendanceModal = (app: Application, type: 'checkin' | 'checkout') => {
@@ -1166,7 +1166,7 @@ export default function CompanyJobCandidates() {
                     data-copilot="empresa.presenca.ver-recibo"
                     onClick={() => navigate(receiptPath(payment.job_id ?? app.job_id, payment.worker_id ?? app.worker_id))}
                 >
-                    {payment.status === 'scheduled' ? 'Ver Comprovante' : 'Ver Recibo'}
+                    {payment.status === 'scheduled' ? 'Ver Comprovante' : 'Ver recibo'}
                 </Button>
                 {podeEstornar && (
                     <Button
@@ -1182,7 +1182,7 @@ export default function CompanyJobCandidates() {
         </div>
     );
 
-    // "Registrar Pagamento" (próximo passo) + "Agendar Pagamento" (alternativa).
+    // "Registrar pagamento" (próximo passo) + "Agendar pagamento" (alternativa).
     const renderRegisterPaymentActions = (app: Application) => (
         <div className="space-y-2">
             <Button
@@ -1192,7 +1192,7 @@ export default function CompanyJobCandidates() {
                 data-copilot-risk="D"
                 onClick={() => openPaymentModal(app)}
             >
-                Registrar Pagamento
+                Registrar pagamento
             </Button>
             <Button
                 variant="ghost"
@@ -1202,7 +1202,7 @@ export default function CompanyJobCandidates() {
                 data-copilot-risk="D"
                 onClick={() => openScheduleModal(app)}
             >
-                Agendar Pagamento
+                Agendar pagamento
             </Button>
         </div>
     );
@@ -1215,7 +1215,7 @@ export default function CompanyJobCandidates() {
         if (kind === 'prepaid' || kind === 'postpaid') {
             return (
                 <Button variant={mainVariant(app)} fullWidth data-copilot-risk="D" onClick={() => setConfirmDeliveryApp(app)}>
-                    Confirmar Entrega
+                    Confirmar entrega
                 </Button>
             );
         }
@@ -1242,7 +1242,7 @@ export default function CompanyJobCandidates() {
         const workerMarked = !!(type === 'checkin' ? app.worker_checkin_at : app.worker_checkout_at);
         const label = type === 'checkin'
             ? (workerMarked ? 'Confirmar Chegada' : 'Registrar chegada')
-            : (workerMarked ? 'Confirmar Saída' : 'Registrar Saída');
+            : (workerMarked ? 'Confirmar saída' : 'Registrar saída');
         const opens = type === 'checkin' && !workerMarked ? checkinOpensAt(jobStartDate, jobStartTime) : null;
         const plannedStart = jobStartDate
             ? buildManualAttendanceTimestamp(app, jobStartDate, jobStartTime, 'checkin', jobStartTime?.slice(0, 5) || '00:00')
@@ -1342,6 +1342,7 @@ export default function CompanyJobCandidates() {
                 Voltar para Turnos
             </Button>
             <PageHeader
+                className="[&>div:first-child]:sm:min-w-[20rem] sm:flex-wrap"
                 title={loading || !jobTitle ? 'Presença e pagamento' : jobTitle}
                 subtitle={loading
                     ? 'Carregando o turno...'
@@ -1357,7 +1358,7 @@ export default function CompanyJobCandidates() {
                                 data-copilot="empresa.presenca.chamar-freelas"
                                 onClick={() => setCallModalOpen(true)}
                             >
-                                Chamar Freelas
+                                Chamar freelas
                             </Button>
                             {/* F11 — SOS: fallback do chamado ao Elenco. Só habilita quando o Elenco
                                 já esgotou e o turno começa em menos de 4h (RPC reverifica tudo). */}
@@ -1461,16 +1462,16 @@ export default function CompanyJobCandidates() {
                 );
             })()}
 
-            <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+            <div className="worki-side-grid">
             {/* Freelas do turno: vêm antes de qualquer histórico. */}
-            <div className="mb-6 space-y-4 lg:col-span-2">
+            <div className="mb-6 space-y-4" data-main>
                 {loading ? (
                     <SkeletonList count={3} itemClassName="h-32" />
                 ) : candidates.length === 0 ? (
                     <EmptyState
                         icon={Users}
                         title="Nenhum freela neste turno."
-                        description={filledCount < jobSlots ? 'Use "Chamar Freelas" para convidar quem está no seu elenco.' : undefined}
+                        description={filledCount < jobSlots ? 'Use "Chamar freelas" para convidar quem está no seu elenco.' : undefined}
                     />
                 ) : (
                     candidates.map((app) => {
@@ -1619,7 +1620,7 @@ export default function CompanyJobCandidates() {
                                                 onClick={() => { void handleCancelInvite(app); }}
                                                 loading={cancelInviteId === app.id}
                                             >
-                                                Cancelar Convite
+                                                Cancelar convite
                                             </Button>
                                         </div>
                                     )}
@@ -1707,7 +1708,7 @@ export default function CompanyJobCandidates() {
                 )}
             </div>
 
-            <div className="lg:col-span-1">
+            <div data-side>
                 <ShiftCallsPanel
                     part="history"
                     calls={calls}
@@ -1721,9 +1722,9 @@ export default function CompanyJobCandidates() {
             {/* Modal de Confirmação de Entrega (escrow legado) */}
             {confirmDeliveryApp && (
                 <Dialog labelledBy="entrega-titulo" onClose={fecharModalAberto}>
-                    <DialogHeader titleId="entrega-titulo" title="Confirmar Entrega" subtitle={confirmDeliveryApp.worker?.full_name} />
+                    <DialogHeader titleId="entrega-titulo" title="Confirmar entrega" subtitle={confirmDeliveryApp.worker?.full_name} />
                     <p className="text-sm text-gray-600">
-                        Tem certeza que deseja confirmar a entrega? O pagamento será liberado imediatamente ao profissional.
+                        Confirmar que o turno foi cumprido? Ele será marcado como concluído. O pagamento pelo Worki está pausado: a plataforma não envia dinheiro ao freela. Pague por fora (PIX ou dinheiro) e guarde o comprovante.
                     </p>
                     <DialogActions>
                         <Button variant="secondary" onClick={() => setConfirmDeliveryApp(null)} disabled={releasing}>
@@ -1742,7 +1743,7 @@ export default function CompanyJobCandidates() {
                 <Dialog labelledBy="presenca-manual-titulo" onClose={fecharModalAberto}>
                     <DialogHeader
                         titleId="presenca-manual-titulo"
-                        title={manualAttendance.type === 'checkin' ? 'Registrar chegada' : 'Registrar Saída'}
+                        title={manualAttendance.type === 'checkin' ? 'Registrar chegada' : 'Registrar saída'}
                         subtitle={`${manualAttendance.app.worker?.full_name || 'Este freela'} não marcou ${manualAttendance.type === 'checkin' ? 'a chegada' : 'a saída'} no app`}
                     />
 
@@ -1802,7 +1803,7 @@ export default function CompanyJobCandidates() {
                             Voltar
                         </Button>
                         <Button variant="danger" data-copilot-risk="D" onClick={handleDismissFromShift} loading={dismissing}>
-                            {dismissThenCall ? 'Confirmar e Chamar Substituto' : 'Confirmar Dispensa'}
+                            {dismissThenCall ? 'Confirmar e chamar substituto' : 'Confirmar dispensa'}
                         </Button>
                     </DialogActions>
                 </Dialog>
@@ -1829,25 +1830,25 @@ export default function CompanyJobCandidates() {
                             rows={2}
                         />
                     </Field>
-                    <DialogActions stacked>
+                    <DialogActions>
                         <Button variant="secondary" onClick={() => { setVoidingPayment(null); setVoidReason(''); }} disabled={voidSubmitting}>
                             Voltar
                         </Button>
                         <Button variant="danger" data-copilot-risk="D" onClick={handleVoidPayment} loading={voidSubmitting}>
-                            {voidingPayment.status === 'scheduled' ? 'Cancelar agendamento' : 'Confirmar Estorno'}
+                            {voidingPayment.status === 'scheduled' ? 'Cancelar agendamento' : 'Confirmar estorno'}
                         </Button>
                     </DialogActions>
                 </Dialog>
             )}
 
-            {/* "Registrar Pagamento" — modo A (pagamento externo declaratório) */}
+            {/* "Registrar pagamento" — modo A (pagamento externo declaratório) */}
             {paymentModalApp && (
                 <Dialog labelledBy="pagamento-titulo" onClose={fecharModalAberto} focusKey={paymentRecorded ? 'ok' : 'form'}>
                     {!paymentRecorded ? (
                         <>
                             <DialogHeader
                                 titleId="pagamento-titulo"
-                                title="Registrar Pagamento"
+                                title="Registrar pagamento"
                                 subtitle={
                                     <>
                                         <span className="block font-bold text-black">{paymentModalApp.worker?.full_name || 'Freela'} · {jobTitle}</span>
@@ -1930,7 +1931,7 @@ export default function CompanyJobCandidates() {
                                     iconLeft={<Receipt size={16} />}
                                     onClick={() => navigate(receiptPath(paymentModalApp.job_id, paymentModalApp.worker_id))}
                                 >
-                                    Ver Recibo
+                                    Ver recibo
                                 </Button>
                             </DialogActions>
                         </div>
@@ -1938,14 +1939,14 @@ export default function CompanyJobCandidates() {
                 </Dialog>
             )}
 
-            {/* "Agendar Pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
+            {/* "Agendar pagamento" — modo A, promessa com data prevista (ADR-20260712) */}
             {scheduleModalApp && (
                 <Dialog labelledBy="agendamento-titulo" onClose={fecharModalAberto} focusKey={paymentScheduled ? 'ok' : 'form'}>
                     {!paymentScheduled ? (
                         <>
                             <DialogHeader
                                 titleId="agendamento-titulo"
-                                title="Agendar Pagamento"
+                                title="Agendar pagamento"
                                 subtitle={
                                     <>
                                         <span className="block font-bold text-black">{scheduleModalApp.worker?.full_name || 'Freela'} · {jobTitle}</span>

@@ -29,6 +29,22 @@ import type {
 } from '../types';
 import { Dialog } from '../components/ui/Dialog';
 
+const RATE_PROMPTED_KEY = 'worki_rate_prompted';
+function readRatePrompted(): boolean {
+    try {
+        return sessionStorage.getItem(RATE_PROMPTED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+function markRatePrompted(): void {
+    try {
+        sessionStorage.setItem(RATE_PROMPTED_KEY, '1');
+    } catch {
+        // sem storage vale só a trava por visita (ref)
+    }
+}
+
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
 // 'confirmed'/'cannot_attend'/'already_responded'/'unauthenticated' têm tratamento dedicado no handler;
 // aqui só os outcomes de negação/erro que viram texto de toast direto.
@@ -251,7 +267,7 @@ export default function MyJobs() {
     // "Falar com a empresa" — o gesto simétrico do freela (empresa já tinha o ícone de chat
     // na tela de presença). id da application sendo processada (loading do botão).
     const [chattingId, setChattingId] = useState<string | null>(null);
-    // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
+    // Pedido de avaliação: abre sozinho 1x por sessão para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
 
@@ -522,18 +538,20 @@ export default function MyJobs() {
         }
     };
 
-    // Avaliação obrigatória pós-pagamento: assim que o turno é concluído/pago pela
+    // Pedido de avaliação pós-pagamento: assim que o turno é concluído/pago pela
     // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
-    // abrimos o modal automaticamente (1x por visita) para o freela avaliar a empresa.
+    // abrimos o modal (1x por sessão, dispensável). Convite pendente tem prazo: vem antes.
     useEffect(() => {
-        if (autoRatePrompted.current || loading) return;
+        if (autoRatePrompted.current || loading || invitesLoading || pendingInvites.length > 0) return;
+        if (readRatePrompted()) return;
         const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id));
         if (pending) {
             autoRatePrompted.current = true;
+            markRatePrompted();
             setSelectedJobToRate(pending);
             setRateModalOpen(true);
         }
-    }, [jobs.history, reviewedJobIds, loading]);
+    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length]);
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
     // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
@@ -653,6 +671,11 @@ export default function MyJobs() {
                         : 'invites'
     );
 
+    const abrirConvites = () => {
+        setActiveTab('invites');
+        document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'start' });
+    };
+
     const tabs: { id: ActiveTab; label: string; count: number }[] = [
         { id: 'invites', label: 'Convites', count: pendingInvites.length },
         { id: 'in_progress', label: 'Em andamento', count: inProgressList.length },
@@ -665,6 +688,17 @@ export default function MyJobs() {
             <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
 
             <PageHeader title="Meus Turnos" className="mb-0" />
+
+            {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
+            {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (
+                <Alert
+                    tone="warning"
+                    title="Convite esperando resposta"
+                    action={<Button variant="secondary" onClick={abrirConvites}>Ver convite</Button>}
+                >
+                    Quem aceitar primeiro fica com a vaga.
+                </Alert>
+            )}
 
             {todayJobs.length > 0 && (
                 <section aria-label="Hoje" className="grid grid-cols-1 gap-4">
@@ -701,24 +735,17 @@ export default function MyJobs() {
                         return (
                             <Card
                                 key={confirmation.id}
+                                padding="sm"
                                 className="shadow-brutal-brand"
                             >
-                                <div className="flex items-center gap-2 mb-3">
-                                    <CalendarClock size={18} className="text-primary" />
-                                    <span className="text-sm font-semibold text-primary-dark">
-                                        Confirma seu turno {rotuloDeQuando(job.raw_date)}?
-                                    </span>
-                                </div>
-                                <h3 className="font-bold text-lg mb-0.5">{job.title}</h3>
-                                <p className="text-sm text-gray-600 mb-3">{job.company_name}</p>
-                                <div className="flex flex-wrap gap-2 mb-5">
-                                    <Chip>
-                                        <Clock size={14} /> {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
-                                    </Chip>
-                                    <Chip tone="info">
-                                        <LocalDoTurno location={job.location} />
-                                    </Chip>
-                                </div>
+                                <p className="flex items-center gap-2 text-sm font-semibold text-primary-dark">
+                                    <CalendarClock size={18} aria-hidden="true" className="shrink-0 text-primary" />
+                                    Confirma seu turno {rotuloDeQuando(job.raw_date)}?
+                                </p>
+                                <h3 className="mt-1 font-bold [overflow-wrap:anywhere]">{job.title}</h3>
+                                <p className="mb-3 text-sm text-gray-600 [overflow-wrap:anywhere]">
+                                    {job.company_name} · {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
+                                </p>
                                 {localResponse === 'confirmed' ? (
                                     <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary-dark rounded-xl font-bold text-sm">
                                         <ThumbsUp size={18} /> Confirmado
@@ -732,10 +759,10 @@ export default function MyJobs() {
                                         Você já respondeu
                                     </span>
                                 ) : (
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-col gap-2 min-[360px]:flex-row">
                                         <Button
                                             variant="primary"
-                                            className="flex-1"
+                                            className="flex-1 !px-2"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'confirmed')}
                                             disabled={isResponding}
                                             loading={isResponding}
@@ -745,7 +772,7 @@ export default function MyJobs() {
                                         </Button>
                                         <Button
                                             variant="secondary"
-                                            className="flex-1"
+                                            className="flex-1 !px-2"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'cannot_attend')}
                                             disabled={isResponding}
                                             loading={isResponding}
@@ -769,7 +796,11 @@ export default function MyJobs() {
                 label="Seções dos seus turnos"
                 tabs={tabs}
                 value={activeTab}
-                onChange={setActiveTab}
+                onChange={(id) => {
+                    setActiveTab(id);
+                    // Com os cartões do topo, o conteúdo da aba pode estar abaixo da dobra.
+                    requestAnimationFrame(() => document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'nearest' }));
+                }}
                 panelId="meus-turnos-painel"
                 className="[&>button]:px-1.5"
             />
@@ -833,9 +864,10 @@ export default function MyJobs() {
                                             </span>
                                         )}
                                     </span>
-                                    <span className="block min-w-0">
+                                    <span className="block min-w-0 flex-1">
                                         <span className="block text-xs text-gray-600">Convite de</span>
-                                        <span className={`block font-bold line-clamp-2 [overflow-wrap:anywhere] ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
+                                        {/* sem `block`: ele anularia o display do line-clamp */}
+                                        <span className={`font-bold line-clamp-2 [overflow-wrap:anywhere] ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
                                     </span>
                                 </>
                             );
@@ -848,17 +880,17 @@ export default function MyJobs() {
                                         </Alert>
                                     )}
                                     {/* Empresa */}
-                                    <div className="flex items-center gap-3 mb-4">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
                                         {companyId ? (
                                             <button
                                                 type="button"
                                                 onClick={() => navigate(`/empresa/${companyId}`)}
-                                                className="group flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                                                className="group flex items-center gap-3 flex-1 basis-48 min-w-0 min-h-11 text-left cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                                             >
                                                 {cabecalhoEmpresa}
                                             </button>
                                         ) : (
-                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 flex-1 basis-48 min-w-0">
                                                 {cabecalhoEmpresa}
                                             </div>
                                         )}
@@ -866,11 +898,11 @@ export default function MyJobs() {
                                             de decidir. Esconder isso seria deixá-lo achar que tem o tempo todo do
                                             mundo e perder a vaga sem entender por quê. */}
                                         {invite.disputed ? (
-                                            <span className="ml-auto bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-pill border border-yellow-300 flex-shrink-0">
+                                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-pill border border-yellow-300 flex-shrink-0">
                                                 Quem aceitar primeiro
                                             </span>
                                         ) : (
-                                            <span className="ml-auto bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
+                                            <span className="bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
                                                 Novo convite
                                             </span>
                                         )}
@@ -916,11 +948,11 @@ export default function MyJobs() {
                                     )}
 
                                     {/* Ações — Aceitar é a ação primária; Recusar é secundária (e arma antes de confirmar) */}
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-col gap-3 min-[360px]:flex-row">
                                         <Button
                                             variant="primary"
                                             size="lg"
-                                            className="flex-1"
+                                            className="flex-1 min-w-0 !px-2 sm:!px-6"
                                             data-copilot="freela.convite.aceitar"
                                             data-copilot-risk="D"
                                             onClick={() => respond(invite.id, 'accepted')}
@@ -933,7 +965,7 @@ export default function MyJobs() {
                                         <Button
                                             variant={recusaArmada === invite.id ? 'danger' : 'secondary'}
                                             size="lg"
-                                            className="flex-1"
+                                            className="flex-1 min-w-0 !px-2 sm:!px-6"
                                             data-copilot="freela.convite.recusar"
                                             data-copilot-risk="D"
                                             onClick={() => armarOuRecusar(invite.id, () => respond(invite.id, 'declined'))}
@@ -1211,10 +1243,9 @@ export default function MyJobs() {
                             <p className="text-xs text-gray-600">{cancelJob.date} • {cancelJob.time}</p>
                         </div>
 
-                        <div className="worki-dialog-actions flex gap-3">
+                        <DialogActions>
                             <Button
                                 variant="secondary"
-                                className="flex-1"
                                 onClick={() => setCancelJob(null)}
                                 disabled={cancelLoading}
                             >
@@ -1222,14 +1253,13 @@ export default function MyJobs() {
                             </Button>
                             <Button
                                 variant="danger"
-                                className="flex-1"
                                 onClick={handleCancelShift}
                                 loading={cancelLoading}
                                 iconLeft={<XCircle size={18} />}
                             >
                                 Cancelar turno
                             </Button>
-                        </div>
+                        </DialogActions>
                 </Dialog>
             )}
 

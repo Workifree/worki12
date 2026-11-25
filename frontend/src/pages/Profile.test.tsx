@@ -125,7 +125,7 @@ function renderComponent() {
 }
 
 // Segurança, Sessão e Zona de Perigo ficam ocultas por padrão atrás do botão
-// "Configurações da Conta" — os testes que interagem com essas seções
+// "Configurações da conta" — os testes que interagem com essas seções
 // precisam abri-las primeiro.
 function openAccountSettings() {
   fireEvent.click(screen.getByRole('button', { name: /configura(ç|c)ões da conta/i }))
@@ -144,7 +144,7 @@ describe('Profile - Renderizacao', () => {
 })
 
 describe('Profile — modal de exclusão de conta', () => {
-  it('botão Confirmar Exclusão desabilitado quando confirmText !== EXCLUIR', async () => {
+  it('botão Confirmar exclusão desabilitado quando confirmText !== EXCLUIR', async () => {
     setupMocks()
     renderComponent()
 
@@ -155,7 +155,7 @@ describe('Profile — modal de exclusão de conta', () => {
     openAccountSettings()
     fireEvent.click(screen.getByText('Excluir minha conta'))
 
-    const confirmarBtn = screen.getByText('Confirmar Exclusão')
+    const confirmarBtn = screen.getByText('Confirmar exclusão')
     expect(confirmarBtn).toBeDisabled()
   })
 
@@ -173,7 +173,7 @@ describe('Profile — modal de exclusão de conta', () => {
     const input = screen.getByPlaceholderText('EXCLUIR')
     fireEvent.change(input, { target: { value: 'EXCLUIR' } })
 
-    const confirmarBtn = screen.getByText('Confirmar Exclusão')
+    const confirmarBtn = screen.getByText('Confirmar exclusão')
     expect(confirmarBtn).not.toBeDisabled()
   })
 
@@ -195,7 +195,7 @@ describe('Profile — modal de exclusão de conta', () => {
     const input = screen.getByPlaceholderText('EXCLUIR')
     fireEvent.change(input, { target: { value: 'EXCLUIR' } })
 
-    fireEvent.click(screen.getByText('Confirmar Exclusão'))
+    fireEvent.click(screen.getByText('Confirmar exclusão'))
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/login')
@@ -221,7 +221,7 @@ describe('Profile — modal de exclusão de conta', () => {
     const input = screen.getByPlaceholderText('EXCLUIR')
     fireEvent.change(input, { target: { value: 'EXCLUIR' } })
 
-    fireEvent.click(screen.getByText('Confirmar Exclusão'))
+    fireEvent.click(screen.getByText('Confirmar exclusão'))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
@@ -294,7 +294,7 @@ describe('Profile — disponibilidade declarada (F7)', () => {
     expect(screen.getByRole('button', { name: /declarar disponibilidade/i })).toBeInTheDocument()
   })
 
-  it('CTA de adoção entra em modo de edição (mesmo gesto de "Editar Perfil")', async () => {
+  it('CTA de adoção entra em modo de edição (mesmo gesto de "Editar perfil")', async () => {
     setupMocks()
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })

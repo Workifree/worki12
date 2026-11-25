@@ -12,7 +12,7 @@ import { TeamConnectionService } from '../../services/teamConnectionService';
 import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
-import { Button, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import { ActionBar, DialogActions, Button, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
 import BackToGestao from '../../components/company/BackToGestao';
 import { Dialog } from '../../components/ui/Dialog';
 
@@ -398,7 +398,7 @@ export default function CompanyProfile() {
     return (
         <>
         <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
-            {/* Page Header — a única ação primária da tela é "Editar Perfil" */}
+            {/* Page Header — a única ação primária da tela é "Editar perfil" */}
             <BackToGestao />
             <PageHeader
                 title="Dados da empresa"
@@ -406,7 +406,7 @@ export default function CompanyProfile() {
                 action={
                     !isEditing ? (
                         <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />} data-copilot="empresa.dados.editar">
-                            Editar Perfil
+                            Editar perfil
                         </Button>
                     ) : undefined
                 }
@@ -433,7 +433,7 @@ export default function CompanyProfile() {
                                 htmlFor="cover-upload"
                                 className="absolute bottom-3 right-3 bg-white border-2 border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
                             >
-                                <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar Capa'}
+                                <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar capa'}
                             </label>
                         </>
                     )}
@@ -508,41 +508,18 @@ export default function CompanyProfile() {
                         </div>
                     </div>
 
-                    {/* Barra de edição: só Cancelar (secundário) e Salvar (primário) */}
-                    {isEditing && (
-                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    setIsEditing(false);
-                                    // Ideally revert changes here by refetching or keeping previous state
-                                }}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                variant="dark"
-                                onClick={handleSave}
-                                loading={saving}
-                                iconLeft={<Save size={16} />}
-                            >
-                                {saving ? 'Salvando...' : 'Salvar Alterações'}
-                            </Button>
-                        </div>
-                    )}
-
                     {/* Content Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                         {/* Left Column */}
                         <div className="space-y-5">
                             <div className="border-b-2 border-gray-200 pb-3">
-                                <h3 className="text-lg font-bold text-gray-900">Sobre a Empresa</h3>
+                                <h3 className="text-lg font-bold text-gray-900">Sobre a empresa</h3>
                                 <p className="text-sm text-gray-600">Informações principais</p>
                             </div>
 
                             {isEditing ? (
                                 <div className="space-y-5">
-                                    <Field label="Razão Social / Fantasia">
+                                    <Field label="Razão social / nome fantasia">
                                         <input
                                             name="name"
                                             value={company.name || ''}
@@ -570,7 +547,7 @@ export default function CompanyProfile() {
                                 </div>
                             ) : (
                                 <div className="space-y-5">
-                                    <ReadField label="Razão Social / Fantasia">
+                                    <ReadField label="Razão social / nome fantasia">
                                         <p className="text-lg font-bold text-gray-900">{company.name || '—'}</p>
                                     </ReadField>
                                     <ReadField label="Setor">
@@ -584,9 +561,9 @@ export default function CompanyProfile() {
                         </div>
 
                         {/* Right Column */}
-                        <div className="space-y-5">
+                        <div className="min-w-0 space-y-5">
                             <div className="border-b-2 border-gray-200 pb-3">
-                                <h3 className="text-lg font-bold text-gray-900">Contato & Endereço</h3>
+                                <h3 className="text-lg font-bold text-gray-900">Contato e endereço</h3>
                                 <p className="text-sm text-gray-600">Canais de comunicação</p>
                             </div>
 
@@ -600,7 +577,7 @@ export default function CompanyProfile() {
                                             placeholder="https://..."
                                         />
                                     </Field>
-                                    <Field label="Email Corporativo">
+                                    <Field label="E-mail corporativo">
                                         <input
                                             name="email"
                                             value={company.email || ''}
@@ -626,10 +603,10 @@ export default function CompanyProfile() {
                                             </a>
                                         ) : <p className="text-gray-600">{company.website || '—'}</p>}
                                     </ReadField>
-                                    <ReadField label="Email Corporativo">
+                                    <ReadField label="E-mail corporativo">
                                         {company.email ? (
-                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
-                                                <Mail size={16} className="text-gray-500" /> {company.email}
+                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex max-w-full items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
+                                                <Mail size={16} className="shrink-0 text-gray-500" /> <span className="min-w-0 break-all">{company.email}</span>
                                             </a>
                                         ) : <p className="text-gray-600">—</p>}
                                     </ReadField>
@@ -649,7 +626,7 @@ export default function CompanyProfile() {
             {/* Briefing padrão do negócio — pré-preenchido ao criar um turno */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
-                    <ClipboardList size={20} /> Briefing Padrão
+                    <ClipboardList size={20} /> Briefing padrão
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
@@ -676,7 +653,7 @@ export default function CompanyProfile() {
             </Card>
 
             {/* F5 — Guarda de risco de vínculo trabalhista: aviso configurável, nunca bloqueia
-                (decisão do owner). Mesmo padrão de tela/card do Briefing Padrão acima. */}
+                (decisão do owner). Mesmo padrão de tela/card do Briefing padrão acima. */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
                     <ShieldAlert size={20} /> Preferências
@@ -770,6 +747,28 @@ export default function CompanyProfile() {
                 )}
             </Card>
 
+            {isEditing && (
+                <ActionBar
+                    className="mb-6"
+                    secondary={
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setIsEditing(false);
+                                // Ideally revert changes here by refetching or keeping previous state
+                            }}
+                        >
+                            Cancelar
+                        </Button>
+                    }
+                    primary={
+                        <Button variant="dark" onClick={handleSave} loading={saving} iconLeft={<Save size={16} />}>
+                            {saving ? 'Salvando...' : 'Salvar alterações'}
+                        </Button>
+                    }
+                />
+            )}
+
             {/* Avaliações recebidas de freelas */}
             {companyId && <ProfileReviews reviewedId={companyId} reviewerRole="worker" />}
 
@@ -777,7 +776,7 @@ export default function CompanyProfile() {
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-                    <Link2 size={20} /> Meu Link de Elenco
+                    <Link2 size={20} /> Meu link de Elenco
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
@@ -801,7 +800,7 @@ export default function CompanyProfile() {
                     aria-expanded={showAccountSettings}
                     iconLeft={<Settings size={18} />}
                 >
-                    {showAccountSettings ? 'Ocultar Configurações da Conta' : 'Configurações da Conta'}
+                    {showAccountSettings ? 'Ocultar Configurações da conta' : 'Configurações da conta'}
                 </Button>
             </div>
 
@@ -919,24 +918,22 @@ export default function CompanyProfile() {
                             placeholder="EXCLUIR"
                         />
                     </Field>
-                    <div className="worki-dialog-actions flex gap-3">
+                    <DialogActions>
                         <Button
                             variant="secondary"
-                            className="flex-1"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
                         >
-                            Cancelar
+                            Voltar
                         </Button>
                         <Button
                             variant="danger"
-                            className="flex-1"
                             onClick={handleDeleteAccount}
                             disabled={deleteConfirmText !== 'EXCLUIR'}
                             loading={deleting}
                         >
-                            {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                            {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
                         </Button>
-                    </div>
+                    </DialogActions>
             </Dialog>
         )}
         </>

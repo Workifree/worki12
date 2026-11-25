@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
 import { supabase } from '../lib/supabase';
 import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, HelpCircle } from 'lucide-react';
-import { ActionBar, Alert, Button, Card, Field } from '../components/ui';
+import { DialogActions, ActionBar, Alert, Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
 import CompanyBadges from '../components/CompanyBadges';
@@ -271,7 +271,7 @@ export default function Profile() {
         }
     }, [workerId, addToast]);
 
-    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar Freela → Worki ID".
+    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Worki ID".
     // Distinto de handleCopyMyLink (que copia a URL do convite).
     const handleCopyWorkiId = useCallback(async () => {
         if (!workerId) return;
@@ -650,7 +650,7 @@ export default function Profile() {
         </div>
     );
 
-    const nivel = levelProgress(profile.xp || 0);
+    const nivel = levelProgress(profile.xp || 0, profile.level || 1);
     const gradeDeclarada = Object.keys(profile.availability_days ?? {}).length > 0;
 
     return (
@@ -853,9 +853,11 @@ export default function Profile() {
                             <p className="text-lg font-bold">Nível {profile.level || 1}</p>
                             <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
                         </div>
-                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
-                        </div>
+                        {nivel && (
+                            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                                <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1056,7 +1058,7 @@ export default function Profile() {
                                     <>
                                         {formatCpfCnpj(String(profile.cpf))}
                                         <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Se estiver errado, <Link to="/messages" className="font-bold underline">fale com a empresa</Link> antes
+                                            Se estiver errado, <Link to="/messages" className="inline-flex min-h-11 items-center font-bold underline">fale com a empresa</Link> antes
                                             de assinar um novo termo.
                                         </span>
                                     </>
@@ -1433,21 +1435,21 @@ export default function Profile() {
                             autoComplete="off"
                         />
                     </Field>
-                    <div className="worki-dialog-actions mt-6 flex gap-3 [&>*]:flex-1">
+                    <DialogActions>
                         <Button
                             variant="secondary"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
                         >
-                            Cancelar
+                            Voltar
                         </Button>
                         <Button
                             variant="danger"
                             onClick={handleDeleteAccount}
                             disabled={deleteConfirmText !== 'EXCLUIR' || deleting}
                         >
-                            {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                            {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
                         </Button>
-                    </div>
+                    </DialogActions>
             </Dialog>
         )}
         </>

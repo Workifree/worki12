@@ -53,8 +53,8 @@ function MilestoneItem({ m, ended }: { m: MilestoneView; ended: boolean }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <h3 className="text-base font-black">{m.title}</h3>
-            <span className="text-base font-black tabular-nums">{value}</span>
+            <h3 className="text-base font-bold">{m.title}</h3>
+            <span className="text-base font-bold tabular-nums">{value}</span>
           </div>
           <p className="sr-only">
             {m.view === 'done' ? 'Concluído' : m.view === 'active' ? 'Em andamento' : m.view === 'excluded' ? 'Fora da contagem' : 'Trancado'}

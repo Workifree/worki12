@@ -336,6 +336,26 @@ export const ShiftCallService = {
     }
   },
 
+  /** A própria sessão já ocupa vaga neste turno? `null` = não deu para saber. */
+  async isOnShift(jobId: string): Promise<boolean | null> {
+    try {
+      const user = await getSessionUserOrThrow();
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('worker_id', user.id)
+        .in('status', ['hired', 'in_progress', 'completed'])
+        .limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    } catch (err) {
+      logError('shiftCall.isOnShift', err);
+      return null;
+    }
+  },
+
   /** Recusa. NEUTRA — zero punição (R6). */
   async declineCall(callId: string): Promise<ShiftCallRpcResult> {
     try {

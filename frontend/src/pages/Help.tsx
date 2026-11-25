@@ -22,6 +22,14 @@ const faqs = [
         a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Worki. Depois de pagar, a empresa registra o pagamento no app, e o Worki emite um recibo para os dois lados como comprovante.',
     },
     {
+        q: 'Sou freela: o valor do recibo está errado ou não recebi. E agora?',
+        a: 'Não confirme o recebimento. No recibo, toque em "Não recebi / valor errado": a conversa com a empresa abre com o texto pronto, e só é enviado quando você tocar em Enviar.',
+    },
+    {
+        q: 'Sou freela: onde registro minha chegada e cadastro meu PIX?',
+        a: 'A chegada fica no cartão do turno, em "Início" ou "Meus Turnos", e é liberada perto do horário de início. A chave PIX fica no seu Perfil; a empresa usa essa chave para pagar por fora.',
+    },
+    {
         q: 'O que é o recibo e a confirmação de recebimento?',
         a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela acompanha isso em "Recebimentos" e, ao abrir o recibo, pode confirmar que recebeu o pagamento — o que fecha o ciclo do turno com um comprovante para ambos os lados.',
     },

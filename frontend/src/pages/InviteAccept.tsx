@@ -11,9 +11,8 @@
  *   - sem prefixo: link de EMPRESA, quem aceita é o freela logado;
  *   - `w_`: link de contato de FREELA, quem age é a empresa logada.
  *
- * Nome de quem convida: não há leitura permitida antes do aceite (`company_invite_links` só é
- * legível por quem opera a empresa ou já está no Elenco, e não há RPC de prévia para este token).
- * Depois do aceite o nome vem de `companies`.
+ * Nome de quem convida: antes do aceite só a RPC `get_invite_preview` pode dizer (tolerante a
+ * falha: sem ela o texto fica genérico). Depois do aceite o nome vem de `companies`.
  */
 
 import { useEffect, useState } from 'react';
@@ -27,6 +26,7 @@ import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, ErrorState } from '../components/ui';
 import { checkSession } from '../lib/authSession';
+import { getInvitePreviewName } from '../services/invitePreviewService';
 
 type PageState =
   | 'loading' | 'confirm' | 'accepting' | 'success' | 'pending' | 'already_exists'
@@ -67,6 +67,8 @@ export default function InviteAccept() {
   const [errorMsg, setErrorMsg] = useState<string | undefined>();
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  // Nome de quem convida, quando a prévia responde; `null` = texto genérico.
+  const [inviterName, setInviterName] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   // Direção do convite é conhecida só pelo prefixo do token — não depende de rede.
@@ -115,7 +117,13 @@ export default function InviteAccept() {
 
       const userType = session.user.user_metadata?.user_type;
       setAccountEmail(session.user.email ?? null);
-      setState((workerLink ? userType === 'work' : userType === 'hire') ? 'wrong_role' : 'confirm');
+      const wrongRole = workerLink ? userType === 'work' : userType === 'hire';
+      if (!wrongRole) {
+        const name = await getInvitePreviewName(token, workerLink ? 'freela' : 'elenco');
+        if (!active) return;
+        setInviterName(name);
+      }
+      setState(wrongRole ? 'wrong_role' : 'confirm');
     }
 
     void open();
@@ -242,12 +250,18 @@ export default function InviteAccept() {
           <StatusCard
             iconClassName="bg-primary-light"
             icon={inviteIcon}
-            title={isWorkerLink ? 'Convidar um freela para o seu Elenco' : 'Uma empresa te convidou para o Elenco dela'}
+            title={isWorkerLink
+              ? `Convidar ${inviterName ?? 'um freela'} para o seu Elenco`
+              : `${inviterName ?? 'Uma empresa'} te convidou para o Elenco dela`}
           >
             <p className="text-sm text-gray-600 mb-4">
               {isWorkerLink
-                ? 'Você abriu o link de contato de um freela. O nome dele aparece no seu Elenco depois que você enviar o convite.'
-                : 'O link não mostra o nome da empresa antes do aceite. Só continue se você sabe quem te enviou. Nada é aceito sem o seu toque.'}
+                ? inviterName
+                  ? `Você abriu o link de contato de ${inviterName}.`
+                  : 'Você abriu o link de contato de um freela. O nome dele aparece no seu Elenco depois que você enviar o convite.'
+                : inviterName
+                  ? `Confira se é mesmo ${inviterName} quem te enviou o link. Nada é aceito sem o seu toque.`
+                  : 'Não foi possível mostrar o nome da empresa antes do aceite. Só continue se você sabe quem te enviou. Nada é aceito sem o seu toque.'}
             </p>
             <div className="mb-4 rounded-xl border-2 border-gray-200 p-4 text-left text-sm">
               {isWorkerLink ? (
@@ -261,7 +275,7 @@ export default function InviteAccept() {
                 </>
               ) : (
                 <>
-                  <p className="font-bold mb-1">Se você aceitar, a empresa poderá ver</p>
+                  <p className="font-bold mb-1">Se você aceitar, {inviterName ?? 'a empresa'} poderá ver</p>
                   <ul className="list-disc pl-5 space-y-1 text-gray-700">
                     <li>seu nome, foto, funções, cidade e avaliações;</li>
                     <li>seu telefone e sua chave PIX;</li>

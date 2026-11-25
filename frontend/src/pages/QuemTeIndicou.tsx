@@ -200,7 +200,7 @@ export default function QuemTeIndicou() {
                 </div>
               </div>
 
-              {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+              {item.message && <p className="text-sm text-gray-600 italic [overflow-wrap:anywhere]">"{item.message}"</p>}
 
               <div className="bg-primary-light text-primary-dark rounded-xl p-4 text-sm font-semibold leading-relaxed">
                 Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e

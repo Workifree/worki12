@@ -1,5 +1,6 @@
 
 import { useEffect, useState, useRef } from 'react';
+import ChatComposerField from '../components/ChatComposerField';
 import { supabase } from '../lib/supabase';
 import { MessageSquare, Send, ArrowLeft, Briefcase, Check, CheckCheck } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
-import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../components/ui'
+import { Button, PageHeader } from '../components/ui'
 import { checkSession } from '../lib/authSession';
 import { activeShiftLabel, type ShiftAttendanceLike } from '../lib/shiftProgress'
 import { TONE_CLASS, getStatus, statusLabel } from '../lib/statusLabels';
@@ -50,6 +51,8 @@ export default function Messages() {
     const [reloadKey, setReloadKey] = useState(0);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
+    // De qual conversa o histórico já chegou: antes disso é "carregando", não "vazio".
+    const [messagesFor, setMessagesFor] = useState<string | null>(null);
     const [erroMensagens, setErroMensagens] = useState(false);
     const [reloadMensagens, setReloadMensagens] = useState(0);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -60,7 +63,7 @@ export default function Messages() {
     const [sending, setSending] = useState(false);
     // Trava do envio por ref: o campo NÃO é desabilitado (desabilitar fecha o teclado no celular).
     const sendingRef = useRef(false);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const { addToast } = useToast();
 
     const logRef = useRef<HTMLDivElement>(null);
@@ -252,6 +255,8 @@ export default function Messages() {
     useEffect(() => {
         if (!selectedConversation || !currentUser) return;
 
+        setErroMensagens(false);
+
         const loadMessages = async () => {
             const { data, error } = await supabase
                 .from('Message')
@@ -270,6 +275,7 @@ export default function Messages() {
                 ...m,
                 is_mine: m.senderid === currentUser
             })));
+            setMessagesFor(selectedConversation.id);
 
             // Mark as read when opening
             markAsRead(selectedConversation.id, currentUser);
@@ -522,7 +528,9 @@ export default function Messages() {
                             <div className="p-4">
                                 <ErroDeCarga onRetry={() => setReloadMensagens(k => k + 1)} mensagem="O histórico não sumiu — a carga falhou. Tente de novo." />
                             </div>
-                        ) : messages.length === 0 ? (
+                        ) : messagesFor !== selectedConversation.id ? (
+                                    <p role="status" className="py-12 text-center text-sm font-semibold text-gray-600">Carregando mensagens...</p>
+                                ) : messages.length === 0 ? (
                                     <div className="text-center py-12 text-gray-600">
                                         <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>
@@ -572,23 +580,18 @@ export default function Messages() {
                             {/* Message Input */}
                             <div className="shrink-0 p-2 sm:p-4 border-t-2 border-black bg-white">
                                 <form
-                                    className="flex gap-2 sm:gap-3"
+                                    className="flex items-end gap-2 sm:gap-3"
                                     onSubmit={(e) => {
                                         e.preventDefault();
                                         void handleSendMessage();
                                         inputRef.current?.focus();
                                     }}
                                 >
-                                    <input
-                                        type="text"
-                                        aria-label="Mensagem"
-                                        ref={inputRef}
-                                        name="message"
-                                        autoComplete="off"
-                                        enterKeyHint="send"
+                                    <ChatComposerField
+                                        inputRef={inputRef}
                                         value={newMessage}
-                                        onChange={(e) => {
-                                            setNewMessage(e.target.value);
+                                        onChange={(value) => {
+                                            setNewMessage(value);
                                             if (selectedConversation && currentUser) {
                                                 presenceChannel.current?.track({ typing: true, userId: currentUser });
                                                 if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -597,12 +600,6 @@ export default function Messages() {
                                                 }, 3000);
                                             }
                                         }}
-                                        onKeyDown={(e) => {
-                                            // Enter que confirma a composição (IME/teclado preditivo) não envia.
-                                            if (e.key === 'Enter' && e.nativeEvent.isComposing) e.preventDefault();
-                                        }}
-                                        placeholder="Digite sua mensagem..."
-                                        className={`${FIELD_CONTROL_CLASS} flex-1 min-w-0`}
                                     />
                                     <Button
                                         variant="primary"

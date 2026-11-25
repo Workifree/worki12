@@ -31,6 +31,7 @@ import type {
   PendingInvite,
   ShiftCall,
   ShiftCallOutcome,
+  ShiftCallRpcResult,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -103,6 +104,29 @@ function messageForOutcome(outcome: ShiftCallOutcome): OutcomeMessage {
     default:
       return { text: 'Não foi possível responder a este chamado.', tone: 'error', ok: false };
   }
+}
+
+/**
+ * Resposta em andamento, por turno. É de MÓDULO porque o takeover e a página usam instâncias
+ * diferentes do hook, e SÍNCRONA porque `respondingId` só vale depois do re-render: dois cliques
+ * no mesmo instante chamavam a RPC duas vezes ("claimed" e depois "filled" para o vencedor).
+ */
+const respostasEmCurso = new Set<string>();
+
+/**
+ * "filled" (ou "already_responded" de um aceite) também chega para quem GANHOU a vaga em outra
+ * chamada (outra aba, retry): antes de dizer que outro aceitou, confere se a pessoa está no turno.
+ */
+async function messageForClaim(result: ShiftCallRpcResult, jobId: string): Promise<OutcomeMessage> {
+  const ambiguo =
+    result.outcome === 'filled' || (result.outcome === 'already_responded' && result.response === 'accepted');
+  if (!ambiguo) return messageForOutcome(result.outcome);
+  const noTurno = await ShiftCallService.isOnShift(jobId);
+  if (noTurno === true) return messageForOutcome('already_hired');
+  if (noTurno === null) {
+    return { text: 'A vaga deste chamado já foi preenchida. Confira em Meus Turnos.', tone: 'info', ok: true };
+  }
+  return messageForOutcome(result.outcome);
 }
 
 const NO_INVITES: Application[] = [];
@@ -244,40 +268,49 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
       const invite = pendingInvites.find((item) => item.id === inviteId);
       if (!invite) return false;
 
-      setRespondingId(inviteId);
+      if (respostasEmCurso.has(invite.jobId)) return false;
+      respostasEmCurso.add(invite.jobId);
+      try {
+        setRespondingId(inviteId);
 
-      let ok: boolean;
-      if (invite.source === 'legacy' && invite.applicationId) {
-        const result = await ShiftInviteService.respondToInvite(invite.applicationId, response);
-        ok = !result.error;
-        if (result.error) {
-          addToast(result.error, 'error');
+        let ok: boolean;
+        if (invite.source === 'legacy' && invite.applicationId) {
+          const result = await ShiftInviteService.respondToInvite(invite.applicationId, response);
+          ok = !result.error;
+          if (result.error) {
+            addToast(result.error, 'error');
+          } else {
+            addToast(
+              response === 'accepted' ? 'Turno confirmado! Bom trabalho.' : 'Convite recusado.',
+              response === 'accepted' ? 'success' : 'info',
+            );
+          }
         } else {
-          addToast(
-            response === 'accepted' ? 'Turno confirmado! Bom trabalho.' : 'Convite recusado.',
-            response === 'accepted' ? 'success' : 'info',
-          );
+          const result =
+            response === 'accepted'
+              ? await ShiftCallService.claimSlot(invite.callId ?? '')
+              : await ShiftCallService.declineCall(invite.callId ?? '');
+          const message =
+            response === 'accepted'
+              ? await messageForClaim(result, invite.jobId)
+              : messageForOutcome(result.outcome);
+          addToast(message.text, message.tone);
+          ok = message.ok;
         }
-      } else {
-        const result =
-          response === 'accepted'
-            ? await ShiftCallService.claimSlot(invite.callId ?? '')
-            : await ShiftCallService.declineCall(invite.callId ?? '');
-        const message = messageForOutcome(result.outcome);
-        addToast(message.text, message.tone);
-        ok = message.ok;
-      }
 
-      setRespondingId(null);
-      // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
-      load();
-      // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
-      const detail: ConvitesMudaramDetail = {
-        origem: instanciaId,
-        jobAceito: ok && response === 'accepted' ? invite.jobId : undefined,
-      };
-      window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail }));
-      return ok;
+        // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
+        load();
+        // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
+        const detail: ConvitesMudaramDetail = {
+          origem: instanciaId,
+          jobAceito: ok && response === 'accepted' ? invite.jobId : undefined,
+        };
+        window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail }));
+        return ok;
+      } finally {
+        respostasEmCurso.delete(invite.jobId);
+        setRespondingId(null);
+      }
     },
     [pendingInvites, addToast, load, instanciaId],
   );

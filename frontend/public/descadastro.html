@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>Avisos por e-mail | Worki</title>
+  <style>
+    body { margin: 0; padding: 32px 16px; background: #f4f4f0; color: #111; font-family: system-ui, Arial, sans-serif; }
+    main { max-width: 420px; margin: 0 auto; background: #fff; border: 2px solid #111; border-radius: 16px; box-shadow: 6px 6px 0 0 #111; padding: 24px; }
+    h1 { margin: 0 0 12px; font-size: 20px; text-transform: uppercase; }
+    p { line-height: 1.5; }
+    button { min-height: 48px; width: 100%; background: #111; color: #fff; border: 2px solid #111; border-radius: 12px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    button:focus-visible { outline: 3px solid #00a651; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Avisos por e-mail</h1>
+    <p id="mensagem" role="status">Quer parar de receber os avisos de turno por e-mail? Os avisos dentro do app continuam.</p>
+    <button id="confirmar" type="button">Parar de receber e-mails</button>
+  </main>
+  <script src="/descadastro.js" defer></script>
+</body>
+</html>

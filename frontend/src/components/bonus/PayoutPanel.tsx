@@ -79,7 +79,7 @@ export default function PayoutPanel({ snapshot: s, onRequest, onCancel, onSavePi
 
   return (
     <section aria-labelledby="bonus-payout-title" className="space-y-3">
-      <h2 id="bonus-payout-title" className="text-xl font-black">
+      <h2 id="bonus-payout-title" className="text-xl font-bold">
         Receber por PIX
       </h2>
       <Card>
@@ -101,7 +101,7 @@ export default function PayoutPanel({ snapshot: s, onRequest, onCancel, onSavePi
               loading={busy}
               onClick={request}
               aria-disabled={belowMin || undefined}
-              className={`!h-16 text-lg font-black uppercase ${belowMin ? 'opacity-60' : ''}`}
+              className={`!h-16 text-lg font-bold ${belowMin ? 'opacity-60' : ''}`}
             >
               Pedir PIX de segunda
             </Button>
@@ -120,7 +120,7 @@ export default function PayoutPanel({ snapshot: s, onRequest, onCancel, onSavePi
       </Card>
 
       <Card>
-        <h3 className="text-base font-black">Sua chave PIX</h3>
+        <h3 className="text-base font-bold">Sua chave PIX</h3>
         {editingPix ? (
           <div className="mt-3">
             <PixKeyForm submitLabel="Salvar chave" busy={busy} onSubmit={savePix} onCancel={() => setEditingPix(false)} />
@@ -138,7 +138,7 @@ export default function PayoutPanel({ snapshot: s, onRequest, onCancel, onSavePi
 
       {s.payouts.length > 0 && (
         <Card>
-          <h3 className="text-base font-black">PIX enviados</h3>
+          <h3 className="text-base font-bold">PIX enviados</h3>
           <ul className="mt-3 divide-y-2 divide-gray-200">
             {s.payouts.map((p) => (
               <li key={p.id} className="py-3">

@@ -25,11 +25,13 @@ export interface MemberCardProps {
   history?: WorkerHistoryWithCompany;
   /** A consulta do histórico falhou: não afirmar "nenhum turno". */
   historyUnavailable?: boolean;
+  /** A consulta ainda não voltou: não afirmar "nenhum turno". */
+  historyLoading?: boolean;
   /** Abre o modal "Convidar para turno" para este freela. */
   onInvite: (member: TeamMember) => void;
 }
 
-export function MemberCard({ member, onRemove, history, historyUnavailable = false, onInvite, restricted = false }: MemberCardProps) {
+export function MemberCard({ member, onRemove, history, historyUnavailable = false, historyLoading = false, onInvite, restricted = false }: MemberCardProps) {
   const { worker } = member;
   const avatarUrl = worker.avatar_url ?? worker.photo_url ?? null;
   const { addToast } = useToast();
@@ -114,7 +116,7 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
               </span>
             ) : (
               <span className="flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-pill">
-                <History size={12} /> Nenhum turno ainda com você
+                <History size={12} /> {historyLoading ? 'Carregando histórico...' : 'Nenhum turno ainda com você'}
               </span>
             )}
           </div>

@@ -14,6 +14,17 @@ export type AvailabilityPeriod = 'manha' | 'tarde' | 'noite';
 export type AvailabilityWeekday = '0' | '1' | '2' | '3' | '4' | '5' | '6';
 export type AvailabilityDays = Partial<Record<AvailabilityWeekday, AvailabilityPeriod[]>>;
 
+// Avisos multicanal (migration 20261201000100): `notice_preferences`.
+export type NoticeChannel = 'push' | 'email' | 'whatsapp';
+export interface NoticePreferences {
+  push: boolean;
+  email: boolean;
+  whatsapp: boolean;
+  quiet_start: string; // 'HH:MM'
+  quiet_end: string;
+  tz: string;
+}
+
 export interface WorkerProfile {
   id: string;
   full_name: string;

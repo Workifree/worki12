@@ -88,7 +88,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
           <CalendarClock size={20} aria-hidden="true" />
         </div>
         <div>
-          <h2 id="coverage-title" className="text-xl font-black">Cobrir turnos</h2>
+          <h2 id="coverage-title" className="text-xl font-bold">Cobrir turnos</h2>
           <p className="mt-1 text-sm text-gray-700">
             Escolha quem será coberto, quem cobre e o período. Ao fim do período, tudo volta ao normal sozinho.
           </p>

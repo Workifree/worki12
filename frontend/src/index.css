@@ -242,3 +242,14 @@ dialog.worki-dialog[open] {
 .worki-progress::-webkit-progress-bar { background: #e5e7eb; }
 .worki-progress::-webkit-progress-value { background: currentColor; border-radius: 999px; }
 .worki-progress::-moz-progress-bar { background: currentColor; border-radius: 999px; }
+
+/* Coluna lateral (2/3 + 1/3) só quando ela tem conteúdo; vazia, a lista usa a largura toda. */
+@media (min-width: 1024px) {
+  .worki-side-grid:has(> [data-side] > *) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 1.5rem;
+  }
+  .worki-side-grid:has(> [data-side] > *) > [data-main] { grid-column: span 2 / span 2; }
+}

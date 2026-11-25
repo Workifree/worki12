@@ -95,7 +95,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
         <p className="text-sm text-gray-600">
           Indicado por <span className="font-bold text-black">{item.referring_company.name}</span>
         </p>
-        {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+        {item.message && <p className="text-sm text-gray-600 italic [overflow-wrap:anywhere]">"{item.message}"</p>}
         {item.status === 'awaiting_worker' && (
           <p className="text-xs text-gray-600">
             Aguardando o freela decidir. Você será avisado se ele aceitar.
@@ -205,7 +205,7 @@ export default function CompanyReferrals() {
         subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."
         action={
           <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)} data-copilot="empresa.indicacoes.indicar">
-            Indicar Freela
+            Indicar freela
           </Button>
         }
       />
@@ -285,15 +285,15 @@ export default function CompanyReferrals() {
           )}
           <div className="grid grid-cols-1 gap-4">
             {sent.map((r) => (
-              <Card key={r.id} as="article" className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-0">
+              <Card key={r.id} as="article" className="flex items-start justify-between gap-4 flex-wrap [overflow-wrap:anywhere]">
+                <div className="min-w-0 max-w-full">
                   <p className="font-bold flex items-center gap-2 flex-wrap">
                     <span>{r.workerName ?? 'Freela'}</span>
                     <span className="text-gray-600 font-normal">→</span>
                     <Building2 size={16} />
                     <span>{r.requestingCompanyName ?? 'Empresa'}</span>
                   </p>
-                  {r.message && <p className="text-sm text-gray-600 mt-2 italic">"{r.message}"</p>}
+                  {r.message && <p className="text-sm text-gray-600 mt-2 italic [overflow-wrap:anywhere]">"{r.message}"</p>}
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={r.status} />

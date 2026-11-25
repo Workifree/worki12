@@ -190,7 +190,11 @@ export default function CompanyJobDetails() {
     const slots = job.slots ?? 1;
     const filled = apps === null ? null : apps.filter((a) => ['hired', 'in_progress', 'completed'].includes(a.status)).length;
     const state = occupancy(slots, filled);
-    const step = apps === null ? null : shiftStep(slots, apps);
+    const nextStep = apps === null ? null : shiftStep(slots, apps);
+    // Antes de o turno começar não há presença para marcar: com vaga aberta, o principal é chamar.
+    const step = nextStep?.kind === 'checkin' && state.needsPeople && !turnoIniciado
+        ? { kind: 'call' as const, label: 'Chamar freelas' }
+        : nextStep;
     const presenca = `/company/jobs/${id}/candidates`;
     const temGente = (filled ?? 0) > 0 || (apps ?? []).some((a) => a.status === 'invited');
     // Um só gesto de encerrar: turno com gente em equipe usa "Cancelar turno"; o resto, "Excluir".
@@ -223,13 +227,13 @@ export default function CompanyJobDetails() {
                 onClose={() => setShowDeleteConfirm(false)}
                 className="max-w-sm"
             >
-                    <DialogHeader titleId="excluir-turno-titulo" title="Excluir turno?" subtitle={job.title} />
+                    <DialogHeader titleId="excluir-turno-titulo" title={temGente ? 'Cancelar este turno?' : 'Excluir turno?'} subtitle={job.title} />
                     <p className="text-sm text-gray-600">
                         O turno sai da agenda. Convites e contratações dele são encerrados e quem já foi contratado é avisado. Não dá para desfazer.
                     </p>
                     <DialogActions>
                         <Button variant="secondary" data-autofocus onClick={() => setShowDeleteConfirm(false)}>Voltar</Button>
-                        <Button variant="danger" data-copilot="empresa.turno.excluir-confirmar" data-copilot-risk="D" onClick={handleDelete}>Excluir</Button>
+                        <Button variant="danger" data-copilot="empresa.turno.excluir-confirmar" data-copilot-risk="D" onClick={handleDelete}>{temGente ? 'Cancelar turno' : 'Excluir'}</Button>
                     </DialogActions>
             </Dialog>
         )}
@@ -257,7 +261,7 @@ export default function CompanyJobDetails() {
                         },
                         usaCancelar
                             ? { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setShowCancelJob(true) }
-                            : { label: 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
+                            : { label: temGente ? 'Cancelar turno' : 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
                     ]}
                 />
             </div>

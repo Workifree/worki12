@@ -193,10 +193,10 @@ export default function InviteTakeover() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-600">Empresa</p>
               <p className="font-bold line-clamp-2 [overflow-wrap:anywhere] group-hover:text-primary transition-colors">{companyName}</p>
+              <span className="flex items-center gap-0.5 text-xs font-semibold text-primary-dark">
+                Ver perfil <ChevronRight size={16} />
+              </span>
             </div>
-            <span className="flex items-center gap-0.5 text-xs font-semibold text-primary-dark flex-shrink-0">
-              Ver perfil <ChevronRight size={16} />
-            </span>
           </button>
         ) : (
           <div className="flex items-center gap-3 mb-4">

@@ -130,7 +130,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part =
             padding="sm"
             tone={isOpen ? 'default' : 'nested'}
           >
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex flex-col items-start gap-3 mb-3 sm:flex-row sm:justify-between">
               <div className="min-w-0">
                 <p className="font-bold text-sm flex items-center gap-2 flex-wrap">
                   {isSos ? <Siren size={16} /> : <Megaphone size={16} />}
@@ -237,7 +237,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part =
           <p className="text-sm text-gray-600">
             Quem ainda não respondeu deixa de poder aceitar e é avisado. Quem já aceitou continua no turno.
           </p>
-          <DialogActions stacked>
+          <DialogActions>
             <Button variant="secondary" data-autofocus onClick={() => setConfirmingId(null)}>
               Voltar
             </Button>

@@ -20,7 +20,7 @@ import CoverageModal, { type CoveragePerson } from '../../components/company/Cov
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import {
-  ActionBar, Alert, Button, ButtonLink, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge,
+  ActionBar, Alert, Button, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge,
 } from '../../components/ui';
 import { occupancy } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
@@ -539,7 +539,6 @@ export default function CompanyToday() {
                       </div>
                       <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:shrink-0">
                         {state.needsPeople ? (
-                          <>
                             <Button
                               variant={job.jobId === firstNeedingPeople ? 'dark' : 'secondary'}
                               className="flex-1 lg:flex-none"
@@ -549,10 +548,6 @@ export default function CompanyToday() {
                             >
                               Chamar freelas
                             </Button>
-                            <ButtonLink variant="ghost" to={presenca} data-copilot="empresa.hoje.ver-turno">
-                              Ver turno
-                            </ButtonLink>
-                          </>
                         ) : (
                           <Button
                             variant="secondary"
@@ -567,6 +562,7 @@ export default function CompanyToday() {
                           label={`Mais opções de ${job.title}`}
                           menuLabel="Ações do turno"
                           items={[
+                            state.needsPeople && { label: 'Ver turno', icon: CalendarClock, onSelect: () => navigate(presenca) },
                             passable && { label: 'Passar para...', icon: Repeat, onSelect: () => setPassIds([job.jobId]) },
                             cancellable && { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setCancelling(job) },
                           ]}

@@ -22,7 +22,7 @@ export default function AlmostThere({ shifts }: AlmostThereProps) {
   return (
     <section aria-labelledby="bonus-almost-title" className="space-y-3">
       <div>
-        <h2 id="bonus-almost-title" className="text-xl font-black">
+        <h2 id="bonus-almost-title" className="text-xl font-bold">
           Quase lá
         </h2>
         <p className="text-sm text-gray-700">Turnos com passos em aberto.</p>
@@ -35,7 +35,7 @@ export default function AlmostThere({ shifts }: AlmostThereProps) {
           const showOpenShift = steps.length === 0 || steps.some((s) => s.actor === 'operator')
           return (
             <Card as="li" padding="sm" key={`${shift.jobId}-${index}`} className="list-none">
-              <h3 className="text-base font-black">{shift.jobTitle}</h3>
+              <h3 className="text-base font-bold">{shift.jobTitle}</h3>
               <p className="text-sm text-gray-600">{[day, shift.workerName].filter(Boolean).join(' · ')}</p>
               {steps.length > 0 && (
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-bold">

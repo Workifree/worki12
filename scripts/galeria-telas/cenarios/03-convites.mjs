@@ -28,7 +28,9 @@ const desfechos = [['expired', 'Convite vencido'], ['revoked', 'Convite cancelad
 export default [
   el('deslogado-vai-ao-login', 'anon', URL_EMPRESA, 'sem sessão: guarda o token e manda ao login', { espera: 'Entrar como freela|Criar conta de freela' }),
   el('contato-freela-deslogado', 'anon', URL_FREELA, 'token w_ deslogado: login de empresa', { espera: 'Entrar como empresa|Criar conta de empresa' }),
-  el('processando', 'freela', URL_EMPRESA, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_company_invite_by_token'] = 'pendura'; }, carregandoEsperado: true, passos: aceitarElenco, espera: 'Convite de Elenco' }),
+  el('processando', 'freela', URL_EMPRESA, 'RPC em andamento', { prep: (m) => { m.falhas['rpc:accept_company_invite_by_token'] = 'pendura'; }, carregandoEsperado: true, passos: aceitarElenco, espera: 'te convidou' }),
+  el('previa', 'freela', URL_EMPRESA, 'consentimento antes do aceite', { prep: semVinculo, espera: 'Entrar no Elenco' }),
+  el('previa-contato', 'empresa', URL_FREELA, 'empresa antes de convidar', { prep: (m) => { m.db.team_connections = []; }, espera: 'Convidar para o Elenco' }),
   el('aceito', 'freela', URL_EMPRESA, 'success', { prep: semVinculo, passos: aceitarElenco, espera: 'Você entrou no Elenco' }),
   el('freela-convidado', 'empresa', URL_FREELA, 'empresa abre link de contato (success)', { prep: (m) => { m.db.team_connections = []; }, passos: convidarElenco, espera: 'Convite enviado' }),
   el('ja-no-elenco', 'empresa', URL_FREELA, 'alreadyExists', { passos: convidarElenco, espera: 'Já está no seu elenco' }),

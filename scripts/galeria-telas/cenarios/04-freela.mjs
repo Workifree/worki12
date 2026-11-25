@@ -21,7 +21,7 @@ const conviteLegado = (m) => { m.db.applications.push({ id: id(30, 40), job_id: 
 const fecharConvite = { clicar: 'Fechar aviso de convite' };
 const recibo = (job = 3) => `/recibo/${id(20, job)}`;
 const soPagamento = (status, extra = {}) => (m) => { const p = m.db.shift_payments[0]; Object.assign(p, { status, ...extra }); if (status === 'scheduled') Object.assign(p, { paid_at: null, scheduled_for: dia(4) }); };
-const aba = (nome) => ({ clicar: new RegExp(`^${nome}`) });
+const aba = (nome) => ({ clicar: new RegExp(`^${nome}`, 'i') });
 
 export default [
   c('inicio', 'freela', '/dashboard', 'com próximo turno e recebimento a confirmar', { espera: 'Fala, Ana' }),
@@ -32,7 +32,7 @@ export default [
   c('carteira', 'freela', '/carteira', 'empresas do elenco + convite de elenco pendente', { espera: 'Buffet Villa Real' }),
   c('carteira-vazia', 'freela', '/carteira', 'sem conexões', { prep: vazio, espera: 'ainda não tem empresas' }),
   c('carteira-erro', 'freela', '/carteira', 'falha de carga', { prep: falhar('erro', 'team_connections'), erroEsperado: true, espera: 'Tentar de novo' }),
-  c('carteira-sair-empresa', 'freela', '/carteira', 'confirmação de sair do elenco', { passos: [{ css: '[aria-label="Sair da empresa Buffet Villa Real"]' }], espera: 'Sair de Buffet Villa Real' }),
+  c('carteira-sair-empresa', 'freela', '/carteira', 'confirmação de sair do elenco', { passos: [{ css: '[aria-label="Mais opções de Buffet Villa Real"]' }, { clicar: /Sair da empresa/ }], espera: 'Sair de Buffet Villa Real' }),
   c('carteira-recusar-elenco', 'freela', '/carteira', 'recusar convite de elenco', { passos: [{ clicar: /^Recusar/ }], espera: '2 empresas' }),
   c('empresa-publica', 'freela', `/empresa/${ID.empresa}`, 'perfil público antes de aceitar convite', { espera: 'Momentos Doces' }),
   c('empresa-publica-sem-avaliacao', 'freela', `/empresa/${ID.empresa3}`, 'sem nota nem avaliações', { prep: (m) => { m.rpc.get_profile_reviews = []; }, espera: 'Buffet Villa Real' }),
@@ -54,7 +54,7 @@ export default [
   mj('presenca-respondida', 'freela', '/my-jobs', 'resposta enviada', { prep: (m) => { jaAvaliou(m); m.rpc.respond_attendance_confirmation = { outcome: 'confirmed' }; }, passos: [{ clicar: 'Sim, vou' }], espera: 'confirm' }),
   mj('em-andamento', 'freela', '/my-jobs', 'turno em andamento (check-out)', { prep: jaAvaliou, passos: [aba('Em Andamento')], espera: 'Atendente de balcão' }),
   mj('agendados', 'freela', '/my-jobs', 'turnos agendados', { prep: jaAvaliou, passos: [aba('Agendados')], espera: 'Barista de sábado' }),
-  mj('checkin', 'freela', '/my-jobs', 'turno de hoje aguardando chegada', { prep: (m) => { jaAvaliou(m); const a = m.app(3); Object.assign(a, { status: 'hired', worker_checkin_at: null, company_checkin_confirmed_at: null }); m.job(2).work_start_time = '13:15'; m.job(2).work_end_time = '19:00'; }, passos: [aba('Em Andamento')], espera: 'Check-in' }),
+  mj('checkin', 'freela', '/my-jobs', 'turno de hoje aguardando chegada', { prep: (m) => { jaAvaliou(m); const a = m.app(3); Object.assign(a, { status: 'hired', worker_checkin_at: null, company_checkin_confirmed_at: null }); m.job(2).work_start_time = '13:15'; m.job(2).work_end_time = '19:00'; }, passos: [aba('Em Andamento')], espera: 'Registrar chegada' }),
   mj('historico', 'freela', '/my-jobs', 'concluídos e cancelados', { prep: jaAvaliou, passos: [aba('Histórico')], espera: 'Garçom para evento' }),
   mj('detalhe', 'freela', '/my-jobs', 'modal de detalhe do turno', { prep: jaAvaliou, passos: [aba('Histórico'), { clicar: /Garçom para evento/ }], espera: 'Garçom para evento' }),
   mj('cancelar-turno', 'freela', '/my-jobs', 'modal de cancelamento pelo freela', { prep: jaAvaliou, passos: [aba('Agendados'), { clicar: /^Cancelar turno/ }], espera: 'Cancelar este turno' }),
@@ -63,7 +63,7 @@ export default [
 
   iv('chamado-disputado', 'freela', '/dashboard', 'InviteTakeover: chamado 1→N', { prep: comConvite(), espera: 'Convite de turno' }),
   iv('chamado-individual', 'freela', '/dashboard', 'InviteTakeover: só um alvo', { prep: comConvite(1), espera: 'Convite de turno' }),
-  iv('chamado-sos', 'freela', '/dashboard', 'InviteTakeover vindo de SOS (fora do elenco)', { prep: comConvite(12, { origin: 'sos' }), espera: 'Convite de turno' }),
+  iv('chamado-sos', 'freela', '/dashboard', 'InviteTakeover vindo de SOS (fora do elenco)', { prep: comConvite(12, { origin: 'sos' }), espera: 'URG|Urg' }),
   iv('legado', 'freela', '/dashboard', 'InviteTakeover: application invited', { prep: conviteLegado, espera: 'Convite de turno' }),
   iv('recusa-armada', 'freela', '/dashboard', 'primeiro toque em Recusar', { prep: comConvite(), passos: [{ clicar: /^Recusar/ }], espera: 'Convite de turno' }),
   iv('aceito', 'freela', '/dashboard', 'claim_shift_slot=claimed', { prep: (m) => { comConvite()(m); m.rpc.claim_shift_slot = (_a, w) => { w.db.shift_call_targets.at(-1).response = 'accepted'; return { outcome: 'claimed' }; }; }, passos: [{ clicar: /^Aceitar/ }], espera: 'Vaga garantida' }),
@@ -76,7 +76,7 @@ export default [
   pg('recibo-sem-cpf', 'freela', recibo(), 'termo com CPF não informado (bloqueia aceite)', { prep: (m) => { m.db.service_terms[0].term_text = m.db.service_terms[0].term_text.replace(/CPF [\d.-]+/, 'CPF: não informado'); }, espera: 'CPF' }),
   pg('recibo-confirmado', 'freela', recibo(), 'recebimento confirmado e termo aceito', { prep: (m) => { soPagamento('recorded', { worker_confirmed_at: em(0, '09:00') })(m); Object.assign(m.db.service_terms[0], { accepted_at: em(0, '09:00'), accepted_ip: '203.0.113.7', accepted_user_agent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/141.0 Mobile Safari/537.36' }); }, espera: 'Termo aceito' }),
   pg('recibo-agendado', 'freela', recibo(), 'status scheduled: comprovante de agendamento', { prep: soPagamento('scheduled'), espera: 'Comprovante de Agendamento' }),
-  pg('recibo-estornado', 'freela', recibo(), 'voided não aparece: recibo não encontrado', { prep: soPagamento('voided', { voided_at: em(0) }), espera: 'não encontrado' }),
+  pg('recibo-estornado', 'freela', recibo(), 'voided não aparece: recibo não encontrado', { prep: soPagamento('voided', { voided_at: em(0) }), espera: 'foi estornado' }),
   pg('recibo-termo-falhou', 'freela', recibo(), 'leitura do termo falha: confirmação bloqueada', { prep: falhar('erro', 'service_terms'), erroEsperado: true, espera: 'Não foi possível verificar o termo' }),
   pg('recibo-sem-presenca-nota', 'freela', recibo(), 'sem horários, dinheiro, com nota longa e valor zero', { prep: (m) => { Object.assign(m.db.shift_payments[0], { amount: 0, source: 'cash', note: 'Pago em dinheiro no fim do turno, incluindo a ajuda de custo do transporte e o jantar. '.repeat(3) }); Object.assign(m.app(4), { worker_checkin_at: null, worker_checkout_at: null }); }, espera: 'Recibo' }),
   pg('recibo-empresa', 'empresa', `${recibo()}?worker=${ID.freela}`, 'empresa vê o recibo (aguarda aceite)', { espera: 'Aguardando aceite' }),
@@ -88,12 +88,12 @@ export default [
   pf('visao', 'freela', '/profile', 'perfil completo: badges, certificações, SOS, indicações', { espera: 'Ana Beatriz' }),
   pf('vazio', 'freela', '/profile', 'sem CPF, PIX, disponibilidade, badges e certificados', { prep: (m) => { Object.assign(m.eu(), { cpf: null, pix_key: null, bio: null, availability_days: null, availability: [], roles: [], primary_role: null, city: null, phone: null, xp: 0, level: 1, rating_average: null, reviews_count: 0 }); m.db.worker_certifications = []; m.db.worker_trainings = []; m.rpc.get_worker_company_badges = []; m.rpc.get_profile_reviews = []; }, espera: 'Cadastrar CPF|disponibilidade' }),
   pf('editando', 'freela', '/profile', 'modo edição (disponibilidade em grade)', { passos: [{ clicar: /^Editar/ }], espera: 'Salvar' }),
-  pf('badges-ocultos', 'freela', '/profile', 'chave-mestra de badges ligada', { prep: (m) => { m.eu().badges_hidden = true; }, espera: 'Mostrar onde já trabalhei' }),
-  pf('badges-erro', 'freela', '/profile', 'RPC de selos falha', { prep: (m) => { m.falhas['rpc:get_worker_company_badges'] = 'erro'; }, erroEsperado: true, espera: 'selos' }),
-  pf('sos-ligado', 'freela', '/profile', 'discoverable_for_sos=true', { prep: (m) => { m.eu().discoverable_for_sos = true; m.eu().accepts_referrals = false; }, espera: 'Descoberta ativ|Desativar' }),
-  pf('certificacao-nova', 'freela', '/profile', 'modal de cadastro de certificação', { passos: [{ clicar: /^Cadastrar$/ }], espera: 'certificação' }),
-  pf('certificacao-editar', 'freela', '/profile', 'editar certificação conferida', { passos: [{ css: aria('Editar certificação Manipulação de alimentos') }], espera: 'Manipulação' }),
-  pf('certificacao-excluir', 'freela', '/profile', 'confirmar exclusão', { passos: [{ css: aria('Excluir certificação Curso de barista') }], espera: 'Excluir certificação' }),
+  pf('badges-ocultos', 'freela', '/profile', 'chave-mestra de badges ligada', { passos: [{ clicar: /Preferências e privacidade/ }], prep: (m) => { m.eu().badges_hidden = true; }, espera: 'Mostrar onde já trabalhei' }),
+  pf('badges-erro', 'freela', '/profile', 'RPC de selos falha', { passos: [{ clicar: /Preferências e privacidade/ }], prep: (m) => { m.falhas['rpc:get_worker_company_badges'] = 'erro'; }, erroEsperado: true, espera: 'selos' }),
+  pf('sos-ligado', 'freela', '/profile', 'discoverable_for_sos=true', { passos: [{ clicar: /Preferências e privacidade/ }], prep: (m) => { m.eu().discoverable_for_sos = true; m.eu().accepts_referrals = false; }, espera: 'Descoberta ativ|Desativar' }),
+  pf('certificacao-nova', 'freela', '/profile', 'modal de cadastro de certificação', { passos: [{ clicar: /Certificações e cursos/ }, { clicar: /^Cadastrar/ }], espera: 'certificação' }),
+  pf('certificacao-editar', 'freela', '/profile', 'editar certificação conferida', { passos: [{ clicar: /Certificações e cursos/ }, { css: aria('Editar certificação Manipulação de alimentos') }], espera: 'Manipulação' }),
+  pf('certificacao-excluir', 'freela', '/profile', 'confirmar exclusão', { passos: [{ clicar: /Certificações e cursos/ }, { css: aria('Excluir certificação Curso de barista') }], espera: 'Excluir certificação' }),
   pf('meu-qr', 'freela', '/profile', 'modal QR de identidade', { passos: [{ clicar: /QR/ }], espera: 'Meu QR de identidade' }),
   pf('conta', 'freela', '/profile', 'configurações de conta abertas', { passos: [{ clicar: /Segurança|Conta|Configurações/ }], espera: 'Zona de perigo' }),
   pf('excluir-conta', 'freela', '/profile', 'modal de exclusão de conta', { passos: [{ clicar: /Segurança|Conta|Configurações/ }, { clicar: 'Excluir minha conta' }], espera: 'irreversível' }),

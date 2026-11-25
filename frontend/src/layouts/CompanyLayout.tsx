@@ -4,6 +4,7 @@ import BottomNav from '../components/BottomNav';
 import SkipLink, { MAIN_CONTENT_ID } from '../components/SkipLink';
 import NotificationBell from '../components/NotificationBell';
 import CompanySwitcher from '../components/company/CompanySwitcher';
+import FormerCompanyNotice from '../components/company/FormerCompanyNotice';
 import GestorRouteGuard from '../components/company/GestorRouteGuard';
 
 export default function CompanyLayout() {
@@ -26,6 +27,7 @@ export default function CompanyLayout() {
             {/* Sem `overflow` aqui: quem rola é a página, e a ActionBar (sticky) depende disso. */}
             <main id={MAIN_CONTENT_ID} tabIndex={-1} className="focus:outline-none min-w-0 flex-1 p-4 sm:p-6 md:p-8 pb-24 md:pb-8">
                 <CompanySwitcher className="md:hidden mb-4" />
+                <FormerCompanyNotice />
                 <GestorRouteGuard>
                     <Outlet />
                 </GestorRouteGuard>

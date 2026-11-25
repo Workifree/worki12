@@ -28,7 +28,7 @@ import PageMeta from '../../components/PageMeta';
 import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
-import { Button, Card, ErrorState, Field, PageHeader } from '../../components/ui';
+import { DialogActions, Button, Card, ErrorState, Field, PageHeader } from '../../components/ui';
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
@@ -437,7 +437,7 @@ export default function CompanyTeamMembers() {
                   </p>
                   <p className="text-sm text-gray-700 mt-1">
                     Entrou como {ROLE_LABEL[m.role]}
-                    {m.acceptedEmail ? <> com o e-mail <strong>{m.acceptedEmail}</strong></> : null}. Enquanto você
+                    {m.acceptedEmail ? <> com o e-mail <strong className="break-all">{m.acceptedEmail}</strong></> : null}. Enquanto você
                     não confirmar, a pessoa não vê nada do trabalho.
                   </p>
                   {formatSaoPaulo(m.confirmationExpiresAt) && (
@@ -501,7 +501,7 @@ export default function CompanyTeamMembers() {
                             </span>
                           </div>
                           {m.acceptedEmail && !pending && (
-                            <p className="text-sm text-gray-600 mt-1">{m.acceptedEmail}</p>
+                            <p className="text-sm text-gray-600 mt-1 break-all">{m.acceptedEmail}</p>
                           )}
                           {m.state === 'pending_expired' && (
                             <p className="text-xs text-gray-600 mt-2">
@@ -708,14 +708,14 @@ export default function CompanyTeamMembers() {
                 </li>
               )}
             </ul>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DialogActions>
               <Button variant="secondary" size="lg" data-autofocus onClick={() => setRemoving(null)} disabled={removeBusy}>
                 Voltar
               </Button>
               <Button variant="danger" size="lg" onClick={() => void confirmRemove()} loading={removeBusy}>
                 Remover agora
               </Button>
-            </div>
+            </DialogActions>
           </>
         </ModalShell>
       )}
@@ -754,7 +754,7 @@ export default function CompanyTeamMembers() {
                 onChange={(e) => { setTypedName(e.target.value); setConfirmError(null); }}
               />
             </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DialogActions>
               <Button variant="secondary" size="lg" onClick={() => setConfirming(null)} disabled={confirmBusy}>
                 Voltar
               </Button>
@@ -767,7 +767,7 @@ export default function CompanyTeamMembers() {
               >
                 Confirmar acesso
               </Button>
-            </div>
+            </DialogActions>
           </form>
         </ModalShell>
       )}
@@ -782,14 +782,14 @@ export default function CompanyTeamMembers() {
             <p className="text-sm text-gray-800 mb-5">
               A pessoa perde o acesso agora. Se foi engano, é só enviar um novo convite.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DialogActions>
               <Button variant="secondary" size="lg" data-autofocus onClick={() => setRejecting(null)}>
                 Voltar
               </Button>
               <Button variant="danger" size="lg" onClick={() => void handleReject(rejecting)}>
                 Cortar acesso
               </Button>
-            </div>
+            </DialogActions>
           </>
         </ModalShell>
       )}

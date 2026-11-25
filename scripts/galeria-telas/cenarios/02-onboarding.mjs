@@ -39,5 +39,5 @@ export default [
 
   c('termos-gate-freela', 'freela', '/dashboard', 'accepted_tos=false (TosGateModal)', { prep: (m) => { m.eu().accepted_tos = false; }, espera: 'Termos de Uso Atualizados' }),
   c('termos-gate-empresa', 'empresa', '/company/dashboard', 'accepted_tos=false (TosGateModal)', { prep: (m) => m.empresa({ accepted_tos: false }), espera: 'Termos de Uso Atualizados' }),
-  c('termos-gate-erro-ao-salvar', 'freela', '/dashboard', 'gravação do aceite falha', { prep: (m) => { m.eu().accepted_tos = false; }, passos: [{ css: '#tos-checkbox' }, { falhar: { 'rest:workers': 'erro' } }, { css: '[role=dialog] button >> nth=-1' }], espera: 'Termos de Uso Atualizados' }),
+  c('termos-gate-erro-ao-salvar', 'freela', '/dashboard', 'gravação do aceite falha', { prep: (m) => { m.eu().accepted_tos = false; }, passos: [{ css: '#tos-checkbox' }, { falhar: { 'rest:workers': 'erro' } }, { clicar: /^Aceitar e Continuar/ }], espera: 'Termos de Uso Atualizados' }),
 ];

@@ -12,8 +12,6 @@ const FORMAT = /^(empresa|freela|publico)\.[a-z0-9-]+\.[a-z0-9-]+$/
 
 /** Id -> nº de declarações permitido, com o motivo. */
 const REPEATED: Record<string, number> = {
-  // CompanyToday: ramos exclusivos do mesmo cartão (com e sem vaga aberta).
-  'empresa.hoje.ver-turno': 2,
   // TodayShiftCard (turno de hoje) e cartão da lista em MyJobs: um turno aparece só num deles.
   'freela.turno.falar-empresa': 2,
   'freela.turnos.cancelar': 2,

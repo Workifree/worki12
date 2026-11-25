@@ -204,9 +204,9 @@ export default function Dashboard() {
     // recompute_my_aggregates(). Confirmar email não gera XP, então essa quest não
     // promete XP (xp: 0 e o selo "+XP" só renderiza quando quest.xp > 0).
     const quests = worker ? [
-        { id: 1, title: 'Adicionar Foto de Perfil', xp: 50, done: !!worker.avatar_url, action: '/profile' },
-        { id: 2, title: 'Confirmar Email', xp: 0, done: !!authUser?.email_confirmed_at, action: '/profile' },
-        { id: 3, title: 'Adicionar Especialidades', xp: 75, done: (worker.roles && worker.roles.length > 0) || !!worker.primary_role, action: '/profile' },
+        { id: 1, title: 'Adicionar foto de perfil', xp: 50, done: !!worker.avatar_url, action: '/profile' },
+        { id: 2, title: 'Confirmar e-mail', xp: 0, done: !!authUser?.email_confirmed_at, action: '/profile' },
+        { id: 3, title: 'Adicionar especialidades', xp: 75, done: (worker.roles && worker.roles.length > 0) || !!worker.primary_role, action: '/profile' },
     ] : [];
 
     const todays = shifts?.todays ?? [];
@@ -278,12 +278,13 @@ export default function Dashboard() {
     const primaryReceipt = pendingReceipts[0];
     const primaryReceiptJob = umOuArray(primaryReceipt?.job);
     const primaryReceiptCompany = umOuArray(primaryReceiptJob?.company)?.name ?? 'Uma empresa';
+    const valoresInformados = pendingReceipts.every((r) => r.amount > 0);
     const totalReceipts = pendingReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
     const primaryInviteCompany = (primaryInvite?.job?.company as { name?: string } | undefined)?.name ?? 'Empresa';
     const primaryInviteTitle = primaryInvite?.job?.title ?? 'Novo turno';
 
     const firstName = worker.full_name?.split(' ')[0] ?? '';
-    const progresso = levelProgress(worker.xp || 0);
+    const progresso = levelProgress(worker.xp || 0, worker.level || 1);
     const nota = worker.rating_average != null ? Number(worker.rating_average).toFixed(1) : null;
     const temAtencao = pendingReceipts.length > 0 || (!invitesLoading && !!primaryInvite);
     // Uma ação primária por tela: o que está esperando o freela agora ganha o botão cheio; o convite
@@ -348,14 +349,14 @@ export default function Dashboard() {
                         <Card padding="sm" className="shadow-brutal-brand flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="min-w-0">
                                 <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary-dark text-xs font-bold px-3 py-1 rounded-pill mb-2">
-                                    <AlertCircle size={12} /> Pagamento para confirmar
+                                    <AlertCircle size={12} /> {valoresInformados ? 'Pagamento para confirmar' : 'Pagamento sem valor'}
                                 </span>
                                 <p className="text-2xl font-bold tabular-nums [overflow-wrap:anywhere]">
-                                    {pendingReceipts.every((r) => r.amount > 0) ? formatBRL(totalReceipts) : 'Valor não informado'}
+                                    {valoresInformados ? formatBRL(totalReceipts) : 'Valor não informado'}
                                 </p>
                                 <p className="text-sm text-gray-600">
                                     {pendingReceipts.length === 1
-                                        ? `${primaryReceiptCompany} registrou este pagamento. Confirme que recebeu.`
+                                        ? `${primaryReceiptCompany} registrou este pagamento. ${valoresInformados ? 'Confirme que recebeu.' : 'Sem o valor não dá para confirmar: fale com a empresa pelo recibo.'}`
                                         : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
                                 </p>
                             </div>
@@ -365,7 +366,7 @@ export default function Dashboard() {
                                 className="sm:flex-shrink-0 w-full sm:w-auto"
                                 onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
                             >
-                                Confirmar recebimento
+                                {valoresInformados ? 'Confirmar recebimento' : pendingReceipts.length === 1 ? 'Ver recibo' : 'Ver recebimentos'}
                             </Button>
                         </Card>
                     )}
@@ -453,7 +454,7 @@ export default function Dashboard() {
                                 className="mt-auto w-full sm:w-auto sm:self-start"
                                 onClick={() => navigate('/my-jobs')}
                             >
-                                Ver Detalhes
+                                Ver detalhes
                             </Button>
                         </>
                     ) : carregandoNextJob ? (
@@ -514,7 +515,7 @@ export default function Dashboard() {
                         onClick={() => navigate('/carteira')}
                         iconRight={<ArrowRight size={16} />}
                     >
-                        Ver Empresas
+                        Ver empresas
                     </Button>
                 </Card>
 
@@ -523,19 +524,23 @@ export default function Dashboard() {
                         <Award size={16} className="text-primary" /> Nível
                     </h2>
                     <p className="text-3xl font-bold tabular-nums mb-3">{worker.level || 1}</p>
-                    <div
-                        className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200"
-                        role="progressbar"
-                        aria-label="Progresso para o próximo nível"
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={Math.round(progresso.percent)}
-                    >
-                        <div className="h-full bg-primary" style={{ width: `${progresso.percent}%` }} />
-                    </div>
-                    <p className="text-xs text-gray-600 mt-2">
-                        {progresso.faltam > 0 ? `Faltam ${progresso.faltam} XP para o próximo nível` : 'Nível máximo!'}
-                    </p>
+                    {progresso && (
+                        <>
+                            <div
+                                className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200"
+                                role="progressbar"
+                                aria-label="Progresso para o próximo nível"
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={Math.round(progresso.percent)}
+                            >
+                                <div className="h-full bg-primary" style={{ width: `${progresso.percent}%` }} />
+                            </div>
+                            <p className="text-xs text-gray-600 mt-2">
+                                {progresso.faltam > 0 ? `Faltam ${progresso.faltam} XP para o próximo nível` : 'Nível máximo!'}
+                            </p>
+                        </>
+                    )}
                 </Card>
             </section>
 

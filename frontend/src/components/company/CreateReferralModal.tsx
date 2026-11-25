@@ -181,7 +181,7 @@ export default function CreateReferralModal({
         initialFocus="panel"
     >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="create-referral-title" className="text-lg font-bold tracking-tight">Indicar Freela</h2>
+          <h2 id="create-referral-title" className="text-lg font-bold tracking-tight">Indicar freela</h2>
           <button
             type="button"
             aria-label="Fechar"

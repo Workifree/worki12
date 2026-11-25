@@ -57,11 +57,11 @@ export default function CelebrationBanner({ items, onClose }: CelebrationBannerP
       <div className="flex items-start gap-3 rounded-2xl border-2 border-black bg-white p-4 shadow-[6px_6px_0px_0px_rgba(37,99,235,1)]">
         <PartyPopper aria-hidden="true" className="mt-1 h-7 w-7 shrink-0 text-blue-600" />
         <div className="min-w-0 flex-1">
-          <p className="text-lg font-black uppercase">
+          <p className="text-lg font-bold">
             {items.length === 1 ? 'Marco concluído!' : `${items.length} marcos concluídos!`}
           </p>
           <p className="text-sm font-bold text-gray-700">{items.map((i) => i.title).join(', ')}</p>
-          {total > 0 && <p className="mt-1 text-2xl font-black tabular-nums">+ {centsToBRL(total)}</p>}
+          {total > 0 && <p className="mt-1 text-2xl font-bold tabular-nums">+ {centsToBRL(total)}</p>}
         </div>
         <IconButton aria-label="Fechar aviso" onClick={onClose}>
           <X aria-hidden="true" className="h-5 w-5" />

@@ -24,7 +24,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
     return (
       <Card className="text-center">
         <Lock aria-hidden="true" className="mx-auto h-8 w-8" />
-        <h2 className="mt-3 text-xl font-black">A trilha é para quem opera com login próprio</h2>
+        <h2 className="mt-3 text-xl font-bold">A trilha é para quem opera com login próprio</h2>
         <p className="mt-2 text-sm text-gray-700">
           Quando você entrar com o seu próprio acesso, a trilha aparece aqui. Se tiver dúvida, fale com a equipe do Worki.
         </p>
@@ -35,7 +35,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
   if (status === 'disabled' || status === 'not_enrolled') {
     return (
       <Card className="text-center">
-        <h2 className="text-xl font-black">A trilha não está disponível para você agora</h2>
+        <h2 className="text-xl font-bold">A trilha não está disponível para você agora</h2>
         <p className="mt-2 text-sm text-gray-700">Assim que houver um convite para você, ele aparece aqui.</p>
       </Card>
     )
@@ -59,7 +59,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
       <div className="flex items-start gap-3">
         <Sparkles aria-hidden="true" className="mt-1 h-6 w-6 shrink-0 text-blue-600" />
         <div>
-          <h2 className="text-xl font-black">Você recebeu um convite para a trilha de bônus</h2>
+          <h2 className="text-xl font-bold">Você recebeu um convite para a trilha de bônus</h2>
           <p className="mt-1 text-sm text-gray-700">
             Cada passo que você conclui no Worki vira um marco, e cada marco vale um bônus em dinheiro, pago por PIX toda segunda.
           </p>
@@ -81,7 +81,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
       </p>
 
       <div className="rounded-xl border-2 border-black p-4">
-        <h3 className="text-base font-black">Chave PIX (opcional agora)</h3>
+        <h3 className="text-base font-bold">Chave PIX (opcional agora)</h3>
         {pix && !addingPix ? (
           <div className="mt-1 space-y-2">
             <p className="text-sm">Chave pronta para o seu primeiro pedido.</p>
@@ -129,7 +129,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
         </p>
       )}
 
-      <Button variant="dark" size="lg" fullWidth loading={busy} disabled={!agreed} onClick={accept} className="!h-14 text-base uppercase">
+      <Button variant="dark" size="lg" fullWidth loading={busy} disabled={!agreed} onClick={accept} className="!h-14 text-base">
         Entrar na trilha
       </Button>
     </Card>

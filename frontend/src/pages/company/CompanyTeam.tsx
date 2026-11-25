@@ -16,7 +16,7 @@ import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
 import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
-import { Alert, Button, Card, PageHeader } from '../../components/ui';
+import { DialogActions, Alert, Button, Card, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
 import { Dialog } from '../../components/ui/Dialog';
 
@@ -50,6 +50,8 @@ export default function CompanyTeam() {
 
   const [historyError, setHistoryError] = useState(false);
   const [historyAttempt, setHistoryAttempt] = useState(0);
+  // Para qual elenco o histórico já chegou: antes disso, ausência no mapa não é "nenhum turno".
+  const [historyLoadedFor, setHistoryLoadedFor] = useState<TeamMember[] | null>(null);
 
   // F2: Listas salvas do elenco — CRUD organizacional, não toca team_connections/saldo.
   const [lists, setLists] = useState<TeamListWithMembers[]>([]);
@@ -139,6 +141,7 @@ export default function CompanyTeam() {
         map[row.worker_id] = entry;
       });
       setHistoryByWorker(map);
+      setHistoryLoadedFor(teamMembers);
     })();
     return () => { active = false; };
   }, [companyId, teamMembers, roleResolved, restricted, historyAttempt]);
@@ -215,7 +218,7 @@ export default function CompanyTeam() {
         }`}
         action={
           <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />} data-copilot="empresa.elenco.adicionar-freela">
-            Adicionar Freela
+            Adicionar freela
           </Button>
         }
       />
@@ -285,6 +288,7 @@ export default function CompanyTeam() {
                 onInvite={(m) => setInvitingMember(m)}
                 history={historyByWorker[member.worker.id]}
                 historyUnavailable={historyError}
+                historyLoading={historyLoadedFor !== teamMembers}
               />
             ))}
           </div>
@@ -463,20 +467,20 @@ export default function CompanyTeam() {
             <p className="text-xs text-gray-600 mb-6">
               Excluir esta lista não remove ninguém do Elenco.
             </p>
-            <div className="worki-dialog-actions flex gap-3">
-              <Button variant="secondary" fullWidth onClick={() => setDeletingList(null)} disabled={isDeletingList}>
-                Cancelar
+            <DialogActions>
+              <Button variant="secondary" onClick={() => setDeletingList(null)} disabled={isDeletingList}>
+                Voltar
               </Button>
               <Button
                 variant="danger"
-                fullWidth
+               
                 loading={isDeletingList}
                 onClick={() => void handleConfirmDeleteList()}
                 iconLeft={<Trash2 size={16} aria-hidden="true" />}
               >
                 {isDeletingList ? 'Excluindo...' : 'Excluir'}
               </Button>
-            </div>
+            </DialogActions>
         </Dialog>
       )}
     </div>

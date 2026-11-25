@@ -266,10 +266,69 @@ self.addEventListener('fetch', (event) => {
 })
 
 /* ------------------------------------------------------------------------------------------- *
- * PUSH — fase futura (exige backend + chaves VAPID)
- *
- * Quando houver backend de push, os handlers entram aqui:
- *   self.addEventListener('push', (event) => { ... self.registration.showNotification(...) })
- *   self.addEventListener('notificationclick', (event) => { ... clients.openWindow(url) })
- * Mantidos fora do arquivo hoje de propósito: handler de push sem emissor é superfície morta.
+ * Web Push (avisos multicanal). Não toca no cache nem no ciclo de vida acima.
+ * Emissor: supabase/functions/notice-dispatch. O clique só ABRE uma tela: nunca executa ação.
  * ------------------------------------------------------------------------------------------- */
+
+const DEFAULT_NOTICE_TITLE = 'Worki'
+
+/** Só caminho relativo desta origem. Qualquer outra coisa vira '/'. */
+function safeNoticePath(path) {
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) return '/'
+  // barra invertida e espaços/controles são normalizados pelo navegador e poderiam virar outra origem
+  if (path.includes('\\') || /\s|\p{Cc}/u.test(path)) return '/'
+  try {
+    return new URL(path, self.location.origin).origin === self.location.origin ? path : '/'
+  } catch {
+    return '/'
+  }
+}
+
+function readPush(event) {
+  try {
+    const data = event.data ? event.data.json() : null
+    return data && typeof data === 'object' ? data : {}
+  } catch {
+    return {}
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const message = readPush(event)
+  const data = message.data && typeof message.data === 'object' ? message.data : {}
+  const options = {
+    body: typeof message.body === 'string' ? message.body : 'Você tem um aviso novo. Abra o Worki.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    lang: 'pt-BR',
+    data: { path: safeNoticePath(data.path), eventId: typeof data.eventId === 'string' ? data.eventId : null },
+  }
+  // mesma tag = o aviso é substituído, não empilhado
+  if (typeof message.tag === 'string' && message.tag) options.tag = message.tag
+  // Sempre mostra algo: o iOS cancela a inscrição de quem recebe push silencioso.
+  const title = typeof message.title === 'string' && message.title ? message.title : DEFAULT_NOTICE_TITLE
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+async function openNotice(data) {
+  const path = safeNoticePath(data.path)
+  const target = new URL(path, self.location.origin)
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  // Reaproveita a janela que JÁ está nessa tela. Não navega as outras: perderia formulário aberto.
+  const existing = windows.find((client) => {
+    const url = new URL(client.url)
+    return url.origin === target.origin && url.pathname === target.pathname
+  })
+  if (existing) {
+    if (data.eventId) existing.postMessage({ type: 'NOTICE_OPENED', eventId: data.eventId })
+    return existing.focus()
+  }
+  // ?aviso= deixa o app registrar a abertura (services/pushService.watchNoticeOpens).
+  if (data.eventId) target.searchParams.set('aviso', data.eventId)
+  return self.clients.openWindow(target.pathname + target.search)
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(openNotice(event.notification.data || {}))
+})

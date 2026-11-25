@@ -44,7 +44,7 @@ export default function PassJobsModal({ jobIds, destinations, onClose, onDone }:
 
   return (
     <ModalShell labelledBy="pass-jobs-title" onClose={() => { if (!busy) onClose(); }}>
-      <h2 id="pass-jobs-title" className="text-xl font-black">
+      <h2 id="pass-jobs-title" className="text-xl font-bold">
         Passar {total === 1 ? 'turno' : `${total} turnos`} para...
       </h2>
       <p className="mt-1 text-sm text-gray-700">Escolha quem vai responder {total === 1 ? 'por esse turno' : 'por esses turnos'}.</p>

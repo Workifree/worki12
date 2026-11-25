@@ -319,41 +319,42 @@ export default function WorkerPublicProfile() {
                         </div>
                     </div>
 
-                    {/* Actions */}
-                    {hasTeamConnection && (
-                        <div className="flex justify-end pt-4 pl-28 sm:pl-40">
-                            <Button
-                                variant="dark"
-                                onClick={() => setInviting(true)}
-                                iconLeft={<Send size={16} />}
-                                data-copilot="empresa.freela.convidar-turno"
-                            >
-                                Convidar para turno
-                            </Button>
-                        </div>
-                    )}
-                    {podeUsarChat && (
-                        <div className="flex justify-end pt-4">
-                            <div className="flex flex-col items-end gap-1">
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => void handleChat()}
-                                    disabled={!applicationId}
-                                    loading={chatLoading}
-                                    iconLeft={<MessageSquare size={18} />}
-                                >
-                                    Mensagem
-                                </Button>
-                                {!applicationId && (
-                                    <span className="text-xs text-gray-600 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
+                    {/* Basic Info */}
+                    {/* pt = metade do avatar que invade o corpo do cartão */}
+                    <div className="pt-16 sm:pt-20">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight [overflow-wrap:anywhere]">{profile.full_name}</h1>
+                        {(hasTeamConnection || podeUsarChat) && (
+                            <div className="mt-3 mb-2">
+                                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:flex">
+                                    {hasTeamConnection && (
+                                        <Button
+                                            variant="dark"
+                                            className="!px-3"
+                                            onClick={() => setInviting(true)}
+                                            iconLeft={<Send size={16} />}
+                                            data-copilot="empresa.freela.convidar-turno"
+                                        >
+                                            Convidar para turno
+                                        </Button>
+                                    )}
+                                    {podeUsarChat && (
+                                        <Button
+                                            variant="secondary"
+                                            className="!px-3"
+                                            onClick={() => void handleChat()}
+                                            disabled={!applicationId}
+                                            loading={chatLoading}
+                                            iconLeft={<MessageSquare size={18} />}
+                                        >
+                                            Mensagem
+                                        </Button>
+                                    )}
+                                </div>
+                                {podeUsarChat && !applicationId && (
+                                    <p className="mt-1 text-xs text-gray-600">Mensagem: disponível após o primeiro turno com este freela.</p>
                                 )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Basic Info */}
-                    <div className="mt-4">
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{profile.full_name}</h1>
+                        )}
                         <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Worki'}</p>
 
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
@@ -384,7 +385,7 @@ export default function WorkerPublicProfile() {
                             <p className="text-xs text-gray-600">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
-                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP Total</div>
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP total</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.xp}</div>
                         </div>
                     </div>
@@ -463,7 +464,7 @@ export default function WorkerPublicProfile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* History */}
                 <div>
-                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico Recente</h3>
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico recente</h3>
                     <div className="space-y-3">
                         {historyError ? <ErrorState title="Não foi possível carregar o histórico." onRetry={retryProfile} /> : history.length > 0 ? history.map((h) => (
                             <div key={h.id} className="p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">

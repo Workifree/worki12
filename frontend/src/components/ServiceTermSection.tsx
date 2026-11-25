@@ -417,7 +417,7 @@ export default function ServiceTermSection({
                                 Não dá para confirmar um recebimento sem valor. Fale com a empresa pelo botão abaixo.
                             </Alert>
                         )}
-                        {mustReadTerm && (
+                        {mustReadTerm && !amountMissing && (
                             <p className="text-xs text-gray-600">Esta confirmação não pode ser desfeita.</p>
                         )}
                         <Button
@@ -440,7 +440,7 @@ export default function ServiceTermSection({
                                     ? 'Aceitar termo e confirmar recebimento'
                                     : 'Confirmar recebimento'}
                         </Button>
-                        {mustReadTerm && !showFullText ? (
+                        {amountMissing ? null : mustReadTerm && !showFullText ? (
                             <p className="text-xs text-gray-600">
                                 Abra "Ler o termo inteiro" acima antes de confirmar o recebimento.
                             </p>

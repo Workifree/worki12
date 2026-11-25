@@ -145,7 +145,7 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
               <h2 id="bonus-roadmap-title" className="text-lg font-bold">
                 Marcos
               </h2>
-              <p className="text-base font-black tabular-nums" data-testid="bonus-counter">
+              <p className="text-base font-bold tabular-nums" data-testid="bonus-counter">
                 {count.done} de {count.total} marcos concluídos
               </p>
             </div>

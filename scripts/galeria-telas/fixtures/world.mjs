@@ -235,6 +235,8 @@ export function trilha(status = 'active', extra = {}) {
 function rpcs() {
   return {
     get_my_companies: [minhaEmpresa()],
+      my_access_state: { removed: false, has_active: false, owns_company: false },
+      get_invite_preview: { outcome: 'ok', inviter_name: 'Momentos Doces Confeitaria', kind: 'elenco' },
     list_team_connection_cards: (_a, m) => ({ outcome: 'ok', items: m.db.team_connections.filter((c) => c.company_id === ID.empresa).map((c) => ({ ...c, worker: m.db.workers.find((w) => w.id === c.worker_id) })) }),
     get_profile_reviews: [
       { review_id: id(97, 11), rating: 5, comment: 'Pagamento certinho e equipe educada.', created_at: em(-5), reviewer_id: null, reviewer_name: 'Carlos E.' },

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Button, Card, Field } from './ui';
+import { DialogActions, Button, Card, Field } from './ui';
 import { Award, Plus, Pencil, Trash2, X, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
@@ -262,7 +262,7 @@ export default function MyCertificationsSection() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-sm">{cert.title}</h4>
+                      <h4 className="font-bold text-sm min-w-0 [overflow-wrap:anywhere]">{cert.title}</h4>
                       {expired && (
                         <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
                           Vencida
@@ -424,23 +424,21 @@ export default function MyCertificationsSection() {
                     Uma empresa poderá conferir de novo em um próximo turno. Deseja continuar?
                   </p>
                 </div>
-                <div className="worki-dialog-actions flex gap-3">
+                <DialogActions>
                   <Button
                     variant="secondary"
-                    className="flex-1"
                     onClick={() => setPendingLossConfirm(false)}
                     disabled={saving}
                   >
-                    Cancelar
+                    Voltar
                   </Button>
                   <Button
-                    className="flex-1"
                     onClick={(e) => void handleSubmit(e as unknown as FormEvent)}
                     loading={saving}
                   >
                     Continuar e salvar
                   </Button>
-                </div>
+                </DialogActions>
               </div>
             )}
         </Dialog>
@@ -461,25 +459,23 @@ export default function MyCertificationsSection() {
             <p className="text-sm text-gray-600 mb-6">
               Esta ação não pode ser desfeita. Empresas com vínculo deixarão de ver este registro.
             </p>
-            <div className="worki-dialog-actions flex gap-3">
+            <DialogActions>
               <Button
                 variant="secondary"
-                className="flex-1"
                 onClick={() => setDeletingId(null)}
                 disabled={deleting}
               >
-                Cancelar
+                Voltar
               </Button>
               <Button
                 variant="danger"
-                className="flex-1"
                 onClick={() => void handleDelete()}
                 loading={deleting}
                 iconLeft={deleting ? undefined : <Trash2 size={14} />}
               >
                 Excluir
               </Button>
-            </div>
+            </DialogActions>
         </Dialog>
       )}
     </Card>
