@@ -1,9 +1,15 @@
 /**
- * Mascara o TOKEN dos links de convite (`/convite-equipe/<token>`, `/convite-gerente/<token>`) antes
- * de qualquer dado sair para o Sentry. O token é segredo ao portador: quem o lê entra na equipe.
- * Vale para URL, breadcrumbs, nome da transação, spans e qualquer outra string do evento.
+ * Mascara o TOKEN dos links de convite (`/convite/<token>`, `/convite-equipe/<token>`,
+ * `/convite-gerente/<token>`) antes de qualquer dado sair para o Sentry. O token é segredo ao
+ * portador. Vale também para as formas codificadas (`?redirect=%2Fconvite%2F<token>`, inclusive
+ * codificadas mais de uma vez), em URL, breadcrumbs, transação, spans e qualquer outra string.
  */
-const INVITE_TOKEN = /(\/convite-(?:equipe|gerente)\/)[^/?#\s"'<>]+/g;
+const SLASH = String.raw`(?:\/|%(?:25)*2F)`;
+// O token termina em separador literal ou codificado (`/`, `?`, `#`, `&`).
+const INVITE_TOKEN = new RegExp(
+  String.raw`(${SLASH}convite(?:-equipe|-gerente)?${SLASH})(?:(?!%(?:25)*(?:2F|3F|23|26))[^/?#&\s"'<>])+`,
+  'gi',
+);
 
 export function scrubInviteTokens(text: string): string {
   return text.replace(INVITE_TOKEN, '$1[redacted]');

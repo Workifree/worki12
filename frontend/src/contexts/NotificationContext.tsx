@@ -44,10 +44,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
         let isActive = true;
 
-        const createId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
         const loadNotifications = async () => {
             if (!dbAvailable) return;
             const { data, error } = await supabase
@@ -94,28 +90,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             )
             .subscribe() : null;
 
-        const broadcastChannel = supabase
-            .channel(`user:${user.id}`)
-            .on('broadcast', { event: 'new_notification' }, (payload) => {
-                const data = payload.payload as Partial<Notification> & { message?: string; link?: string; title?: string; type?: Notification['type'] };
-                const createdAt = new Date().toISOString();
-                const notification: Notification = {
-                    id: data.id ?? createId(),
-                    type: data.type ?? 'system',
-                    title: data.title ?? 'Notificação',
-                    message: data.message ?? '',
-                    link: data.link,
-                    read_at: null,
-                    created_at: data.created_at ?? createdAt
-                };
-                setNotifications(prev => [notification, ...prev]);
-            })
-            .subscribe();
-
         return () => {
             isActive = false;
             if (dbChannel) supabase.removeChannel(dbChannel);
-            supabase.removeChannel(broadcastChannel);
         };
     // Depender do OBJETO `user` refazia tudo 3x por sessao: o supabase-js emite
     // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED e cada evento produz um objeto novo com o

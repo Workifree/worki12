@@ -1,3 +1,4 @@
+import { clearJobDrafts } from '../../lib/jobDraft';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
@@ -353,6 +354,7 @@ export default function CompanyProfile() {
             return;
         }
         await supabase.auth.signOut();
+        clearJobDrafts();
         navigate('/login');
     };
 

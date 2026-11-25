@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megaphone } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { jobDraftKey } from '../../lib/jobDraft';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
@@ -175,38 +176,54 @@ export default function CompanyCreateJob() {
     // session: aba morta e justamente o caso), 24h de validade, e o rascunho so existe se ha
     // conteudo digitado — campo vazio nunca vira rascunho. Criou o turno? Rascunho morre.
     // Edicao e ?repetir= ficam de fora: intencao explicita vence rascunho.
-    const RASCUNHO_KEY = 'worki_rascunho_turno';
+    // Chave por usuário + empresa (lib/jobDraft); enquanto não resolve, não lê nem grava.
+    const [rascunhoKey, setRascunhoKey] = useState<string | null>(null);
+    useEffect(() => {
+        let ativo = true;
+        void (async () => {
+            try {
+                const [{ data }, companyId] = await Promise.all([supabase.auth.getSession(), getAuthenticatedCompanyId()]);
+                const userId = data.session?.user.id;
+                if (ativo && userId && companyId) setRascunhoKey(jobDraftKey(userId, companyId));
+            } catch {
+                /* sem sessão/empresa legível: segue sem rascunho */
+            }
+        })();
+        return () => { ativo = false; };
+    }, []);
     const rascunhoRestaurado = useRef(false);
     useEffect(() => {
-        if (isEditing || repetirId || rascunhoRestaurado.current) return;
+        if (!rascunhoKey || isEditing || repetirId || rascunhoRestaurado.current) return;
         rascunhoRestaurado.current = true;
         try {
-            const bruto = localStorage.getItem(RASCUNHO_KEY);
+            const bruto = localStorage.getItem(rascunhoKey);
             if (!bruto) return;
             const r = JSON.parse(bruto) as { em?: number; formData?: typeof formData };
             if (!r?.formData || Date.now() - (r.em ?? 0) > 24 * 60 * 60 * 1000) {
-                localStorage.removeItem(RASCUNHO_KEY);
+                localStorage.removeItem(rascunhoKey);
                 return;
             }
+            // O que já foi digitado enquanto a chave resolvia vence o rascunho.
+            if (formData.title || formData.description || formData.budget) return;
             setFormData((prev) => ({ ...prev, ...r.formData }));
             addToast('Rascunho recuperado — continue de onde parou.', 'info');
         } catch {
             /* rascunho ilegivel: ignora e segue com o formulario limpo */
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restauracao unica no mount
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restauracao unica, quando a chave resolve
+    }, [rascunhoKey]);
 
     useEffect(() => {
-        if (isEditing || showInvitePanel) return;   // editar nao gera rascunho; criado = rascunho morto
+        if (!rascunhoKey || isEditing || showInvitePanel) return;   // editar nao gera rascunho; criado = rascunho morto
         const t = setTimeout(() => {
             try {
                 const temAlgo = formData.title.trim() || formData.description.trim() || formData.budget;
-                if (!temAlgo) { localStorage.removeItem(RASCUNHO_KEY); return; }
-                localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ em: Date.now(), formData }));
+                if (!temAlgo) { localStorage.removeItem(rascunhoKey); return; }
+                localStorage.setItem(rascunhoKey, JSON.stringify({ em: Date.now(), formData }));
             } catch { /* storage indisponivel: rascunho e conveniencia */ }
         }, 600);
         return () => clearTimeout(t);
-    }, [formData, isEditing, showInvitePanel]);
+    }, [formData, isEditing, showInvitePanel, rascunhoKey]);
 
     // Falha ao carregar o turno (editar/repetir): aviso na própria tela, sem desmontar o formulário.
     const [erroCarga, setErroCarga] = useState<{ jobId: string; modo: 'editar' | 'repetir' } | null>(null);
@@ -533,7 +550,7 @@ export default function CompanyCreateJob() {
                 addToast('Turno criado! Convide um freela do seu elenco.', 'success');
                 setCreatedJobId(newJob.id);
                 setShowInvitePanel(true);
-                try { localStorage.removeItem('worki_rascunho_turno'); } catch { /* ok */ }
+                try { if (rascunhoKey) localStorage.removeItem(rascunhoKey); } catch { /* ok */ }
             }
         } catch (error: unknown) {
             logError('Error saving job:', error);

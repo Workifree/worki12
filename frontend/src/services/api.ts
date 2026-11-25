@@ -20,7 +20,7 @@ export async function invokeFunction<T = Record<string, unknown>>(
       } catch { /* erro de parse ignorado */ }
     }
     const err = new Error(msg);
-    Sentry.captureException(err, { extra: { functionName, body } });
+    Sentry.captureException(err, { extra: { functionName } });
     throw err;
   }
 

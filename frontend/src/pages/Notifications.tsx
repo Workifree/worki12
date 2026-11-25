@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button, PageHeader } from '../components/ui';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 type FilterType = 'all' | 'message' | 'payment' | 'status_change' | 'system';
 
@@ -57,8 +58,10 @@ export default function Notifications() {
 
     const handleNotificationClick = async (id: string, link?: string) => {
         await markAsRead(id);
-        if (link) {
-            navigate(link);
+        // O link vem do banco: só navega para caminho interno.
+        const destino = safeInternalPath(link);
+        if (destino) {
+            navigate(destino);
         }
     };
 

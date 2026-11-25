@@ -1,3 +1,4 @@
+import { clearJobDrafts } from '../lib/jobDraft';
 import { useEffect, useRef, useState } from 'react';
 import { DoorClosed, LogOut, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -34,6 +35,7 @@ export default function AcessoEncerrado() {
             logError('AcessoEncerrado.sair', error);
         }
         clearAllTeamMemberHints();
+        clearJobDrafts();
         window.location.assign('/');
     };
 

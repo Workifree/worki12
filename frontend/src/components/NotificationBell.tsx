@@ -7,6 +7,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 export default function NotificationBell({ className = "" }: { className?: string }) {
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
@@ -71,8 +72,10 @@ export default function NotificationBell({ className = "" }: { className?: strin
     const handleNotificationClick = async (id: string, link?: string) => {
         await markAsRead(id);
         setIsOpen(false);
-        if (link) {
-            navigate(link);
+        // O link vem do banco: só navega para caminho interno.
+        const destino = safeInternalPath(link);
+        if (destino) {
+            navigate(destino);
         }
     };
 

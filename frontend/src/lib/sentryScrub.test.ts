@@ -9,8 +9,25 @@ describe('sentryScrub', () => {
     expect(scrubInviteTokens(`/convite-gerente/${TOKEN}`)).toBe('/convite-gerente/[redacted]');
   });
 
+  it('mascara o convite de freela (/convite/<token>)', () => {
+    expect(scrubInviteTokens(`/convite/${TOKEN}?x=1`)).toBe('/convite/[redacted]?x=1');
+    expect(scrubInviteTokens('/convite/w_abc-123')).toBe('/convite/[redacted]');
+  });
+
+  it('mascara as formas codificadas em ?redirect=, preservando os demais parâmetros', () => {
+    for (const rota of ['convite', 'convite-equipe', 'convite-gerente']) {
+      for (const barra of ['%2F', '%2f', '%252F', '%25252F']) {
+        expect(scrubInviteTokens(`/login?redirect=${barra}${rota}${barra}${TOKEN}&type=hire`))
+          .toBe(`/login?redirect=${barra}${rota}${barra}[redacted]&type=hire`);
+      }
+      expect(scrubInviteTokens(`/login?redirect=/${rota}/${TOKEN}&type=hire`))
+        .toBe(`/login?redirect=/${rota}/[redacted]&type=hire`);
+    }
+    expect(scrubInviteTokens(`?redirect=%2Fconvite%2F${TOKEN}%3Fa%3D1`)).toBe('?redirect=%2Fconvite%2F[redacted]%3Fa%3D1');
+  });
+
   it('não mexe em outras rotas', () => {
-    expect(scrubInviteTokens('/convite/abc')).toBe('/convite/abc');
+    expect(scrubInviteTokens('/convites/abc')).toBe('/convites/abc');
     expect(scrubInviteTokens('/company/hoje')).toBe('/company/hoje');
   });
 

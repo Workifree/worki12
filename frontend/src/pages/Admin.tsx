@@ -273,6 +273,7 @@ export default function Admin() {
                             <label className="block text-xs font-bold uppercase mb-1">Email</label>
                             <input
                                 type="email"
+                                autoComplete="username"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"
@@ -284,6 +285,7 @@ export default function Admin() {
                             <label className="block text-xs font-bold uppercase mb-1">Senha</label>
                             <input
                                 type="password"
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"

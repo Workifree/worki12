@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import * as Sentry from '@sentry/react';
 import { supabase } from '../lib/supabase';
 import { clearServiceWorkerCaches } from '../lib/pwa';
+import { clearJobDrafts } from '../lib/jobDraft';
 
 interface AuthContextType {
     user: User | null;
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw error;
         // PWA: esvazia os caches do service worker no logout (defesa em profundidade; ele ja nao guarda dado de usuario).
         clearServiceWorkerCaches();
+        clearJobDrafts();
         setUser(null);
     };
 
