@@ -40,6 +40,7 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import type { ShiftPayment, PaymentSource } from '../types';
+import { getSessionUserOrThrow } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // Tipos de parâmetros e resultado
@@ -535,64 +536,61 @@ export const PaymentRecordService = {
    *     ativo mais antigo que a RLS deixar essa sessão enxergar, de forma determinística.
    */
   async getReceipt(jobId: string, workerId?: string): Promise<ShiftPaymentReceipt | null> {
-    // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
-    if (!jobId) return null;
     try {
-      if (workerId) {
-        const { data, error } = await supabase
-          .from('shift_payments')
-          .select(RECEIPT_SELECT)
-          .eq('job_id', jobId)
-          .in('status', ['scheduled', 'recorded'])
-          .eq('worker_id', workerId)
-          .maybeSingle();
-
-        if (error) {
-          logError('paymentRecord.getReceipt', error);
-          return null;
-        }
-        return mapReceiptRow(data);
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      // 2. Tenta como o próprio freela (caso mais comum sem `?worker=`).
-      const { data: ownRow, error: ownErr } = await supabase
-        .from('shift_payments')
-        .select(RECEIPT_SELECT)
-        .eq('job_id', jobId)
-        .in('status', ['scheduled', 'recorded'])
-        .eq('worker_id', user.id)
-        .maybeSingle();
-
-      if (ownErr) {
-        logError('paymentRecord.getReceipt', ownErr);
-        return null;
-      }
-      if (ownRow) return mapReceiptRow(ownRow);
-
-      // 3. Fallback determinístico (empresa em link antigo, sem `?worker=`) — RLS decide o
-      // que essa sessão pode ver; sem vínculo nenhum, `rows` volta vazio.
-      const { data: rows, error: fallbackErr } = await supabase
-        .from('shift_payments')
-        .select(RECEIPT_SELECT)
-        .eq('job_id', jobId)
-        .in('status', ['scheduled', 'recorded'])
-        .order('created_at', { ascending: true })
-        .limit(1);
-
-      if (fallbackErr) {
-        logError('paymentRecord.getReceipt', fallbackErr);
-        return null;
-      }
-      return mapReceiptRow(rows?.[0] ?? null);
+      return await this.getReceiptChecked(jobId, workerId);
     } catch (err) {
       logError('paymentRecord.getReceipt', err);
       return null;
     }
+  },
+
+  /**
+   * Mesma leitura de `getReceipt`, mas LANÇA quando a consulta falha: `null` aqui significa
+   * "não há recibo visível", nunca "a carga falhou".
+   */
+  async getReceiptChecked(jobId: string, workerId?: string): Promise<ShiftPaymentReceipt | null> {
+    // G3: guarda de id falsy — evita GET shift_payments?job_id=eq.null (400).
+    if (!jobId) return null;
+    if (workerId) {
+      const { data, error } = await supabase
+        .from('shift_payments')
+        .select(RECEIPT_SELECT)
+        .eq('job_id', jobId)
+        .in('status', ['scheduled', 'recorded'])
+        .eq('worker_id', workerId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return mapReceiptRow(data);
+    }
+
+    const user = await getSessionUserOrThrow();
+    if (!user) return null;
+
+    // 2. Tenta como o próprio freela (caso mais comum sem `?worker=`).
+    const { data: ownRow, error: ownErr } = await supabase
+      .from('shift_payments')
+      .select(RECEIPT_SELECT)
+      .eq('job_id', jobId)
+      .in('status', ['scheduled', 'recorded'])
+      .eq('worker_id', user.id)
+      .maybeSingle();
+
+    if (ownErr) throw ownErr;
+    if (ownRow) return mapReceiptRow(ownRow);
+
+    // 3. Fallback determinístico (empresa em link antigo, sem `?worker=`) — RLS decide o
+    // que essa sessão pode ver; sem vínculo nenhum, `rows` volta vazio.
+    const { data: rows, error: fallbackErr } = await supabase
+      .from('shift_payments')
+      .select(RECEIPT_SELECT)
+      .eq('job_id', jobId)
+      .in('status', ['scheduled', 'recorded'])
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (fallbackErr) throw fallbackErr;
+    return mapReceiptRow(rows?.[0] ?? null);
   },
 
   /**
@@ -603,38 +601,40 @@ export const PaymentRecordService = {
    * depender só do RLS se a policy mudar) — mesmo espírito de `getJobCompanyId`.
    */
   async listForWorker(workerId: string): Promise<WorkerShiftPaymentListItem[]> {
-    if (!workerId) return [];
     try {
-      const { data, error } = await supabase
-        .from('shift_payments')
-        .select(
-          `
-          *,
-          job:jobs ( id, title, location, start_date ),
-          company:companies ( id, name, logo_url )
-        `,
-        )
-        .eq('worker_id', workerId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        logError('paymentRecord.listForWorker', error);
-        return [];
-      }
-      if (!data) return [];
-
-      return (data as Array<ShiftPayment & {
-        job: WorkerShiftPaymentListItem['job'];
-        company: WorkerShiftPaymentListItem['company'];
-      }>).map(({ job, company, ...paymentFields }) => ({
-        payment: paymentFields as ShiftPayment,
-        job: job ?? null,
-        company: company ?? null,
-      }));
+      return await this.listForWorkerChecked(workerId);
     } catch (err) {
       logError('paymentRecord.listForWorker', err);
       return [];
     }
+  },
+
+  /** Como `listForWorker`, mas LANÇA quando a consulta falha (lista vazia = não há pagamento). */
+  async listForWorkerChecked(workerId: string): Promise<WorkerShiftPaymentListItem[]> {
+    if (!workerId) return [];
+    const { data, error } = await supabase
+      .from('shift_payments')
+      .select(
+        `
+          *,
+          job:jobs ( id, title, location, start_date ),
+          company:companies ( id, name, logo_url )
+        `,
+      )
+      .eq('worker_id', workerId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!data) return [];
+
+    return (data as Array<ShiftPayment & {
+      job: WorkerShiftPaymentListItem['job'];
+      company: WorkerShiftPaymentListItem['company'];
+    }>).map(({ job, company, ...paymentFields }) => ({
+      payment: paymentFields as ShiftPayment,
+      job: job ?? null,
+      company: company ?? null,
+    }));
   },
 
   /**

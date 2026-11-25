@@ -20,6 +20,7 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import type { CompanyRole, MyCompany } from '../types';
+import { clearAllTeamMemberHints } from '../lib/teamInviteToken';
 
 const SELECTED_COMPANY_STORAGE_KEY = 'worki_selected_company_id';
 
@@ -101,8 +102,21 @@ export function subscribeCompanyScope(callback: () => void): () => void {
 // Troca de sessão invalida sozinha (login/logout/refresh de usuário). O try/catch existe porque
 // os testes mockam `lib/supabase` só com o que usam, e este módulo não pode explodir no import.
 try {
-  supabase.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+  let lastUserId: string | null = null;
+  supabase.auth.onAuthStateChange((event, session) => {
+    const userId = session?.user?.id ?? null;
+    if (event === 'SIGNED_OUT') {
+      // Aparelho compartilhado: a marca "já foi da equipe" não sobrevive ao logout.
+      clearAllTeamMemberHints();
+      lastUserId = null;
+      invalidateCompanyScope();
+      return;
+    }
+    // O Supabase redispara SIGNED_IN ao voltar o foco da aba com a MESMA sessão: sem esse filtro cada
+    // retorno derrubaria o cache do seam e refaria todas as consultas em cascata.
+    const sameUser = event === 'SIGNED_IN' && userId !== null && userId === lastUserId;
+    if (userId) lastUserId = userId;
+    if (!sameUser && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
       invalidateCompanyScope();
     }
   });

@@ -1,9 +1,10 @@
 import { Link, Outlet } from 'react-router-dom';
-import { UserCog } from 'lucide-react';
+import { Trophy, UserCog } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import NotificationBell from '../components/NotificationBell';
 import { useCurrentCompany } from '../hooks/useCurrentCompany';
+import { useBonusTrailAccess } from '../hooks/useBonusTrailAccess';
 import { showTeamNav } from '../services/companyScopeService';
 
 export default function CompanyLayout() {
@@ -11,6 +12,8 @@ export default function CompanyLayout() {
     // o dono único não é incomodado e chega por Perfil Empresa → Atalhos.
     const currentCompany = useCurrentCompany();
     const mostrarEquipe = showTeamNav(currentCompany);
+    // O BottomNav já está no limite a 320px: a Trilha entra no cabeçalho, como o ícone de Equipe.
+    const mostrarTrilha = useBonusTrailAccess();
 
     // A checagem que vivia aqui era redundante com o <ProtectedRoute> (sessao + papel +
     // onboarding, gerente incluso) — e pior: refazia getUser + get_my_companies A CADA troca de
@@ -25,6 +28,15 @@ export default function CompanyLayout() {
             <header className="md:hidden flex items-center justify-between px-4 h-14 sticky top-0 bg-white/90 backdrop-blur-md z-40 border-b-2 border-black">
                 <p className="text-xl font-bold text-black tracking-tight">Worki. <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-pill ml-1">Business</span></p>
                 <div className="flex items-center gap-1">
+                    {mostrarTrilha && (
+                        <Link
+                            to="/company/trilha"
+                            aria-label="Trilha de bônus"
+                            className="min-h-11 min-w-11 flex items-center justify-center rounded-xl border-2 border-transparent hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                        >
+                            <Trophy size={22} aria-hidden="true" />
+                        </Link>
+                    )}
                     {mostrarEquipe && (
                         <Link
                             to="/company/configuracoes/equipe"

@@ -20,7 +20,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { checkSession } from '../lib/authSession';
+import { logError } from '../lib/logger';
 import { ShiftInviteService } from '../services/shiftInviteService';
 import { ShiftCallService } from '../services/shiftCallService';
 import { useToast } from '../contexts/ToastContext';
@@ -104,6 +105,19 @@ function messageForOutcome(outcome: ShiftCallOutcome): OutcomeMessage {
   }
 }
 
+const NO_INVITES: Application[] = [];
+
+/** Alvos que ainda contam como convidados: chamado aberto e sem resposta, ou aceito. */
+function activeCallWorkerIds(calls: ShiftCall[]): string[] {
+  const now = Date.now();
+  return calls.flatMap((call) => {
+    const open = call.status === 'open' && !(new Date(call.expires_at).getTime() <= now);
+    return (call.targets ?? [])
+      .filter((target) => target.response === 'accepted' || (open && !target.response))
+      .map((target) => target.worker_id);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Hook para WORKER — aba "Convites"
 // ---------------------------------------------------------------------------
@@ -112,6 +126,8 @@ export interface UseWorkerInvitesResult {
   /** Convites pendentes, de qualquer origem (chamado novo ou convite legado). */
   pendingInvites: PendingInvite[];
   loading: boolean;
+  /** Não deu para carregar (rede). Diferente de "nenhum convite": a tela oferece tentar de novo. */
+  error?: boolean;
   /** ID do convite sendo processado (para loading state no botão). */
   respondingId: string | null;
   /** Aceitar ou recusar. Recebe o `id` do PendingInvite (não o do chamado). */
@@ -138,6 +154,7 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
   const instanciaIdRef = useRef<number | null>(null);
@@ -147,8 +164,8 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
   const fetchInvites = useCallback(async (): Promise<PendingInvite[]> => {
     // As duas origens em paralelo — nenhuma depende da outra.
     const [calls, legacy] = await Promise.all([
-      ShiftCallService.listPendingForWorker(),
-      ShiftInviteService.listPendingInvites(),
+      ShiftCallService.listPendingForWorkerChecked(),
+      ShiftInviteService.listPendingInvitesChecked(),
     ]);
 
     // Um chamado e um convite legado do MESMO turno seriam a mesma vaga aparecendo duas vezes.
@@ -162,41 +179,49 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     ];
   }, []);
 
-  const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    setPendingInvites(await fetchInvites());
-    setLoading(false);
-  }, [navigate, fetchInvites]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+  const load = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
         navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        logError('useWorkerInvites.session', session.error);
+        setError(true);
+        setLoading(false);
         return;
       }
 
       setLoading(true);
-      const invites = await fetchInvites();
-      if (!active) return;
-      setPendingInvites(invites);
+      try {
+        const invites = await fetchInvites();
+        if (!isActive()) return;
+        setError(false);
+        setPendingInvites(invites);
+      } catch (err) {
+        logError('useWorkerInvites.fetch', err);
+        if (!isActive()) return;
+        // Mantém o que já estava na tela: falha de consulta não esvazia a lista.
+        setError(true);
+      }
       setLoading(false);
-    })();
+    },
+    [navigate, fetchInvites],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [navigate, fetchInvites]);
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    void load();
+  }, [load]);
 
   // Outra instancia respondeu um convite — esta precisa refletir isso.
   useEffect(() => {
@@ -247,7 +272,7 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     [pendingInvites, addToast, load, instanciaId],
   );
 
-  return { pendingInvites, loading, respondingId, respond, refresh: load };
+  return { pendingInvites, loading, error, respondingId, respond, refresh };
 }
 
 // ---------------------------------------------------------------------------
@@ -257,6 +282,12 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
 export interface UseCompanyInvitesResult {
   /** Convites enviados para o turno (fluxo legado + histórico). */
   invites: Application[];
+  /**
+   * Quem já está convidado para o turno, das DUAS origens: `applications` (convite legado ou já
+   * aceito) e alvos de `shift_calls` (o convite de hoje, que não cria application até o aceite).
+   * É o que decide entre "Convidar" e "Convidado".
+   */
+  invitedWorkerIds: string[];
   loading: boolean;
   /** ID do worker sendo convidado (para loading state). */
   invitingWorkerId: string | null;
@@ -267,64 +298,71 @@ export interface UseCompanyInvitesResult {
 }
 
 export function useCompanyInvites(jobId: string | null | undefined): UseCompanyInvitesResult {
-  const [invites, setInvites] = useState<Application[]>([]);
+  // O que foi lido vem carimbado com o turno: ao trocar de turno, nada do anterior vaza.
+  const [loaded, setLoaded] = useState<{ jobId: string; invites: Application[]; calledIds: string[] } | null>(
+    null,
+  );
+  // Marcado na hora em que o envio dá certo, sem esperar a releitura (que pode falhar na rede).
+  const [justInvited, setJustInvited] = useState<{ jobId: string; workerId: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitingWorkerId, setInvitingWorkerId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
-    // (`job_id=eq.` vazio é filtro inválido no PostgREST).
-    if (!jobId) {
-      setInvites([]);
-      setLoading(false);
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    const list = await ShiftInviteService.listInvitesByJob(jobId);
-    setInvites(list);
-    setLoading(false);
-  }, [jobId, navigate]);
-
-  useEffect(() => {
-    let active = true;
-
-    void (async () => {
+  const load = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
+      // (`job_id=eq.` vazio é filtro inválido no PostgREST).
       if (!jobId) {
-        if (!active) return;
-        setInvites([]);
         setLoading(false);
         return;
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
         navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        logError('useCompanyInvites.session', session.error);
+        setLoading(false);
         return;
       }
 
       setLoading(true);
-      const list = await ShiftInviteService.listInvitesByJob(jobId);
-      if (!active) return;
-      setInvites(list);
+      const [list, calls] = await Promise.all([
+        ShiftInviteService.listInvitesByJob(jobId),
+        ShiftCallService.listCallsByJob(jobId),
+      ]);
+      if (!isActive()) return;
+      setLoaded({ jobId, invites: list, calledIds: activeCallWorkerIds(calls) });
       setLoading(false);
-    })();
+    },
+    [jobId, navigate],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [jobId, navigate]);
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    void load();
+  }, [load]);
+
+  const current = loaded && loaded.jobId === jobId ? loaded : null;
+  const invites = current?.invites ?? NO_INVITES;
+  const invitedWorkerIds = Array.from(
+    new Set([
+      ...invites.map((item) => item.worker_id),
+      ...(current?.calledIds ?? []),
+      ...justInvited.filter((item) => item.jobId === jobId).map((item) => item.workerId),
+    ]),
+  );
 
   const invite = useCallback(
     async (
@@ -340,7 +378,9 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
       setInvitingWorkerId(null);
 
       if (result.alreadyInvited) {
+        setJustInvited((prev) => [...prev, { jobId, workerId }]);
         addToast('Este freela já foi convidado para este turno.', 'info');
+        load();
         return true;
       }
       if (result.error) {
@@ -348,6 +388,7 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
         return false;
       }
 
+      setJustInvited((prev) => [...prev, { jobId, workerId }]);
       addToast('Convite enviado com sucesso!', 'success');
       load();
       return true;
@@ -355,7 +396,7 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
     [jobId, addToast, load],
   );
 
-  return { invites, loading, invitingWorkerId, invite, refresh: load };
+  return { invites, invitedWorkerIds, loading, invitingWorkerId, invite, refresh };
 }
 
 // ---------------------------------------------------------------------------

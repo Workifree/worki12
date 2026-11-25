@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { SosService } from '../services/sosService';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Descoberta em urgência" (F11) — seção de opt-in no perfil do freela.
@@ -37,10 +38,9 @@ export default function SosDiscoverySection() {
   const carregar = useCallback(async () => {
     setLoading(true);
     setErroCarga(false);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    const session = await checkSession();
+    if (session.status !== 'ok') { setErroCarga(true); setLoading(false); return; }
+    const user = session.user;
 
     const { data, error } = await supabase
       .from('workers')

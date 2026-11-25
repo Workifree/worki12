@@ -14,9 +14,10 @@ vi.mock('../../components/PageMeta', () => ({ default: () => null }));
 vi.mock('../../lib/supabase', () => ({
   supabase: { auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'me' } } }), onAuthStateChange: vi.fn() } },
 }));
+let mockToday = '2026-11-23';
 vi.mock('../../lib/dateUtils', async () => {
   const actual = await vi.importActual<typeof import('../../lib/dateUtils')>('../../lib/dateUtils');
-  return { ...actual, todayInBrazil: () => '2026-11-23', todayLocalDate: () => '2026-11-23' };
+  return { ...actual, todayInBrazil: () => mockToday, todayLocalDate: () => mockToday };
 });
 
 vi.mock('../../services/companyScopeService', async () => {
@@ -38,6 +39,7 @@ vi.mock('../../services/shiftOperationService', async () => {
     listCompanyOperators: vi.fn(),
     endCoverage: vi.fn(),
     cancelJob: vi.fn(),
+    isCancelJobAvailable: vi.fn(),
     reassignJobs: vi.fn(),
   };
 });
@@ -83,9 +85,11 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockToday = '2026-11-23';
   vi.mocked(getMyCompanies).mockResolvedValue([company()]);
   vi.mocked(listMembers).mockResolvedValue({ outcome: 'ok', items: [member(), member({ memberId: 'm2', userId: 'u2', displayName: 'Beto' })] });
   vi.mocked(ops.listTagsChecked).mockResolvedValue({ ok: true, items: [{ id: 't1', name: 'Salão', archivedAt: null }] });
+  vi.mocked(ops.isCancelJobAvailable).mockResolvedValue(true);
   vi.mocked(ops.listActiveCoveragesChecked).mockResolvedValue({ ok: true, items: [] });
   vi.mocked(ops.listCompanyOperators).mockResolvedValue({
     ok: true,
@@ -213,12 +217,20 @@ describe('CompanyToday — Gestor', () => {
     expect(screen.queryByRole('button', { name: /Cobrir/ })).not.toBeInTheDocument();
   });
 
+  it('D-8: sem a RPC cancel_job no ambiente, não mostra um botão que sempre falharia', async () => {
+    vi.mocked(ops.isCancelJobAvailable).mockResolvedValue(false);
+    renderPage();
+    await screen.findByText('Garçom de salão');
+    await screen.findByRole('button', { name: 'Passar para...' });
+    expect(screen.queryByRole('button', { name: 'Cancelar turno' })).not.toBeInTheDocument();
+  });
+
   it('cancelar turno recusado por pagamento ativo mostra o motivo e não fecha a lista', async () => {
     vi.mocked(ops.cancelJob).mockResolvedValue({ outcome: 'active_payment', cancelledApplications: 0, cancelledCalls: 0, closedCandidates: 0 });
     renderPage();
     await screen.findByText('Garçom de salão');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar turno' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar turno' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar o turno' }));
 
@@ -232,7 +244,7 @@ describe('CompanyToday — Gestor', () => {
     renderPage();
     await screen.findByText('Garçom de salão');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar turno' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar turno' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar o turno' }));
 
@@ -260,8 +272,8 @@ describe('CompanyToday — divulgação progressiva (dono único)', () => {
     expect(screen.queryByRole('button', { name: 'Todos' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Responsável:/)).not.toBeInTheDocument();
     expect(listMembers).not.toHaveBeenCalled();
-    // cancelar continua disponível ao dono
-    expect(screen.getByRole('button', { name: 'Cancelar turno' })).toBeInTheDocument();
+    // D-8: dono único não ganha "Cancelar turno" (R23)
+    expect(screen.queryByRole('button', { name: 'Cancelar turno' })).not.toBeInTheDocument();
   });
 });
 
@@ -271,8 +283,8 @@ describe('CompanyToday — encarregado', () => {
     vi.mocked(ops.listOwnJobs).mockResolvedValue({
       outcome: 'ok',
       items: [
-        job({ jobId: 'own', title: 'Turno meu', responsibleKind: 'self', responsibleLabel: 'Você', filled: null }),
-        job({ jobId: 'cov', title: 'Turno coberto', responsibleKind: 'covering', responsibleLabel: 'Você cobre um colega', filled: null }),
+        job({ jobId: 'own', date: '2099-01-01', title: 'Turno meu', responsibleKind: 'self', responsibleLabel: 'Você', filled: null }),
+        job({ jobId: 'cov', date: '2099-01-01', title: 'Turno coberto', responsibleKind: 'covering', responsibleLabel: 'Você cobre um colega', filled: null }),
       ],
     });
   });
@@ -290,7 +302,7 @@ describe('CompanyToday — encarregado', () => {
   it('cancela os próprios e os cobertos, sem filtro de pessoa', async () => {
     renderPage();
     await screen.findByText('Turno meu');
-    expect(screen.getAllByRole('button', { name: 'Cancelar turno' })).toHaveLength(2);
+    expect(await screen.findAllByRole('button', { name: 'Cancelar turno' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Todos' })).toBeInTheDocument(); // há etiqueta: filtro de etiqueta
     expect(screen.queryByRole('button', { name: 'Ana' })).not.toBeInTheDocument();
   });
@@ -312,5 +324,40 @@ describe('CompanyToday — encarregado', () => {
     await screen.findByText('Turno meu');
     fireEvent.click(screen.getAllByRole('button', { name: 'Abrir turno' })[0]);
     expect(await screen.findByTestId('candidatos')).toBeInTheDocument();
+  });
+});
+
+describe('CompanyToday — virada do dia', () => {
+  it('após a meia-noite de São Paulo recalcula "hoje" e refaz a consulta com a janela nova', async () => {
+    renderPage();
+    await screen.findByText('Garçom de salão');
+    expect(ops.listJobsByResponsible).toHaveBeenLastCalledWith(expect.objectContaining({ from: '2026-11-23' }));
+
+    // a aba passou a noite aberta: o relógio vira o dia e a aba volta ao foco
+    mockToday = '2026-11-24';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() =>
+      expect(ops.listJobsByResponsible).toHaveBeenLastCalledWith(expect.objectContaining({ from: '2026-11-24', to: '2026-12-07' })),
+    );
+  });
+
+  it('o timer da meia-noite também atualiza o dia (fake timers)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-23T23:59:30-03:00'));
+      renderPage();
+      await vi.waitFor(() => expect(ops.listJobsByResponsible).toHaveBeenCalled());
+
+      mockToday = '2026-11-24';
+      await vi.advanceTimersByTimeAsync(40_000);
+
+      await vi.waitFor(() =>
+        expect(ops.listJobsByResponsible).toHaveBeenLastCalledWith(expect.objectContaining({ from: '2026-11-24' })),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

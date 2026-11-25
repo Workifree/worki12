@@ -17,6 +17,7 @@ import { normalizeAvailabilityGrade } from '../lib/availability';
 import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { Button, Card, PageHeader } from '../components/ui';
+import { getSessionUserOrThrow } from '../lib/authSession';
 
 interface NextJobData {
     status: string;
@@ -61,8 +62,9 @@ export default function Dashboard() {
 
     const { data: authUser } = useQuery({
         queryKey: ['authUser'],
+        networkMode: 'always',
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow();
             return user;
         },
         staleTime: 300000
@@ -71,8 +73,9 @@ export default function Dashboard() {
     // React Query Hooks
     const { data: worker, isLoading: isLoadingWorker, isError: erroWorker, refetch: refetchWorker } = useQuery({
         queryKey: ['workerProfile'],
+        networkMode: 'always',
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow();
             // Sem sessão → null (redireciona pro login). Erro de query → throw: isError segura
             // o redirect — falha transitória de rede/RLS não pode expulsar quem está logado.
             if (!user) return null;
@@ -82,10 +85,11 @@ export default function Dashboard() {
         }
     });
 
-    const { data: nextJob, isLoading: carregandoNextJob, isError: erroNextJob } = useQuery({
+    const { data: nextJob, isLoading: carregandoNextJob, isError: erroNextJob, refetch: refetchNextJob } = useQuery({
         queryKey: ['nextJob'],
+        networkMode: 'always',
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow();
             if (!user) return null;
             const { data, error } = await supabase
                 .from('applications')
@@ -119,10 +123,11 @@ export default function Dashboard() {
         enabled: !!worker
     });
 
-    const { data: history = [], isLoading: carregandoHistory, isError: erroHistory } = useQuery({
+    const { data: history = [], isLoading: carregandoHistory, isError: erroHistory, refetch: refetchHistory } = useQuery({
         queryKey: ['workerHistory'],
+        networkMode: 'always',
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow();
             if (!user) return [];
             const { data, error } = await supabase
                 .from('applications')
@@ -138,7 +143,7 @@ export default function Dashboard() {
     });
 
     // Convites de turno pendentes (push, Slice 1) — mesmo hook do InviteTakeover/MyJobs.
-    const { pendingInvites, loading: invitesLoading } = useWorkerInvites();
+    const { pendingInvites, loading: invitesLoading, error: invitesError, refresh: refreshInvites } = useWorkerInvites();
 
     // ── Pagamento registrado aguardando MINHA confirmação ───────────────────────────────────
     // "Pagamento registrado — confirme" só existia como notificação — e notificação é
@@ -152,10 +157,11 @@ export default function Dashboard() {
         job: { title: string | null; company: { name: string | null } | { name: string | null }[] | null } |
              { title: string | null; company: { name: string | null } | { name: string | null }[] | null }[] | null;
     }
-    const { data: pendingReceipts = [] } = useQuery<PendingReceiptRow[]>({
+    const { data: pendingReceipts = [], isError: erroReceipts, refetch: refetchReceipts } = useQuery<PendingReceiptRow[]>({
         queryKey: ['pendingReceipts'],
+        networkMode: 'always',
         queryFn: async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow();
             if (!user) return [];
             const { data, error } = await supabase
                 .from('shift_payments')
@@ -165,7 +171,8 @@ export default function Dashboard() {
                 .is('worker_confirmed_at', null);
             if (error) {
                 logError('dashboard.pendingReceipts', error);
-                return [];
+                // Lança: lista vazia esconderia um pagamento esperando confirmação.
+                throw error;
             }
             return (data ?? []) as unknown as PendingReceiptRow[];
         },
@@ -173,7 +180,7 @@ export default function Dashboard() {
     });
 
     // "Minhas Empresas" — empresas conectadas (equipe aceita), atalho para /carteira.
-    const { myStores, loading: storesLoading } = useWorkerStores();
+    const { myStores, loading: storesLoading, erroCarga: erroStores, refresh: refreshStores } = useWorkerStores();
 
     // Quests Logic (derived from worker data)
     // R: XP só é concedido por foto de perfil (+50) e especialidades (+75) — ver RPC
@@ -192,7 +199,8 @@ export default function Dashboard() {
     useEffect(() => {
         // So expulsa quando de fato NAO ha sessao (worker null sem erro). Query que falhou
         // (rede/RLS) segura o freela na tela com estado de erro — nunca /login.
-        if (!worker && !loading && !erroWorker) {
+        // `null` = a consulta respondeu "sem sessão". `undefined` = ainda não sabemos.
+        if (worker === null && !loading && !erroWorker) {
             navigate('/login');
         }
     }, [worker, loading, erroWorker, navigate]);
@@ -221,6 +229,15 @@ export default function Dashboard() {
     );
 
     if (!worker) return <div>Erro ao carregar dados.</div>;
+
+    const falhaParcial = erroNextJob || erroHistory || erroReceipts || !!invitesError || !!erroStores;
+    const tentarDeNovo = () => {
+        if (erroNextJob) void refetchNextJob();
+        if (erroHistory) void refetchHistory();
+        if (erroReceipts) void refetchReceipts();
+        if (invitesError) refreshInvites?.();
+        if (erroStores) refreshStores?.();
+    };
 
     // Helper for Quest Progress
     const completedQuests = quests.filter(q => q.done).length;
@@ -265,6 +282,10 @@ export default function Dashboard() {
                 title={firstName ? `Fala, ${firstName}!` : 'Fala!'}
                 subtitle="Pronto para faturar hoje?"
             />
+
+            {falhaParcial && (
+                <ErroDeCarga onRetry={tentarDeNovo} mensagem="Parte das suas informações não carregou. Tente de novo." />
+            )}
 
             {/* --- PRECISA DA SUA ATENÇÃO (ação pendente, persistente) ---
                 Pagamento vem ANTES do convite: é o fecho de um trabalho JÁ FEITO (a empresa
@@ -366,7 +387,7 @@ export default function Dashboard() {
                         <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
                     ) : erroNextJob ? (
                         <div className="text-center py-6 text-red-600 text-sm font-bold bg-red-50 rounded-xl border border-red-200">
-                            Não foi possível carregar. Recarregue a página.
+                            Não foi possível carregar.
                         </div>
                     ) : (
                         <div className="text-center py-6 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
@@ -408,6 +429,8 @@ export default function Dashboard() {
                                     empresa{myStores.length > 1 ? 's' : ''} confiando no seu trabalho.
                                 </p>
                             </>
+                        ) : erroStores ? (
+                            <p className="text-sm font-bold text-red-600">Não foi possível carregar suas empresas.</p>
                         ) : (
                             <p className="text-sm text-gray-600">Você ainda não tem empresas conectadas.</p>
                         )}

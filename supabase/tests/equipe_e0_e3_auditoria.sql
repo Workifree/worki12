@@ -102,7 +102,8 @@ SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    AND pg_get_functiondef(p.oid) ~ '[[:<:]]company_members[[:>:]]'
    AND pg_get_functiondef(p.oid) !~ '[[:<:]]role[[:>:]]'      -- a PALAVRA role (primary_role nao conta)
    -- can_review_for_job: lista branca explicita — delega a is_job_owner, sem leitura propria de membros
-   AND p.proname NOT IN ('anonymize_account','lgpd_guard_auth_user_delete','can_review_for_job')
+   AND p.proname NOT IN ('anonymize_account','lgpd_guard_auth_user_delete','can_review_for_job',
+                         'bonus_identity_ok')  -- trilha S2: interna, so atribuicao de bonus
  ORDER BY 1;
 
 -- 1.8 [G1/C11] dependencias registradas do par (BEGIN ATOMIC) — ordem do DOWN.
@@ -228,6 +229,9 @@ BEGIN
     ALTER TABLE public.company_members DROP CONSTRAINT company_members_role_check;
     ALTER TABLE public.company_members ADD CONSTRAINT company_members_role_check
         CHECK (role IN ('manager', 'encarregado'));
+    ALTER TABLE auth.users DISABLE TRIGGER on_auth_user_created;
+    INSERT INTO auth.users (id, email) SELECT x, x::text || '@invalido.local' FROM unnest(ARRAY[v_enc, v_enc2, v_mgr, v_orgop]) x;
+    ALTER TABLE auth.users ENABLE TRIGGER on_auth_user_created;
     INSERT INTO public.company_members
         (company_id, user_id, role, status, created_by, accepted_at, display_name, confirmed_at)
     VALUES (v_company, v_enc,  'encarregado', 'active', v_owner, now(), 'QA Enc 1', now()),
@@ -356,8 +360,8 @@ BEGIN
           FROM public.applications a WHERE a.job_id = v_job AND a.worker_id = v_w1;
         RAISE EXCEPTION 'G3: sp_insert_company aceitou company_id divergente.';
     EXCEPTION WHEN sqlstate '42501' THEN NULL; END;
-    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, recorded_by)
-    SELECT v_job, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, v_enc
+    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, paid_at, recorded_by)
+    SELECT v_job, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, NULL, v_enc
       FROM public.applications a WHERE a.job_id = v_job AND a.worker_id = v_w1
     RETURNING id INTO v_sp1;
     SELECT count(*) INTO v_n FROM public.shift_payments WHERE id = v_sp1;
@@ -375,8 +379,8 @@ BEGIN
     PERFORM pg_temp.as_user(v_owner);                       -- Gestor estorna
     UPDATE public.shift_payments SET status = 'voided', voided_at = now(), void_reason = 'qa' WHERE id = v_sp1;
     PERFORM pg_temp.as_server();                            -- sessao nula atravessa o trigger
-    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, recorded_by)
-    SELECT v_job, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, v_owner
+    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, paid_at, recorded_by)
+    SELECT v_job, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, NULL, v_owner
       FROM public.applications a WHERE a.job_id = v_job AND a.worker_id = v_w1
     RETURNING id INTO v_sp2;
     UPDATE public.shift_payments SET status = 'recorded', paid_at = now() WHERE id = v_sp2;
@@ -530,7 +534,7 @@ BEGIN
      WHERE id = v_new_job;
     DELETE FROM public.applications WHERE job_id = v_new_job;
     INSERT INTO public.shift_calls (job_id, company_id, created_by, slots, reason, targets_count, status, origin, expires_at)
-    VALUES (v_new_job, v_company, v_owner, 1, 'falta', 0, 'expired', 'team', now() - interval '1 hour');
+    VALUES (v_new_job, v_company, v_owner, 1, 'falta', 1, 'expired', 'team', now() - interval '1 hour');
     INSERT INTO public.shift_calls (job_id, company_id, created_by, slots, reason, targets_count, status, origin, expires_at)
     VALUES (v_new_job, v_company, v_owner, 1, 'falta', 1, 'open', 'sos', now() - interval '1 hour')
     RETURNING id INTO v_cid;

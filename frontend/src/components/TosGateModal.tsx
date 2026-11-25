@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { Button } from './ui';
 import { getAuthenticatedCompanyId } from '../services/companyScopeService';
+import { checkSession } from '../lib/authSession';
 
 interface TosGateModalProps {
     userRole: 'worker' | 'company';
@@ -19,12 +20,18 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
 
         setLoading(true);
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            addToast('Sessão expirada. Faça login novamente.', 'error');
+        const session = await checkSession();
+        if (session.status !== 'ok') {
+            addToast(
+                session.status === 'signed_out'
+                    ? 'Sessão expirada. Faça login novamente.'
+                    : 'Sem conexão. Verifique sua internet e tente de novo.',
+                'error',
+            );
             setLoading(false);
             return;
         }
+        const user = session.user;
 
         // Empresa: o aceite grava na linha da empresa OPERADA pela sessão (seam), não em `user.id`
         // — gerente não é a linha de `companies`. (Encarregado aceita os Termos no convite,

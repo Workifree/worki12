@@ -1,4 +1,4 @@
-import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown, BadgeCheck, CircleDashed, UserCog, CalendarClock } from 'lucide-react';
+import { Home, Briefcase, User, Zap, PlusCircle, Building2, MessageSquare, LogOut, Users, Contact, Inbox, FileText, HelpCircle, Receipt, BarChart3, Share2, Network, ChevronDown, BadgeCheck, CircleDashed, UserCog, CalendarClock, Trophy } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +7,7 @@ import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
 import { Button } from './ui';
 import { useEffect, useState } from 'react';
+import { useBonusTrailAccess } from '../hooks/useBonusTrailAccess';
 import { getMyCompanies, pickCurrentCompany, setSelectedCompanyId, canSeeOrganization as podeVerOrganizacao, showTeamNav, hasTeamNav, readTeamNavHint, writeTeamNavHint, subscribeCompanyScope } from '../services/companyScopeService';
 import type { MyCompany } from '../types';
 
@@ -132,6 +133,9 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         if (currentCompany) writeTeamNavHint(hasTeamNav(currentCompany));
     }, [currentCompany]);
 
+    // Trilha de bônus: só com inscrição ativa (consulta leve e em cache; dono único não vê nada novo).
+    const temTrilha = useBonusTrailAccess(type === 'company');
+
     const companyNavItems = [
         { icon: Home, label: 'Dashboard', path: '/company/dashboard' },
         ...(comEquipe ? [{ icon: CalendarClock, label: 'Hoje', path: '/company/hoje' }] : []),
@@ -142,6 +146,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         { icon: PlusCircle, label: 'Criar Turno', path: '/company/create' },
         { icon: Briefcase, label: 'Meus Turnos', path: '/company/jobs' },
         { icon: Share2, label: 'Indicações', path: '/company/indicacoes' },
+        ...(temTrilha ? [{ icon: Trophy, label: 'Trilha', path: '/company/trilha' }] : []),
         { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
         { icon: FileText, label: 'Pagamentos', path: '/company/relatorio' },
         { icon: BarChart3, label: 'Operação', path: '/company/operacao' },
@@ -214,13 +219,13 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             )}
 
             {/* Navigation */}
-            <nav className="flex-1 px-4 py-5 flex flex-col gap-1.5 overflow-y-auto">
+            <nav className="flex-1 px-4 py-5 flex flex-col gap-1.5 overflow-y-auto [@media(max-height:860px)]:py-2 [@media(max-height:860px)]:gap-0.5">
                 {navItems.map((item) => (
                     <NavLink
                         key={item.path}
                         to={item.path}
                         className={({ isActive }) => `
-              flex items-center gap-3 h-11 px-4 shrink-0 rounded-xl border-2 text-sm font-semibold
+              flex items-center gap-3 h-11 [@media(max-height:860px)]:h-9 px-4 shrink-0 rounded-xl border-2 text-sm font-semibold
               transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
               ${isActive
                                 ? activeNavClass

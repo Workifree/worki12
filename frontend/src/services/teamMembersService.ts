@@ -45,6 +45,7 @@ interface RpcMemberRow {
   state: string;
   confirmed: boolean;
   accepted_email: string | null;
+  confirmation_expires_at?: string | null;
   invited_at: string | null;
   expires_at: string | null;
   accepted_at: string | null;
@@ -66,6 +67,7 @@ interface RpcRow {
   elenco_link_rotation_advised?: boolean;
   already_removed?: boolean;
   items?: RpcMemberRow[];
+  elenco_link_rotation_pending?: boolean;
 }
 
 function asRole(value: string | undefined): TeamMemberRole | undefined {
@@ -90,6 +92,8 @@ export function memberActionMessage(outcome: string, fallback: string): string {
     case 'not_pending_confirmation':
     case 'not_pending':
       return 'Outro Gestor já resolveu isso. A lista foi atualizada.';
+    case 'last_manager':
+      return 'A empresa precisa ter pelo menos um Gestor. Inclua outro Gestor antes de tirar este.';
     case 'cannot_remove_self':
       return 'Você não pode remover o seu próprio acesso.';
     case 'unauthenticated':
@@ -206,7 +210,13 @@ export async function acceptMemberInvite(
       invalidateCompanyScope();
       // Marca esta pessoa como membro de equipe: se o acesso for encerrado depois, ela vê a tela
       // neutra de "acesso encerrado" em vez de cair no onboarding de CNPJ (só UX, não é segurança).
-      markTeamMember();
+      // A marca é por usuário: precisa do id da sessão que acabou de aceitar.
+      try {
+        const { data: sessionData } = await supabase.auth.getUser();
+        markTeamMember(sessionData.user?.id);
+      } catch (markError) {
+        logError('teamMembersService.markTeamMember', markError);
+      }
     }
     return {
       outcome,
@@ -226,15 +236,21 @@ export async function acceptMemberInvite(
 export async function confirmMember(
   companyId: string,
   userId: string,
+  typedName: string,
 ): Promise<{ outcome: ConfirmMemberOutcome }> {
   try {
+    // O Gestor DIGITA o nome do convite: o banco compara (normalizado) antes de liberar.
     const { data, error } = await supabase.rpc('confirm_company_member', {
       p_company_id: companyId,
       p_user_id: userId,
+      p_typed_name: typedName,
     });
     if (error) throw error;
     const outcome = outcomeOf<ConfirmMemberOutcome>(data as RpcRow | null);
-    if (outcome === 'confirmed' || outcome === 'already_confirmed') invalidateCompanyScope();
+    // `expired` também muda a equipe: o banco encerra o acesso na hora.
+    if (outcome === 'confirmed' || outcome === 'already_confirmed' || outcome === 'expired') {
+      invalidateCompanyScope();
+    }
     return { outcome };
   } catch (err) {
     logError('teamMembersService.confirmMember', err);
@@ -301,7 +317,7 @@ export async function removeMember(
 export async function listMembers(
   companyId: string,
   includeRemoved = false,
-): Promise<{ outcome: ListMembersOutcome; items: TeamMemberItem[] }> {
+): Promise<{ outcome: ListMembersOutcome; items: TeamMemberItem[]; elencoLinkRotationPending?: boolean }> {
   try {
     const { data, error } = await supabase.rpc('list_company_members', {
       p_company_id: companyId,
@@ -310,7 +326,7 @@ export async function listMembers(
     if (error) throw error;
     const row = (data ?? null) as RpcRow | null;
     const outcome = outcomeOf<ListMembersOutcome>(row);
-    if (outcome !== 'ok') return { outcome, items: [] };
+    if (outcome !== 'ok') return { outcome, items: [], elencoLinkRotationPending: false };
     const items = (row?.items ?? []).map((m): TeamMemberItem => ({
       memberId: m.member_id,
       userId: m.user_id,
@@ -325,11 +341,30 @@ export async function listMembers(
       acceptedAt: m.accepted_at,
       confirmedAt: m.confirmed_at,
       removedAt: m.removed_at,
+      confirmationExpiresAt: m.confirmation_expires_at ?? null,
     }));
-    return { outcome: 'ok', items };
+    return { outcome: 'ok', items, elencoLinkRotationPending: row?.elenco_link_rotation_pending === true };
   } catch (err) {
     logError('teamMembersService.listMembers', err);
-    return { outcome: 'error', items: [] };
+    return { outcome: 'error', items: [], elencoLinkRotationPending: false };
+  }
+}
+
+/**
+ * Gera um link NOVO do Elenco (o antigo deixa de valer) e desliga a pendência de rotação
+ * (`elenco_link_rotation_pending`). Só o Gestor passa pela RPC. O token devolvido não é guardado.
+ */
+export async function rotateElencoLink(companyId: string): Promise<{ ok: boolean }> {
+  try {
+    const { data, error } = await supabase.rpc('get_company_invite_token', {
+      p_rotate: true,
+      p_company_id: companyId,
+    });
+    if (error) throw error;
+    return { ok: typeof data === 'string' && data.length > 0 };
+  } catch (err) {
+    logError('teamMembersService.rotateElencoLink', err);
+    return { ok: false };
   }
 }
 

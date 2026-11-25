@@ -287,6 +287,7 @@ const INSTALL_PROMPT_EXCLUDED_PREFIXES = [
   '/login',
   '/convite/',
   '/convite-gerente/',
+  '/convite-equipe/',
   '/esqueci-senha',
   '/redefinir-senha',
 ]

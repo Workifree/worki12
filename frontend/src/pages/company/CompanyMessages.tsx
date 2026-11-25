@@ -46,6 +46,9 @@ export default function CompanyMessages() {
     const { addToast } = useToast();
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    // Conversa aberta agora: o envio é assíncrono e o eco não pode cair em outra conversa.
+    const openConversationRef = useRef<string | null>(null);
+    openConversationRef.current = selectedConversation?.id ?? null;
     const presenceChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -258,10 +261,9 @@ export default function CompanyMessages() {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
 
-                setMessages(prev => [...prev, {
-                    ...newMsg,
-                    is_mine: isMine
-                }]);
+                setMessages(prev => prev.some(m => m.id === newMsg.id)
+                    ? prev
+                    : [...prev, { ...newMsg, is_mine: isMine }]);
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine && currentUser) {
@@ -304,15 +306,24 @@ export default function CompanyMessages() {
         presenceChannel.current?.track({ typing: false, userId: currentUser });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+        const sent = {
+            id: crypto.randomUUID(),
+            conversationid: selectedConversation.id,
+            senderid: currentUser,
+            content: messageContent,
+            createdat: new Date().toISOString()
+        };
         const { error } = await supabase
             .from('Message')
-            .insert({
-                id: crypto.randomUUID(),
-                conversationid: selectedConversation.id,
-                senderid: currentUser,
-                content: messageContent,
-                createdat: new Date().toISOString()
-            });
+            .insert(sent);
+
+        // Eco imediato (como em Messages.tsx): com o Realtime fora, a mensagem não aparecia para
+        // quem enviou. O id nasce no client, então o evento do Realtime não duplica.
+        if (!error && openConversationRef.current === sent.conversationid) {
+            setMessages(prev => prev.some(m => m.id === sent.id)
+                ? prev
+                : [...prev, { ...sent, read_at: null, is_mine: true }]);
+        }
 
         if (error) {
             logError('Error sending message:', error);

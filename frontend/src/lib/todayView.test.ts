@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canCancelJob, canPassJob, dayLabel, groupByDay, responsibleLine } from './todayView';
+import { canCancelJob, canPassJob, dayLabel, groupByDay, jobHasStarted, responsibleLine } from './todayView';
 import type { TodayJob } from '../services/shiftOperationService';
 
 function job(overrides: Partial<TodayJob> = {}): TodayJob {
@@ -65,5 +65,20 @@ describe('permissões da UI', () => {
     expect(canCancelJob(job({ responsibleKind: 'self' }), { isGestor: false })).toBe(true);
     expect(canCancelJob(job({ responsibleKind: 'covering' }), { isGestor: false })).toBe(true);
     expect(canCancelJob(job({ responsibleKind: 'person' }), { isGestor: false })).toBe(false);
+  });
+});
+
+describe('cancelar depois que o turno começou', () => {
+  const now = new Date('2026-11-23T20:00:00-03:00');
+  it('jobHasStarted usa o horário de São Paulo', () => {
+    expect(jobHasStarted('2026-11-23', '18:00', now)).toBe(true);
+    expect(jobHasStarted('2026-11-23', '21:00', now)).toBe(false);
+  });
+  it('encarregado não vê "Cancelar" em turno iniciado; Gestor continua vendo', () => {
+    const started = job({ responsibleKind: 'self', date: '2026-11-23', startTime: '18:00' });
+    const future = job({ responsibleKind: 'self', date: '2026-11-24', startTime: '09:00' });
+    expect(canCancelJob(started, { isGestor: false }, now)).toBe(false);
+    expect(canCancelJob(future, { isGestor: false }, now)).toBe(true);
+    expect(canCancelJob(started, { isGestor: true }, now)).toBe(true);
   });
 });

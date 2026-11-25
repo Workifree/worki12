@@ -86,6 +86,53 @@ function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
     };
 }
 
+interface PendingCallRow {
+    jobId: string;
+    workerId: string;
+    row: AppRow;
+}
+
+type CallWorker = AppRow['worker'];
+
+// Alvos sem resposta de chamados abertos e no prazo, na forma de um convite pendente. Falha de
+// leitura não derruba a agenda: só deixa de marcar "Aguardando resposta".
+async function fetchPendingCallRows(jobIds: string[]): Promise<PendingCallRow[]> {
+    if (jobIds.length === 0) return [];
+    try {
+        const { data, error } = await supabase
+            .from('shift_calls')
+            .select('job_id, expires_at, targets:shift_call_targets(worker_id, response, worker:workers(full_name, avatar_url))')
+            .in('job_id', jobIds)
+            .eq('status', 'open');
+        if (error) {
+            logError('CompanyJobs.fetchPendingCallRows', error);
+            return [];
+        }
+        const calls = (data ?? []) as unknown as {
+            job_id: string;
+            expires_at: string;
+            targets: { worker_id: string; response: string | null; worker: CallWorker | CallWorker[] }[] | null;
+        }[];
+        const now = Date.now();
+        return calls
+            .filter((call) => !(new Date(call.expires_at).getTime() <= now))
+            .flatMap((call) => (call.targets ?? [])
+                .filter((target) => !target.response)
+                .map((target) => ({
+                    jobId: call.job_id,
+                    workerId: target.worker_id,
+                    row: {
+                        status: 'invited',
+                        invitation_expires_at: call.expires_at,
+                        worker: (Array.isArray(target.worker) ? target.worker[0] : target.worker) ?? null,
+                    },
+                })));
+    } catch (err) {
+        logError('CompanyJobs.fetchPendingCallRows', err);
+        return [];
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Agenda por dia — a pergunta nº1 da operação é "quem trabalha amanhã?". A lista
 // deixa de ser ordenada por data de criação (organização de banco) e passa a ser
@@ -442,7 +489,7 @@ export default function CompanyJobs() {
                 const jobIds = jobsData.map(j => j.id);
                 const { data: apps } = await supabase
                     .from('applications')
-                    .select('job_id, status, invitation_expires_at, invitation_response, worker:workers(full_name, avatar_url)')
+                    .select('job_id, worker_id, status, invitation_expires_at, invitation_response, worker:workers(full_name, avatar_url)')
                     .in('job_id', jobIds);
 
                 const byJob: Record<string, AppRow[]> = {};
@@ -455,6 +502,17 @@ export default function CompanyJobs() {
                         invitation_response: a.invitation_response,
                         worker: w ?? null,
                     });
+                });
+
+                // Convite de hoje é um chamado (`shift_calls`): não existe `applications` até o aceite.
+                // Sem esta leitura o turno com convite pendente aparecia como "Sem freela".
+                const pendingCalls = await fetchPendingCallRows(jobIds);
+                const inApplications = new Set((apps || []).map(a => `${a.job_id}:${a.worker_id}`));
+                pendingCalls.forEach(({ jobId, workerId, row }) => {
+                    const key = `${jobId}:${workerId}`;
+                    if (inApplications.has(key)) return;
+                    inApplications.add(key);
+                    (byJob[jobId] ||= []).push(row);
                 });
 
                 // Selo de série (F3): 1 query em lote para o tipo de recorrência das séries
@@ -598,7 +656,7 @@ export default function CompanyJobs() {
         <>
         <PageMeta title="Meus Turnos" />
         {deleteJobId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
                 <Card
                     role="dialog"
                     aria-modal="true"
@@ -642,7 +700,7 @@ export default function CompanyJobs() {
                         className={`${FIELD_CONTROL_CLASS} pl-10`}
                     />
                 </div>
-                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0 md:pb-0" role="group" aria-label="Filtrar turnos">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar turnos">
                     {FILTERS.map(({ key, label }) => (
                         <button
                             key={key}
@@ -719,7 +777,7 @@ export default function CompanyJobs() {
 
         {/* Modal "Convidar Freela" — atrela um freela do elenco a uma vaga já criada */}
         {inviteJobId && (
-            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <Card
                     role="dialog"
                     aria-modal="true"

@@ -10,6 +10,14 @@ import { useToast } from '../contexts/ToastContext';
 import { Button } from './ui';
 import type { ServiceTerm, ServiceTermAcceptOutcome } from '../types';
 
+/**
+ * Só EXIBIÇÃO: pontua um CPF cru (11 dígitos) que venha depois de "CPF:". O `term_text` gravado
+ * continua intacto (é o documento congelado no aceite).
+ */
+function formatCpfForDisplay(text: string): string {
+    return text.replace(/(CPF:?\s*)(\d{3})(\d{3})(\d{3})(\d{2})(?!\d)/g, '$1$2.$3.$4-$5');
+}
+
 interface ServiceTermSectionProps {
     /** `shift_payments.id` — o termo é chaveado no pagamento, nunca no turno. */
     shiftPaymentId: string;
@@ -212,7 +220,7 @@ export default function ServiceTermSection({
                                 !showFullText && !isAccepted ? 'max-h-72 overflow-hidden' : ''
                             }`}
                         >
-                            {term.term_text}
+                            {formatCpfForDisplay(term.term_text)}
                         </p>
                         {!isAccepted && (
                             <Button

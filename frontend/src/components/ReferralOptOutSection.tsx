@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Indicação entre empresas" (F10) — seção de opt-out no perfil do freela.
@@ -29,10 +30,13 @@ export default function ReferralOptOutSection() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      const session = await checkSession();
+      if (session.status !== 'ok') {
+        // Sem leitura, o interruptor mostraria o padrão como se fosse a escolha da pessoa.
+        if (active) { setErroCarga(true); setLoading(false); }
+        return;
+      }
+      const user = session.user;
 
       const { data, error } = await supabase
         .from('workers')

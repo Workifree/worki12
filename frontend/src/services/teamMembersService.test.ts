@@ -24,7 +24,9 @@ import {
   getInvitePreview,
   inviteMember,
   listMembers,
+  memberActionMessage,
   normalizeBrazilPhone,
+  rotateElencoLink,
   rejectMember,
   removeMember,
   resendInvite,
@@ -132,8 +134,10 @@ describe('acceptMemberInvite', () => {
 describe('confirm / reject / remove / list', () => {
   it('confirm e reject usam (empresa, pessoa)', async () => {
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'confirmed' }, error: null });
-    expect(await confirmMember('c1', 'u1')).toEqual({ outcome: 'confirmed' });
-    expect(mockRpc).toHaveBeenLastCalledWith('confirm_company_member', { p_company_id: 'c1', p_user_id: 'u1' });
+    expect(await confirmMember('c1', 'u1', 'Ana')).toEqual({ outcome: 'confirmed' });
+    expect(mockRpc).toHaveBeenLastCalledWith('confirm_company_member', {
+      p_company_id: 'c1', p_user_id: 'u1', p_typed_name: 'Ana',
+    });
 
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'rejected' }, error: null });
     expect(await rejectMember('c1', 'u1')).toEqual({ outcome: 'rejected' });
@@ -189,7 +193,48 @@ describe('confirm / reject / remove / list', () => {
 
   it('list: forbidden devolve lista vazia', async () => {
     mockRpc.mockResolvedValue({ data: { outcome: 'forbidden' }, error: null });
-    expect(await listMembers('c1')).toEqual({ outcome: 'forbidden', items: [] });
+    expect(await listMembers('c1')).toEqual({ outcome: 'forbidden', items: [], elencoLinkRotationPending: false });
+  });
+
+  it.each(['expired', 'name_mismatch'] as const)('confirm repassa %s', async (outcome) => {
+    mockRpc.mockResolvedValue({ data: { outcome }, error: null });
+    expect(await confirmMember('c1', 'u1', 'Ana')).toEqual({ outcome });
+    // expired encerra o acesso no banco; name_mismatch não muda nada
+    expect(mockInvalidate).toHaveBeenCalledTimes(outcome === 'expired' ? 1 : 0);
+  });
+
+  it('list traz pending_expired, prazo de confirmação e a pendência de rotação do link', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        outcome: 'ok',
+        elenco_link_rotation_pending: true,
+        items: [{
+          member_id: 'm1', user_id: 'u1', display_name: 'Ana', role: 'encarregado', status: 'active',
+          state: 'pending_expired', confirmed: false, accepted_email: null, confirmation_expires_at: '2026-11-28T12:00:00Z',
+          invited_at: null, expires_at: null, accepted_at: null, confirmed_at: null, removed_at: null,
+        }],
+      },
+      error: null,
+    });
+    const r = await listMembers('c1');
+    expect(r.elencoLinkRotationPending).toBe(true);
+    expect(r.items[0]).toMatchObject({ state: 'pending_expired', confirmationExpiresAt: '2026-11-28T12:00:00Z' });
+  });
+
+  it('rotaciona o link do Elenco com p_rotate=true e a unidade', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'novo-token', error: null });
+    expect(await rotateElencoLink('c1')).toEqual({ ok: true });
+    expect(mockRpc).toHaveBeenLastCalledWith('get_company_invite_token', { p_rotate: true, p_company_id: 'c1' });
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('x') });
+    expect(await rotateElencoLink('c1')).toEqual({ ok: false });
+  });
+
+  it('last_manager é repassado em remove e revoke, com mensagem própria', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'last_manager' }, error: null });
+    expect((await removeMember('c1', 'u1')).outcome).toBe('last_manager');
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'last_manager' }, error: null });
+    expect(await revokeInvite('m1')).toEqual({ outcome: 'last_manager' });
+    expect(memberActionMessage('last_manager', 'x')).toMatch(/pelo menos um Gestor/);
   });
 });
 
@@ -227,7 +272,7 @@ describe('invalida o escopo (Sidebar reflete team_enabled sem recarregar)', () =
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'resent', invite_token: 't' }, error: null });
     await resendInvite('m1');
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'confirmed' }, error: null });
-    await confirmMember('c1', 'u1');
+    await confirmMember('c1', 'u1', 'Ana');
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'rejected' }, error: null });
     await rejectMember('c1', 'u1');
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'removed' }, error: null });

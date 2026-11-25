@@ -48,6 +48,25 @@ async function countRows(table: string, companyId: string, extraEq?: [string, st
   return count ?? 0;
 }
 
+/**
+ * Turnos abertos DE VERDADE: `jobs.status` continua `open` depois que o turno é concluído (a
+ * conclusão muda a candidatura), então um turno com todas as vagas concluídas não conta.
+ */
+async function countOpenJobs(companyId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('slots, applications(status)')
+    .eq('company_id', companyId)
+    .eq('status', 'open');
+  if (error) {
+    logError('Organization.countOpenJobs', error);
+    return null;
+  }
+  return ((data ?? []) as Array<{ slots: number | null; applications: Array<{ status: string }> | null }>)
+    .filter((job) => (job.applications ?? []).filter((a) => a.status === 'completed').length < (job.slots ?? 1))
+    .length;
+}
+
 export default function Organization() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -64,7 +83,7 @@ export default function Organization() {
       const summaries = await Promise.all(
         companies.map(async (company): Promise<UnitSummary> => {
           const [openJobs, teamSize, managers] = await Promise.all([
-            countRows('jobs', company.company_id, ['status', 'open']),
+            countOpenJobs(company.company_id),
             countRows('team_connections', company.company_id, ['status', 'accepted']),
             listCompanyManagers(company.company_id),
           ]);

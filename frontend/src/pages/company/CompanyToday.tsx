@@ -6,8 +6,8 @@
  *    `list_jobs_by_responsible` (responsável efetivo resolvido no banco, R19).
  *  - Encarregado: vê só os dele e os que está cobrindo (a UI nunca consulta turno alheio, R9).
  * Ações opcionais: "Passar para...", "Cobrir" e "Cancelar turno". Divulgação progressiva (R23):
- * sem equipe (dono único), não existem filtros de pessoa, nem "Passar"/"Cobrir", nem etiqueta de
- * responsável — só os turnos e o cancelamento.
+ * sem equipe (dono único), não existem filtros de pessoa, nem "Passar"/"Cobrir"/"Cancelar turno",
+ * nem etiqueta de responsável — só os turnos.
  * Toda autorização real mora nas RPCs; esta tela é UX.
  */
 
@@ -18,6 +18,7 @@ import PageMeta from '../../components/PageMeta';
 import PassJobsModal, { type PassDestination } from '../../components/company/PassJobsModal';
 import CoverageModal, { type CoveragePerson } from '../../components/company/CoverageModal';
 import CancelJobModal from '../../components/company/CancelJobModal';
+import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { Button, Card, PageHeader } from '../../components/ui';
 import { useToast } from '../../contexts/ToastContext';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
@@ -115,11 +116,44 @@ export default function CompanyToday() {
   const [cancelling, setCancelling] = useState<TodayJob | null>(null);
   const [endingId, setEndingId] = useState<string | null>(null);
 
-  const today = useMemo(() => todayInBrazil(), []);
+  // "Hoje" NÃO congela no mount: aba aberta de um dia para o outro mostraria o dia errado. Recalcula
+  // no reload, ao voltar à aba (visibilitychange) e num timer até a meia-noite de São Paulo.
+  const [today, setToday] = useState<string>(() => todayInBrazil());
+  const syncToday = useCallback(() => {
+    const now = todayInBrazil();
+    setToday((prev) => {
+      if (prev === now) return prev;
+      setLoading(true);
+      return now;
+    });
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncToday();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const nextMidnight = Date.parse(`${addDaysTo(todayInBrazil(), 1)}T00:00:00-03:00`);
+      // +1s de folga; piso de 1s evita laço apertado se o relógio estiver estranho
+      const wait = Math.max(1000, nextMidnight - Date.now() + 1000);
+      timer = setTimeout(() => {
+        syncToday();
+        schedule();
+      }, wait);
+    };
+    schedule();
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(timer);
+    };
+  }, [syncToday]);
   const companyId = company?.company_id ?? null;
   const gestor = isGestorRole(company);
   const teamEnabled = company?.team_enabled === true || company?.role === 'encarregado';
   const noCompany = resolved && company === null;
+  const cancelAvailable = useCancelJobAvailable(teamEnabled);
 
   // quem sou eu (a UI do encarregado e os rótulos "Para mim"/"Você" dependem disto)
   useEffect(() => {
@@ -215,10 +249,11 @@ export default function CompanyToday() {
   }, [companyId, company, gestor, userId, today, personFilter, tagFilter, reloadKey]);
 
   const reload = useCallback(() => {
+    syncToday();
     setSelected(new Set());
     setLoading(true);
     setReloadKey((k) => k + 1);
-  }, []);
+  }, [syncToday]);
 
   /** Trocar filtro mostra o esqueleto e zera a seleção (não dá para passar o que não está na tela). */
   const changeFilters = (person: string | null, tag: string | null) => {
@@ -442,7 +477,8 @@ export default function CompanyToday() {
           <ul className="space-y-3">
             {group.jobs.map((job) => {
               const passable = canPassJob(job, perms);
-              const cancellable = canCancelJob(job, perms);
+              // Dono único não ganha ação nova (R23); sem a RPC no ambiente, o botão não aparece.
+              const cancellable = teamEnabled && cancelAvailable && canCancelJob(job, perms, new Date());
               const isSelected = selected.has(job.jobId);
               const line = responsibleLine(job);
               return (
@@ -468,7 +504,7 @@ export default function CompanyToday() {
                             <>
                               {' · '}
                               {job.filled !== null ? `${job.filled} de ${job.slots}` : `${job.slots}`} {job.slots === 1 ? 'vaga' : 'vagas'}
-                              {job.filled !== null ? ' preenchida' + (job.filled === 1 ? '' : 's') : ''}
+                              {job.filled !== null ? (job.slots === 1 ? ' preenchida' : ' preenchidas') : ''}
                             </>
                           )}
                         </p>

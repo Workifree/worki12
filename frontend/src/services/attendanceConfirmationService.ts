@@ -26,6 +26,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getSessionUserOrThrow } from '../lib/authSession';
 import type {
   AttendanceConfirmationOutcome,
   AttendanceConfirmationResponse,
@@ -227,34 +228,34 @@ export const AttendanceConfirmationService = {
    */
   async getMyPendingConfirmations(): Promise<ShiftAttendanceConfirmation[]> {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from('shift_attendance_confirmations')
-        .select('*')
-        .eq('worker_id', user.id)
-        .is('response', null)
-        .order('requested_at', { ascending: false });
-
-      if (error) {
-        logError('attendanceConfirmation.getMyPendingConfirmations', error);
-        return [];
-      }
-
-      const seen = new Set<string>();
-      const deduped: ShiftAttendanceConfirmation[] = [];
-      for (const row of (data ?? []) as ShiftAttendanceConfirmation[]) {
-        if (seen.has(row.application_id)) continue;
-        seen.add(row.application_id);
-        deduped.push(row);
-      }
-      return deduped;
+      return await this.getMyPendingConfirmationsChecked();
     } catch (err) {
       logError('attendanceConfirmation.getMyPendingConfirmations', err);
       return [];
     }
+  },
+
+  /** Como `getMyPendingConfirmations`, mas LANÇA quando a consulta falha (lista vazia = não há nada mesmo). */
+  async getMyPendingConfirmationsChecked(): Promise<ShiftAttendanceConfirmation[]> {
+    const user = await getSessionUserOrThrow();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('shift_attendance_confirmations')
+      .select('*')
+      .eq('worker_id', user.id)
+      .is('response', null)
+      .order('requested_at', { ascending: false });
+
+    if (error) throw error;
+
+    const seen = new Set<string>();
+    const deduped: ShiftAttendanceConfirmation[] = [];
+    for (const row of (data ?? []) as ShiftAttendanceConfirmation[]) {
+      if (seen.has(row.application_id)) continue;
+      seen.add(row.application_id);
+      deduped.push(row);
+    }
+    return deduped;
   },
 };

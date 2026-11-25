@@ -224,7 +224,7 @@ describe('ProtectedRoute - Onboarding Gate', () => {
         })
 
         it('ex-membro (removido/revogado) sem NENHUMA empresa vê "acesso encerrado", nunca o onboarding de CNPJ', async () => {
-            localStorage.setItem('worki_team_member_hint', '1')
+            localStorage.setItem('worki_team_member_hint:ex-1', '1')
             mockGetSession.mockResolvedValue({
                 data: { session: { user: { id: 'ex-1', user_metadata: { user_type: 'hire' } } } },
             })
@@ -237,6 +237,38 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             })
             expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
             expect(screen.queryByTestId('outlet-content')).not.toBeInTheDocument()
+        })
+
+        it('dono NOVO no mesmo aparelho de um ex-membro não herda a marca: vai ao onboarding, não a "acesso encerrado"', async () => {
+            localStorage.setItem('worki_team_member_hint:ex-1', '1')
+            localStorage.setItem('worki_team_member_hint', '1') // marca global de versão antiga também é ignorada
+            mockGetSession.mockResolvedValue({
+                data: { session: { user: { id: 'dono-novo', user_metadata: { user_type: 'hire' } } } },
+            })
+            mockRpc.mockResolvedValue({ data: [], error: null })
+
+            renderRoute('/company/dashboard')
+
+            await waitFor(() => {
+                expect(screen.getByTestId('company-onboarding')).toBeInTheDocument()
+            })
+            expect(screen.queryByText('Seu acesso a essa empresa foi encerrado')).not.toBeInTheDocument()
+        })
+
+        it('encarregado confirmado é barrado em /company/onboarding e /company/profile', async () => {
+            mockGetSession.mockResolvedValue({
+                data: { session: { user: { id: 'enc-2', user_metadata: { user_type: 'hire' } } } },
+            })
+            mockRpc.mockResolvedValue({
+                data: [myCompaniesRow({ company_id: 'comp-9', role: 'encarregado', confirmed: true })],
+                error: null,
+            })
+
+            renderRoute('/company/onboarding')
+            await waitFor(() => {
+                expect(screen.getByTestId('outlet-content')).toBeInTheDocument()
+            })
+            expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
         })
 
         it('quem está no meio do convite de equipe (token pendente) e sem empresa volta ao convite, não ao CNPJ', async () => {
@@ -254,19 +286,40 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
         })
 
-        it('falha fechada: erro ao resolver empresa com convite de equipe pendente NÃO cai no onboarding de CNPJ', async () => {
-            sessionStorage.setItem('pending_team_invite_token', 'tok-pendente')
-            mockGetSession.mockResolvedValue({
-                data: { session: { user: { id: 'enc-9', user_metadata: { user_type: 'hire' } } } },
-            })
-            mockRpc.mockResolvedValue({ data: null, error: new Error('rede') })
+        it.each(['/company/dashboard', '/company/onboarding'])(
+            'D-2: falha em get_my_companies (%s) mostra erro com "Tentar de novo", nunca o onboarding',
+            async (path) => {
+                mockGetSession.mockResolvedValue({
+                    data: { session: { user: { id: 'dono-1', user_metadata: { user_type: 'hire' } } } },
+                })
+                mockRpc.mockResolvedValue({ data: null, error: new Error('Failed to fetch') })
 
-            renderRoute('/company/onboarding')
+                renderRoute(path)
+
+                await waitFor(() => {
+                    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
+                })
+                expect(screen.getByText(/Nada foi alterado/)).toBeInTheDocument()
+                expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
+                expect(screen.queryByTestId('outlet-content')).not.toBeInTheDocument()
+            },
+        )
+
+        it('D-3: dono com token de convite na sessão e marca de equipe, sob falha, NÃO vê "o Gestor precisa liberar sua entrada"', async () => {
+            sessionStorage.setItem('pending_team_invite_token', 'tok-qualquer')
+            localStorage.setItem('worki_team_member_hint:dono-2', '1')
+            mockGetSession.mockResolvedValue({
+                data: { session: { user: { id: 'dono-2', user_metadata: { user_type: 'hire' } } } },
+            })
+            mockRpc.mockResolvedValue({ data: null, error: new Error('Failed to fetch') })
+
+            renderRoute('/company/dashboard')
 
             await waitFor(() => {
-                expect(screen.getByText('Seu acesso está quase pronto')).toBeInTheDocument()
+                expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
             })
-            expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
+            expect(screen.queryByText('Seu acesso está quase pronto')).not.toBeInTheDocument()
+            expect(screen.queryByText(/O Gestor precisa liberar/)).not.toBeInTheDocument()
         })
 
         it('encarregado NÃO confirmado não escapa da espera pela rota de onboarding', async () => {

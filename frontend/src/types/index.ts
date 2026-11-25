@@ -218,6 +218,7 @@ export type TeamMemberState =
   | 'invited'
   | 'invite_expired'
   | 'awaiting_confirmation'
+  | 'pending_expired'
   | 'active'
   | 'removed';
 
@@ -236,6 +237,8 @@ export interface TeamMemberItem {
   acceptedAt: string | null;
   confirmedAt: string | null;
   removedAt: string | null;
+  /** Prazo (72h) para o Gestor confirmar; só para Encarregado aceito e não confirmado. */
+  confirmationExpiresAt?: string | null;
 }
 
 /** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
@@ -267,6 +270,7 @@ export type ResendInviteOutcome =
 
 export type RevokeInviteOutcome =
   | 'revoked'
+  | 'last_manager'
   | 'not_pending'
   | 'not_found'
   | 'forbidden'
@@ -309,6 +313,8 @@ export interface AcceptMemberInviteResult {
 export type ConfirmMemberOutcome =
   | 'confirmed'
   | 'already_confirmed'
+  | 'expired'
+  | 'name_mismatch'
   | 'not_found'
   | 'forbidden'
   | 'invalid_input'
@@ -327,6 +333,7 @@ export type RejectMemberOutcome =
 export type RemoveMemberOutcome =
   | 'removed'
   | 'would_remove'
+  | 'last_manager'
   | 'cannot_remove_self'
   | 'not_found'
   | 'forbidden'

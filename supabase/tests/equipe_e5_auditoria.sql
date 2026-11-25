@@ -164,7 +164,7 @@ DECLARE
     v_enc3 uuid := gen_random_uuid();     -- encarregado ATIVO e NAO confirmado
     v_mgr  uuid := gen_random_uuid();     -- Gestor 'manager' em DUAS companies (A25)
     v_ws   uuid[];  v_w1 uuid;  v_w2 uuid;  v_w3 uuid;
-    v_jb uuid; v_jc uuid; v_jd uuid; v_je uuid; v_jf uuid; v_jg uuid; v_esc uuid;
+    v_jb uuid; v_jc uuid; v_jd uuid; v_je uuid; v_jf uuid; v_jg uuid; v_esc uuid; v_jh uuid;
     v_ps timestamptz; v_pe timestamptz;
     v_json jsonb; v_n bigint; v_n0 bigint; v_t text; v_ok boolean;
     v_cid uuid; v_tag uuid; v_sp uuid; v_app uuid; v_cov uuid; v_n_tc bigint;
@@ -194,6 +194,9 @@ BEGIN
         ALTER TABLE public.company_members ADD CONSTRAINT company_members_role_check
             CHECK (role IN ('manager', 'encarregado'));
     END IF;
+    ALTER TABLE auth.users DISABLE TRIGGER on_auth_user_created;
+    INSERT INTO auth.users (id, email) SELECT x, x::text || '@invalido.local' FROM unnest(ARRAY[v_enc, v_enc2, v_enc3, v_mgr]) x;
+    ALTER TABLE auth.users ENABLE TRIGGER on_auth_user_created;
     INSERT INTO public.company_members
         (company_id, user_id, role, status, created_by, accepted_at, display_name, confirmed_at)
     VALUES (v_company, v_enc,  'encarregado', 'active', v_owner, now(), 'QA Enc 1', now()),
@@ -231,9 +234,10 @@ BEGIN
     IF v_ws IS DISTINCT FROM ARRAY[v_w1] THEN
         RAISE EXCEPTION 'A5/A6: esperado so w1 ocupado (w2 fora do Elenco, w3 livre), veio %.', v_ws; END IF;
     -- payload: nenhum campo alem de worker_id (A5)
-    SELECT count(*) INTO v_n FROM (SELECT jsonb_object_keys(to_jsonb(b)) AS k
-                                     FROM public.get_busy_workers(v_company, v_ps, v_pe, ARRAY[v_w1], v_jb) b) q
-     WHERE k <> 'worker_id';
+    SELECT count(*) INTO v_n
+      FROM (SELECT to_jsonb(b) AS item
+              FROM (SELECT * FROM public.get_busy_workers(v_company, v_ps, v_pe, ARRAY[v_w1], v_jb)) AS b) q
+     WHERE q.item IS DISTINCT FROM jsonb_build_object('worker_id', v_w1);
     IF v_n <> 0 THEN RAISE EXCEPTION 'A5: payload de get_busy_workers tem campo alem de worker_id.'; END IF;
     -- janela adjacente (22:00-23:00): fim do turno e EXCLUSIVO => livre
     v_ps := ((v_start::text || ' 22:00')::timestamp AT TIME ZONE 'America/Sao_Paulo');
@@ -288,6 +292,20 @@ BEGIN
         RAISE EXCEPTION 'A14: turno alheio foi movido.'; END IF;
     IF pg_temp.n_notif(v_enc2, 'Turno passado para você') < 1 OR pg_temp.n_notif(v_enc, 'Turno passado') < 1 THEN
         RAISE EXCEPTION 'A14: destino e origem precisam ser avisados.'; END IF;
+    IF pg_temp.n_notif(v_owner, 'Turnos passados na equipe') < 1 THEN
+        RAISE EXCEPTION 'M2: Gestor precisa ser avisado quando o encarregado passa turnos.'; END IF;
+    -- M2: turno antigo (hoje - 3) nao e passado por encarregado; o Gestor passa
+    v_jh := pg_temp.mk_job(v_job, '08:00', '12:00', 1);
+    UPDATE public.jobs SET responsible_id = v_enc,
+           start_date = ((((now() AT TIME ZONE 'America/Sao_Paulo')::date - 3)::text || ' 12:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo')
+     WHERE id = v_jh;
+    PERFORM pg_temp.as_user(v_enc);
+    v_json := public.reassign_job_responsible(ARRAY[v_jh], v_enc2);
+    IF (v_json ->> 'moved')::int <> 0 OR (v_json ->> 'skipped')::int <> 1 OR (v_json ->> 'skipped_past')::int <> 1 THEN
+        RAISE EXCEPTION 'M2: encarregado passou turno antigo (%).', v_json; END IF;
+    PERFORM pg_temp.as_user(v_owner);
+    IF (public.reassign_job_responsible(ARRAY[v_jh], v_enc2) ->> 'moved')::int <> 1 THEN
+        RAISE EXCEPTION 'M2: Gestor deveria poder passar turno antigo.'; END IF;
     PERFORM pg_temp.as_user(v_enc);                                             -- ja nao e dele
     IF public.is_job_owner(v_jb) THEN RAISE EXCEPTION 'A14: origem ainda opera o turno passado.'; END IF;
     IF (public.reassign_job_responsible(ARRAY[v_jb], v_enc) ->> 'moved')::int <> 0 THEN
@@ -330,6 +348,14 @@ BEGIN
         RAISE EXCEPTION 'A15: janela > 60 dias aceita.'; END IF;
     IF public.create_responsibility_coverage(v_company, v_enc, v_enc2, v_start - 30, v_start - 20) ->> 'outcome' <> 'in_the_past' THEN
         RAISE EXCEPTION 'A15: janela no passado aceita.'; END IF;
+    -- retroativa com fim no futuro: v_start = hoje + 7, logo v_start - 37 = hoje - 30 e v_start - 9 = hoje - 2
+    IF public.create_responsibility_coverage(v_company, v_enc, v_enc2, v_start - 37, v_start - 2) ->> 'outcome' <> 'starts_in_the_past'
+       OR public.create_responsibility_coverage(v_company, v_enc, v_enc2, v_start - 9, v_start - 2) ->> 'outcome' <> 'starts_in_the_past' THEN
+        RAISE EXCEPTION 'A15: cobertura RETROATIVA aceita.'; END IF;
+    PERFORM pg_temp.as_server();
+    IF pg_temp.n_notif(v_owner, 'Cobertura criada na equipe') < 1 THEN
+        RAISE EXCEPTION 'A15: cobertura criada por encarregado precisa avisar o Gestor.'; END IF;
+    PERFORM pg_temp.as_user(v_enc);
     PERFORM pg_temp.as_user(v_owner);
     IF public.create_responsibility_coverage(v_company, v_owner, v_enc2, v_start, v_start) ->> 'outcome' <> 'from_is_gestor' THEN
         RAISE EXCEPTION 'M1: cobertura DE Gestor/dono aceita (e inerte).'; END IF;
@@ -409,8 +435,8 @@ BEGIN
 
     -- recusa por pagamento ativo: nada muda
     PERFORM pg_temp.as_server();
-    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, recorded_by)
-    SELECT v_jc, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, v_owner
+    INSERT INTO public.shift_payments (job_id, company_id, worker_id, application_id, source, amount, status, scheduled_for, paid_at, recorded_by)
+    SELECT v_jc, v_company, v_w1, a.id, 'external_pix', 10, 'scheduled', current_date, NULL, v_owner
       FROM public.applications a WHERE a.job_id = v_jc AND a.worker_id = v_w1
     RETURNING id INTO v_sp;
     PERFORM pg_temp.as_user(v_enc);
@@ -465,10 +491,15 @@ BEGIN
     v_jg := pg_temp.mk_job(v_job, '08:00', '12:00', 1);
     UPDATE public.jobs SET responsible_id = v_enc WHERE id = v_jg;
     BEGIN
+        IF NOT EXISTS (SELECT 1 FROM public.wallets) THEN
+            INSERT INTO public.wallets (user_id, user_type) VALUES (v_owner, 'company');
+        END IF;
         INSERT INTO public.escrow_transactions (job_id, amount, company_wallet_id, status)
         SELECT v_jg, 10, w.id, 'reserved' FROM public.wallets w LIMIT 1 RETURNING id INTO v_esc;
     EXCEPTION WHEN OTHERS THEN v_esc := NULL; RAISE NOTICE 'M-1: insert de escrow falhou (%): PULADO.', SQLERRM; END;
-    IF v_esc IS NOT NULL THEN
+    IF v_esc IS NULL THEN
+        RAISE NOTICE 'M-1 (escrow ativo): PULADO — escrow sintetico nao foi criado.';
+    ELSE
         PERFORM pg_temp.as_user(v_enc);
         IF public.cancel_job(v_jg, NULL) ->> 'outcome' <> 'active_escrow' THEN
             RAISE EXCEPTION 'M-1: escrow reservado nao recusou o cancelamento.'; END IF;
@@ -540,7 +571,13 @@ BEGIN
 
     -- ============ R7b/A25: my_link_risk_config ======================================================
     PERFORM pg_temp.as_server();
-    SELECT c.id INTO v_company2 FROM public.companies c WHERE c.id <> v_company ORDER BY c.id LIMIT 1;
+    v_company2 := gen_random_uuid();
+    INSERT INTO auth.users (id, email, email_confirmed_at, raw_user_meta_data)
+    VALUES (v_company2, v_company2::text || '@invalido.local', now(),
+            jsonb_build_object('user_type', 'hire', 'full_name', 'QA Segunda Empresa'));
+    IF NOT EXISTS (SELECT 1 FROM public.companies c WHERE c.id = v_company2) THEN
+        RAISE EXCEPTION 'PRE-CONDICAO A25: o signup hire nao criou a segunda company.';
+    END IF;
     PERFORM pg_temp.as_user(v_owner);
     SELECT count(*) INTO v_n FROM public.get_my_companies();
     v_json := public.my_link_risk_config();
@@ -560,23 +597,19 @@ BEGIN
     PERFORM pg_temp.as_user(v_w1);                                              -- freela: nega / default sem empresa
     IF public.my_link_risk_config(v_company) ->> 'outcome' <> 'forbidden' THEN RAISE EXCEPTION 'A25: freela leu config de empresa.'; END IF;
     IF public.my_link_risk_config() ->> 'outcome' <> 'no_company' THEN RAISE EXCEPTION 'A25: freela sem parametro deveria ser no_company.'; END IF;
-    IF v_company2 IS NOT NULL THEN
-        PERFORM pg_temp.as_server();
-        INSERT INTO public.company_members (company_id, user_id, role, status, created_by, accepted_at)
-        VALUES (v_company,  v_mgr, 'manager', 'active', v_owner, now()),
-               (v_company2, v_mgr, 'manager', 'active', v_owner, now());
-        UPDATE public.companies SET link_risk_alert_threshold = 3 WHERE id = v_company;
-        UPDATE public.companies SET link_risk_alert_threshold = 5 WHERE id = v_company2;
-        PERFORM pg_temp.as_user(v_mgr);
-        v_json := public.my_link_risk_config();
-        IF v_json ->> 'outcome' <> 'company_required' OR v_json ? 'enabled' OR v_json ? 'threshold' THEN
-            RAISE EXCEPTION 'A25: duas companies sem parametro deveria dar company_required sem dado (%).', v_json; END IF;
-        IF (public.my_link_risk_config(v_company)  ->> 'threshold')::int <> 3
-           OR (public.my_link_risk_config(v_company2) ->> 'threshold')::int <> 5 THEN
-            RAISE EXCEPTION 'A25: o limite devolvido nao e o da empresa pedida.'; END IF;
-    ELSE
-        RAISE NOTICE 'A25 (duas companies): PULADO — so existe 1 company nesta base.';
-    END IF;
+    PERFORM pg_temp.as_server();
+    INSERT INTO public.company_members (company_id, user_id, role, status, created_by, accepted_at)
+    VALUES (v_company,  v_mgr, 'manager', 'active', v_owner, now()),
+           (v_company2, v_mgr, 'manager', 'active', v_owner, now());
+    UPDATE public.companies SET link_risk_alert_threshold = 3 WHERE id = v_company;
+    UPDATE public.companies SET link_risk_alert_threshold = 5 WHERE id = v_company2;
+    PERFORM pg_temp.as_user(v_mgr);
+    v_json := public.my_link_risk_config();
+    IF v_json ->> 'outcome' <> 'company_required' OR v_json ? 'enabled' OR v_json ? 'threshold' THEN
+        RAISE EXCEPTION 'A25: duas companies sem parametro deveria dar company_required sem dado (%).', v_json; END IF;
+    IF (public.my_link_risk_config(v_company)  ->> 'threshold')::int <> 3
+       OR (public.my_link_risk_config(v_company2) ->> 'threshold')::int <> 5 THEN
+        RAISE EXCEPTION 'A25: o limite devolvido nao e o da empresa pedida.'; END IF;
 
     -- ============ R21: avisos de claim / decline / respond roteados =================================
     PERFORM pg_temp.as_server();

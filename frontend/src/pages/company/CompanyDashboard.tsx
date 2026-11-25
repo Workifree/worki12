@@ -247,6 +247,9 @@ export default function CompanyDashboard() {
     // Derived State
     const companyName = company?.name || '';
     const loading = isLoadingCompany;
+    // Enquanto os dados não chegaram, nada de "0" nem "Nenhum turno": a query de turnos só liga
+    // depois da empresa, e nesse intervalo `jobs` é [] sem estar carregado.
+    const jobsPending = loading || isLoadingJobs || (!company && !isErrorCompany);
 
     const stats = {
         activeJobs: isErrorJobs ? null : jobs.filter(j => j.status === 'open').length,
@@ -328,6 +331,10 @@ export default function CompanyDashboard() {
                         message="Erro ao carregar indicadores. Tente novamente."
                         onRetry={() => { refetchJobs(); }}
                     />
+                ) : jobsPending ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="status" aria-label="Carregando indicadores">
+                        {[0, 1, 2].map((i) => <div key={i} className="h-28 bg-gray-200 rounded-2xl animate-pulse" />)}
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {[
@@ -371,6 +378,8 @@ export default function CompanyDashboard() {
                                     ? { rotulo: 'Saiu — confirme', cls: 'bg-orange-100 text-orange-800' }
                                     : chegouConfirme
                                         ? { rotulo: 'Chegou — confirme', cls: 'bg-orange-100 text-orange-800' }
+                                        : app.company_checkout_confirmed_at
+                                            ? { rotulo: 'Saída confirmada', cls: 'bg-gray-100 text-gray-700' }
                                         : app.company_checkin_confirmed_at
                                             ? { rotulo: 'Presença OK', cls: 'bg-green-100 text-green-700' }
                                             : { rotulo: 'Aguardando chegada', cls: 'bg-yellow-100 text-yellow-800' };
@@ -460,7 +469,7 @@ export default function CompanyDashboard() {
                                     message="Erro ao carregar turnos. Tente novamente."
                                     onRetry={() => { refetchJobs(); }}
                                 />
-                            ) : loading || isLoadingJobs ? (
+                            ) : jobsPending ? (
                                 <div className="space-y-4 animate-pulse">
                                     {[...Array(3)].map((_, i) => (
                                         <div key={i} className="bg-gray-200 rounded-2xl h-28" />

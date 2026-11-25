@@ -23,6 +23,7 @@ vi.mock('../../services/teamMembersService', async () => {
     listMembers: vi.fn(),
     inviteMember: vi.fn(),
     resendInvite: vi.fn(),
+    rotateElencoLink: vi.fn(),
     revokeInvite: vi.fn(),
     confirmMember: vi.fn(),
     rejectMember: vi.fn(),
@@ -44,7 +45,7 @@ function member(overrides: Partial<TeamMemberItem> = {}): TeamMemberItem {
   return {
     memberId: 'm1', userId: 'u1', displayName: 'Ana', role: 'encarregado', status: 'active',
     state: 'active', confirmed: true, acceptedEmail: 'ana@x.com', invitedAt: null, expiresAt: null,
-    acceptedAt: null, confirmedAt: null, removedAt: null, ...overrides,
+    acceptedAt: null, confirmedAt: null, removedAt: null, confirmationExpiresAt: null, ...overrides,
   };
 }
 
@@ -62,7 +63,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getMyCompanies).mockResolvedValue([company()]);
-  vi.mocked(svc.listMembers).mockResolvedValue({ outcome: 'ok', items: [] });
+  vi.mocked(svc.listMembers).mockResolvedValue({ outcome: 'ok', elencoLinkRotationPending: false, items: [] });
 });
 
 describe('CompanyTeamMembers', () => {
@@ -81,7 +82,7 @@ describe('CompanyTeamMembers', () => {
 
   it('lista nome, papel e status; destaca "Fulano entrou, é ele?" com Confirmar e Não é ele', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
-      outcome: 'ok',
+      outcome: 'ok', elencoLinkRotationPending: false,
       items: [
         member({ memberId: 'm1', userId: 'u1', displayName: 'Ana', state: 'awaiting_confirmation', confirmed: false }),
         member({ memberId: 'm2', userId: 'u2', displayName: 'Beto', state: 'active', acceptedEmail: 'beto@x.com' }),
@@ -97,12 +98,119 @@ describe('CompanyTeamMembers', () => {
     expect(screen.getByRole('button', { name: /Gerar novo link/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/ }));
-    await waitFor(() => expect(svc.confirmMember).toHaveBeenCalledWith('c1', 'u1'));
+    // Abre o diálogo; nada é confirmado antes de digitar o nome.
+    const campo = await screen.findByLabelText(/Digite o nome da pessoa/);
+    expect(campo).toHaveValue('');
+    expect(screen.getByRole('button', { name: /Confirmar acesso/ })).toBeDisabled();
+    expect(svc.confirmMember).not.toHaveBeenCalled();
+    fireEvent.change(campo, { target: { value: 'Ana' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar acesso/ }));
+    await waitFor(() => expect(svc.confirmMember).toHaveBeenCalledWith('c1', 'u1', 'Ana'));
+  });
+
+  it('diálogo mostra e-mail verificado e hora do aceite em São Paulo; name_mismatch mantém aberto', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok',
+      elencoLinkRotationPending: false,
+      items: [member({
+        state: 'awaiting_confirmation', confirmed: false,
+        acceptedAt: '2026-11-25T15:30:00Z', confirmationExpiresAt: '2026-11-28T15:30:00Z',
+      })],
+    });
+    vi.mocked(svc.confirmMember).mockResolvedValue({ outcome: 'name_mismatch' });
+    renderPage();
+    expect(await screen.findByText(/Confirme até 28\/11.*12:30/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('ana@x.com');
+    expect(dialog).toHaveTextContent(/25\/11.*12:30/);
+    fireEvent.change(screen.getByLabelText(/Digite o nome da pessoa/), { target: { value: 'Outra' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar acesso/ }));
+    expect(await screen.findByText(/O nome não confere/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('confirmação expired: fecha o diálogo e explica o prazo de 72 horas', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok', elencoLinkRotationPending: false,
+      items: [member({ state: 'awaiting_confirmation', confirmed: false })],
+    });
+    vi.mocked(svc.confirmMember).mockResolvedValue({ outcome: 'expired' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Confirmar$/ }));
+    fireEvent.change(await screen.findByLabelText(/Digite o nome da pessoa/), { target: { value: 'Ana' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar acesso/ }));
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/72 horas/), 'error'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('pending_expired: rótulo "Expirou", sem Confirmar, e "Convidar de novo" gera link', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok', elencoLinkRotationPending: false,
+      items: [member({ state: 'pending_expired', confirmed: false })],
+    });
+    vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'invited', inviteToken: 'tok-novo' });
+    renderPage();
+    expect(await screen.findByText('Expirou')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Convidar de novo/ }));
+    expect(await screen.findByTestId('invite-link')).toHaveTextContent('tok-novo');
+    expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado');
+  });
+
+  it('linha de Gestor ativa não tem Confirmar nem Revogar', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok', elencoLinkRotationPending: false,
+      items: [member({ role: 'manager', state: 'active', confirmed: false })],
+    });
+    renderPage();
+    expect(await screen.findByText('Gestor')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Confirmar|Revogar|Não é essa pessoa/ })).not.toBeInTheDocument();
+  });
+
+  it('banner de rotação do link do Elenco persiste e some após rotacionar', async () => {
+    vi.mocked(svc.listMembers)
+      .mockResolvedValueOnce({ outcome: 'ok', items: [], elencoLinkRotationPending: true })
+      .mockResolvedValue({ outcome: 'ok', items: [], elencoLinkRotationPending: false });
+    vi.mocked(svc.rotateElencoLink).mockResolvedValue({ ok: true });
+    renderPage();
+    expect(await screen.findByText('Gere um novo link do Elenco')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Gerar novo link do Elenco/ }));
+    await waitFor(() => expect(screen.queryByText('Gere um novo link do Elenco')).not.toBeInTheDocument());
+    expect(svc.rotateElencoLink).toHaveBeenCalledWith('c1');
+  });
+
+  it('already_invited por variação do nome: avisa e usa o nome gravado no convite', async () => {
+    vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'already_invited', memberId: 'm9', inviteToken: 'tok' });
+    vi.mocked(svc.listMembers)
+      .mockResolvedValueOnce({ outcome: 'ok', items: [], elencoLinkRotationPending: false })
+      .mockResolvedValue({
+        outcome: 'ok', elencoLinkRotationPending: false,
+        items: [member({ memberId: 'm9', userId: null, displayName: 'José', state: 'invited', status: 'invited' })],
+      });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Convidar alguém da equipe/ }));
+    fireEvent.change(screen.getByLabelText(/Nome da pessoa/), { target: { value: 'jose' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
+    expect(await screen.findByText(/Este é o mesmo link/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Envie o link para José.'));
+  });
+
+  it('remover o último Gestor (last_manager) explica o motivo', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok', elencoLinkRotationPending: false, items: [member({ role: 'manager' })],
+    });
+    vi.mocked(svc.removeMember).mockResolvedValue({
+      outcome: 'last_manager', openJobs: 0, elencoLinkRotationAdvised: false, alreadyRemoved: false,
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Remover da equipe/ }));
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/pelo menos um Gestor/), 'error'));
   });
 
   it('"Não é ele" corta o acesso (reject)', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
-      outcome: 'ok',
+      outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ state: 'awaiting_confirmation', confirmed: false })],
     });
     vi.mocked(svc.rejectMember).mockResolvedValue({ outcome: 'rejected' });
@@ -147,7 +255,7 @@ describe('CompanyTeamMembers', () => {
   });
 
   it('remover: faz dry-run, informa os turnos abertos e só então remove (nunca bloqueia)', async () => {
-    vi.mocked(svc.listMembers).mockResolvedValue({ outcome: 'ok', items: [member()] });
+    vi.mocked(svc.listMembers).mockResolvedValue({ outcome: 'ok', elencoLinkRotationPending: false, items: [member()] });
     vi.mocked(svc.removeMember)
       .mockResolvedValueOnce({ outcome: 'would_remove', openJobs: 3, elencoLinkRotationAdvised: true, alreadyRemoved: false })
       .mockResolvedValueOnce({ outcome: 'removed', openJobs: 3, elencoLinkRotationAdvised: true, alreadyRemoved: false });
@@ -163,7 +271,7 @@ describe('CompanyTeamMembers', () => {
 
   it('reenviar convite vencido mostra o NOVO link', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
-      outcome: 'ok',
+      outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ memberId: 'm3', userId: null, displayName: 'Caio', state: 'invite_expired', status: 'invited' })],
     });
     vi.mocked(svc.resendInvite).mockResolvedValue({ outcome: 'resent', inviteToken: 'novo-token' });
@@ -194,7 +302,7 @@ describe('CompanyTeamMembers', () => {
 
   it('mensagem própria quando outro Gestor já resolveu (not_pending_confirmation)', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
-      outcome: 'ok',
+      outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ state: 'awaiting_confirmation', confirmed: false })],
     });
     vi.mocked(svc.rejectMember).mockResolvedValue({ outcome: 'not_pending_confirmation' });
@@ -206,7 +314,7 @@ describe('CompanyTeamMembers', () => {
 
   it('revogar convite pendente chama a RPC', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
-      outcome: 'ok',
+      outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ memberId: 'm3', userId: null, displayName: 'Caio', state: 'invited', status: 'invited' })],
     });
     vi.mocked(svc.revokeInvite).mockResolvedValue({ outcome: 'revoked' });

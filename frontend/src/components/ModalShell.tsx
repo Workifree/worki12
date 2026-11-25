@@ -33,14 +33,14 @@ export default function ModalShell({ labelledBy, onClose, focusKey, children }: 
     return (
         <div
             onClick={aoClicarNoFundo}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
         >
             <div
                 ref={trapRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={labelledBy}
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[90vh] overflow-y-auto"
+                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
             >
                 {children}
             </div>

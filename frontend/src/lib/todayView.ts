@@ -68,7 +68,18 @@ export function canPassJob(job: TodayJob, perms: TodayPermissions): boolean {
   return perms.isGestor || job.responsibleKind === 'self';
 }
 
-/** Gestor cancela qualquer turno; encarregado os próprios e os que cobre (`is_job_owner`). */
-export function canCancelJob(job: TodayJob, perms: Pick<TodayPermissions, 'isGestor'>): boolean {
-  return perms.isGestor || job.responsibleKind === 'self' || job.responsibleKind === 'covering';
+/** O turno já começou? (data local + horário de entrada em São Paulo; sem horário = 00:00.) */
+export function jobHasStarted(date: string, startTime: string | null, now: Date = new Date()): boolean {
+  const start = Date.parse(`${date}T${startTime ?? '00:00'}:00-03:00`);
+  return Number.isFinite(start) && start < now.getTime();
+}
+
+/**
+ * Gestor cancela qualquer turno; encarregado os próprios e os que cobre (`is_job_owner`), mas só
+ * antes de o turno começar (depois disso o banco recusa com `job_in_the_past`).
+ */
+export function canCancelJob(job: TodayJob, perms: Pick<TodayPermissions, 'isGestor'>, now: Date = new Date()): boolean {
+  if (perms.isGestor) return true;
+  if (job.responsibleKind !== 'self' && job.responsibleKind !== 'covering') return false;
+  return !jobHasStarted(job.date, job.startTime, now);
 }

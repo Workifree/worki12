@@ -116,7 +116,7 @@ export default function CompanyCreateJob() {
 
     // Hooks de equipe e convites — carregados após criação do job
     const { teamMembers, loading: teamLoading } = useCompanyTeam();
-    const { invite, invitingWorkerId, invites: sentInvites } = useCompanyInvites(createdJobId ?? '');
+    const { invite, invitingWorkerId, invitedWorkerIds } = useCompanyInvites(createdJobId ?? '');
 
     // Etapa 2 — divulgacao progressiva (NN/g): dos quatro campos da tela, so a DESCRICAO e
     // obrigatoria, mas os quatro apareciam com o mesmo peso visual — e o botao desabilitado nao
@@ -1026,7 +1026,7 @@ export default function CompanyCreateJob() {
                                                     <p className="truncate text-xs text-gray-600">{member.worker.primary_role}</p>
                                                 )}
                                             </div>
-                                            {sentInvites.some((inv) => inv.worker_id === member.worker.id) ? (
+                                            {invitedWorkerIds.includes(member.worker.id) ? (
                                                 <span className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary-light px-4 text-xs font-bold text-primary">
                                                     <Check size={14} /> Convidado
                                                 </span>
@@ -1046,7 +1046,7 @@ export default function CompanyCreateJob() {
                                 })}
                             </div>
 
-                            {sentInvites.length > 0 ? (
+                            {invitedWorkerIds.length > 0 ? (
                                 <Button
                                     variant="secondary"
                                     size="lg"
@@ -1054,7 +1054,7 @@ export default function CompanyCreateJob() {
                                     onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
                                     className="mt-5"
                                 >
-                                    Concluir — {sentInvites.length} convite{sentInvites.length > 1 ? 's' : ''} enviado{sentInvites.length > 1 ? 's' : ''}
+                                    Concluir — {invitedWorkerIds.length} convite{invitedWorkerIds.length > 1 ? 's' : ''} enviado{invitedWorkerIds.length > 1 ? 's' : ''}
                                 </Button>
                             ) : (
                                 <p className="mt-5 text-center text-xs text-gray-600">

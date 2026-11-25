@@ -46,6 +46,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<EligibleJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
+  const [jobsCompanyId, setJobsCompanyId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const { invite, invitingWorkerId } = useCompanyInvites(selectedJobId);
 
@@ -102,7 +103,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
         }
 
         const eligible = futureOrUndated.filter((j) => !excludeSet.has(j.id));
-        if (active) setJobs(eligible);
+        if (active) { setJobs(eligible); setJobsCompanyId(companyId); }
       } catch (err) {
         logError('CompanyTeam.InviteToShiftModal', err);
         if (active) setJobs([]);
@@ -134,6 +135,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
     windows: busyWindows,
     workerIds: [member.worker.id],
     excludeJobId: selectedJobId,
+    companyId: jobsCompanyId,
     enabled: selectedJob !== null,
   });
   const memberIsBusy = busyIds.has(member.worker.id);

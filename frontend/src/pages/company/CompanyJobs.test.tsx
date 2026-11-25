@@ -384,3 +384,34 @@ describe('groupJobsByDay — agenda por dia (CompanyJobs)', () => {
     expect(buckets.map((b) => b.key)).toEqual(['today', 'tomorrow', 'week', 'later', 'no_date', 'past'])
   })
 })
+
+describe('CompanyJobs — convite por chamado pendente (D-5)', () => {
+  it('turno com convite sem resposta mostra "Aguardando resposta", nunca "Sem freela"', async () => {
+    const { jobsChain, applicationsChain } = setupMocks()
+    const callsResult = {
+      data: [
+        {
+          job_id: 'job-1',
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          targets: [{ worker_id: 'worker-1', response: null, worker: { full_name: 'Worker E2E', avatar_url: null } }],
+        },
+      ],
+      error: null,
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return {
+        select: vi.fn().mockReturnValue({
+          in: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue(callsResult) }),
+        }),
+      } as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    expect(await screen.findByText('Aguardando resposta')).toBeInTheDocument()
+    expect(screen.getByText('Worker E2E')).toBeInTheDocument()
+    expect(screen.queryByText('Sem freela')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /convidar freela/i })).not.toBeInTheDocument()
+  })
+})

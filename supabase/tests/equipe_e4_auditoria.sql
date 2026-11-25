@@ -92,7 +92,8 @@ SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    AND pg_get_functiondef(p.oid) !~ '[[:<:]]role[[:>:]]'
    AND p.proname NOT IN ('anonymize_account','lgpd_guard_auth_user_delete',
                          'internal_company_active_operator','session_company_member_confirmed',
-                         'can_review_for_job','internal_drop_empty_company_shell')
+                         'can_review_for_job','internal_drop_empty_company_shell',
+                         'bonus_identity_ok')   -- trilha S2: interna, so atribuicao de bonus
  ORDER BY 1;
 --     idem para policies de OUTRAS tabelas e views. esperado: 0 linhas cada.
 SELECT tablename, policyname FROM pg_policies
@@ -201,6 +202,12 @@ DECLARE
     v_unver  uuid := gen_random_uuid();   -- 'hire' com e-mail NAO verificado
     v_wk     uuid := gen_random_uuid();   -- conta de freela (no Elenco)
     v_wk2    uuid := gen_random_uuid();   -- freela que o ENCARREGADO traz ao Elenco
+    v_p      uuid := gen_random_uuid();   -- pessoa dos testes de cobertura zumbi / expiracao 72h
+    v_m2     uuid := gen_random_uuid();   -- segundo Gestor (so linha de membro)
+    v_email_p text;
+    v_tok_p  text;
+    v_cov    uuid;
+    v_mid_p  uuid;
     v_company uuid;
     v_n1     bigint;
     v_job3   uuid := gen_random_uuid();   -- turno de OUTRO responsavel (Gestor), com freela hired
@@ -239,7 +246,10 @@ BEGIN
     PERFORM pg_temp.mk_user(v_x,     'qa-e4-' || v_tag || '-x@invalido.local',     true,  true);
     PERFORM pg_temp.mk_user(v_unver, 'qa-e4-' || v_tag || '-unver@invalido.local', true,  false);
     PERFORM pg_temp.mk_user(v_wk,    'qa-e4-' || v_tag || '-wk@invalido.local',    false, true);
+    PERFORM pg_temp.mk_user(v_mgr, 'qa-e4-' || v_tag || '-mgr@invalido.local', false, true);
     PERFORM pg_temp.mk_user(v_wk2,   'qa-e4-' || v_tag || '-wk2@invalido.local',   false, true);
+    v_email_p := 'qa-e4-' || v_tag || '-gil@invalido.local';
+    PERFORM pg_temp.mk_user(v_p,     v_email_p,                                    true,  true);
 
     v_company := v_dono;      -- a casca de companies do signup 'hire' e a empresa do dono
     UPDATE public.companies SET name = 'QA Empresa E4 ' || v_tag WHERE id = v_company;
@@ -282,6 +292,11 @@ BEGIN
     IF v_r ->> 'outcome' <> 'already_invited' OR v_r ->> 'invite_token' <> v_tok_ana
        OR (v_r ->> 'member_id')::uuid <> v_mid_ana THEN
         RAISE EXCEPTION 'R11: idempotencia por (nome sem caixa, papel) falhou: %.', v_r; END IF;
+
+    -- nome NORMALIZADO (acentos, caixa, espacos internos, NBSP): ainda e o mesmo convite pendente
+    v_r := public.invite_company_member(v_company, '  ÁNA ' || chr(160) || '  Qà ', 'encarregado');
+    IF v_r ->> 'outcome' <> 'already_invited' OR (v_r ->> 'member_id')::uuid <> v_mid_ana THEN
+        RAISE EXCEPTION 'R4-2: variante do mesmo nome criou outro convite: %.', v_r; END IF;
 
     -- validacao de entrada
     IF public.invite_company_member(v_company, '   ', 'encarregado') ->> 'outcome' <> 'invalid_input'
@@ -362,7 +377,7 @@ BEGIN
     -- sessao nula
     PERFORM pg_temp.as_server();
     IF public.invite_company_member(v_company, 'Nulo', 'encarregado') ->> 'outcome' <> 'unauthenticated'
-       OR public.confirm_company_member(v_company, v_inv) ->> 'outcome' <> 'unauthenticated'
+       OR public.confirm_company_member(v_company, v_inv, 'Ana QA') ->> 'outcome' <> 'unauthenticated'
        OR public.list_company_members(v_company) ->> 'outcome' <> 'unauthenticated'
        OR public.accept_company_member_invite(v_tok_ana, true) ->> 'outcome' <> 'unauthenticated' THEN
         RAISE EXCEPTION 'sessao nula nao recebeu unauthenticated.'; END IF;
@@ -438,9 +453,16 @@ BEGIN
                         WHERE user_id = v_t::uuid AND title = 'Nova pessoa na equipe') THEN
             RAISE EXCEPTION 'R22: Gestor % nao foi avisado "entrou" (dono/manager).', v_t; END IF;
     END LOOP;
+    IF NOT EXISTS (SELECT 1 FROM public.notifications
+                    WHERE user_id = v_dono AND title = 'Nova pessoa na equipe'
+                      AND strpos(message, 'Ana QA') > 0
+                      AND strpos(message, '(qa***@invalido.local)') > 0
+                      AND strpos(message, 'horário de São Paulo') > 0
+                      AND link = '/company/configuracoes/equipe?membro=' || v_mid_ana::text) THEN
+        RAISE EXCEPTION 'D4/L2/L3: aviso sem nome + e-mail mascarado + hora + link do membro.'; END IF;
     IF EXISTS (SELECT 1 FROM public.notifications
-                WHERE title = 'Nova pessoa na equipe' AND created_at >= now() AND message LIKE '%@%') THEN
-        RAISE EXCEPTION 'R22: o aviso ao Gestor grava o e-mail da pessoa (minimizacao).'; END IF;
+                WHERE title = 'Nova pessoa na equipe' AND strpos(message, lower(v_email_inv)) > 0) THEN
+        RAISE EXCEPTION 'L2: o aviso grava o e-mail completo.'; END IF;
     IF EXISTS (SELECT 1 FROM public.notifications WHERE user_id = v_inv AND title = 'Nova pessoa na equipe') THEN
         RAISE EXCEPTION 'R22: o proprio convidado recebeu o aviso destinado ao Gestor.'; END IF;
 
@@ -469,9 +491,9 @@ BEGIN
     IF v_n <> 0 THEN RAISE EXCEPTION 'G6: encarregado le % linhas de company_members de outras pessoas (token?).', v_n; END IF;
     BEGIN
         UPDATE public.company_members SET confirmed_at = now() WHERE user_id = v_inv;
-        RAISE EXCEPTION 'A12: encarregado se auto-confirmou por UPDATE direto.';
+        GET DIAGNOSTICS v_n = ROW_COUNT; IF v_n <> 0 THEN RAISE EXCEPTION 'A12: encarregado se auto-confirmou por UPDATE direto.'; END IF;
     EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-    IF public.confirm_company_member(v_company, v_inv) ->> 'outcome' <> 'forbidden'
+    IF public.confirm_company_member(v_company, v_inv, 'Ana QA') ->> 'outcome' <> 'forbidden'
        OR public.reject_company_member(v_company, v_inv) ->> 'outcome' <> 'forbidden'
        OR public.remove_company_member(v_company, v_inv, false) ->> 'outcome' <> 'forbidden'
        OR public.list_company_members(v_company) ->> 'outcome' <> 'forbidden'
@@ -511,13 +533,18 @@ BEGIN
         RAISE EXCEPTION 'M2: a listagem devolve ultimo acesso (dado global de auth.users).'; END IF;
 
     PERFORM pg_temp.as_user(v_mgr);
-    IF public.confirm_company_member(v_company, v_mgr) ->> 'outcome' <> 'forbidden' THEN
+    IF public.confirm_company_member(v_company, v_mgr, 'QA Gestor') ->> 'outcome' <> 'forbidden' THEN
         RAISE EXCEPTION 'R22: Gestor se confirmou sozinho.'; END IF;
-    IF public.confirm_company_member(v_company, gen_random_uuid()) ->> 'outcome' <> 'not_found' THEN
+    IF public.confirm_company_member(v_company, gen_random_uuid(), 'x') ->> 'outcome' <> 'not_found' THEN
         RAISE EXCEPTION 'R22: confirmar quem nao existe nao devolveu not_found.'; END IF;
-    IF public.confirm_company_member(v_company, v_inv) ->> 'outcome' <> 'confirmed' THEN
+    -- D4: nome digitado precisa bater (normalizado); errado/vazio = name_mismatch e nada muda
+    IF public.confirm_company_member(v_company, v_inv, 'Outra Pessoa') ->> 'outcome' <> 'name_mismatch'
+       OR public.confirm_company_member(v_company, v_inv, NULL) ->> 'outcome' <> 'name_mismatch'
+       OR public.confirm_company_member(v_company, v_inv, '   ') ->> 'outcome' <> 'name_mismatch' THEN
+        RAISE EXCEPTION 'D4: nome divergente nao devolveu name_mismatch.'; END IF;
+    IF public.confirm_company_member(v_company, v_inv, '  ÁNA   qa ') ->> 'outcome' <> 'confirmed' THEN
         RAISE EXCEPTION 'R22: confirmar falhou.'; END IF;
-    IF public.confirm_company_member(v_company, v_inv) ->> 'outcome' <> 'already_confirmed' THEN
+    IF public.confirm_company_member(v_company, v_inv, 'Ana QA') ->> 'outcome' <> 'already_confirmed' THEN
         RAISE EXCEPTION 'R22: reconfirmar nao foi idempotente.'; END IF;
     PERFORM pg_temp.as_server();
     IF NOT EXISTS (SELECT 1 FROM public.company_members WHERE id = v_mid_ana AND confirmed_at IS NOT NULL AND confirmed_by = v_mgr)
@@ -692,7 +719,7 @@ BEGIN
     PERFORM pg_temp.as_user(v_dono);
     IF public.reject_company_member(v_company, v_inv2) ->> 'outcome' <> 'rejected' THEN
         RAISE EXCEPTION 'R22: revogar falhou.'; END IF;
-    IF public.confirm_company_member(v_company, v_inv2) ->> 'outcome' <> 'not_found' THEN
+    IF public.confirm_company_member(v_company, v_inv2, 'Beto QA') ->> 'outcome' <> 'not_found' THEN
         RAISE EXCEPTION 'R22: confirmar quem foi revogado nao devolveu not_found.'; END IF;
     PERFORM pg_temp.as_user(v_inv2);
     SELECT count(*) INTO v_n FROM public.get_my_companies();
@@ -722,6 +749,150 @@ BEGIN
     IF public.get_member_invite_preview(v_tok_dani) ->> 'outcome' <> 'not_found'
        OR public.get_member_invite_preview(v_tok_ana) ->> 'outcome' <> 'not_found' THEN
         RAISE EXCEPTION 'R13: previa respondeu para token queimado/revogado.'; END IF;
+
+    -- ============ rodada 4: cobertura zumbi, rotacao, removed_by ====================================
+    PERFORM pg_temp.as_user(v_dono);
+    v_r := public.invite_company_member(v_company, 'Gil QA', 'encarregado');
+    v_tok_p := v_r ->> 'invite_token';
+    PERFORM pg_temp.as_user(v_p);
+    IF public.accept_company_member_invite(v_tok_p, true) ->> 'outcome' <> 'accepted' THEN
+        RAISE EXCEPTION 'R4 (setup): Gil nao aceitou.'; END IF;
+    PERFORM pg_temp.as_user(v_dono);
+    IF public.confirm_company_member(v_company, v_p, 'gil qa') ->> 'outcome' <> 'confirmed' THEN
+        RAISE EXCEPTION 'R4 (setup): Gil nao confirmado.'; END IF;
+    PERFORM pg_temp.as_server();
+    INSERT INTO public.responsibility_coverages (company_id, from_user_id, to_user_id, starts_on, ends_on, created_by)
+    VALUES (v_company, v_p, v_inv, current_date, current_date + 5, v_dono)
+    RETURNING id INTO v_cov;
+    -- M1: pendencia DERIVADA. Garante que existe o link; "rotacionou": como now() e igual na
+    -- transacao inteira, empurra remocoes antigas para -2h e a rotacao para -1h.
+    PERFORM pg_temp.as_user(v_dono);
+    PERFORM public.get_company_invite_token(true, v_company);
+    IF (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'M1: logo apos rotacionar a pendencia deveria ser false.'; END IF;
+    PERFORM pg_temp.as_server();
+    UPDATE public.company_members SET removed_at = now() - interval '2 hours'
+     WHERE company_id = v_company AND status = 'removed';
+    UPDATE public.company_invite_links SET rotated_at = now() - interval '1 hour' WHERE company_id = v_company;
+    -- remocao de NAO confirmado (v_inv2, revogado) depois da rotacao nao acende a pendencia
+    UPDATE public.company_members SET removed_at = now()
+     WHERE company_id = v_company AND user_id = v_inv2 AND status = 'removed';
+    PERFORM pg_temp.as_user(v_dono);
+    IF (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'M1: remocao de quem nunca foi confirmado acendeu a pendencia.'; END IF;
+    IF public.remove_company_member(v_company, v_p, false) ->> 'outcome' <> 'removed' THEN
+        RAISE EXCEPTION 'R4: remover Gil falhou.'; END IF;
+    IF NOT (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'D5: remover confirmado nao ligou a pendencia de rotacao.'; END IF;
+    PERFORM pg_temp.as_server();
+    IF NOT EXISTS (SELECT 1 FROM public.responsibility_coverages WHERE id = v_cov AND revoked_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'R4-1: remocao nao revogou a cobertura.'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.company_members
+                    WHERE company_id = v_company AND user_id = v_p AND status = 'removed' AND removed_by = v_dono) THEN
+        RAISE EXCEPTION 'R4-6: removed_by nao foi preenchido.'; END IF;
+    -- rotacionar o link desliga a pendencia
+    PERFORM pg_temp.as_user(v_dono);
+    PERFORM public.get_company_invite_token(true, v_company);
+    IF (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'D5: rotacionar o link nao desligou a pendencia.'; END IF;
+    -- reconvidar + confirmar NAO revive a cobertura antiga
+    v_r := public.invite_company_member(v_company, 'Gil QA', 'encarregado');
+    v_tok_p := v_r ->> 'invite_token';
+    PERFORM pg_temp.as_user(v_p);
+    PERFORM public.accept_company_member_invite(v_tok_p, true);
+    PERFORM pg_temp.as_user(v_dono);
+    IF public.confirm_company_member(v_company, v_p, 'Gil QA') ->> 'outcome' <> 'confirmed' THEN
+        RAISE EXCEPTION 'R4-1 (setup): reconfirmar Gil.'; END IF;
+    PERFORM pg_temp.as_server();
+    IF EXISTS (SELECT 1 FROM public.responsibility_coverages
+                WHERE company_id = v_company AND (from_user_id = v_p OR to_user_id = v_p) AND revoked_at IS NULL) THEN
+        RAISE EXCEPTION 'R4-1: cobertura ZUMBI reviveu apos remover + reconvidar + confirmar.'; END IF;
+    PERFORM pg_temp.as_user(v_dono);
+    PERFORM public.remove_company_member(v_company, v_p, false);
+
+    -- ============ D4: pendente de confirmacao expira em 72h (preguicoso, sem cron) =================
+    v_r := public.invite_company_member(v_company, 'Gil QA', 'encarregado');
+    v_tok_p := v_r ->> 'invite_token';
+    PERFORM pg_temp.as_user(v_p);
+    PERFORM public.accept_company_member_invite(v_tok_p, true);
+    PERFORM pg_temp.as_server();
+    UPDATE public.company_members SET accepted_at = now() - interval '73 hours'
+     WHERE company_id = v_company AND user_id = v_p AND status = 'active';
+    PERFORM pg_temp.as_user(v_dono);
+    SELECT i INTO v_item FROM jsonb_array_elements(public.list_company_members(v_company) -> 'items') AS i
+     WHERE i ->> 'user_id' = v_p::text AND i ->> 'status' = 'active';
+    IF v_item ->> 'state' IS DISTINCT FROM 'pending_expired' THEN RAISE EXCEPTION 'D4: estado %.', v_item; END IF;
+    IF public.confirm_company_member(v_company, v_p, 'Gil QA') ->> 'outcome' <> 'expired' THEN
+        RAISE EXCEPTION 'D4: confirmar apos 72h nao devolveu expired.'; END IF;
+    PERFORM pg_temp.as_server();
+    IF EXISTS (SELECT 1 FROM public.company_members WHERE company_id = v_company AND user_id = v_p AND status = 'active') THEN
+        RAISE EXCEPTION 'D4: expirado continuou ativo.'; END IF;
+    -- pendente expirado NAO prende a pessoa: um convite novo e aceito (nao vira already_accepted)
+    PERFORM pg_temp.as_user(v_dono);
+    v_tok_p := public.invite_company_member(v_company, 'Gil QA', 'encarregado') ->> 'invite_token';
+    PERFORM pg_temp.as_user(v_p);
+    PERFORM public.accept_company_member_invite(v_tok_p, true);
+    PERFORM pg_temp.as_server();
+    UPDATE public.company_members SET accepted_at = now() - interval '73 hours'
+     WHERE company_id = v_company AND user_id = v_p AND status = 'active';
+    PERFORM pg_temp.as_user(v_dono);
+    v_tok_p := public.invite_company_member(v_company, 'Gil QA', 'encarregado') ->> 'invite_token';
+    PERFORM pg_temp.as_user(v_p);
+    IF public.accept_company_member_invite(v_tok_p, true) ->> 'outcome' <> 'accepted' THEN
+        RAISE EXCEPTION 'D4: entrada expirada prendeu a pessoa fora da equipe.'; END IF;
+
+    -- LGPD/L3: anular accepted_email (o que anonymize_account faz) expurga SO os avisos daquele membro
+    PERFORM pg_temp.as_server();
+    SELECT id INTO v_mid_p FROM public.company_members
+     WHERE company_id = v_company AND user_id = v_p AND status = 'active';
+    IF NOT EXISTS (SELECT 1 FROM public.notifications WHERE title = 'Nova pessoa na equipe'
+                    AND link = '/company/configuracoes/equipe?membro=' || v_mid_p::text) THEN
+        RAISE EXCEPTION 'LGPD (setup): nao havia aviso ligado ao membro.'; END IF;
+    SELECT count(*) INTO v_n FROM public.notifications
+     WHERE title = 'Nova pessoa na equipe'
+       AND link IS DISTINCT FROM '/company/configuracoes/equipe?membro=' || v_mid_p::text;
+    UPDATE public.company_members SET accepted_email = NULL WHERE id = v_mid_p;
+    IF EXISTS (SELECT 1 FROM public.notifications WHERE title = 'Nova pessoa na equipe'
+                AND link = '/company/configuracoes/equipe?membro=' || v_mid_p::text) THEN
+        RAISE EXCEPTION 'LGPD: aviso do membro sobreviveu a anulacao de accepted_email.'; END IF;
+    IF (SELECT count(*) FROM public.notifications
+         WHERE title = 'Nova pessoa na equipe'
+           AND link IS DISTINCT FROM '/company/configuracoes/equipe?membro=' || v_mid_p::text) <> v_n THEN
+        RAISE EXCEPTION 'L3: o expurgo apagou avisos de outro membro.'; END IF;
+
+    -- ============ D3: last_manager ==================================================================
+    -- Por estas RPCs quem remove ja e Gestor e nao se remove, entao last_manager e defesa em
+    -- profundidade; a invariante e exercitada no helper, com um estado sintetico desfeito em seguida.
+    IF NOT public.internal_company_has_gestor_besides_member(v_company, v_mgr) THEN
+        RAISE EXCEPTION 'D3: com dono vivo deveria sobrar Gestor.'; END IF;
+    BEGIN
+        UPDATE public.companies SET anonymized_at = now() WHERE id = v_company;
+        UPDATE public.organization_members om SET status = 'removed'
+          FROM public.companies c WHERE c.id = v_company AND om.organization_id = c.organization_id;
+        IF public.internal_company_has_gestor_besides_member(v_company, v_mgr) THEN
+            RAISE EXCEPTION 'D3: sem dono/operador, o unico manager deveria ser o ultimo Gestor.'; END IF;
+        RAISE EXCEPTION 'desfaz-estado-sintetico';
+    EXCEPTION WHEN raise_exception THEN
+        GET STACKED DIAGNOSTICS v_t = MESSAGE_TEXT;
+        IF v_t <> 'desfaz-estado-sintetico' THEN RAISE EXCEPTION '%', v_t; END IF;
+    END;
+    -- revoke_company_manager (editada na E4): grava removed_by/removed_at; a pendencia derivada acende
+    INSERT INTO public.company_members (company_id, user_id, role, status, created_by, accepted_at, display_name)
+    VALUES (v_company, v_m2, 'manager', 'active', v_dono, now(), 'QA Gestor 2');
+    UPDATE public.company_members SET removed_at = now() - interval '2 hours'
+     WHERE company_id = v_company AND status = 'removed';
+    UPDATE public.company_invite_links SET rotated_at = now() - interval '1 hour' WHERE company_id = v_company;
+    PERFORM pg_temp.as_user(v_dono);
+    IF (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'M1 (setup): pendencia deveria estar apagada antes de revogar o Gestor.'; END IF;
+    IF public.revoke_company_manager(v_company, v_m2) ->> 'outcome' <> 'revoked' THEN
+        RAISE EXCEPTION 'D3: revoke_company_manager falhou.'; END IF;
+    IF NOT (public.list_company_members(v_company) ->> 'elenco_link_rotation_pending')::boolean THEN
+        RAISE EXCEPTION 'M1: revogar Gestor que aceitou nao acendeu a pendencia derivada.'; END IF;
+    PERFORM pg_temp.as_server();
+    IF NOT EXISTS (SELECT 1 FROM public.company_members
+                    WHERE user_id = v_m2 AND status = 'removed' AND removed_by = v_dono AND removed_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'D3: revoke_company_manager sem removed_by/removed_at.'; END IF;
 
     -- ============ Gestor (entrou por invite_company_manager) + LGPD ================================
     -- Gestor NAO entra por link de equipe (H1). Aqui o servidor simula o Gestor ja ativo, com PII, para

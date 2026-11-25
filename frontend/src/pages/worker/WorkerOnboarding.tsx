@@ -11,6 +11,8 @@ import { logError } from '../../lib/logger'
 import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
 
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../../types';
+import { checkSession } from '../../lib/authSession';
+import ErroDeCarga from '../../components/ErroDeCarga';
 
 /**
  * Converte os cinco chips rápidos do cadastro na grade dia×período do F7.
@@ -101,17 +103,23 @@ export default function WorkerOnboarding() {
         'Manhã', 'Tarde', 'Noite', 'Madrugada', 'Fim de Semana'
     ];
 
+    const [erroSessao, setErroSessao] = useState(false);
+    const [tentativa, setTentativa] = useState(0);
+
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUserId(data.user.id);
-                checkIfOnboardingComplete(data.user.id);
-            } else {
+        checkSession().then((session) => {
+            if (session.status === 'ok') {
+                setErroSessao(false);
+                setUserId(session.user.id);
+                checkIfOnboardingComplete(session.user.id);
+            } else if (session.status === 'signed_out') {
                 navigate('/login');
+            } else {
+                setErroSessao(true);
             }
         });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- carrega dados iniciais apenas no mount, navigate estavel
-    }, [navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- carrega dados iniciais no mount e a cada nova tentativa
+    }, [navigate, tentativa]);
 
     const checkIfOnboardingComplete = async (uid: string) => {
         const { data } = await supabase
@@ -330,6 +338,12 @@ export default function WorkerOnboarding() {
                 ? 'bg-primary-dark text-white border-black'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-black'
         }`;
+
+    if (erroSessao) return (
+        <div className="mx-auto max-w-md p-4 pt-10">
+            <ErroDeCarga onRetry={() => { setErroSessao(false); setTentativa((n) => n + 1); }} />
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">

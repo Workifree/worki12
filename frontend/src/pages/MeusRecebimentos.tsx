@@ -9,7 +9,7 @@ import {
     XCircle,
     Building2,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { checkSession } from '../lib/authSession';
 import { PaymentRecordService } from '../services/paymentRecordService';
 import type { WorkerShiftPaymentListItem } from '../services/paymentRecordService';
 import { logError } from '../lib/logger';
@@ -157,10 +157,12 @@ export default function MeusRecebimentos() {
         const fetchPayments = async () => {
             setLoading(true);
             try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) { navigate('/login'); return; }
+                const session = await checkSession();
+                if (!active) return;
+                if (session.status === 'signed_out') { navigate('/login'); return; }
+                if (session.status === 'unavailable') throw session.error;
 
-                const data = await PaymentRecordService.listForWorker(user.id);
+                const data = await PaymentRecordService.listForWorkerChecked(session.user.id);
                 if (active) { setItems(data); setErroCarga(false); }
             } catch (error) {
                 logError('MeusRecebimentos: fetchPayments', error);

@@ -21,7 +21,7 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, Field } from '../components/ui';
-import { PENDING_TEAM_INVITE_TOKEN_KEY, readPendingTeamInviteToken } from '../lib/teamInviteToken';
+import { clearPendingTeamInviteToken, readPendingTeamInviteToken, storePendingTeamInviteToken } from '../lib/teamInviteToken';
 import { acceptMemberInvite, getInvitePreview, ROLE_LABEL } from '../services/teamMembersService';
 import type { AcceptMemberInviteOutcome, InvitePreviewResult } from '../types';
 
@@ -76,13 +76,8 @@ const OUTCOME_COPY: Record<
 
 type TerminalOutcome = keyof typeof OUTCOME_COPY;
 
-function clearStoredToken() {
-  try {
-    sessionStorage.removeItem(PENDING_TEAM_INVITE_TOKEN_KEY);
-  } catch {
-    // best-effort
-  }
-}
+/** Token morto não pode ficar guardado: o ProtectedRoute o usaria para redirecionar em ciclo. */
+const clearStoredToken = clearPendingTeamInviteToken;
 
 export default function AcceptTeamInvite() {
   const { token: paramToken } = useParams<{ token: string }>();
@@ -106,13 +101,13 @@ export default function AcceptTeamInvite() {
       setPreview({ outcome: 'not_found' });
       return;
     }
-    try {
-      sessionStorage.setItem(PENDING_TEAM_INVITE_TOKEN_KEY, token);
-    } catch {
-      // sessionStorage indisponível — o token segue na URL da própria rota
-    }
     setPreview(null);
     const result = await getInvitePreview(token);
+    // Só um convite VÁLIDO fica guardado (rede de segurança do reload/login). Convite inexistente,
+    // vencido ou revogado apaga o que houver, para não prender a conta num redirecionamento em ciclo.
+    // Falha de rede (`error`) preserva o estado anterior: o convite pode estar bom.
+    if (result.outcome === 'ok') storePendingTeamInviteToken(token);
+    else if (result.outcome !== 'error') clearStoredToken();
     setPreview(result);
   }, [token]);
 
@@ -155,6 +150,8 @@ export default function AcceptTeamInvite() {
       setFormError('Para entrar, aceite os Termos de Uso e a Política de Privacidade.');
       return;
     }
+    // Todo desfecho terminal (not_found, expired, revoked, token_already_used...) descarta o token.
+    if (result.outcome !== 'error' && result.outcome !== 'unauthenticated') clearStoredToken();
     // Desfecho fora do contrato (RPC nova, resposta estranha) cai em 'error' em vez de tela branca.
     setTerminal(result.outcome in OUTCOME_COPY ? (result.outcome as TerminalOutcome) : 'error');
     setStep('form');
@@ -215,6 +212,7 @@ export default function AcceptTeamInvite() {
     if (data.user.user_metadata?.user_type === 'work') {
       // E-mail que já é de freela: não cria nem move conta de empresa (Article 1).
       setSessionIsWorker(true);
+      clearStoredToken();
       setTerminal('worker_cannot_be_manager');
       return;
     }
@@ -284,7 +282,7 @@ export default function AcceptTeamInvite() {
   if (preview.outcome === 'error') {
     return frame(
       <>
-        {alerta('error', 'Não foi possível abrir o convite', 'Verifique sua conexão e tente de novo.')}
+        {alerta('error', 'Não foi possível abrir o convite', 'Não conseguimos abrir o convite agora. Tente de novo em instantes. Se continuar, peça um novo link ao Gestor.')}
         <Button variant="dark" size="lg" fullWidth onClick={() => void loadPreview()}>
           Tentar de novo
         </Button>

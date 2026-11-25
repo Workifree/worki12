@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../lib/logger';
 import { Card } from './ui';
+import ErroDeCarga from './ErroDeCarga';
 
 interface ReviewRow {
     id: string;
@@ -54,6 +55,8 @@ export default function ProfileReviews({
 }) {
     const [reviews, setReviews] = useState<ReviewRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let active = true;
@@ -62,6 +65,7 @@ export default function ProfileReviews({
         void (async () => {
             if (!reviewedId) { setLoading(false); return; }
             setLoading(true);
+            setFailed(false);
             try {
                 const { data, error } = await supabase.rpc('get_profile_reviews', {
                     p_reviewed_id: reviewedId,
@@ -89,12 +93,13 @@ export default function ProfileReviews({
                 })));
             } catch (error) {
                 logError('ProfileReviews', error);
+                if (active) setFailed(true);
             } finally {
                 if (active) setLoading(false);
             }
         })();
         return () => { active = false; };
-    }, [reviewedId, reviewerRole]);
+    }, [reviewedId, reviewerRole, reloadKey]);
 
     return (
         <Card as="section" className="mt-6">
@@ -106,6 +111,8 @@ export default function ProfileReviews({
                 <div className="space-y-3 animate-pulse">
                     {[...Array(2)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
                 </div>
+            ) : failed ? (
+                <ErroDeCarga onRetry={() => setReloadKey((k) => k + 1)} mensagem="Não foi possível carregar as avaliações." />
             ) : reviews.length === 0 ? (
                 <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
                     Ainda sem avaliações. Elas aparecem aqui após turnos concluídos.

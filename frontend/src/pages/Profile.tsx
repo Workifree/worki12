@@ -20,6 +20,8 @@ import { TeamConnectionService } from '../services/teamConnectionService';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../types';
 import { SHIFT_CATEGORIES } from '../components/company/shiftCategories';
+import { checkSession } from '../lib/authSession';
+import ErroDeCarga from '../components/ErroDeCarga';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -116,14 +118,14 @@ interface FormData {
  * Turno concluido sem check-in ou sem check-out soma zero: nao ha o que medir, e estimar de novo
  * seria repetir o erro. Falha de leitura devolve 0 em vez de derrubar o perfil.
  */
-async function somarHorasRegistradas(workerId: string): Promise<number> {
+async function somarHorasRegistradas(workerId: string): Promise<number | null> {
     try {
         const { data, error } = await supabase
             .from('applications')
             .select('worker_checkin_at, worker_checkout_at')
             .eq('worker_id', workerId)
             .eq('status', 'completed');
-        if (error || !data) return 0;
+        if (error || !data) return null;
 
         const ms = data.reduce((total, row) => {
             if (!row.worker_checkin_at || !row.worker_checkout_at) return total;
@@ -135,7 +137,7 @@ async function somarHorasRegistradas(workerId: string): Promise<number> {
 
         return Math.floor(ms / 3_600_000);
     } catch {
-        return 0;
+        return null;
     }
 }
 
@@ -145,6 +147,7 @@ export default function Profile() {
     const [loading, setLoading] = useState(true);
     const [salvando, setSalvando] = useState(false);
     const [profile, setProfile] = useState<WorkerProfile | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
@@ -231,7 +234,7 @@ export default function Profile() {
     }, [isDirty, handleBeforeUnload]);
 
 
-    const [stats, setStats] = useState({
+    const [stats, setStats] = useState<{ completedJobs: number; totalEarnings: number; hoursWorked: number | null }>({
         completedJobs: 0,
         totalEarnings: 0,
         hoursWorked: 0
@@ -288,8 +291,14 @@ export default function Profile() {
 
     useEffect(() => {
         const fetchProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return navigate('/login');
+            const session = await checkSession();
+            if (session.status === 'signed_out') return navigate('/login');
+            if (session.status === 'unavailable') {
+                logError('Profile.session', session.error);
+                setLoading(false); // sem `profile`: a tela mostra erro com "Tentar de novo"
+                return;
+            }
+            const user = session.user;
 
             setWorkerId(user.id);
 
@@ -329,7 +338,7 @@ export default function Profile() {
         };
 
         fetchProfile();
-    }, [navigate]);
+    }, [navigate, reloadKey]);
 
     // Best-effort: recomputa XP/nível/ganhos/turnos via RPC (recompute_my_aggregates,
     // SECURITY DEFINER, usa auth.uid()) e mescla o resultado no state do perfil, para a
@@ -354,7 +363,7 @@ export default function Profile() {
                     ...prev,
                     completedJobs: data.completed_jobs_count ?? prev.completedJobs,
                     totalEarnings: data.earnings_total ?? prev.totalEarnings,
-                    hoursWorked: horasReais
+                    hoursWorked: horasReais ?? prev.hoursWorked
                 }));
             }
         } catch (error) {
@@ -621,7 +630,11 @@ export default function Profile() {
         </div>
     );
 
-    if (!profile) return <div className="text-center p-8">Erro ao carregar perfil.</div>;
+    if (!profile) return (
+        <div className="mx-auto max-w-3xl pt-6 pb-12">
+            <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey((k) => k + 1); }} />
+        </div>
+    );
 
     // Pares Cancelar/Salvar: UMA definição, renderizada no hero (desktop) e na barra fixa (mobile).
     // CTA único de salvar — mesmo texto, mesma variante, mesmo estado de loading nos dois lugares.
@@ -813,7 +826,7 @@ export default function Profile() {
                         <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
-                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked}h</dd>
+                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked === null ? '—' : `${stats.hoursWorked}h`}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">

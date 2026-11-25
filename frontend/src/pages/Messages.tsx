@@ -9,6 +9,7 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
 import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../components/ui'
+import { checkSession } from '../lib/authSession';
 
 interface ConversationItem {
     id: string;
@@ -103,8 +104,15 @@ export default function Messages() {
     // Load conversations and unread counts
     useEffect(() => {
         const loadData = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return navigate('/login');
+            const session = await checkSession();
+            if (session.status === 'signed_out') return navigate('/login');
+            if (session.status === 'unavailable') {
+                logError('Messages.session', session.error);
+                setErroCarga(true);
+                setLoading(false);
+                return;
+            }
+            const user = session.user;
             setCurrentUser(user.id);
 
             // Fetch conversations with job and company info

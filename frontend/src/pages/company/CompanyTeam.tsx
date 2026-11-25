@@ -344,7 +344,7 @@ export default function CompanyTeam() {
       {/* Modal de Confirmação de Exclusão de Lista (F2/R7) */}
       {deletingList && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingList) setDeletingList(null);
           }}

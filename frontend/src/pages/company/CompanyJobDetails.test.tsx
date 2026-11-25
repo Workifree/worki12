@@ -46,6 +46,7 @@ vi.mock('../../services/companyScopeService', () => ({
   pickCurrentCompany: () => null,
   subscribeCompanyScope: () => () => undefined,
   isGestor: () => true,
+  hasTeamNav: () => false,
 }))
 
 const JOB_DATA = {
@@ -215,6 +216,8 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
     })
+    // D-8: dono único (sem equipe) não ganha "Cancelar turno"
+    expect(screen.queryByText('Cancelar turno')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Excluir'))
 
     await waitFor(() => {
@@ -250,6 +253,8 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
     })
+    // D-8: dono único (sem equipe) não ganha "Cancelar turno"
+    expect(screen.queryByText('Cancelar turno')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Excluir'))
 
     await waitFor(() => {
@@ -283,6 +288,8 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
     })
+    // D-8: dono único (sem equipe) não ganha "Cancelar turno"
+    expect(screen.queryByText('Cancelar turno')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Excluir'))
 
     await waitFor(() => {
@@ -330,6 +337,8 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     await waitFor(() => {
       expect(screen.getByText('Excluir')).toBeInTheDocument()
     })
+    // D-8: dono único (sem equipe) não ganha "Cancelar turno"
+    expect(screen.queryByText('Cancelar turno')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Excluir'))
 
     await waitFor(() => {

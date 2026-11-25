@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import LocalDoTurno from '../components/LocalDoTurno';
 import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
+import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
 import { CheckCircle2, Clock, XCircle, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
 import { Button, Card, PageHeader } from '../components/ui';
@@ -52,11 +53,11 @@ export function computeWorkerSteps(job: JobApplication): Step[] {
 
     return [
         {
-            label: 'Chegada registrada',
+            label: checkinDone ? 'Chegada registrada' : 'Registrar chegada',
             status: checkinDone ? 'complete' : 'active'
         },
         {
-            label: 'Check-out',
+            label: checkoutDone ? 'Saída registrada' : 'Registrar saída',
             status: checkoutDone
                 ? 'complete'
                 : checkinDone && !checkoutDone
@@ -64,7 +65,9 @@ export function computeWorkerSteps(job: JobApplication): Step[] {
                     : 'pending'
         },
         {
-            label: 'Aguardando empresa',
+            label: companyConfirmed
+                ? 'Empresa confirmou'
+                : checkoutDone ? 'Aguardando empresa' : 'Confirmação da empresa',
             status: companyConfirmed
                 ? 'complete'
                 : checkoutDone && !companyConfirmed
@@ -95,6 +98,50 @@ export interface JobApplication {
     company_checkin_confirmed_at: string | null;
     company_checkout_confirmed_at: string | null;
     created_at?: string;
+}
+
+/**
+ * Traduz a recusa do guard de `applications` (migration 20261125000200,
+ * `applications_update_guard`) em frase clara. Devolve `null` para qualquer outro erro.
+ * O texto cru do banco nunca chega à tela.
+ */
+function attendanceGuardMessage(
+    error: unknown,
+    startDate: string | null | undefined,
+    startTime: string | null | undefined,
+): string | null {
+    const raw = (error as { message?: unknown } | null)?.message;
+    if (typeof raw !== 'string' || !raw.includes('applications_update_guard')) return null;
+    if (raw.includes('este turno foi cancelado')) return 'Este turno foi cancelado.';
+    if (raw.includes('horario de presenca no futuro')) return 'O horário não pode ser no futuro.';
+    if (raw.includes('ainda nao e possivel registrar a chegada')) {
+        const opens = checkinOpensAt(startDate, startTime);
+        return opens
+            ? `Só dá para registrar a chegada a partir de ${opens}.`
+            : 'Ainda não dá para registrar a chegada neste turno.';
+    }
+    if (raw.includes('registro de presenca ja gravado')) {
+        return 'Essa presença já foi registrada. Atualize a página.';
+    }
+    return 'Não foi possível fazer isso agora. Atualize a página e tente novamente.';
+}
+
+/**
+ * Abertura da janela de chegada, igual ao banco: 12h antes da data do turno (em São Paulo) com
+ * `work_start_time`; sem horário válido, 00:00. São Paulo é UTC-3 (sem horário de verão).
+ */
+function checkinOpensAt(startDate: string | null | undefined, startTime: string | null | undefined): string | null {
+    if (!startDate) return null;
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) return null;
+    const zone = 'America/Sao_Paulo';
+    const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(start).split('-').map(Number);
+    const time = /^([01]\d|2[0-3]):[0-5]\d/.test(startTime ?? '') ? (startTime as string).slice(0, 5) : '00:00';
+    const [h, min] = time.split(':').map(Number);
+    const opens = new Date(Date.UTC(y, m - 1, d, h + 3 - 12, min));
+    const day = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, day: '2-digit', month: '2-digit' }).format(opens);
+    const hour = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, hour: '2-digit', minute: '2-digit' }).format(opens);
+    return `${day} às ${hour}`;
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
@@ -222,13 +269,21 @@ export default function MyJobs() {
     const { addToast } = useToast();
 
     // Hook de convites push
-    const { pendingInvites, loading: invitesLoading, respondingId, respond } = useWorkerInvites();
+    const {
+        pendingInvites,
+        loading: invitesLoading,
+        error: invitesError,
+        refresh: refreshInvites,
+        respondingId,
+        respond,
+    } = useWorkerInvites();
 
     // Confirmação de véspera (D-1) — pedidos pendentes (`response IS NULL`) endereçados a este
     // freela. Fetch independente do `fetchJobs` (mesmo padrão de `useWorkerInvites`): a tela não
     // precisa esperar o histórico completo carregar para mostrar o card de confirmação.
     const [pendingConfirmations, setPendingConfirmations] = useState<ShiftAttendanceConfirmation[]>([]);
     const [confirmationsLoading, setConfirmationsLoading] = useState(true);
+    const [erroConfirmacoes, setErroConfirmacoes] = useState(false);
     const [respondingConfirmationId, setRespondingConfirmationId] = useState<string | null>(null);
     // R7/A3/A4 (requisito duro, não superado pelo ddl-aprovado.md): depois de responder, o card
     // NÃO some — troca os botões por um badge ("Confirmado"/"Avisou que não vai"), pra o freela
@@ -246,14 +301,28 @@ export default function MyJobs() {
     >({});
 
     const fetchJobs = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return navigate('/login');
+        const session = await checkSession();
+        if (session.status === 'signed_out') return navigate('/login');
+        if (session.status === 'unavailable') {
+            logError('MyJobs.fetchJobs.session', session.error);
+            setErroCarga(true);
+            setLoading(false);
+            return;
+        }
+        const user = session.user;
 
         // Fetch my reviews to know what I've rated
-        const { data: myReviews } = await supabase
+        const { data: myReviews, error: reviewsError } = await supabase
             .from('reviews')
             .select('job_id')
             .eq('reviewer_id', user.id);
+        // Sem saber o que já foi avaliado, a tela ofereceria (e abriria sozinha) avaliação repetida.
+        if (reviewsError) {
+            logError('MyJobs.fetchJobs.reviews', reviewsError);
+            setErroCarga(true);
+            setLoading(false);
+            return;
+        }
 
         const reviewedSet = new Set(myReviews?.map(r => r.job_id) || []);
         setReviewedJobIds(reviewedSet);
@@ -396,10 +465,12 @@ export default function MyJobs() {
 
     const fetchConfirmations = useCallback(async () => {
         try {
-            const rows = await AttendanceConfirmationService.getMyPendingConfirmations();
+            const rows = await AttendanceConfirmationService.getMyPendingConfirmationsChecked();
             setPendingConfirmations(rows);
+            setErroConfirmacoes(false);
         } catch (err) {
             logError('MyJobs.fetchConfirmations', err);
+            setErroConfirmacoes(true);
         } finally {
             setConfirmationsLoading(false);
         }
@@ -477,6 +548,12 @@ export default function MyJobs() {
     // RLS negado silenciosamente): sob RLS um UPDATE cuja linha não casa mais com a policy
     // USING retorna 0 linhas sem erro (PostgREST 204). Sem checar `data`, a UI diria "check-in
     // realizado" com o banco intocado.
+    /** Frase clara para a recusa do banco, com a janela de chegada do turno certo. */
+    const guardMessageFor = (appId: string, error: unknown): string | null => {
+        const job = [...jobs.in_progress, ...jobs.scheduled].find((j) => j.id === appId);
+        return attendanceGuardMessage(error, job?.raw_date, job?.time);
+    };
+
     const handleCheckin = async (appId: string) => {
         setActionLoading(appId);
         try {
@@ -498,7 +575,7 @@ export default function MyJobs() {
             await fetchJobs();
         } catch (err) {
             logError('Error checking in:', err);
-            addToast('Erro ao fazer check-in. Tente novamente.', 'error');
+            addToast(guardMessageFor(appId, err) ?? 'Erro ao fazer check-in. Tente novamente.', 'error');
         } finally {
             setActionLoading(null);
         }
@@ -522,7 +599,7 @@ export default function MyJobs() {
             await fetchJobs();
         } catch (err) {
             logError('Error checking out:', err);
-            addToast('Erro ao fazer check-out. Tente novamente.', 'error');
+            addToast(guardMessageFor(appId, err) ?? 'Erro ao fazer check-out. Tente novamente.', 'error');
         } finally {
             setActionLoading(null);
         }
@@ -555,7 +632,7 @@ export default function MyJobs() {
             await fetchJobs();
         } catch (err) {
             logError('Error cancelling shift:', err);
-            addToast('Erro ao cancelar turno. Tente novamente.', 'error');
+            addToast(attendanceGuardMessage(err, null, null) ?? 'Erro ao cancelar turno. Tente novamente.', 'error');
         } finally {
             setCancelLoading(false);
         }
@@ -638,7 +715,7 @@ export default function MyJobs() {
 
     if (erroCarga && !loading) return (
         <div className="pb-24 max-w-4xl mx-auto pt-6">
-            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); }} />
+            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); refreshInvites?.(); fetchConfirmations(); }} />
         </div>
     );
 
@@ -753,11 +830,16 @@ export default function MyJobs() {
                 </div>
             )}
 
+            {erroConfirmacoes && (
+                <ErroDeCarga onRetry={() => { void fetchConfirmations(); }} mensagem="Não foi possível verificar pedidos de confirmação de presença." />
+            )}
+
             {/* Tabs — Convites PRIMEIRO */}
             <div
                 role="tablist"
                 aria-label="Seções dos seus turnos"
-                className="flex gap-1 border-b-2 border-gray-200 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                // No celular as quatro abas ficam em 2 colunas: rolagem sem barra escondia o Histórico.
+                className="grid grid-cols-2 sm:flex gap-1 border-b-2 border-gray-200"
             >
                 {tabs.map((tab) => (
                     <button
@@ -769,7 +851,7 @@ export default function MyJobs() {
                         aria-controls="meus-turnos-painel"
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-                            min-h-11 px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
+                            min-h-11 justify-center px-2 sm:px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black rounded-t-xl
                             ${activeTab === tab.id
                                 ? 'border-black text-black'
@@ -791,7 +873,9 @@ export default function MyJobs() {
                 id="meus-turnos-painel"
                 role="tabpanel"
                 aria-labelledby={`meus-turnos-tab-${activeTab}`}
-                className="grid gap-4"
+                // `grid-cols-1` = minmax(0,1fr): sem isso a coluna cresce até o maior título (`truncate`
+                // não quebra linha) e o card do Histórico sai da tela a 320px.
+                className="grid grid-cols-1 gap-4"
             >
 
                 {/* ── ABA CONVITES ── */}
@@ -805,7 +889,9 @@ export default function MyJobs() {
                             </div>
                         )}
 
-                        {!invitesLoading && pendingInvites.length === 0 && (
+                        {!invitesLoading && invitesError && <ErroDeCarga onRetry={refreshInvites} />}
+
+                        {!invitesLoading && !invitesError && pendingInvites.length === 0 && (
                             <EmptyState
                                 icon={<Bell size={40} />}
                                 title="Nenhum convite pendente."

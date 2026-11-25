@@ -78,6 +78,7 @@ export interface ReassignResult {
 export type CoverageOutcome =
   | 'created'
   | 'already_covered'
+  | 'starts_in_the_past'
   | 'overlaps'
   | 'from_is_gestor'
   | 'invalid_input'
@@ -117,6 +118,7 @@ export type CancelJobOutcome =
   | 'not_found'
   | 'invalid_input'
   | 'unauthenticated'
+  | 'unavailable'
   | 'error';
 export interface CancelJobResult {
   outcome: CancelJobOutcome;
@@ -221,6 +223,9 @@ function num(value: unknown): number {
 
 // ── Aviso de conflito (R14) ──────────────────────────────────────────────────────────────────
 
+/** Limite de ids por chamada de `get_busy_workers` (acima disso a RPC recusa com invalid_input). */
+const BUSY_BATCH_SIZE = 200;
+
 /**
  * Freelas do Elenco que já estão ocupados na janela, em turno de QUALQUER responsável da empresa.
  * Devolve só ids (o banco não diz qual turno, nem de quem). NUNCA lança e nunca bloqueia: erro
@@ -234,22 +239,25 @@ export async function getBusyWorkerIds(params: {
 }): Promise<Set<string>> {
   const { companyId, window: win, workerIds, excludeJobId } = params;
   if (!win || workerIds.length === 0) return new Set();
-  try {
-    const ids = workerIds.slice(0, 200);
-    const { data, error } = await supabase.rpc('get_busy_workers', {
-      p_company_id: companyId,
-      p_start: win.start,
-      p_end: win.end,
-      p_worker_ids: ids,
-      p_exclude_job_id: excludeJobId ?? null,
-    });
-    if (error) throw error;
-    const rows = (data ?? []) as Array<{ worker_id: string }>;
-    return new Set(rows.map((r) => r.worker_id));
-  } catch (err) {
-    logError('shiftOperation.getBusyWorkerIds', err);
-    return new Set();
+  // A RPC aceita no máximo 200 ids por chamada (acima disso recusa tudo): divide em lotes. Lote que
+  // falha vira "sem aviso" só para ele, e os demais seguem.
+  const busy = new Set<string>();
+  for (let i = 0; i < workerIds.length; i += BUSY_BATCH_SIZE) {
+    try {
+      const { data, error } = await supabase.rpc('get_busy_workers', {
+        p_company_id: companyId,
+        p_start: win.start,
+        p_end: win.end,
+        p_worker_ids: workerIds.slice(i, i + BUSY_BATCH_SIZE),
+        p_exclude_job_id: excludeJobId ?? null,
+      });
+      if (error) throw error;
+      ((data ?? []) as Array<{ worker_id: string }>).forEach((r) => busy.add(r.worker_id));
+    } catch (err) {
+      logError('shiftOperation.getBusyWorkerIds', err);
+    }
   }
+  return busy;
 }
 
 // ── Passar / Cobrir (R18) ────────────────────────────────────────────────────────────────────
@@ -418,8 +426,44 @@ export async function cancelJob(jobId: string, reason?: string): Promise<CancelJ
     };
   } catch (err) {
     logError('shiftOperation.cancelJob', err);
-    return { outcome: 'error', cancelledApplications: 0, cancelledCalls: 0, closedCandidates: 0 };
+    const missing = isMissingFunction(err);
+    if (missing) cancelJobAvailability = Promise.resolve(false);
+    return { outcome: missing ? 'unavailable' : 'error', cancelledApplications: 0, cancelledCalls: 0, closedCandidates: 0 };
   }
+}
+
+function isMissingFunction(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  return e.code === 'PGRST202' || /Could not find the function/i.test(e.message ?? '');
+}
+
+let cancelJobAvailability: Promise<boolean> | null = null;
+
+/** Só para testes: esquece a sondagem. */
+export function resetCancelJobAvailability(): void {
+  cancelJobAvailability = null;
+}
+
+/**
+ * A RPC `cancel_job` existe neste ambiente? (o front pode subir antes da migration E5). Sonda
+ * INÓCUA: com `p_job_id` nulo a função devolve `invalid_input` antes de ler ou gravar qualquer coisa.
+ * Só "função inexistente" (PGRST202) esconde o botão; falha de rede não é cacheada.
+ */
+export function isCancelJobAvailable(): Promise<boolean> {
+  if (cancelJobAvailability) return cancelJobAvailability;
+  const probe = (async () => {
+    try {
+      const { error } = await supabase.rpc('cancel_job', { p_job_id: null, p_reason: null });
+      if (error && isMissingFunction(error)) return false;
+      if (error) cancelJobAvailability = null;
+      return true;
+    } catch {
+      cancelJobAvailability = null;
+      return true;
+    }
+  })();
+  cancelJobAvailability = probe;
+  return probe;
 }
 
 /** Texto em português claro, neutro de gênero, para cada desfecho do cancelamento. */
@@ -452,6 +496,8 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
       return 'Não encontramos esse turno. A lista foi atualizada.';
     case 'unauthenticated':
       return 'Sua sessão expirou. Entre de novo.';
+    case 'unavailable':
+      return 'O cancelamento por aqui ainda não está disponível. Nada foi alterado.';
     default:
       return 'Não foi possível cancelar o turno agora. Tente de novo em instantes.';
   }
@@ -478,6 +524,8 @@ export function reassignMessage(result: ReassignResult): string {
 
 export function coverageMessage(result: CoverageResult): string {
   switch (result.outcome) {
+    case 'starts_in_the_past':
+      return 'A cobertura precisa começar hoje (ou ontem).';
     case 'created':
       return 'Cobertura criada. As duas pessoas foram avisadas.';
     case 'already_covered':
@@ -720,6 +768,7 @@ export async function listOwnJobs(params: {
     };
 
     const own = await fetchRange(userId, from, to);
+    const filledByJob = new Map<string, number>();
     const covered = await Promise.all(
       coverages.map(async (c) => {
         const a = c.startsOn > from ? c.startsOn : from;
@@ -727,6 +776,25 @@ export async function listOwnJobs(params: {
         return b < a ? [] : fetchRange(c.fromUserId, a, b);
       }),
     );
+
+    // Vagas preenchidas de verdade (best-effort): se a leitura falhar, `filled` fica null e a tela
+    // mostra só o total de vagas, sem inventar número.
+    let filledKnown = false;
+    try {
+      const ids = [...new Set([...own, ...covered.flat()].map((r) => r.id))];
+      if (ids.length > 0) {
+        const { data, error } = await supabase
+          .from('applications')
+          .select('job_id')
+          .in('job_id', ids)
+          .in('status', ['hired', 'in_progress', 'completed']);
+        if (error) throw error;
+        ((data ?? []) as Array<{ job_id: string }>).forEach((a) => filledByJob.set(a.job_id, (filledByJob.get(a.job_id) ?? 0) + 1));
+        filledKnown = true;
+      }
+    } catch (err) {
+      logError('shiftOperation.listOwnJobs.filled', err);
+    }
 
     const toItem = (row: JobRow, kind: ResponsibleKind): TodayJob | null => {
       if (!row.start_date) return null;
@@ -738,7 +806,7 @@ export async function listOwnJobs(params: {
         date: toBrazilDateOnly(row.start_date),
         startTime: hhmm(row.work_start_time),
         slots: row.slots,
-        filled: null,
+        filled: filledKnown ? (filledByJob.get(row.id) ?? 0) : null,
         responsibleId: row.responsible_id,
         responsibleKind: kind,
         responsibleLabel: kind === 'self' ? 'Você' : 'Você cobre um colega',

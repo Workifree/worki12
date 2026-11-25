@@ -19,7 +19,7 @@ vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
 const mockListForWorker = vi.fn()
 vi.mock('../services/paymentRecordService', () => ({
   PaymentRecordService: {
-    listForWorker: (...args: unknown[]) => mockListForWorker(...args),
+    listForWorkerChecked: (...args: unknown[]) => mockListForWorker(...args),
   },
 }))
 

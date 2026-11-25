@@ -70,6 +70,30 @@ describe('LinkRiskService.getConfig', () => {
     expect(result).toEqual(DEFAULT_LINK_RISK_CONFIG);
   });
 
+  it.each(['PGRST202'])(
+    'D-1: assinatura com p_company_id inexistente (%s, antes da E5) repete SEM parâmetro e respeita a config',
+    async (code) => {
+      mockRpc
+        .mockResolvedValueOnce({ data: null, error: { code, message: 'Could not find the function public.my_link_risk_config(p_company_id)' } })
+        .mockResolvedValueOnce({ data: { enabled: false, threshold: 1 }, error: null });
+
+      const result = await LinkRiskService.getConfig();
+
+      expect(mockRpc).toHaveBeenNthCalledWith(1, 'my_link_risk_config', { p_company_id: 'co-1' });
+      expect(mockRpc).toHaveBeenNthCalledWith(2, 'my_link_risk_config', undefined);
+      expect(result).toEqual({ enabled: false, threshold: 1 });
+    },
+  );
+
+  it('D-1: erro que não é de função ausente NÃO repete a chamada', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'forbidden' } });
+
+    const result = await LinkRiskService.getConfig();
+
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(DEFAULT_LINK_RISK_CONFIG);
+  });
+
   it('usa o companyId explícito sem consultar o seam', async () => {
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'ok', enabled: false, threshold: 5 }, error: null });
 

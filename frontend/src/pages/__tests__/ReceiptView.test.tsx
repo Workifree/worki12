@@ -14,7 +14,7 @@ vi.mock('../../lib/supabase', () => ({
 
 vi.mock('../../services/paymentRecordService', () => ({
   PaymentRecordService: {
-    getReceipt: vi.fn(),
+    getReceiptChecked: vi.fn(),
     confirmReceiptByWorker: vi.fn(),
   },
 }))
@@ -107,7 +107,7 @@ vi.mock('../../services/companyScopeService', () => ({
 
 describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () => {
   it('repassa o workerId da querystring para getReceipt(jobId, workerId)', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
     vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
 
     render(
@@ -119,23 +119,23 @@ describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () =>
     )
 
     await waitFor(() => {
-      expect(PaymentRecordService.getReceipt).toHaveBeenCalledWith('job-1', 'worker-1')
+      expect(PaymentRecordService.getReceiptChecked).toHaveBeenCalledWith('job-1', 'worker-1')
     })
   })
 
   it('sem ?worker= na URL, chama getReceipt(jobId, undefined) — resolução fica a cargo do service', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
     vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
 
     renderComponent('job-1')
 
     await waitFor(() => {
-      expect(PaymentRecordService.getReceipt).toHaveBeenCalledWith('job-1', undefined)
+      expect(PaymentRecordService.getReceiptChecked).toHaveBeenCalledWith('job-1', undefined)
     })
   })
 
   it('exibe o nome do freela logo abaixo do título — turno com N recibos nunca fica ambíguo', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(
       baseReceipt({}, { id: 'worker-2', full_name: 'Beltrana Segunda', avatar_url: null })
     )
     vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
@@ -160,7 +160,7 @@ describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () =>
   it('workerId alheio: getReceipt (mock) devolve null (RLS não devolveria a linha) — tela mostra "não encontrado", nunca o recibo de outro freela', async () => {
     // O service já garante isso (não é a UI que filtra) — este teste documenta a UI honrando
     // um `null` do service como "não encontrado", sem tentar adivinhar outro recibo.
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(null)
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(null)
     vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
 
     render(
@@ -179,7 +179,7 @@ describe('ReceiptView - parâmetro ?worker= (desambiguação por freela)', () =>
 
 describe('ReceiptView - Horas trabalhadas', () => {
   it('calcula corretamente um turno que cruza a meia-noite (18h10 -> 01h00)', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -206,7 +206,7 @@ describe('ReceiptView - Horas trabalhadas', () => {
   })
 
   it('calcula corretamente um turno dentro do mesmo dia (08h00 -> 16h30)', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -230,7 +230,7 @@ describe('ReceiptView - Horas trabalhadas', () => {
   })
 
   it('não inventa horário: mostra "Não registrado" quando os timestamps não existem', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -253,7 +253,7 @@ describe('ReceiptView - Horas trabalhadas', () => {
   })
 
   it('marca "Não registrado" quando só a chegada existe (sem checkout ainda)', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -278,7 +278,7 @@ describe('ReceiptView - Horas trabalhadas', () => {
 
 describe('ReceiptView - Fallback para confirmação da empresa (freela não usou o app)', () => {
   it('cai para company_checkin_confirmed_at/company_checkout_confirmed_at quando os do freela são nulos, com rótulo de origem', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -309,7 +309,7 @@ describe('ReceiptView - Fallback para confirmação da empresa (freela não usou
   })
 
   it('prioriza a marcação do freela quando ela existe, mesmo com confirmação da empresa também presente', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({
@@ -340,7 +340,7 @@ describe('ReceiptView - Fallback para confirmação da empresa (freela não usou
   })
 
   it('sem nenhum dos dois (freela nem empresa) o bloco continua omitido', async () => {
-    vi.mocked(PaymentRecordService.getReceipt).mockResolvedValue(baseReceipt())
+    vi.mocked(PaymentRecordService.getReceiptChecked).mockResolvedValue(baseReceipt())
 
     const applicationsChain = buildChain({
       maybeSingle: vi.fn().mockResolvedValue({

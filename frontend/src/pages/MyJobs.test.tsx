@@ -53,7 +53,7 @@ const mockGetMyPendingConfirmations = vi.fn()
 const mockRespondConfirmation = vi.fn()
 vi.mock('../services/attendanceConfirmationService', () => ({
   AttendanceConfirmationService: {
-    getMyPendingConfirmations: (...args: unknown[]) => mockGetMyPendingConfirmations(...args),
+    getMyPendingConfirmationsChecked: (...args: unknown[]) => mockGetMyPendingConfirmations(...args),
     respondConfirmation: (...args: unknown[]) => mockRespondConfirmation(...args),
     requestConfirmation: vi.fn(),
     getConfirmationsForJob: vi.fn().mockResolvedValue([]),
@@ -302,5 +302,38 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
       expect(screen.getByText('Você já respondeu')).toBeInTheDocument()
     })
     expect(screen.queryByText('Sim, vou')).not.toBeInTheDocument()
+  })
+})
+
+describe('MyJobs — recusas do banco no check-in', () => {
+  it.each([
+    [
+      'applications_update_guard: ainda nao e possivel registrar a chegada neste turno.',
+      // 12/08 às 18:00 (São Paulo) menos 12h
+      'Só dá para registrar a chegada a partir de 12/08 às 06:00.',
+    ],
+    ['applications_update_guard: este turno foi cancelado.', 'Este turno foi cancelado.'],
+  ])('traduz "%s" sem mostrar o erro cru', async (raw, esperado) => {
+    const { mockAddToast } = setupMocks('2026-08-12T15:00:00+00:00')
+    const row = {
+      ...APPLICATION_ROW,
+      status: 'in_progress',
+      job: { ...APPLICATION_ROW.job, start_date: '2026-08-12T15:00:00+00:00' },
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table !== 'applications') {
+        return thenableChain({ data: [], error: null }) as unknown as ReturnType<typeof supabase.from>
+      }
+      const chain = thenableChain({ data: [row], error: null })
+      chain.update = vi.fn(() => thenableChain({ data: null, error: { message: raw, code: '42501' } }))
+      return chain as unknown as ReturnType<typeof supabase.from>
+    })
+    mockGetMyPendingConfirmations.mockResolvedValue([])
+    renderComponent()
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Em Andamento/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Check-in$/i }))
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(esperado, 'error'))
   })
 })

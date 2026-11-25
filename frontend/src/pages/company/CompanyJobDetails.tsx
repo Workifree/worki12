@@ -9,10 +9,12 @@ import { ptBR } from 'date-fns/locale';
 import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
-import { formatDateOnly } from '../../lib/dateUtils';
-import { getAuthenticatedCompanyId, isGestor } from '../../services/companyScopeService';
+import { formatDateOnly, toBrazilDateOnly } from '../../lib/dateUtils';
+import { getAuthenticatedCompanyId, isGestor, hasTeamNav } from '../../services/companyScopeService';
+import { jobHasStarted } from '../../lib/todayView';
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import CancelJobModal from '../../components/company/CancelJobModal';
+import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { Button, Card } from '../../components/ui';
 
 const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
@@ -47,6 +49,8 @@ export default function CompanyJobDetails() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showCancelJob, setShowCancelJob] = useState(false);
     const currentCompany = useCurrentCompany();
+    // Dono único não ganha a ação (R23); sem a RPC no ambiente, o item também não aparece.
+    const cancelamentoDisponivel = useCancelJobAvailable(hasTeamNav(currentCompany));
     const [activeWorkersCount, setActiveWorkersCount] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
     const { addToast } = useToast();
@@ -171,6 +175,14 @@ export default function CompanyJobDetails() {
         setShowDeleteConfirm(false);
     };
 
+    // "Cancelar turno" (RPC cancel_job) é ação de quem opera em equipe (R23): dono único não ganha
+    // ação nova. Encarregado só cancela antes de o turno começar (depois, o banco recusa).
+    const souGestor = isGestor(currentCompany);
+    const turnoIniciado = job?.start_date
+        ? jobHasStarted(toBrazilDateOnly(job.start_date), job.work_start_time?.slice(0, 5) ?? null)
+        : false;
+    const podeCancelarTurno = cancelamentoDisponivel && hasTeamNav(currentCompany) && (souGestor || !turnoIniciado);
+
     if (loading) return (
         <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-6">
             <div className="h-10 bg-gray-200 rounded w-1/2" />
@@ -221,7 +233,7 @@ export default function CompanyJobDetails() {
             />
         )}
         {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
                 <Card
                     role="dialog"
                     aria-modal="true"
@@ -279,13 +291,15 @@ export default function CompanyJobDetails() {
                                 {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
                                 {job.status === 'open' ? 'Pausar' : 'Reativar'}
                             </button>
-                            <button
-                                role="menuitem"
-                                onClick={() => { setOpenMenu(false); setShowCancelJob(true); }}
-                                className={MENU_ITEM}
-                            >
-                                <XCircle size={16} /> Cancelar turno
-                            </button>
+                            {podeCancelarTurno && (
+                                <button
+                                    role="menuitem"
+                                    onClick={() => { setOpenMenu(false); setShowCancelJob(true); }}
+                                    className={MENU_ITEM}
+                                >
+                                    <XCircle size={16} /> Cancelar turno
+                                </button>
+                            )}
                             <button
                                 role="menuitem"
                                 onClick={() => { setOpenMenu(false); setShowDeleteConfirm(true); }}

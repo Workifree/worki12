@@ -8,6 +8,7 @@ import TosGateModal from './TosGateModal';
 import AguardandoConfirmacao from './AguardandoConfirmacao';
 import AcessoEncerrado from './AcessoEncerrado';
 import { hasTeamMemberHint, readPendingTeamInviteToken } from '../lib/teamInviteToken';
+import ErroDeEmpresa from './ErroDeEmpresa';
 import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
@@ -38,6 +39,8 @@ export default function ProtectedRoute() {
     const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
     // Quem era da equipe e ficou sem nenhuma empresa (removido/revogado): tela neutra, nunca onboarding de CNPJ.
     const [accessEnded, setAccessEnded] = useState(false);
+    // `get_my_companies` falhou: não sabemos se há empresa — mostra erro, nunca decide por ausência.
+    const [scopeError, setScopeError] = useState(false);
     const location = useLocation();
 
     useEffect(() => {
@@ -107,12 +110,11 @@ export default function ProtectedRoute() {
                             setCompanyRole(atual.role);
                             setAwaitingConfirmation(isUnconfirmedEncarregado(atual));
                         }
-                    } catch {
-                        // Falha ABERTA só para quem não tem relação com equipe (onboarding de quem não tem
-                        // empresa). Com convite de equipe pendente ou já aceito, falha FECHADA: tela de espera.
-                        if (hasTeamMemberHint() || readPendingTeamInviteToken() !== null) {
-                            setAwaitingConfirmation(true);
-                        }
+                    } catch (error) {
+                        // Sem saber se esta conta já tem empresa, o formulário de onboarding NÃO abre
+                        // (ele grava por cima da linha existente): tela de erro com "Tentar de novo".
+                        logError('Erro ao verificar a empresa no onboarding', error);
+                        setScopeError(true);
                     }
                     setOnboardingChecked(true);
                     setTosAccepted(true);
@@ -125,7 +127,7 @@ export default function ProtectedRoute() {
 
                     if (!current) {
                         const tokenPendente = readPendingTeamInviteToken();
-                        if (hasTeamMemberHint()) {
+                        if (hasTeamMemberHint(authUser.id)) {
                             // Era da equipe e ficou sem empresa: acesso encerrado, não onboarding de CNPJ.
                             setAccessEnded(true);
                         } else if (tokenPendente) {
@@ -149,13 +151,11 @@ export default function ProtectedRoute() {
                         }
                     }
                 } catch (error) {
+                    // FALHA ao resolver a empresa não é "não tem empresa": nunca vai ao onboarding (que
+                    // gravaria por cima de uma empresa já cadastrada) nem finge tela de espera para o
+                    // dono. Onboarding só com resposta VÁLIDA sem empresa.
                     logError('Erro ao verificar onboarding', error);
-                    if (hasTeamMemberHint() || readPendingTeamInviteToken() !== null) {
-                        // Falha fechada para quem é de equipe: nunca jogar no onboarding de CNPJ.
-                        setAwaitingConfirmation(true);
-                    } else {
-                        setOnboardingRedirect('/company/onboarding');
-                    }
+                    setScopeError(true);
                     setTosAccepted(true);
                 }
 
@@ -194,6 +194,8 @@ export default function ProtectedRoute() {
 
     if (!user) return <Navigate to="/" replace />;
 
+    if (scopeError) return <ErroDeEmpresa />;
+
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
     if (awaitingConfirmation) return <AguardandoConfirmacao />;
     if (accessEnded) return <AcessoEncerrado />;
@@ -231,9 +233,15 @@ export default function ProtectedRoute() {
     } else if (
         userType === 'hire'
         && companyRole === 'encarregado'
-        && pathname.startsWith('/company/configuracoes')
+        && (
+            pathname.startsWith('/company/configuracoes')
+            // Onboarding de CNPJ e perfil da empresa também são do Gestor: a empresa não é dele.
+            || pathname === '/company/onboarding'
+            || pathname === '/company/profile'
+            || pathname.startsWith('/company/profile/')
+        )
     ) {
-        // Equipe/Configurações da empresa são do Gestor. Encarregado nunca administra pessoas.
+        // Equipe/Configurações/perfil da empresa são do Gestor. Encarregado nunca administra pessoas.
         roleRedirectTarget = '/company/dashboard';
     }
 

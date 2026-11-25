@@ -12,14 +12,29 @@ export function useCurrentCompany(enabled = true): MyCompany | null {
     return useCurrentCompanyState(enabled).company;
 }
 
+/** Só o que decide telas/menus: se nada disso mudou, a referência anterior é mantida (sem re-render em cascata). */
+function sameCompany(a: MyCompany | null, b: MyCompany | null): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return a.company_id === b.company_id
+        && a.role === b.role
+        && a.confirmed === b.confirmed
+        && a.team_enabled === b.team_enabled
+        && a.company_name === b.company_name
+        && a.onboarding_completed === b.onboarding_completed
+        && a.accepted_tos === b.accepted_tos;
+}
+
 /**
- * Igual a `useCurrentCompany`, mas diz quando a resolução TERMINOU (`resolved`): `company: null`
- * com `resolved: true` = a sessão não opera nenhuma empresa (ou a consulta falhou), e a tela deve
- * mostrar um estado útil em vez de carregar para sempre.
+ * Igual a `useCurrentCompany`, mas diz quando a resolução TERMINOU (`resolved`) e se ela FALHOU
+ * (`error`): `company: null` com `resolved: true` = a sessão não opera nenhuma empresa (ou a
+ * consulta falhou — então `error: true`). Na falha a empresa anterior NÃO é mantida: um acesso
+ * revogado não pode continuar parecendo ativo.
  */
-export function useCurrentCompanyState(enabled = true): { company: MyCompany | null; resolved: boolean } {
+export function useCurrentCompanyState(enabled = true): { company: MyCompany | null; resolved: boolean; error: boolean } {
     const [company, setCompany] = useState<MyCompany | null>(null);
     const [resolved, setResolved] = useState(false);
+    const [error, setError] = useState(false);
     const [version, setVersion] = useState(0);
 
     useEffect(() => {
@@ -33,9 +48,15 @@ export function useCurrentCompanyState(enabled = true): { company: MyCompany | n
         void (async () => {
             try {
                 const current = pickCurrentCompany(await getMyCompanies());
-                if (active) setCompany(current);
-            } catch (error) {
-                logError('useCurrentCompany', error);
+                if (!active) return;
+                setCompany((prev) => (sameCompany(prev, current) ? prev : current));
+                setError(false);
+            } catch (err) {
+                logError('useCurrentCompany', err);
+                if (active) {
+                    setCompany(null);
+                    setError(true);
+                }
             } finally {
                 if (active) setResolved(true);
             }
@@ -43,5 +64,5 @@ export function useCurrentCompanyState(enabled = true): { company: MyCompany | n
         return () => { active = false; };
     }, [enabled, version]);
 
-    return { company, resolved };
+    return { company, resolved, error };
 }

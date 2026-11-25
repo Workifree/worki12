@@ -9,6 +9,8 @@ import {
   createCoverage,
   createTag,
   getBusyWorkerIds,
+  isCancelJobAvailable,
+  resetCancelJobAvailability,
   listCompanyOperators,
   listJobsByResponsible,
   reassignJobs,
@@ -77,6 +79,19 @@ describe('getBusyWorkerIds', () => {
     expect([...result].sort()).toEqual(['w1', 'w3']);
   });
 
+  it('divide mais de 200 freelas em lotes de 200 e une os resultados', async () => {
+    const ids = Array.from({ length: 450 }, (_, i) => `w${i}`);
+    mockRpc
+      .mockResolvedValueOnce({ data: [{ worker_id: 'w1' }], error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: '22023', message: 'x' } })
+      .mockResolvedValueOnce({ data: [{ worker_id: 'w440' }], error: null });
+    const result = await getBusyWorkerIds({ companyId: 'c1', window: win, workerIds: ids });
+    expect(mockRpc).toHaveBeenCalledTimes(3);
+    expect((mockRpc.mock.calls[0][1] as { p_worker_ids: string[] }).p_worker_ids).toHaveLength(200);
+    expect((mockRpc.mock.calls[2][1] as { p_worker_ids: string[] }).p_worker_ids).toHaveLength(50);
+    expect([...result].sort()).toEqual(['w1', 'w440']);
+  });
+
   it('não consulta sem janela ou sem freelas', async () => {
     expect((await getBusyWorkerIds({ companyId: 'c1', window: null, workerIds: ['w1'] })).size).toBe(0);
     expect((await getBusyWorkerIds({ companyId: 'c1', window: win, workerIds: [] })).size).toBe(0);
@@ -142,6 +157,7 @@ describe('createCoverage', () => {
     expect(coverageMessage({ outcome: 'window_too_long' })).toMatch(/60 dias/);
     expect(coverageMessage({ outcome: 'from_is_gestor' })).toMatch(/Gestor/);
     expect(coverageMessage({ outcome: 'already_covered' })).toMatch(/já está coberto/);
+    expect(coverageMessage({ outcome: 'starts_in_the_past' })).toBe('A cobertura precisa começar hoje (ou ontem).');
   });
 
   it('coverageSpanDays conta dias corridos inclusive', () => {
@@ -277,5 +293,34 @@ describe('tagMessage', () => {
   it('forbidden de atribuição fala do turno; o de gestão fala de criar/arquivar', () => {
     expect(tagMessage('forbidden', 'assign')).toBe('Você não pode alterar a etiqueta deste turno.');
     expect(tagMessage('forbidden')).toBe('Só o Gestor pode criar ou arquivar etiquetas.');
+  });
+});
+
+describe('isCancelJobAvailable (front no ar antes da E5)', () => {
+  beforeEach(() => resetCancelJobAvailability());
+
+  it('sonda inócua (p_job_id nulo); função inexistente esconde o botão e fica em cache', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    expect(await isCancelJobAvailable()).toBe(false);
+    expect(await isCancelJobAvailable()).toBe(false);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('cancel_job', { p_job_id: null, p_reason: null });
+  });
+
+  it('função existente (invalid_input) = disponível; erro de rede não é cacheado como ausência', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'invalid_input' }, error: null });
+    expect(await isCancelJobAvailable()).toBe(true);
+    resetCancelJobAvailability();
+    mockRpc.mockRejectedValueOnce(new Error('rede'));
+    expect(await isCancelJobAvailable()).toBe(true);
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'x' } });
+    expect(await isCancelJobAvailable()).toBe(false);
+  });
+
+  it('cancelJob com a RPC ausente devolve "unavailable" com texto claro', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    const r = await cancelJob('j1');
+    expect(r.outcome).toBe('unavailable');
+    expect(cancelJobMessage(r)).toMatch(/ainda não está disponível/);
   });
 });

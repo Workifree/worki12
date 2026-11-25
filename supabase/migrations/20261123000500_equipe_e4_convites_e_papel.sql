@@ -35,8 +35,46 @@
 -- NO-OP PARA AS 13 CONTAS ATUAIS (company_members esta VAZIA, verificado 23/11/2026): nenhuma funcao
 -- nova e chamada por codigo existente; o CHECK alargado nao altera linha nenhuma; get_my_companies
 -- devolve para dono/operador exatamente as mesmas 7 primeiras colunas (+ confirmed=true,
--- team_enabled=false). Esta migration NAO cria trigger nenhum; logo nao ha o que atravessar para
--- sessao nula (cron/service_role). As RPCs novas respondem 'unauthenticated' a sessao nula.
+-- team_enabled=false). O unico trigger novo (expurgo do aviso, secao 6b) e DEFINER, so dispara ao
+-- anular accepted_email e nao bloqueia nada: sessao nula (cron/service_role) atravessa. As RPCs
+-- novas respondem 'unauthenticated' a sessao nula.
+--
+-- RODADA 4 (red team): coberturas revogadas em toda saida/entrada (sem cobertura zumbi); convite
+-- duplicado por nome NORMALIZADO; confirmacao exige o nome digitado, expira em 72h (preguicosa) e o
+-- aviso ao Gestor traz o e-mail verificado (MASCARADO) e a hora; pendencia de rotacao do link (D5)
+-- DERIVADA em list_company_members (nenhuma coluna: companies tem SELECT USING (true));
+-- last_manager em remove/revoke_company_manager (D3); company_members.removed_by (auditoria).
+-- Runbook: docs/ops-recuperar-acesso-gestor.md.
+--
+-- OUTCOMES (contrato com o frontend):
+--   invite_company_member: invited | already_invited | reinvited | forbidden | invalid_input | not_found
+--   confirm_company_member(company, user, typed_name): confirmed | already_confirmed | expired |
+--     name_mismatch | forbidden | not_found | invalid_input
+--   reject_company_member: rejected | not_pending_confirmation | forbidden | not_found
+--   remove_company_member: removed (+already_removed) | would_remove | last_manager |
+--     cannot_remove_self | forbidden | not_found | invalid_input
+--   revoke_company_manager (F13): revoked | not_found | forbidden | last_manager
+--   list_company_members: ok {items[state: invited|invite_expired|awaiting_confirmation|
+--     pending_expired|active|removed; confirmation_expires_at], elenco_link_rotation_pending}
+--     (elenco_link_rotation_pending: DERIVADO no topo do retorno, so para o Gestor)
+--   (todas: unauthenticated para sessao nula)
+--
+-- L1 (aceito): list_company_members NAO escreve; `pending_expired` e DERIVADO (a linha so vira
+-- removed quando alguem tenta confirmar, revoga, remove ou a pessoa aceita convite novo). A linha
+-- vencida e nao confirmada ainda passa em is_company_member, mas NAO le o Elenco nem opera turno
+-- (ambos exigem confirmacao).
+-- L4: a serializacao de equipe usa o lock advisory 'worki:team:<company>'. O lock de cobertura da
+-- E5 (hoje 'worki:coverage:...') passara a usar a MESMA chave (feito na E5, por outro builder):
+-- sem isso, criar cobertura e remover pessoa em paralelo poderiam deixar cobertura viva.
+-- ORDEM DE LOCKS (sem inversao): toda mudanca de membership/cobertura da equipe (invite, accept,
+-- confirm, reject, remove, revoke_company_manager, e create_responsibility_coverage na E5) pega
+-- PRIMEIRO o advisory 'worki:team:<company>' e SO DEPOIS FOR UPDATE de linha; nenhuma pega dois
+-- locks de equipe. Quem trava linha SEM o advisory (resend_member_invite, revoke_member_invite,
+-- end_responsibility_coverage da E5, anonymize_account) nunca o pede depois, logo nao ha ciclo.
+-- Ordem de linhas: company_members antes de responsibility_coverages (igual a anonymize_account).
+-- Dry-run de remove_company_member nao toma lock nenhum.
+-- L6: bonus_identity_ok (trilha de bonus S2, 20261124000200) pode ja existir quando esta
+-- migration rodar; esta classificada na lista branca do portao (g).
 --
 -- CONTRADICAO A8/A9 DA SPEC (resolvida aqui): A8 pede "token anulado" no aceite; A9 pede
 -- `token_already_used` para a segunda pessoa e `revoked` para link revogado. Com o token em NULL, as
@@ -105,15 +143,23 @@
 --      DROP FUNCTION IF EXISTS public.list_company_members(uuid, boolean);
 --      DROP FUNCTION IF EXISTS public.remove_company_member(uuid, uuid, boolean);
 --      DROP FUNCTION IF EXISTS public.reject_company_member(uuid, uuid);
---      DROP FUNCTION IF EXISTS public.confirm_company_member(uuid, uuid);
+--      DROP FUNCTION IF EXISTS public.confirm_company_member(uuid, uuid, text);
+--      DROP TRIGGER IF EXISTS trg_company_members_purge_join_notice ON public.company_members;
+--      DROP FUNCTION IF EXISTS public.purge_member_join_notification();
+--      (antes de dropar os helpers: reverter revoke_company_manager — recriar de 20260818100300
+--       + filtro role='manager' de E0)
 --      DROP FUNCTION IF EXISTS public.revoke_member_invite(uuid);
 --      DROP FUNCTION IF EXISTS public.resend_member_invite(uuid);
 --      DROP FUNCTION IF EXISTS public.invite_company_member(uuid, text, text);
 --      DROP FUNCTION IF EXISTS public.internal_drop_empty_company_shell(uuid);
 --      DROP FUNCTION IF EXISTS public.internal_notify_member_event(uuid, text, text, text);
 --      DROP FUNCTION IF EXISTS public.internal_company_gestor_ids(uuid);
+--      DROP FUNCTION IF EXISTS public.internal_revoke_member_coverages(uuid, uuid);
+--      DROP FUNCTION IF EXISTS public.internal_company_has_gestor_besides_member(uuid, uuid);
+--      DROP FUNCTION IF EXISTS public.normalize_member_name(text);
 --   5. DROP INDEX IF EXISTS public.idx_company_members_invite_token_hash;
---      ALTER TABLE public.company_members DROP COLUMN IF EXISTS invite_token_hash;
+--      ALTER TABLE public.company_members DROP COLUMN IF EXISTS invite_token_hash,
+--          DROP COLUMN IF EXISTS removed_by;
 
 -- ============================================================================
 -- 0. PORTAO — o catalogo precisa ser o que esta migration espera (D4/D5 do gate)
@@ -145,6 +191,8 @@ BEGIN
         'public.company_organization_id(uuid)',
         'public.anonymize_account(uuid)',
         'public.lgpd_guard_auth_user_delete()',
+        'public.revoke_company_manager(uuid, uuid)',
+        'public.get_company_invite_token(boolean, uuid)',
         'public.get_my_companies()'
     ]) AS sig
     LOOP
@@ -212,6 +260,11 @@ BEGIN
                                    'internal_company_active_operator', 'session_company_member_confirmed',
                                    -- E0: delega a is_job_owner (seam); sem leitura propria de membros
                                    'can_review_for_job',
+                                   -- trilha de bonus S2: INTERNA (sem EXECUTE p/ client); delega a
+                                   -- internal_company_confirmed_operator e so decide ATRIBUICAO de
+                                   -- bonus (encarregado confirmado e operador por desenho do C2);
+                                   -- nao concede leitura nem escrita de dado de empresa/freela
+                                   'bonus_identity_ok',
                                    -- E4 (reaplicacao): so confere se a casca esta vazia; nao concede acesso
                                    'internal_drop_empty_company_shell']);
     IF v_unknown IS NOT NULL THEN
@@ -255,8 +308,88 @@ COMMENT ON COLUMN public.company_members.invite_token_hash IS
     'antigo morre como not_found. Equipe e encarregados (E4).';
 
 -- ============================================================================
+-- 1b. Coluna nova de auditoria (rodada 4). Aditiva: no-op para as 13 contas. A pendencia de
+--     rotacao do link NAO tem coluna (companies tem SELECT USING (true)): e derivada na listagem.
+-- ============================================================================
+ALTER TABLE public.company_members
+    ADD COLUMN IF NOT EXISTS removed_by uuid;
+COMMENT ON COLUMN public.company_members.removed_by IS
+    'Quem cortou o acesso (uuid de pessoa, sem FK, pseudonimo retido como created_by). NULL em linha '
+    'removed = expiracao automatica de pendente (72h), anonimizacao ou dado anterior. So RPC grava.';
+
+-- ============================================================================
 -- 2. HELPERS INTERNOS (sem EXECUTE para authenticated/anon)
 -- ============================================================================
+
+-- 2.0 Nome normalizado para comparar (convite duplicado e confirmacao digitada): NFC, minusculas,
+--     sem acentos (translate, sem extensao unaccent), espacos (inclusive nao separavel) colapsados.
+CREATE OR REPLACE FUNCTION public.normalize_member_name(p_name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+    SELECT btrim(regexp_replace(
+        translate(
+            lower(normalize(replace(COALESCE(p_name, ''), chr(160), ' '), NFC)),
+            'áàâãäéèêëíìîïóòôõöúùûüçñýÿ',
+            'aaaaaeeeeiiiiooooouuuucnyy'
+        ),
+        '[[:space:]]+', ' ', 'g'
+    ));
+$fn$;
+COMMENT ON FUNCTION public.normalize_member_name(text) IS
+    'Forma de COMPARACAO de nome de membro (nunca de exibicao): NFC, lower, sem acentos, espacos '
+    'colapsados. Funcao pura, sem leitura de tabela. E4 de equipe-encarregados.';
+REVOKE ALL ON FUNCTION public.normalize_member_name(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.normalize_member_name(text) TO authenticated, service_role;
+
+-- 2.0b Coberturas zumbi: revoga (nunca DELETE) toda cobertura viva em que a pessoa e origem ou destino.
+CREATE OR REPLACE FUNCTION public.internal_revoke_member_coverages(p_company_id uuid, p_user_id uuid)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+    UPDATE public.responsibility_coverages rc
+       SET revoked_at = now()
+     WHERE rc.company_id = p_company_id
+       AND (rc.from_user_id = p_user_id OR rc.to_user_id = p_user_id)
+       AND rc.revoked_at IS NULL;
+$fn$;
+COMMENT ON FUNCTION public.internal_revoke_member_coverages(uuid, uuid) IS
+    'INTERNA. Revoga coberturas vivas da pessoa naquela empresa (saida, revogacao, expiracao e nova '
+    'entrada). Sem isto, remover + reconvidar + confirmar reviveria a cobertura antiga.';
+
+-- 2.0c "Sobra Gestor se a LINHA de membro desta pessoa sair?" Dono com conta viva e empresa nao
+--      anonimizada, operador de organizacao ativo (mesmo que seja a propria pessoa: ela continua
+--      Gestora por essa via), ou OUTRO manager ativo.
+CREATE OR REPLACE FUNCTION public.internal_company_has_gestor_besides_member(p_company_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+    SELECT EXISTS (SELECT 1 FROM public.companies c
+                     JOIN auth.users u ON u.id = COALESCE(c.owner_id, c.id)
+                    WHERE c.id = p_company_id AND c.anonymized_at IS NULL)
+        OR EXISTS (SELECT 1 FROM public.organization_members om
+                     JOIN public.companies c2 ON c2.organization_id = om.organization_id
+                    WHERE c2.id = p_company_id AND om.status = 'active'
+                      AND om.role IN ('owner', 'operator') AND om.user_id IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM public.company_members cm
+                    WHERE cm.company_id = p_company_id AND cm.status = 'active'
+                      AND cm.role = 'manager' AND cm.user_id IS DISTINCT FROM p_user_id);
+$fn$;
+COMMENT ON FUNCTION public.internal_company_has_gestor_besides_member(uuid, uuid) IS
+    'INTERNA. Invariante last_manager (D3): a empresa mantem ao menos um Gestor/dono ativo depois que a '
+    'linha manager desta pessoa sair. Aceita uid de terceiro: sem EXECUTE para o client.';
+
+REVOKE ALL ON FUNCTION public.internal_revoke_member_coverages(uuid, uuid)           FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.internal_company_has_gestor_besides_member(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.internal_revoke_member_coverages(uuid, uuid)           TO service_role;
+GRANT EXECUTE ON FUNCTION public.internal_company_has_gestor_besides_member(uuid, uuid) TO service_role;
 
 -- 2.1 Gestores da empresa: dono + managers ativos + operadores da organizacao dona. O mesmo conjunto
 --     de notification_recipients_for_job (E2), sem o responsavel de turno (aqui nao ha turno).
@@ -451,13 +584,25 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
 
-    -- Convite pendente para o mesmo (nome, papel): devolve o vigente; vencido e reemitido.
+    -- Nome armazenado com espacos colapsados (acentos PRESERVADOS: e texto visivel).
+    v_name := btrim(regexp_replace(replace(v_name, chr(160), ' '), '[[:space:]]+', ' ', 'g'));
+    IF public.normalize_member_name(v_name) = '' THEN
+        RETURN jsonb_build_object('outcome', 'invalid_input');
+    END IF;
+
+    -- O indice de E1 (ja em producao) so compara lower(btrim()): "Jose" e "José" passariam como dois
+    -- convites. A comparacao normalizada e feita aqui, sob lock da empresa (sem corrida).
+    PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || p_company_id::text)::bigint);
+
+    -- Convite pendente para o mesmo (nome normalizado, papel): devolve o vigente; vencido e reemitido.
     SELECT * INTO v_row FROM public.company_members cm
      WHERE cm.company_id = p_company_id
        AND cm.status = 'invited'
        AND cm.role = p_role
        AND cm.display_name IS NOT NULL
-       AND lower(btrim(cm.display_name)) = lower(v_name)
+       AND public.normalize_member_name(cm.display_name) = public.normalize_member_name(v_name)
+     ORDER BY cm.invited_at, cm.id
+     LIMIT 1
      FOR UPDATE;
 
     IF v_row.id IS NOT NULL THEN
@@ -490,7 +635,10 @@ BEGIN
         END IF;
         SELECT * INTO v_row FROM public.company_members cm
          WHERE cm.company_id = p_company_id AND cm.status = 'invited' AND cm.role = p_role
-           AND cm.display_name IS NOT NULL AND lower(btrim(cm.display_name)) = lower(v_name);
+           AND cm.display_name IS NOT NULL
+           AND public.normalize_member_name(cm.display_name) = public.normalize_member_name(v_name)
+         ORDER BY cm.invited_at, cm.id
+         LIMIT 1;
         RETURN jsonb_build_object('outcome', 'already_invited', 'member_id', v_row.id,
                                   'invite_token', v_row.invite_token, 'expires_at', v_row.expires_at);
     END;
@@ -504,7 +652,7 @@ COMMENT ON FUNCTION public.invite_company_member(uuid, text, text) IS
     'Convida ENCARREGADO para a equipe SEM e-mail: nome + papel (so encarregado; manager = '
     'invalid_input, Gestor entra por invite_company_manager), token '
     'aleatorio de 64 hex (generate_invite_token), validade 14 dias. Quem convida: qualquer Gestor '
-    '(is_company_owner). Encarregado nunca convida. Idempotente por (empresa, nome sem caixa, papel): devolve o token '
+    '(is_company_owner). Encarregado nunca convida. Idempotente por (empresa, nome NORMALIZADO — caixa, acentos e espacos —, papel; sob lock da empresa): devolve o token '
     'vigente; vencido e reemitido. O token so e devolvido a quem convida. Outcomes: invited | '
     'already_invited | reinvited | forbidden | invalid_input | not_found | unauthenticated. R11/A7.';
 
@@ -603,6 +751,7 @@ BEGIN
     UPDATE public.company_members
        SET status            = 'removed',
            removed_at        = now(),
+           removed_by        = v_uid,
            invite_token_hash = CASE WHEN invite_token IS NOT NULL
                                     THEN encode(sha256(convert_to(invite_token, 'UTF8')), 'hex')
                                     ELSE invite_token_hash END,
@@ -689,6 +838,7 @@ DECLARE
     v_verified boolean;
     v_g        uuid;
     v_cn       text;
+    v_company  uuid;
 BEGIN
     IF v_uid IS NULL THEN
         RETURN jsonb_build_object('outcome', 'unauthenticated');
@@ -699,8 +849,21 @@ BEGIN
 
     v_hash := encode(sha256(convert_to(v_tok, 'UTF8')), 'hex');
 
-    SELECT * INTO v_row FROM public.company_members cm
+    -- ORDEM DE LOCKS (igual em toda a equipe): 1) lock advisory 'worki:team:<company>', 2) FOR UPDATE
+    -- da linha. Como a empresa so se descobre pela linha, a 1a leitura e SEM lock (so para obter
+    -- company_id) e a linha e RELIDA e revalidada sob os dois locks: se o token foi rotacionado,
+    -- revogado ou consumido nesse meio tempo, os testes abaixo enxergam o estado novo.
+    SELECT cm.company_id INTO v_company FROM public.company_members cm
      WHERE cm.invite_token = v_tok OR cm.invite_token_hash = v_hash
+     LIMIT 1;
+    IF v_company IS NULL THEN
+        RETURN jsonb_build_object('outcome', 'not_found');
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || v_company::text)::bigint);
+
+    SELECT * INTO v_row FROM public.company_members cm
+     WHERE cm.company_id = v_company
+       AND (cm.invite_token = v_tok OR cm.invite_token_hash = v_hash)
      FOR UPDATE;
 
     IF v_row.id IS NULL THEN
@@ -761,6 +924,19 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'email_not_verified');
     END IF;
 
+    -- Entrada anterior desta pessoa que venceu sem confirmacao (72h) nao pode prende-la: vira removed
+    -- agora (expiracao preguicosa) e o convite novo segue. Sem isto o aceite cairia no ramo
+    -- "ja e membro" abaixo e queimaria o convite novo.
+    UPDATE public.company_members
+       SET status = 'removed', removed_at = now(), removed_by = NULL, invite_token = NULL
+     WHERE company_id = v_row.company_id
+       AND user_id    = v_uid
+       AND status     = 'active'
+       AND role       = 'encarregado'
+       AND confirmed_at IS NULL
+       AND COALESCE(accepted_at, invited_at) <= now() - interval '72 hours'
+       AND id <> v_row.id;
+
     -- Ja e membro ATIVO desta empresa por OUTRA linha? Queima este convite redundante (sem 23505 cru).
     SELECT cm.id INTO v_existing
       FROM public.company_members cm
@@ -775,6 +951,10 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'already_accepted',
                                   'company_id', v_row.company_id, 'member_id', v_existing);
     END IF;
+
+    -- Entrada nova nasce SEM heranca: qualquer cobertura antiga da pessoa nesta empresa (removida por
+    -- outro caminho, ex.: dado anterior) e revogada antes de ativar. Cobre todos os caminhos de saida.
+    PERFORM public.internal_revoke_member_coverages(v_row.company_id, v_uid);
 
     BEGIN
         UPDATE public.company_members
@@ -814,12 +994,19 @@ BEGIN
         PERFORM public.internal_notify_member_event(
             v_g,
             'Nova pessoa na equipe',
-            -- Sem e-mail na mensagem (minimizacao): o Gestor o ve na lista da equipe. So o NOME que
-            -- ele mesmo deu ao convidar. Nota LGPD: anonymize_account apaga notificacoes do TITULAR
-            -- (user_id = titular); este aviso mora com o Gestor e mantem o apelido que ele digitou.
-            format('%s entrou na equipe como Encarregado. É a pessoa certa? Confirme ou revogue o acesso.',
-                   COALESCE(v_row.display_name, 'Alguém')),
-            '/company/configuracoes/equipe'
+            -- D4: e-mail VERIFICADO (MASCARADO, L2: jo***@dominio.com) e hora de Sao Paulo, so para o
+            -- Gestor CONFERIR quem entrou antes de confirmar; o e-mail completo fica apenas em
+            -- list_company_members. TRADE-OFF: sobra um dado parcial na caixa do Gestor, fora do
+            -- DELETE de notificacoes do anonymize_account (que so apaga as do TITULAR). Mitigacao: o
+            -- link carrega o member_id (L3) e o trigger da secao 6b apaga SO os avisos daquele membro
+            -- quando accepted_email e anulado.
+            format('%s entrou na equipe como Encarregado (%s). Entrada em %s (horário de São Paulo). É a pessoa certa? Confirme em até 72 horas ou revogue o acesso.',
+                   COALESCE(v_row.display_name, 'Alguém'),
+                   left(split_part(v_email, '@', 1),
+                        CASE WHEN length(split_part(v_email, '@', 1)) > 2 THEN 2 ELSE 1 END)
+                       || '***@' || split_part(v_email, '@', 2),
+                   to_char(now() AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI')),
+            '/company/configuracoes/equipe?membro=' || v_row.id::text
         );
     END LOOP;
 
@@ -843,9 +1030,18 @@ COMMENT ON FUNCTION public.accept_company_member_invite(text, boolean) IS
 -- 4. RPCs DE EQUIPE: confirmar, revogar, remover, listar
 -- ============================================================================
 
--- 4.1 confirm_company_member (R22). Gestor confirma "e a pessoa certa". Quem e Gestor-manager nao
---     confirma a si mesmo; confirmar linha de Gestor exige dono/operador de organizacao.
-CREATE OR REPLACE FUNCTION public.confirm_company_member(p_company_id uuid, p_user_id uuid)
+-- 4.1 confirm_company_member (R22 + D4). Gestor confirma "e a pessoa certa" DIGITANDO o nome que
+--     foi usado no convite (p_typed_name, comparado normalizado: atrito contra o "confirmar" no
+--     automatico; nao e segredo, o Gestor ve o nome na lista). So encarregado. Ninguem se confirma.
+--     Pendente de confirmacao EXPIRA em 72h do aceite, de forma PREGUICOSA (sem cron): quem tentar
+--     confirmar depois recebe `expired` e a linha vira removed (removed_by NULL = expiracao
+--     automatica). Enquanto isso o nao confirmado ja nao opera nada.
+DROP FUNCTION IF EXISTS public.confirm_company_member(uuid, uuid);
+CREATE OR REPLACE FUNCTION public.confirm_company_member(
+    p_company_id uuid,
+    p_user_id    uuid,
+    p_typed_name text
+)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -861,6 +1057,10 @@ BEGIN
     IF p_company_id IS NULL OR p_user_id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'invalid_input');
     END IF;
+    -- Mesmo lock de equipe das demais mudancas (e da cobertura da E5), ANTES de qualquer
+    -- FOR UPDATE; a autorizacao e o estado da linha sao avaliados SOB o lock (READ COMMITTED:
+    -- cada comando seguinte ja ve o que a transacao concorrente gravou).
+    PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || p_company_id::text)::bigint);
     IF NOT public.is_company_owner(p_company_id) THEN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
@@ -870,18 +1070,29 @@ BEGIN
 
     SELECT * INTO v_row FROM public.company_members cm
      WHERE cm.company_id = p_company_id AND cm.user_id = p_user_id AND cm.status = 'active'
+       AND cm.role = 'encarregado'
      FOR UPDATE;
     IF v_row.id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'not_found');
     END IF;
 
-    IF v_row.role = 'manager'
-       AND NOT public.is_organization_operator(public.company_organization_id(p_company_id)) THEN
-        RETURN jsonb_build_object('outcome', 'forbidden');
-    END IF;
-
     IF v_row.confirmed_at IS NOT NULL THEN
         RETURN jsonb_build_object('outcome', 'already_confirmed', 'member_id', v_row.id);
+    END IF;
+
+    -- Expiracao preguicosa: 72h sem confirmacao. A escrita persiste (retorno normal, sem excecao).
+    IF COALESCE(v_row.accepted_at, v_row.invited_at) <= now() - interval '72 hours' THEN
+        UPDATE public.company_members
+           SET status = 'removed', removed_at = now(), removed_by = NULL, invite_token = NULL
+         WHERE id = v_row.id;
+        PERFORM public.internal_revoke_member_coverages(p_company_id, p_user_id);
+        RETURN jsonb_build_object('outcome', 'expired', 'member_id', v_row.id);
+    END IF;
+
+    IF public.normalize_member_name(p_typed_name) = ''
+       OR public.normalize_member_name(p_typed_name)
+          IS DISTINCT FROM public.normalize_member_name(v_row.display_name) THEN
+        RETURN jsonb_build_object('outcome', 'name_mismatch', 'member_id', v_row.id);
     END IF;
 
     UPDATE public.company_members
@@ -899,11 +1110,13 @@ BEGIN
 END;
 $fn$;
 
-COMMENT ON FUNCTION public.confirm_company_member(uuid, uuid) IS
-    'Gestor confirma uma pessoa ativa ("e a pessoa certa?"): grava confirmed_at/confirmed_by. So depois '
-    'o encarregado le o Elenco e opera turnos (ADR encarregado-confirmado). Confirmar linha de Gestor '
-    'exige dono/operador de organizacao; ninguem se confirma sozinho. Outcomes: confirmed | '
-    'already_confirmed | forbidden | not_found | invalid_input | unauthenticated. R22/A12.';
+COMMENT ON FUNCTION public.confirm_company_member(uuid, uuid, text) IS
+    'Gestor confirma um ENCARREGADO ativo ("e a pessoa certa?"), digitando o nome do convite '
+    '(p_typed_name, comparado por normalize_member_name): grava confirmed_at/confirmed_by. So depois '
+    'o encarregado le o Elenco e opera turnos (ADR encarregado-confirmado). Pendente ha mais de 72h '
+    'expira de forma preguicosa (outcome expired, linha removed, removed_by NULL). Ninguem se '
+    'confirma sozinho. Outcomes: confirmed | already_confirmed | expired | name_mismatch | forbidden | '
+    'not_found | invalid_input | unauthenticated. R22/A12.';
 
 -- 4.2 reject_company_member (R22) — "Revogar": so enquanto NAO confirmada (confirmada = remove_*)
 CREATE OR REPLACE FUNCTION public.reject_company_member(p_company_id uuid, p_user_id uuid)
@@ -922,6 +1135,10 @@ BEGIN
     IF p_company_id IS NULL OR p_user_id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'invalid_input');
     END IF;
+    -- Mesmo lock de equipe das demais mudancas (e da cobertura da E5), ANTES de qualquer
+    -- FOR UPDATE; a autorizacao e o estado da linha sao avaliados SOB o lock (READ COMMITTED:
+    -- cada comando seguinte ja ve o que a transacao concorrente gravou).
+    PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || p_company_id::text)::bigint);
     IF NOT public.is_company_owner(p_company_id) THEN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
@@ -929,16 +1146,13 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
 
+    -- So encarregado passa por confirmacao (Gestor sai por remove_company_member).
     SELECT * INTO v_row FROM public.company_members cm
      WHERE cm.company_id = p_company_id AND cm.user_id = p_user_id AND cm.status = 'active'
+       AND cm.role = 'encarregado'
      FOR UPDATE;
     IF v_row.id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'not_found');
-    END IF;
-
-    IF v_row.role = 'manager'
-       AND NOT public.is_organization_operator(public.company_organization_id(p_company_id)) THEN
-        RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
 
     IF v_row.confirmed_at IS NOT NULL THEN
@@ -946,16 +1160,17 @@ BEGIN
     END IF;
 
     UPDATE public.company_members
-       SET status = 'removed', removed_at = now(), invite_token = NULL
+       SET status = 'removed', removed_at = now(), removed_by = v_uid, invite_token = NULL
      WHERE id = v_row.id;
+    PERFORM public.internal_revoke_member_coverages(p_company_id, p_user_id);
 
     RETURN jsonb_build_object('outcome', 'rejected', 'member_id', v_row.id);
 END;
 $fn$;
 
 COMMENT ON FUNCTION public.reject_company_member(uuid, uuid) IS
-    'Gestor REVOGA pessoa que entrou e ainda nao foi confirmada: status removed, acesso cessa no '
-    'proximo request. Pessoa ja confirmada sai por remove_company_member. Nao toca turno, chamado, '
+    'Gestor REVOGA ENCARREGADO que entrou e ainda nao foi confirmado: status removed (removed_by), '
+    'coberturas da pessoa revogadas, acesso cessa no proximo request. Pessoa ja confirmada sai por remove_company_member. Nao toca turno, chamado, '
     'candidatura, pagamento nem Elenco. Outcomes: rejected | not_pending_confirmation | forbidden | '
     'not_found | invalid_input | unauthenticated. R22/A12.';
 
@@ -981,6 +1196,11 @@ BEGIN
     END IF;
     IF p_company_id IS NULL OR p_user_id IS NULL THEN
         RETURN jsonb_build_object('outcome', 'invalid_input');
+    END IF;
+    -- Serializa mudancas de equipe da empresa ANTES da autorizacao: dois Gestores se removendo ao
+    -- mesmo tempo nao podem ambos passar pelo teste de "sobra outro Gestor" (dry-run nao trava).
+    IF NOT COALESCE(p_dry_run, false) THEN
+        PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || p_company_id::text)::bigint);
     END IF;
     IF NOT public.is_company_owner(p_company_id) THEN
         RETURN jsonb_build_object('outcome', 'forbidden');
@@ -1018,6 +1238,13 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
 
+    -- D3: a empresa nunca fica sem nenhum Gestor/dono ativo (defesa em profundidade: por estas RPCs
+    -- quem remove ja e Gestor e nao se remove, mas a invariante nao depende disso).
+    IF v_row.role = 'manager'
+       AND NOT public.internal_company_has_gestor_besides_member(p_company_id, p_user_id) THEN
+        RETURN jsonb_build_object('outcome', 'last_manager');
+    END IF;
+
     -- Turnos realmente ABERTOS e FUTUROS cujo responsavel registrado e a pessoa: ficam com o Gestor
     -- como responsavel efetivo (R19), sem escrita em jobs. jobs.status so admite open | paused |
     -- deleted (CHECK de 20260822000400): "aberto" = open ou paused; deleted nao conta. So informativo.
@@ -1040,8 +1267,11 @@ BEGIN
     END IF;
 
     UPDATE public.company_members
-       SET status = 'removed', removed_at = now(), invite_token = NULL
+       SET status = 'removed', removed_at = now(), removed_by = v_uid, invite_token = NULL
      WHERE id = v_row.id;
+    -- Cobertura ZUMBI: sem revogar, remover + reconvidar + confirmar reviveria a cobertura antiga
+    -- (o seam exige membership ativa, mas a linha continuaria valida quando ela voltasse).
+    PERFORM public.internal_revoke_member_coverages(p_company_id, p_user_id);
 
     RETURN jsonb_build_object('outcome', 'removed', 'member_id', v_row.id,
                               'display_name', v_row.display_name, 'role', v_row.role,
@@ -1053,14 +1283,17 @@ $fn$;
 COMMENT ON FUNCTION public.remove_company_member(uuid, uuid, boolean) IS
     'Remove pessoa ATIVA da equipe: status removed + removed_at, e mais nada. NUNCA e recusada por '
     'turno aberto, chamado, pagamento ou freela trazido por ela; NENHUMA linha de jobs, applications, '
-    'shift_*, team_connections ou coberturas e reescrita (ADR remover-pessoa-so-corta-acesso). O corte '
+    'shift_* ou team_connections e reescrita (ADR remover-pessoa-so-corta-acesso; coberturas sao so '
+    'revogadas, nunca apagadas). O corte '
     'e consequencia do seam (membership deixa de ser active). p_dry_run devolve {open_jobs} sem '
     'escrever (copy "N turnos abertos dele ficarao com voce"). elenco_link_rotation_advised=true quando '
     'a pessoa era Gestor ou confirmada: o Gestor deve rotacionar o link do Elenco. Gestor remove '
     'Encarregado; so dono/operador de organizacao remove Gestor. Convite pendente: revoke_member_invite. '
     'open_jobs conta so turnos open/paused e futuros (jobs.status nao tem outro valor aberto). Remover '
     'quem ja foi removido e idempotente: outcome removed + already_removed=true. '
-    'Outcomes: removed | would_remove (dry-run) | cannot_remove_self | forbidden | not_found | invalid_input | '
+    'Grava removed_by e REVOGA as coberturas da pessoa na empresa. A pendencia de rotacao do link e '
+    'derivada em list_company_members (nada e gravado para isso). '
+    'Outcomes: removed | would_remove (dry-run) | last_manager | cannot_remove_self | forbidden | not_found | invalid_input | '
     'unauthenticated. R17/A13.';
 
 -- 4.4 list_company_members — Gestor-only, projecao FECHADA, SEM invite_token (G6)
@@ -1097,10 +1330,20 @@ BEGIN
                                               AND (cm.expires_at IS NULL OR cm.expires_at <= now())
                                               THEN 'invite_expired'
                                          WHEN cm.status = 'invited' THEN 'invited'
-                                         WHEN cm.confirmed_at IS NULL THEN 'awaiting_confirmation'
+                                         -- confirmacao so existe para encarregado; 72h sem confirmar
+                                         WHEN cm.role = 'encarregado' AND cm.confirmed_at IS NULL
+                                              AND COALESCE(cm.accepted_at, cm.invited_at) <= now() - interval '72 hours'
+                                              THEN 'pending_expired'
+                                         WHEN cm.role = 'encarregado' AND cm.confirmed_at IS NULL
+                                              THEN 'awaiting_confirmation'
                                          ELSE 'active'
                                      END,
                    'confirmed',      cm.confirmed_at IS NOT NULL,
+                   'confirmation_expires_at',
+                                     CASE WHEN cm.status = 'active' AND cm.role = 'encarregado'
+                                               AND cm.confirmed_at IS NULL
+                                          THEN COALESCE(cm.accepted_at, cm.invited_at) + interval '72 hours'
+                                     END,
                    'accepted_email', cm.accepted_email,
                    'invited_at',     cm.invited_at,
                    'expires_at',     cm.expires_at,
@@ -1116,13 +1359,34 @@ BEGIN
      WHERE cm.company_id = p_company_id
        AND (COALESCE(p_include_removed, false) OR cm.status <> 'removed');
 
-    RETURN jsonb_build_object('outcome', 'ok', 'items', v_items);
+    -- D5 (M1): pendencia de rotacao DERIVADA, so para o Gestor: existe alguem que podia ler o link
+    -- do Elenco (encarregado/Gestor confirmado, ou Gestor que aceitou) removido DEPOIS da ultima
+    -- rotacao (company_invite_links.rotated_at; nunca rotacionado = -infinity). Cobre tambem a
+    -- anonimizacao, que marca a linha removed + removed_at. Nada e escrito.
+    RETURN jsonb_build_object(
+        'outcome', 'ok',
+        'items', v_items,
+        'elenco_link_rotation_pending',
+        EXISTS (
+            SELECT 1 FROM public.company_members rm
+             WHERE rm.company_id = p_company_id
+               AND rm.status = 'removed'
+               AND rm.role IN ('manager', 'encarregado')
+               AND (rm.confirmed_at IS NOT NULL
+                    OR (rm.role = 'manager' AND rm.accepted_at IS NOT NULL))
+               AND rm.removed_at > COALESCE(
+                       (SELECT l.rotated_at FROM public.company_invite_links l
+                         WHERE l.company_id = p_company_id),
+                       '-infinity'::timestamptz)
+        )
+    );
 END;
 $fn$;
 
 COMMENT ON FUNCTION public.list_company_members(uuid, boolean) IS
     'Equipe da empresa para o Gestor (is_company_owner): nome, papel, status, estado derivado '
-    '(invited | invite_expired | awaiting_confirmation | active | removed), confirmado e e-mail aceito. '
+    '(invited | invite_expired | awaiting_confirmation | pending_expired | active | removed), '
+    'confirmado, confirmation_expires_at (72h), e-mail aceito (completo, so aqui) e, no topo, elenco_link_rotation_pending (derivado). '
     'NAO le auth.users (ultimo acesso removido: dado global, minimizacao LGPD). Projecao FECHADA e EXAUSTIVA: NUNCA devolve '
     'invite_token (o token so sai de invite_company_member / resend_member_invite). Encarregado nao '
     'lista a equipe. Dono e operadores de organizacao nao tem linha em company_members e nao aparecem. '
@@ -1291,6 +1555,78 @@ END
 $mig$;
 
 -- ============================================================================
+-- 6b. Expurgo do aviso "Nova pessoa na equipe" quando o e-mail e anulado (LGPD, D4/L3)
+--     anonymize_account so apaga notificacoes do TITULAR; o aviso sobre ele mora com o Gestor. Em vez
+--     de editar anonymize_account por texto, o gatilho amarra o expurgo ao FATO que ele ja produz
+--     (accepted_email := NULL, E1 bloco 7). O alvo e o link EXATO com o member_id: nunca por e-mail
+--     nem por nome (um display_name escolhido pelo Gestor nao pode induzir o expurgo de avisos
+--     alheios). DEFINER: sessao nula (service_role/cron) atravessa; nada e bloqueado.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.purge_member_join_notification()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    DELETE FROM public.notifications n
+     WHERE n.title = 'Nova pessoa na equipe'
+       AND n.link  = '/company/configuracoes/equipe?membro=' || OLD.id::text;
+    RETURN NEW;
+END;
+$fn$;
+COMMENT ON FUNCTION public.purge_member_join_notification() IS
+    'AFTER UPDATE OF accepted_email em company_members (de preenchido para NULL): apaga SO os avisos '
+    '"Nova pessoa na equipe" daquele membro (link com o member_id). E a metade do anonymize_account '
+    'que ele nao alcanca (notificacao de terceiro).';
+-- funcao de trigger: mantem EXECUTE para authenticated (licao 20260816201420/57)
+REVOKE ALL ON FUNCTION public.purge_member_join_notification() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.purge_member_join_notification() TO authenticated, service_role;
+
+DROP TRIGGER IF EXISTS trg_company_members_purge_join_notice ON public.company_members;
+CREATE TRIGGER trg_company_members_purge_join_notice
+    AFTER UPDATE OF accepted_email ON public.company_members
+    FOR EACH ROW
+    WHEN (OLD.accepted_email IS NOT NULL AND NEW.accepted_email IS NULL)
+    EXECUTE FUNCTION public.purge_member_join_notification();
+
+-- ============================================================================
+-- 6c. revoke_company_manager (F13, endurecida por E0, JA EM PRODUCAO): last_manager, removed_by,
+--     cobertura zumbi. Edicao do corpo do CATALOGO + assercao (D4). A pendencia de rotacao e
+--     derivada de removed_at (que esta edicao passa a preencher).
+-- ============================================================================
+DO $mig$
+DECLARE
+    v_def  text := pg_get_functiondef('public.revoke_company_manager(uuid, uuid)'::regprocedure);
+    v_pat  text := 'UPDATE public[.]company_members[[:space:]]+SET status = ''removed'', invite_token = NULL';
+    v_hit  text;
+    v_n    integer;
+BEGIN
+    IF position('last_manager' IN v_def) > 0 THEN
+        RAISE NOTICE 'E4: revoke_company_manager ja atualizada; nada a fazer.';
+        RETURN;
+    END IF;
+    SELECT count(*) INTO v_n FROM regexp_matches(v_def, v_pat, 'g');
+    IF v_n <> 1 OR position('role = ''manager''' IN v_def) = 0 OR position('v_uid' IN v_def) = 0 THEN
+        RAISE EXCEPTION 'ASSERCAO E4: revoke_company_manager nao tem o corpo esperado (F13 + E0; % ocorrencia(s) do UPDATE). HALT.', v_n;
+    END IF;
+    v_hit := (regexp_match(v_def, v_pat))[1];
+    EXECUTE replace(v_def, v_hit,
+        'PERFORM pg_advisory_xact_lock(hashtext(''worki:team:'' || p_company_id::text)::bigint);' || chr(10) ||
+        '    IF EXISTS (SELECT 1 FROM public.company_members cmx' || chr(10) ||
+        '                WHERE cmx.company_id = p_company_id AND cmx.user_id = p_user_id' || chr(10) ||
+        '                  AND cmx.status = ''active'' AND cmx.role = ''manager'') THEN' || chr(10) ||
+        '        IF NOT public.internal_company_has_gestor_besides_member(p_company_id, p_user_id) THEN' || chr(10) ||
+        '            RETURN jsonb_build_object(''outcome'', ''last_manager'');' || chr(10) ||
+        '        END IF;' || chr(10) ||
+        '        PERFORM public.internal_revoke_member_coverages(p_company_id, p_user_id);' || chr(10) ||
+        '    END IF;' || chr(10) || chr(10) ||
+        '    UPDATE public.company_members' || chr(10) ||
+        '       SET status = ''removed'', removed_at = now(), removed_by = v_uid, invite_token = NULL');
+END
+$mig$;
+
+-- ============================================================================
 -- 7. GRANTS das RPCs de equipe (padrao do projeto; anon NUNCA — exceto get_member_invite_preview,
 --    excecao unica e explicita do ADR-20261123-previa-publica-do-convite)
 -- ============================================================================
@@ -1299,7 +1635,7 @@ REVOKE ALL ON FUNCTION public.resend_member_invite(uuid)                    FROM
 REVOKE ALL ON FUNCTION public.revoke_member_invite(uuid)                    FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.get_member_invite_preview(text)               FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.accept_company_member_invite(text, boolean)   FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.confirm_company_member(uuid, uuid)            FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.confirm_company_member(uuid, uuid, text)      FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.reject_company_member(uuid, uuid)             FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.remove_company_member(uuid, uuid, boolean)    FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.list_company_members(uuid, boolean)           FROM PUBLIC, anon;
@@ -1310,7 +1646,7 @@ GRANT EXECUTE ON FUNCTION public.revoke_member_invite(uuid)                  TO 
 -- Excecao unica (ADR previa-publica): projecao fechada {outcome, company_name, role}, erro colapsado.
 GRANT EXECUTE ON FUNCTION public.get_member_invite_preview(text)             TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.accept_company_member_invite(text, boolean) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.confirm_company_member(uuid, uuid)          TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.confirm_company_member(uuid, uuid, text)    TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.reject_company_member(uuid, uuid)           TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.remove_company_member(uuid, uuid, boolean)  TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.list_company_members(uuid, boolean)         TO authenticated, service_role;
@@ -1383,7 +1719,9 @@ BEGIN
                          'accept_company_member_invite','confirm_company_member',
                          'reject_company_member','remove_company_member','list_company_members',
                          'get_my_companies','internal_company_gestor_ids',
-                         'internal_notify_member_event','internal_drop_empty_company_shell')
+                         'internal_notify_member_event','internal_drop_empty_company_shell',
+                         'internal_revoke_member_coverages','internal_company_has_gestor_besides_member',
+                         'normalize_member_name','purge_member_join_notification')
        AND has_function_privilege('anon', p.oid, 'EXECUTE');
     IF v_bad IS NOT NULL THEN
         RAISE EXCEPTION 'VERIFICACAO E4: funcao(oes) alem da previa com EXECUTE para anon: %. HALT.', v_bad;
@@ -1400,7 +1738,9 @@ BEGIN
                          'get_member_invite_preview','accept_company_member_invite',
                          'confirm_company_member','reject_company_member','remove_company_member',
                          'list_company_members','get_my_companies','internal_company_gestor_ids',
-                         'internal_notify_member_event','internal_drop_empty_company_shell')
+                         'internal_notify_member_event','internal_drop_empty_company_shell',
+                         'internal_revoke_member_coverages','internal_company_has_gestor_besides_member',
+                         'purge_member_join_notification')
        AND ( NOT p.prosecdef
           OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) x WHERE x LIKE 'search_path=%' AND x NOT LIKE '%public%') );
     IF v_bad IS NOT NULL THEN
@@ -1411,10 +1751,41 @@ BEGIN
     SELECT string_agg(p.proname, ', ') INTO v_bad
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public'
-       AND p.proname IN ('internal_company_gestor_ids','internal_notify_member_event','internal_drop_empty_company_shell')
+       AND p.proname IN ('internal_company_gestor_ids','internal_notify_member_event','internal_drop_empty_company_shell',
+                         'internal_revoke_member_coverages','internal_company_has_gestor_besides_member')
        AND has_function_privilege('authenticated', p.oid, 'EXECUTE');
     IF v_bad IS NOT NULL THEN
         RAISE EXCEPTION 'VERIFICACAO E4: helper(s) interno(s) com EXECUTE para authenticated: %. HALT.', v_bad;
+    END IF;
+
+    -- L5: a edicao de revoke_company_manager esta no catalogo; get_company_invite_token (NAO editada)
+    -- continua carimbando rotated_at, de que a pendencia derivada depende; anon sem EXECUTE nas duas.
+    v_bad := pg_get_functiondef('public.revoke_company_manager(uuid, uuid)'::regprocedure);
+    IF position('last_manager' IN v_bad) = 0
+       OR position('internal_company_has_gestor_besides_member' IN v_bad) = 0
+       OR position('internal_revoke_member_coverages' IN v_bad) = 0
+       OR position('removed_by = v_uid' IN v_bad) = 0
+       OR position('removed_at = now()' IN v_bad) = 0
+       OR position('pg_advisory_xact_lock' IN v_bad) = 0 THEN
+        RAISE EXCEPTION 'VERIFICACAO E4: revoke_company_manager sem a edicao completa (6c). HALT.';
+    END IF;
+    IF position('rotated_at = now()' IN pg_get_functiondef('public.get_company_invite_token(boolean, uuid)'::regprocedure)) = 0 THEN
+        RAISE EXCEPTION 'VERIFICACAO E4: get_company_invite_token nao carimba rotated_at ao rotacionar; a pendencia derivada ficaria sempre ligada. HALT.';
+    END IF;
+    IF has_function_privilege('anon', 'public.revoke_company_manager(uuid, uuid)'::regprocedure, 'EXECUTE')
+       OR has_function_privilege('anon', 'public.get_company_invite_token(boolean, uuid)'::regprocedure, 'EXECUTE') THEN
+        RAISE EXCEPTION 'VERIFICACAO E4: anon tem EXECUTE em revoke_company_manager/get_company_invite_token. HALT.';
+    END IF;
+
+    -- o lock de equipe esta em toda mudanca de membership/cobertura (revoke_company_manager acima)
+    SELECT string_agg(p.proname, ', ') INTO v_bad
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('invite_company_member','accept_company_member_invite','confirm_company_member',
+                         'reject_company_member','remove_company_member','revoke_company_manager')
+       AND position('worki:team:' IN pg_get_functiondef(p.oid)) = 0;
+    IF v_bad IS NOT NULL THEN
+        RAISE EXCEPTION 'VERIFICACAO E4: funcao(oes) sem o lock de equipe worki:team: %. HALT.', v_bad;
     END IF;
 
     -- a listagem nao pode carregar o token

@@ -3,7 +3,7 @@ import { DoorClosed, LogOut, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { invalidateCompanyScope } from '../services/companyScopeService';
-import { clearTeamMemberHint } from '../lib/teamInviteToken';
+import { clearAllTeamMemberHints } from '../lib/teamInviteToken';
 import PageMeta from './PageMeta';
 import { Button, Card } from './ui';
 
@@ -33,7 +33,7 @@ export default function AcessoEncerrado() {
         } catch (error) {
             logError('AcessoEncerrado.sair', error);
         }
-        clearTeamMemberHint();
+        clearAllTeamMemberHints();
         window.location.assign('/');
     };
 

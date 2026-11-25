@@ -105,10 +105,17 @@ export const LinkRiskService = {
         }
       }
 
-      const { data, error } = await supabase.rpc(
+      let { data, error } = await supabase.rpc(
         'my_link_risk_config',
         resolved ? { p_company_id: resolved } : undefined,
       );
+
+      // Front no ar ANTES da migration E5: a assinatura com `p_company_id` ainda não existe
+      // (PGRST202/404). Repete sem parâmetro (assinatura antiga), senão toda empresa cairia no
+      // padrão e a configuração dela seria ignorada.
+      if (error && resolved && isMissingRpc(error as SupabaseErrorLike)) {
+        ({ data, error } = await supabase.rpc('my_link_risk_config', undefined));
+      }
 
       if (error) {
         if (!isMissingRpc(error as SupabaseErrorLike)) {

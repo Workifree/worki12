@@ -25,7 +25,7 @@ vi.mock('../lib/logger', () => ({ logError: vi.fn() }));
 const mockGetReceipt = vi.fn();
 vi.mock('../services/paymentRecordService', () => ({
   PaymentRecordService: {
-    getReceipt: (...args: unknown[]) => mockGetReceipt(...args),
+    getReceiptChecked: (...args: unknown[]) => mockGetReceipt(...args),
   },
 }));
 

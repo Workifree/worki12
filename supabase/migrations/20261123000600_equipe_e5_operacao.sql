@@ -5,6 +5,13 @@
 -- ADRs:  ADR-20261123-responsavel-efetivo-derivado-no-seam, ADR-20261123-encarregado-confirmado-e-pii,
 --        ADR-20261123-remover-pessoa-so-corta-acesso, ADR-20261123-elenco-unico-da-company
 --
+-- DATA LOCAL DO TURNO (expressao canonica desta E5 e do seam de E2):
+--   (jobs.start_date AT TIME ZONE 'America/Sao_Paulo')::date
+-- E EQUIVALENTE a public.job_local_date (20260817000600), que faz start_date::timestamptz::date com
+-- SET timezone = 'America/Sao_Paulo': sendo start_date timestamptz (assercao de E1), ambas convertem o
+-- mesmo instante para a data civil de Sao Paulo, sem depender do TimeZone da sessao. A E5 usa a forma
+-- explicita porque tem a linha em maos (job_local_date reconsulta jobs por id).
+--
 -- ORDEM DE APLICACAO: E0, E1, E2, E3, E4 e SO ENTAO esta E5 (nunca antes da E4: usa
 -- internal_notify_member_event / internal_company_gestor_ids / get_my_companies de E4; o bloco 0 da HALT).
 -- PRECONDICAO DE DADOS: nenhum turno orfao (jobs.company_id sem linha em companies) — o bloco 0 da HALT
@@ -385,15 +392,15 @@ BEGIN
           ) dd
           CROSS JOIN LATERAL (
                 SELECT
-                    CASE WHEN j.work_start_time IS NULL
+                    CASE WHEN (CASE WHEN j.work_start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_start_time::time END) IS NULL
                          THEN (dd.d::timestamp AT TIME ZONE 'America/Sao_Paulo')
-                         ELSE ((dd.d + j.work_start_time) AT TIME ZONE 'America/Sao_Paulo')
+                         ELSE ((dd.d + (CASE WHEN j.work_start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_start_time::time END)) AT TIME ZONE 'America/Sao_Paulo')
                     END AS ini,
-                    CASE WHEN j.work_start_time IS NULL OR j.work_end_time IS NULL
+                    CASE WHEN (CASE WHEN j.work_start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_start_time::time END) IS NULL OR (CASE WHEN j.work_end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_end_time::time END) IS NULL
                          THEN (((dd.d + 1)::timestamp) AT TIME ZONE 'America/Sao_Paulo')
-                         WHEN j.work_end_time > j.work_start_time
-                         THEN ((dd.d + j.work_end_time) AT TIME ZONE 'America/Sao_Paulo')
-                         ELSE (((dd.d + 1) + j.work_end_time) AT TIME ZONE 'America/Sao_Paulo')
+                         WHEN (CASE WHEN j.work_end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_end_time::time END) > (CASE WHEN j.work_start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_start_time::time END)
+                         THEN ((dd.d + (CASE WHEN j.work_end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_end_time::time END)) AT TIME ZONE 'America/Sao_Paulo')
+                         ELSE (((dd.d + 1) + (CASE WHEN j.work_end_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN j.work_end_time::time END)) AT TIME ZONE 'America/Sao_Paulo')
                     END AS fim
           ) w
          WHERE j.company_id = p_company_id
@@ -460,6 +467,12 @@ DECLARE
     v_to_name  text;
     v_cur_resp   uuid;
     v_cur_status text;
+    v_cur_start  timestamptz;
+    v_today      date := (now() AT TIME ZONE 'America/Sao_Paulo')::date;
+    v_past       integer := 0;
+    v_is_gestor  boolean;
+    v_enc_moves  uuid[] := ARRAY[]::uuid[];   -- company_id de cada turno passado por quem NAO e Gestor
+    g            record;
     r          record;
     o          record;
 BEGIN
@@ -478,7 +491,7 @@ BEGIN
     END IF;
 
     FOR r IN
-        SELECT j.id, j.company_id, j.responsible_id, j.status
+        SELECT j.id, j.company_id, j.responsible_id, j.status, j.start_date
           FROM public.jobs j
          WHERE j.id = ANY (v_ids)
          ORDER BY j.id
@@ -495,9 +508,18 @@ BEGIN
         CONTINUE WHEN NOT v_can;
         CONTINUE WHEN NOT public.internal_company_confirmed_operator(r.company_id, p_to);
 
+        -- M2: quem NAO e Gestor nao passa turno antigo (data local < hoje - 1): daria ao colega acesso a
+        -- turnos/pagamentos concluidos, contornando o bloqueio de cobertura retroativa. So conta como
+        -- `skipped_past` DEPOIS de v_can (turno alheio continua indistinguivel). Revalidado sob o lock.
+        v_is_gestor := public.is_company_owner(r.company_id);
+        IF NOT v_is_gestor AND (r.start_date AT TIME ZONE 'America/Sao_Paulo')::date < v_today - 1 THEN
+            v_past := v_past + 1;
+            CONTINUE;
+        END IF;
+
         -- M-2: trava a linha so DEPOIS de autorizar (quem nao opera o turno nao o trava) e REAVALIA a
         -- autorizacao sobre o valor travado (outra sessao pode ter passado/cancelado o turno no meio).
-        SELECT j.responsible_id, j.status INTO v_cur_resp, v_cur_status
+        SELECT j.responsible_id, j.status, j.start_date INTO v_cur_resp, v_cur_status, v_cur_start
           FROM public.jobs j WHERE j.id = r.id FOR UPDATE;
         CONTINUE WHEN NOT FOUND OR COALESCE(v_cur_status, '') = 'deleted' OR v_cur_resp IS NOT DISTINCT FROM p_to;
         v_can := COALESCE(
@@ -507,6 +529,11 @@ BEGIN
                          AND v_cur_resp = v_uid ),
                     false);
         CONTINUE WHEN NOT v_can;
+        v_is_gestor := public.is_company_owner(r.company_id);
+        IF NOT v_is_gestor AND (v_cur_start AT TIME ZONE 'America/Sao_Paulo')::date < v_today - 1 THEN
+            v_past := v_past + 1;
+            CONTINUE;
+        END IF;
 
         -- Sinal ao guard de jobs (ADR troca-de-responsavel-so-pela-rpc): GUC LOCAL = id deste turno, zerada
         -- logo apos o UPDATE (antes de qualquer CONTINUE). O texto vem SEMPRE de r.id (nunca do chamador).
@@ -520,6 +547,9 @@ BEGIN
         CONTINUE WHEN v_rows <> 1;
 
         v_moved := v_moved + 1;
+        IF NOT v_is_gestor THEN
+            v_enc_moves := v_enc_moves || r.company_id;
+        END IF;
         IF v_company1 IS NULL THEN
             v_company1 := r.company_id;
         END IF;
@@ -561,10 +591,28 @@ BEGIN
         END LOOP;
     END IF;
 
+    -- M2: turnos passados por encarregado => os Gestores ficam sabendo (uma notificacao por Gestor e
+    -- company, com a contagem; quem agiu e o destino, ja avisados, ficam de fora).
+    -- L7: o texto guarda NOMES (de quem passou e de quem recebeu) na caixa dos Gestores.
+    FOR o IN SELECT x AS cid, count(*)::integer AS n FROM unnest(v_enc_moves) AS x GROUP BY x
+    LOOP
+        FOR g IN SELECT gi AS uid FROM public.internal_company_gestor_ids(o.cid) AS gi
+                  WHERE gi NOT IN (v_uid, p_to)
+        LOOP
+            PERFORM public.internal_notify_member_event(
+                g.uid, 'Turnos passados na equipe',
+                COALESCE(public.internal_member_label(o.cid, v_uid), 'Um encarregado') || ' passou '
+                    || CASE WHEN o.n = 1 THEN 'um turno' ELSE o.n::text || ' turnos' END
+                    || ' para ' || COALESCE(public.internal_member_label(o.cid, p_to), 'o Gestor') || '.',
+                '/company/hoje');
+        END LOOP;
+    END LOOP;
+
     RETURN jsonb_build_object(
-        'outcome', CASE WHEN v_moved > 0 THEN 'ok' ELSE 'nothing_moved' END,
-        'moved',   v_moved,
-        'skipped', v_total - v_moved
+        'outcome',      CASE WHEN v_moved > 0 THEN 'ok' ELSE 'nothing_moved' END,
+        'moved',        v_moved,
+        'skipped',      v_total - v_moved,
+        'skipped_past', v_past       -- subconjunto de skipped: turno antigo, bloqueado a quem nao e Gestor
     );
 END;
 $fn$;
@@ -573,7 +621,9 @@ COMMENT ON FUNCTION public.reassign_job_responsible(uuid[], uuid) IS
     '"Passar para..." (R18/A14): troca jobs.responsible_id de 1..100 turnos em transacao unica. Gestor: '
     'qualquer turno da company que opera. Encarregado confirmado: so os PROPRIOS (responsible_id = ele; '
     'cobertura nao da direito). Destino: operador ativo e confirmado da company do turno. Devolve '
-    '{outcome: ok|nothing_moved|invalid_input|unauthenticated, moved, skipped}; skipped agrega turno '
+    '{outcome: ok|nothing_moved|invalid_input|unauthenticated, moved, skipped, skipped_past}. Quem NAO e '
+    'Gestor nao passa turno com data local anterior a hoje - 1 (skipped_past, revalidado sob lock); passagem '
+    'por encarregado avisa os Gestores (o aviso guarda nomes nas caixas deles). skipped agrega turno '
     'inexistente/deletado/alheio/sem direito/ja do destino (sem oraculo). Avisa destino e origem(ns) '
     '(uma notificacao por pessoa, com a contagem). Nao reescreve nada alem de jobs.responsible_id. '
     'Nao move saldo (Article 8).';
@@ -604,6 +654,7 @@ DECLARE
     v_period  text;
     v_ex_start date;
     v_ex_end   date;
+    g          record;
 BEGIN
     IF v_uid IS NULL THEN
         RETURN jsonb_build_object('outcome', 'unauthenticated');
@@ -622,6 +673,20 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
 
+    -- L4: MESMA chave de lock das mudancas de equipe da E4 (remove_company_member / revoke_company_manager /
+    -- convite). Sem isto uma remocao concorrente revogaria as coberturas ANTES de esta nascer (cobertura
+    -- orfa). Tambem serializa criacoes concorrentes (overlaps). Tomado so depois de autorizar; a
+    -- autorizacao e REAVALIADA sob o lock, e as checagens de from/to abaixo ja rodam sob ele.
+    PERFORM pg_advisory_xact_lock(hashtext('worki:team:' || p_company_id::text)::bigint);
+    v_gestor := public.is_company_owner(p_company_id);
+    v_self   := COALESCE(
+                    public.session_company_member_role(p_company_id) = 'encarregado'
+                    AND public.session_company_member_confirmed(p_company_id)
+                    AND p_from = v_uid, false);
+    IF NOT (v_gestor OR v_self) THEN
+        RETURN jsonb_build_object('outcome', 'forbidden');
+    END IF;
+
     IF p_ends_on < p_starts_on THEN
         RETURN jsonb_build_object('outcome', 'invalid_window');
     END IF;
@@ -631,13 +696,18 @@ BEGIN
     IF p_ends_on < v_today THEN
         RETURN jsonb_build_object('outcome', 'in_the_past');
     END IF;
+    -- Sem cobertura RETROATIVA: starts_on no passado daria acesso a turnos, pagamentos e recibos ja
+    -- concluidos. Tolerancia de 1 dia (data local) so para o turno que cruza a meia-noite.
+    IF p_starts_on < v_today - 1 THEN
+        RETURN jsonb_build_object('outcome', 'starts_in_the_past');
+    END IF;
     IF p_starts_on > v_today + 365 THEN
         RETURN jsonb_build_object('outcome', 'too_far');
     END IF;
 
     -- L-2: quem tambem e Gestor/dono/operador de organizacao nao tem o que ser coberto (cobertura inerte
     -- e enganosa): recusa mesmo que exista linha de encarregado.
-    IF EXISTS (SELECT 1 FROM public.internal_company_gestor_ids(p_company_id) AS g WHERE g = p_from) THEN
+    IF EXISTS (SELECT 1 FROM public.internal_company_gestor_ids(p_company_id) AS gi WHERE gi = p_from) THEN
         RETURN jsonb_build_object('outcome', 'from_is_gestor');
     END IF;
 
@@ -652,10 +722,6 @@ BEGIN
                       AND cm.role = 'encarregado' AND cm.status = 'active' AND cm.confirmed_at IS NOT NULL) THEN
         RETURN jsonb_build_object('outcome', 'to_not_encarregado');
     END IF;
-
-    -- serializa criacoes concorrentes do MESMO par (company, from, to): sem isto duas sessoes passariam
-    -- juntas pelo SELECT de sobreposicao e criariam janelas sobrepostas.
-    PERFORM pg_advisory_xact_lock(hashtext('worki:coverage:' || p_company_id::text || ':' || p_from::text || ':' || p_to::text));
 
     -- janela que sobrepoe cobertura vigente do MESMO par: se a vigente ja cobre tudo = already_covered;
     -- senao `overlaps` com a janela existente (nada e criado nem estendido em silencio).
@@ -697,6 +763,20 @@ BEGIN
         v_to_nm || ' vai cobrir seus turnos ' || v_period || '. O responsável registrado continua sendo você.',
         '/company/hoje');
 
+    -- Criada por ENCARREGADO (abre acesso a um colega sem passar pelo Gestor): os Gestores ficam sabendo.
+    -- L7: o texto do aviso guarda os NOMES (from e to) nas caixas dos Gestores; anonymize_account nao
+    -- reescreve notificacoes ja entregues a terceiros.
+    IF NOT v_gestor THEN
+        FOR g IN SELECT gi AS uid FROM public.internal_company_gestor_ids(p_company_id) AS gi
+                  WHERE gi NOT IN (v_uid, p_from, p_to)
+        LOOP
+            PERFORM public.internal_notify_member_event(
+                g.uid, 'Cobertura criada na equipe',
+                v_to_nm || ' vai cobrir os turnos de ' || v_from_nm || ' ' || v_period || '.',
+                '/company/hoje');
+        END LOOP;
+    END IF;
+
     RETURN jsonb_build_object('outcome', 'created', 'coverage_id', v_id);
 END;
 $fn$;
@@ -707,7 +787,8 @@ COMMENT ON FUNCTION public.create_responsibility_coverage(uuid, uuid, uuid, date
     'predicado de session_can_operate_job: sem cron, nada a reverter; jobs.responsible_id NAO muda. '
     'Gestor cobre qualquer from; encarregado confirmado so com from = ele. from e to precisam ser '
     'encarregados ativos e confirmados (cobertura de Gestor/dono e inerte). Avisa os dois. '
-    'Outcomes: created|already_covered|overlaps|from_is_gestor|invalid_input|invalid_window|window_too_long|in_the_past|too_far|'
+    'Sem retroatividade: starts_on >= hoje - 1. Criada por encarregado, avisa tambem os Gestores. '
+    'Outcomes: created|already_covered|overlaps|starts_in_the_past|from_is_gestor|invalid_input|invalid_window|window_too_long|in_the_past|too_far|'
     'from_not_encarregado|to_not_encarregado|forbidden|unauthenticated.';
 
 -- 4.3 end_responsibility_coverage — encerrar antes da janela
@@ -879,7 +960,7 @@ BEGIN
     -- sem horario = 00:00 local). O Gestor segue podendo (correcao de cadastro).
     IF NOT public.is_company_owner(v_job.company_id) AND v_job.start_date IS NOT NULL THEN
         v_start_ts := (((v_job.start_date AT TIME ZONE 'America/Sao_Paulo')::date
-                        + COALESCE(v_job.work_start_time, TIME '00:00')) AT TIME ZONE 'America/Sao_Paulo');
+                        + COALESCE((CASE WHEN v_job.work_start_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' THEN v_job.work_start_time::time END), TIME '00:00')) AT TIME ZONE 'America/Sao_Paulo');
         IF v_start_ts < now() THEN
             RETURN jsonb_build_object('outcome', 'job_in_the_past');
         END IF;
@@ -976,7 +1057,7 @@ BEGIN
 
     -- (5) rastro: responsavel efetivo + Gestores + dono (+ operadores de organizacao), UMA vez por
     --     turno e sem avisar quem cancelou. Falha de aviso vira WARNING (helper), nunca derruba o gesto.
-    -- quem age sem linha em company_members (dono) e "o Gestor", nunca "alguem da equipe".
+    -- quem age sem vinculo de equipe (dono) e "o Gestor", nunca "alguem da equipe".
     v_actor := COALESCE('por ' || public.internal_member_label(v_job.company_id, v_uid), 'pelo Gestor');
     v_msg   := 'O turno "' || v_title || '"' || v_when || ' foi cancelado ' || v_actor || '. '
                || CASE WHEN v_n_apps + v_n_pull = 0 THEN 'Nenhum freela estava no turno.'

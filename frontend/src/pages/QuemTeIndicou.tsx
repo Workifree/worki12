@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
 import type { WorkerReferral } from '../types';
 import { Button, Card, PageHeader } from '../components/ui';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Quem te indicou" (F10) — o freela decide sobre indicações que empresas do seu
@@ -43,11 +44,15 @@ export default function QuemTeIndicou() {
   const [respondingAction, setRespondingAction] = useState<'accept' | 'decline' | null>(null);
 
   const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    const session = await checkSession();
+    if (session.status === 'signed_out') {
       navigate('/login');
+      return;
+    }
+    if (session.status === 'unavailable') {
+      logError('QuemTeIndicou.session', session.error);
+      setErroCarga(true);
+      setLoading(false);
       return;
     }
 

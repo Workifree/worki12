@@ -1561,3 +1561,46 @@ describe('CompanyJobCandidates — Dispensar e chamar substituto (F4, blocker 3)
     dismissSpy.mockRestore()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Recusas do guard de applications (migration 20261125000200): nunca o texto cru do banco.
+// ---------------------------------------------------------------------------
+describe('CompanyJobCandidates — recusas do banco ao registrar presença', () => {
+  async function abrirSaida(jobData?: Record<string, unknown>) {
+    const mocks = setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK, jobData)
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+    await screen.findByRole('heading', { name: /Registrar Saída/i })
+    return mocks
+  }
+
+  it.each([
+    ['applications_update_guard: horario de presenca no futuro.', 'O horário não pode ser no futuro.'],
+    ['applications_update_guard: este turno foi cancelado.', 'Este turno foi cancelado.'],
+    [
+      'applications_update_guard: ainda nao e possivel registrar a chegada neste turno.',
+      // turno 05/03 sem work_start_time: 00:00 de São Paulo menos 12h = 04/03 às 12:00
+      'Só dá para registrar a chegada a partir de 04/03 às 12:00.',
+    ],
+    ['applications_update_guard: coluna nao editavel foi alterada.', 'Não foi possível fazer isso agora. Atualize a página e tente novamente.'],
+  ])('traduz "%s"', async (raw, esperado) => {
+    const { appChain, mockAddToast } = await abrirSaida({
+      title: 'Turno', start_date: '2026-03-05T15:00:00+00:00',
+    })
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: null, error: { message: raw, code: '42501' } }))
+    fireEvent.change(screen.getByLabelText(/Horário real de saída/i), { target: { value: '02:00' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(esperado, 'error'))
+    expect(mockAddToast).not.toHaveBeenCalledWith(expect.stringContaining('applications_update_guard'), 'error')
+  })
+
+  it('não preenche como padrão um horário previsto que ainda está no futuro', async () => {
+    await abrirSaida({ title: 'Turno futuro', start_date: '2099-03-05T15:00:00+00:00', work_end_time: '23:00:00' })
+    expect((screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement).value).toBe('')
+    expect(screen.getByRole('button', { name: /^Confirmar$/i })).toBeDisabled()
+  })
+})

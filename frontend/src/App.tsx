@@ -44,10 +44,12 @@ const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
 const Organization = lazy(() => import('./pages/company/Organization'));
 const CompanyTeamMembers = lazy(() => import('./pages/company/CompanyTeamMembers'));
 const CompanyToday = lazy(() => import('./pages/company/CompanyToday'));
+const BonusTrail = lazy(() => import('./pages/company/BonusTrail'));
 const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
+const BonusRules = lazy(() => import('./pages/BonusRules'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Admin = lazy(() => import('./pages/Admin'));
@@ -134,6 +136,7 @@ function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/termos" element={<Terms />} />
                   <Route path="/privacidade" element={<Privacy />} />
+                  <Route path="/regulamento-trilha" element={<BonusRules />} />
                   <Route path="/esqueci-senha" element={<ForgotPassword />} />
                   <Route path="/redefinir-senha" element={<ResetPassword />} />
                   <Route path="/ajuda" element={<Help />} />
@@ -210,6 +213,7 @@ function App() {
                       {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As
                           notificações de passar/cobrir apontam para cá. */}
                       <Route path="hoje" element={<CompanyToday />} />
+                      <Route path="trilha" element={<BonusTrail />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="operacao" element={<CompanyOperationAnalytics />} />
                       <Route path="notifications" element={<Notifications />} />

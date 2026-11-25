@@ -70,6 +70,8 @@ import { BusyWorkerBadge } from './BusyWorkerBadge';
 export interface ShiftCallModalProps {
   job: Pick<Job, 'id' | 'title' | 'start_date' | 'work_start_time' | 'certification_requirement'> & {
     work_end_time?: string | null;
+    /** Empresa DONA do turno (quem opera 2 unidades não pode depender da "corrente"). */
+    company_id?: string | null;
     slots?: number;
   };
   /** Freelas que já estão no turno (contratados ou já chamados) — não aparecem para seleção. */
@@ -195,6 +197,7 @@ export function ShiftCallModal({
     windows: busyWindows,
     workerIds: available.map((member) => member.worker.id),
     excludeJobId: job.id,
+    companyId: job.company_id ?? null,
     enabled: !loadingTeam,
   });
 

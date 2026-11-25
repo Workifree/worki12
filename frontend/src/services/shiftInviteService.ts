@@ -24,6 +24,7 @@ import type {
   InvitationResponse,
 } from '../types';
 import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
+import { getSessionUserOrThrow } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // Tipos do resultado estruturado de autorização de pagamento
@@ -688,51 +689,51 @@ export const ShiftInviteService = {
    */
   async listPendingInvites(): Promise<Application[]> {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from('applications')
-        .select(
-          `
-          *,
-          job:jobs (
-            id,
-            title,
-            description,
-            briefing,
-            location,
-            start_date,
-            work_start_time,
-            work_end_time,
-            budget,
-            has_lunch,
-            company_id,
-            company:companies (
-              id,
-              name,
-              logo_url,
-              rating_average
-            )
-          )
-        `,
-        )
-        .eq('worker_id', user.id)
-        .eq('status', 'invited')
-        .order('invited_by_company_at', { ascending: false });
-
-      if (error) {
-        logError('shiftInvite.listPendingInvites', error);
-        return [];
-      }
-
-      return (data ?? []) as Application[];
+      return await this.listPendingInvitesChecked();
     } catch (err) {
       logError('shiftInvite.listPendingInvites', err);
       return [];
     }
+  },
+
+  /** Como `listPendingInvites`, mas LANÇA quando a consulta falha (lista vazia = não há nada mesmo). */
+  async listPendingInvitesChecked(): Promise<Application[]> {
+    const user = await getSessionUserOrThrow();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('applications')
+      .select(
+        `
+        *,
+        job:jobs (
+          id,
+          title,
+          description,
+          briefing,
+          location,
+          start_date,
+          work_start_time,
+          work_end_time,
+          budget,
+          has_lunch,
+          company_id,
+          company:companies (
+            id,
+            name,
+            logo_url,
+            rating_average
+          )
+        )
+      `,
+      )
+      .eq('worker_id', user.id)
+      .eq('status', 'invited')
+      .order('invited_by_company_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []) as Application[];
   },
 
   /**

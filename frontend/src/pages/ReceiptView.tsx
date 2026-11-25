@@ -14,6 +14,7 @@ import { ArrowLeft, Printer, Clock, AlertTriangle, LogIn, LogOut } from 'lucide-
 import { Button, Card } from '../components/ui';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
+import { getSessionUserOrThrow } from '../lib/authSession';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -76,11 +77,11 @@ export default function ReceiptView() {
         if (!jobId) { setLoading(false); return; }
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
             if (!user) { navigate('/login'); return; }
             setCurrentUserId(user.id);
 
-            const data = await PaymentRecordService.getReceipt(jobId, workerIdParam ?? undefined);
+            const data = await PaymentRecordService.getReceiptChecked(jobId, workerIdParam ?? undefined);
             setReceipt(data);
 
             // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte

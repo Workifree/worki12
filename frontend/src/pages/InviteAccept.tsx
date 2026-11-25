@@ -26,13 +26,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, User, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { TeamConnectionService } from '../services/teamConnectionService';
-import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
 import { Button, Card } from '../components/ui';
+import { checkSession } from '../lib/authSession';
+import ErroDeCarga from '../components/ErroDeCarga';
 
-type PageState = 'loading' | 'success' | 'already_exists' | 'blocked' | 'error';
+type PageState = 'loading' | 'success' | 'already_exists' | 'blocked' | 'error' | 'offline';
 type InviteDirection = 'company' | 'worker';
 
 interface PageData {
@@ -73,6 +74,8 @@ export default function InviteAccept() {
   const redirectTo = direction === 'worker' ? '/company/team' : '/my-jobs';
   const redirectLabel = direction === 'worker' ? 'Ver Meu Elenco' : 'Ver Meus Turnos';
 
+  const [tentativa, setTentativa] = useState(0);
+
   useEffect(() => {
     let active = true;
 
@@ -84,8 +87,13 @@ export default function InviteAccept() {
 
       // Sem sessão: preserva o token e manda pro login em vez de deixar o
       // service falhar com "sessão expirada" — ver nota do item 11 no topo do arquivo.
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const session = await checkSession();
+      if (session.status === 'unavailable') {
+        logError('InviteAccept.session', session.error);
+        if (active) setPage({ state: 'offline' });
+        return;
+      }
+      if (session.status === 'signed_out') {
         if (!active) return;
         try {
           sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, token);
@@ -137,7 +145,7 @@ export default function InviteAccept() {
 
     void processInvite();
     return () => { active = false; };
-  }, [token, navigate]);
+  }, [token, navigate, tentativa]);
 
   const successTitle = direction === 'worker' ? 'Freela Convidado!' : 'Convite Aceito!';
   const successBody = direction === 'worker'
@@ -172,6 +180,10 @@ export default function InviteAccept() {
               <span className="text-sm font-semibold">Processando convite...</span>
             </div>
           </StatusCard>
+        )}
+
+        {page.state === 'offline' && (
+          <ErroDeCarga onRetry={() => { setPage({ state: 'loading' }); setTentativa((n) => n + 1); }} />
         )}
 
         {/* Sucesso */}

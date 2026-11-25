@@ -70,6 +70,21 @@ describe('AcceptTeamInvite — prévia', () => {
     expect(sessionStorage.getItem('pending_team_invite_token')).toBe(TOKEN);
   });
 
+  it('token morto (prévia not_found/expired) NÃO fica guardado e apaga um token velho da sessão', async () => {
+    sessionStorage.setItem('pending_team_invite_token', 'token-velho');
+    vi.mocked(getInvitePreview).mockResolvedValue({ outcome: 'expired' });
+    renderPage();
+    await screen.findByText(/venceu|vencido/i);
+    expect(sessionStorage.getItem('pending_team_invite_token')).toBeNull();
+  });
+
+  it('desfecho terminal no aceite (token_already_used) descarta o token pendente', async () => {
+    vi.mocked(acceptMemberInvite).mockResolvedValue({ outcome: 'token_already_used' } as never);
+    renderPage();
+    await percorrerAteAceitar();
+    await waitFor(() => expect(sessionStorage.getItem('pending_team_invite_token')).toBeNull());
+  });
+
   it('prévia not_found: link inválido, sem formulário', async () => {
     vi.mocked(getInvitePreview).mockResolvedValue({ outcome: 'not_found' });
     renderPage();

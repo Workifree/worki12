@@ -37,7 +37,7 @@ vi.mock('../../../hooks/useTeamConnections', () => ({
 }))
 
 vi.mock('../../../hooks/useShiftInvites', () => ({
-  useCompanyInvites: () => ({ invite: vi.fn(), invitingWorkerId: null, invites: [] }),
+  useCompanyInvites: () => ({ invite: vi.fn(), invitingWorkerId: null, invites: [], invitedWorkerIds: [] }),
 }))
 
 vi.mock('@tanstack/react-query', () => ({

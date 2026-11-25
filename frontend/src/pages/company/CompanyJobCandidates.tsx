@@ -125,6 +125,50 @@ const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
 };
 
 /**
+ * Traduz a recusa do guard de `applications` (migration 20261125000200,
+ * `applications_update_guard`) em frase clara. Devolve `null` para qualquer outro erro.
+ * O texto cru do banco nunca chega à tela.
+ */
+function attendanceGuardMessage(
+    error: unknown,
+    startDate: string | null | undefined,
+    startTime: string | null | undefined,
+): string | null {
+    const raw = (error as { message?: unknown } | null)?.message;
+    if (typeof raw !== 'string' || !raw.includes('applications_update_guard')) return null;
+    if (raw.includes('este turno foi cancelado')) return 'Este turno foi cancelado.';
+    if (raw.includes('horario de presenca no futuro')) return 'O horário não pode ser no futuro.';
+    if (raw.includes('ainda nao e possivel registrar a chegada')) {
+        const opens = checkinOpensAt(startDate, startTime);
+        return opens
+            ? `Só dá para registrar a chegada a partir de ${opens}.`
+            : 'Ainda não dá para registrar a chegada neste turno.';
+    }
+    if (raw.includes('registro de presenca ja gravado')) {
+        return 'Essa presença já foi registrada. Atualize a página.';
+    }
+    return 'Não foi possível fazer isso agora. Atualize a página e tente novamente.';
+}
+
+/**
+ * Abertura da janela de chegada, igual ao banco: 12h antes da data do turno (em São Paulo) com
+ * `work_start_time`; sem horário válido, 00:00. São Paulo é UTC-3 (sem horário de verão).
+ */
+function checkinOpensAt(startDate: string | null | undefined, startTime: string | null | undefined): string | null {
+    if (!startDate) return null;
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) return null;
+    const zone = 'America/Sao_Paulo';
+    const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(start).split('-').map(Number);
+    const time = /^([01]\d|2[0-3]):[0-5]\d/.test(startTime ?? '') ? (startTime as string).slice(0, 5) : '00:00';
+    const [h, min] = time.split(':').map(Number);
+    const opens = new Date(Date.UTC(y, m - 1, d, h + 3 - 12, min));
+    const day = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, day: '2-digit', month: '2-digit' }).format(opens);
+    const hour = new Intl.DateTimeFormat('pt-BR', { timeZone: zone, hour: '2-digit', minute: '2-digit' }).format(opens);
+    return `${day} às ${hour}`;
+}
+
+/**
  * Monta o timestamp ISO absoluto do fallback manual de chegada/saída — quando a EMPRESA
  * confirma um horário que o freela não marcou no app (bar fecha às 02h, gerente só registra
  * às 09h da manhã seguinte: gravar `now()` faria o recibo mentir "Saída 09:00" e ~13h
@@ -149,7 +193,8 @@ function buildManualAttendanceTimestamp(
     timeHHmm: string,
 ): string | null {
     if (!jobStartDate || !timeHHmm) return null;
-    const [y, m, d] = jobStartDate.split('-').map(Number);
+    // `jobs.start_date` é timestamptz: só a parte da data importa (como `parseDateOnly`).
+    const [y, m, d] = jobStartDate.split('T')[0].split('-').map(Number);
     const [h, min] = timeHHmm.split(':').map(Number);
     if (![y, m, d, h, min].every(Number.isFinite)) return null;
 
@@ -268,6 +313,7 @@ export default function CompanyJobCandidates() {
     const [jobStartDate, setJobStartDate] = useState('');
     const [jobStartTime, setJobStartTime] = useState<string | null>(null);
     const [jobEndTime, setJobEndTime] = useState<string | null>(null);
+    const [jobCompanyId, setJobCompanyId] = useState<string | null>(null);
     const [companyName, setCompanyName] = useState('');
 
     // Chamado de turno (F1): quantas vagas o turno tem e o modal de disparo múltiplo.
@@ -404,7 +450,7 @@ export default function CompanyJobCandidates() {
             // Fetch Job Title (only if owned by this company)
             const { data: job, error: jobError } = await supabase
                 .from('jobs')
-                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement')
+                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement, company_id')
                 .eq('id', id)
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
@@ -417,6 +463,7 @@ export default function CompanyJobCandidates() {
             setJobStartDate(job.start_date ?? '');
             setJobStartTime(job.work_start_time ?? null);
             setJobEndTime(job.work_end_time ?? null);
+            setJobCompanyId((job as { company_id?: string | null }).company_id ?? null);
 
             // Nome da empresa OPERADA pela sessão (não `user.id`: gerente/encarregado não são a
             // linha de `companies`) — só para montar a mensagem do WhatsApp, best-effort.
@@ -498,7 +545,11 @@ export default function CompanyJobCandidates() {
             // reserva escrow atômico (RAISE EXCEPTION em Postgres se saldo insuficiente). A
             // mensagem do Postgres já é clara ("Saldo insuficiente...") — repassamos ela em vez
             // de um texto genérico. Nenhuma RPC/trigger foi alterada aqui, só o texto exibido.
-            addToast(error.message || 'Erro ao atualizar status do freela.', 'error');
+            addToast(
+                attendanceGuardMessage(error, jobStartDate, jobStartTime)
+                    ?? (error.message || 'Erro ao atualizar status do freela.'),
+                'error',
+            );
             return;
         }
         if (!data || data.length === 0) {
@@ -1006,7 +1057,7 @@ export default function CompanyJobCandidates() {
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
-            addToast('Erro ao confirmar check-in.', 'error');
+            addToast(attendanceGuardMessage(error, jobStartDate, jobStartTime) ?? 'Erro ao confirmar check-in.', 'error');
         } finally {
             setConfirmingCheckin(null);
         }
@@ -1040,7 +1091,7 @@ export default function CompanyJobCandidates() {
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates', error);
-            addToast('Erro ao confirmar check-out.', 'error');
+            addToast(attendanceGuardMessage(error, jobStartDate, jobStartTime) ?? 'Erro ao confirmar check-out.', 'error');
         } finally {
             setConfirmingCheckin(null);
         }
@@ -1058,8 +1109,15 @@ export default function CompanyJobCandidates() {
             return;
         }
         const plannedTime = type === 'checkin' ? jobStartTime : jobEndTime;
+        const planned = plannedTime ? plannedTime.slice(0, 5) : '';
+        // Horário previsto que ainda não chegou não vira padrão: o banco recusa futuro e a empresa
+        // só confirmaria sem olhar.
+        const plannedAt = planned
+            ? buildManualAttendanceTimestamp(app, jobStartDate, jobStartTime, type, planned)
+            : null;
+        const isFuture = plannedAt !== null && new Date(plannedAt).getTime() > Date.now();
         setManualAttendance({ app, type });
-        setManualAttendanceTime(plannedTime ? plannedTime.slice(0, 5) : '');
+        setManualAttendanceTime(isFuture ? '' : planned);
     };
 
     const closeManualAttendanceModal = () => {
@@ -1102,7 +1160,7 @@ export default function CompanyJobCandidates() {
             fetchCandidates();
         } catch (error) {
             logError('CompanyJobCandidates: handleConfirmManualAttendance', error);
-            addToast('Erro ao confirmar horário.', 'error');
+            addToast(attendanceGuardMessage(error, jobStartDate, jobStartTime) ?? 'Erro ao confirmar horário.', 'error');
         } finally {
             setConfirmingManualAttendance(false);
         }
@@ -1243,11 +1301,13 @@ export default function CompanyJobCandidates() {
             </Button>
             <PageHeader
                 title="Presença e Pagamento"
-                subtitle={`${jobTitle} • ${filledCount} de ${jobSlots} vaga${jobSlots !== 1 ? 's' : ''} preenchida${filledCount !== 1 ? 's' : ''}`}
+                subtitle={loading
+                    ? 'Carregando o turno...'
+                    : `${jobTitle} • ${filledCount} de ${jobSlots} ${jobSlots === 1 ? 'vaga preenchida' : 'vagas preenchidas'}`}
                 action={
                     /* O gesto de 8h30: um clique, vários freelas, quem aceitar primeiro leva.
                        Some quando o turno já está completo — não há vaga para disputar. */
-                    filledCount < jobSlots ? (
+                    !loading && filledCount < jobSlots ? (
                         <div className="flex flex-col gap-2 sm:flex-row">
                             <Button
                                 variant="dark"
@@ -1626,7 +1686,8 @@ export default function CompanyJobCandidates() {
                                                                 Sem resposta
                                                             </StatusChip>
                                                         )}
-                                                        {response === null && (
+                                                        {/* Quem já chegou ou saiu não precisa confirmar que vem. */}
+                                                        {response === null && !app.worker_checkin_at && !app.company_checkin_confirmed_at && !app.company_checkout_confirmed_at && (
                                                             <Button
                                                                 variant="secondary"
                                                                 iconLeft={<Bell size={16} />}
@@ -1642,7 +1703,7 @@ export default function CompanyJobCandidates() {
                                                             gerente no chão de loja. A10 pede o motivo VISÍVEL, não só
                                                             hover-only. Linha própria (`w-full`) dentro do flex-wrap para
                                                             não brigar de espaço com os botões/badges vizinhos. */}
-                                                        {disabledReason && (
+                                                        {disabledReason && !app.worker_checkin_at && !app.company_checkin_confirmed_at && !app.company_checkout_confirmed_at && (
                                                             <span className="w-full text-xs text-gray-600">
                                                                 {disabledReason}
                                                             </span>
@@ -2076,6 +2137,12 @@ export default function CompanyJobCandidates() {
                                 </p>
                             </div>
 
+                            {!(paymentAmount > 0) && (
+                                <p role="alert" className="mt-4 text-sm font-semibold text-red-700">
+                                    Informe um valor maior que zero para confirmar o registro.
+                                </p>
+                            )}
+
                             <div className="flex gap-3 mt-6">
                                 <Button
                                     variant="secondary"
@@ -2336,6 +2403,7 @@ export default function CompanyJobCandidates() {
                         start_date: jobStartDate,
                         work_start_time: jobStartTime ?? undefined,
                         work_end_time: jobEndTime ?? undefined,
+                        company_id: jobCompanyId,
                         certification_requirement: jobCertificationRequirement,
                         slots: jobSlots,
                     }}

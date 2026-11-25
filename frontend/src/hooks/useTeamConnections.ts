@@ -15,6 +15,7 @@ import { TeamConnectionService } from '../services/teamConnectionService';
 import { useToast } from '../contexts/ToastContext';
 import type { TeamConnection, TeamMember, MyStore, TeamConnectionSource } from '../types';
 import { getAuthenticatedCompanyId } from '../services/companyScopeService';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // Hook para EMPRESA — gerenciar "minha equipe"
@@ -173,37 +174,17 @@ export function useWorkerStores(): UseWorkerStoresResult {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    const [stores, pending] = await Promise.all([
-      TeamConnectionService.listMyStores(),
-      TeamConnectionService.listPendingConnections(),
-    ]);
-
-    // null = fetch falhou; manter o que ja esta na tela e sinalizar erro em vez de
-    // esvaziar a carteira ("Voce ainda nao tem clientes" mentiria — N1).
-    setErroCarga(stores === null || pending === null);
-    if (stores !== null) setMyStores(stores);
-    if (pending !== null) setPendingConnections(pending);
-    setLoading(false);
-  }, [navigate]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+  const load = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
         navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        setErroCarga(true);
+        setLoading(false);
         return;
       }
 
@@ -212,17 +193,29 @@ export function useWorkerStores(): UseWorkerStoresResult {
         TeamConnectionService.listMyStores(),
         TeamConnectionService.listPendingConnections(),
       ]);
+      if (!isActive()) return;
 
-      if (!active) return;
+      // null = fetch falhou; manter o que ja esta na tela e sinalizar erro em vez de
+      // esvaziar a carteira ("Voce ainda nao tem clientes" mentiria — N1).
       setErroCarga(stores === null || pending === null);
       if (stores !== null) setMyStores(stores);
       if (pending !== null) setPendingConnections(pending);
       setLoading(false);
-    })();
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    void load();
+  }, [load]);
 
   const acceptConnection = useCallback(
     async (connectionId: string): Promise<boolean> => {
@@ -273,6 +266,6 @@ export function useWorkerStores(): UseWorkerStoresResult {
     acceptConnection,
     blockConnection,
     declineConnection,
-    refresh: load,
+    refresh,
   };
 }

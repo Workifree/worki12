@@ -239,7 +239,7 @@ export default function InviteTakeover() {
           <Button
             variant="primary"
             size="lg"
-            className="flex-1"
+            className="flex-1 min-w-0 !px-2 sm:!px-6"
             onClick={() => void handleRespond('accepted')}
             disabled={isResponding}
             loading={isResponding && acaoEmCurso === 'accepted'}
@@ -250,7 +250,7 @@ export default function InviteTakeover() {
           <Button
             variant={recusaArmada ? 'danger' : 'secondary'}
             size="lg"
-            className="flex-1"
+            className="flex-1 min-w-0 !px-2 sm:!px-6"
             onClick={() => {
               if (recusaArmada) {
                 if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);

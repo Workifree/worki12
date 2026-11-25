@@ -109,7 +109,10 @@ export default function Notifications() {
                 <div role="alert" className="text-center py-16">
                     <Bell size={40} className="mx-auto mb-4 text-red-300" />
                     <p className="text-red-600 text-lg font-bold">Não foi possível carregar</p>
-                    <p className="text-gray-600 text-sm mt-2">Verifique sua conexão e recarregue a página.</p>
+                    <p className="text-gray-600 text-sm mt-2 mb-6">Verifique sua conexão e tente de novo.</p>
+                    <Button variant="dark" onClick={() => window.location.reload()}>
+                        Tentar de novo
+                    </Button>
                 </div>
             ) : filteredNotifications.length === 0 ? (
                 <div className="text-center py-16">

@@ -72,6 +72,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     // turnos (o alvo só traz a data). Só AVISA: erro em qualquer etapa = sem selo + log.
     const [busyWindows, setBusyWindows] = useState<BusyWindow[]>([]);
     const [busyTruncated, setBusyTruncated] = useState(false);
+    const [busyCompanyId, setBusyCompanyId] = useState<string | null>(null);
     useEffect(() => {
         if (targetJobIds.length === 0) return;
         let active = true;
@@ -79,21 +80,22 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
             try {
                 const { data, error } = await supabase
                     .from('jobs')
-                    .select('id, start_date, work_start_time, work_end_time')
+                    .select('id, company_id, start_date, work_start_time, work_end_time')
                     .in('id', targetJobIds.slice(0, 100));
                 if (error) throw error;
                 // Uma janela por ocorrência, cada uma excluindo o PRÓPRIO turno (um chamado aberto
                 // nele mesmo não é conflito). Conflito com as outras ocorrências da série não existe:
                 // elas ainda não têm freela.
                 const all: BusyWindow[] = [];
-                ((data ?? []) as Array<{ id: string; start_date: string | null; work_start_time: string | null; work_end_time: string | null }>)
-                    .forEach((j) => {
+                const rows = (data ?? []) as Array<{ id: string; company_id: string | null; start_date: string | null; work_start_time: string | null; work_end_time: string | null }>;
+                rows.forEach((j) => {
                         const w = buildShiftWindow(j.start_date, j.work_start_time, j.work_end_time);
                         if (w) all.push({ ...w, excludeJobId: j.id });
                     });
                 all.sort((a, b) => a.start.localeCompare(b.start));
                 if (active) {
                     setBusyWindows(all.slice(0, MAX_BUSY_WINDOWS));
+                    setBusyCompanyId(rows.find((r) => r.company_id)?.company_id ?? null);
                     setBusyTruncated(all.length > MAX_BUSY_WINDOWS || targetJobIds.length > 100);
                 }
             } catch (error) {
@@ -106,6 +108,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const busyWorkerIds = useBusyWorkers({
         windows: busyWindows,
         workerIds: teamMembers.map((m) => m.worker.id),
+        companyId: busyCompanyId,
         enabled: !teamLoading && busyWindows.length > 0,
     });
 

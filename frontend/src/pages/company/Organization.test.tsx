@@ -53,7 +53,14 @@ describe('Organization (F13 R16)', () => {
     });
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'jobs') return { select: vi.fn(() => countChain(3)) };
+      if (table === 'jobs') {
+        // 3 abertos de verdade + 1 já concluído (status ainda 'open'), que não conta
+        const rows = [
+          { slots: 1, applications: [] }, { slots: 2, applications: [{ status: 'completed' }] },
+          { slots: 1, applications: [{ status: 'hired' }] }, { slots: 1, applications: [{ status: 'completed' }] },
+        ];
+        return { select: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: rows, error: null })) })) })) };
+      }
       if (table === 'team_connections') return { select: vi.fn(() => countChain(7)) };
       if (table === 'company_members') {
         return {
