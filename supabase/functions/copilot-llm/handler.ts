@@ -90,9 +90,9 @@ export const TEST_USER_IDS: readonly string[] = [
   'a4c775db-c05d-4e3b-b8fe-48661d371cb9',
 ]
 
-/** Fechado por padrão. `COPILOT_ALLOWED_USERS` substitui a lista; só `COPILOT_PUBLIC=true` abre a todos. */
+/** Aberto a todos por padrão (decisão do dono, 26/11/2026). `COPILOT_PUBLIC=false` fecha e volta à lista de teste (`COPILOT_ALLOWED_USERS`). */
 export function isReleased(userId: string, env: Deps['env']): boolean {
-  if (env('COPILOT_PUBLIC') === 'true') return true
+  if (env('COPILOT_PUBLIC') !== 'false') return true
   const listed = (env('COPILOT_ALLOWED_USERS') ?? '').split(',').map((id) => id.trim()).filter(Boolean)
   return (listed.length ? listed : TEST_USER_IDS).includes(userId)
 }
