@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SHIFT_CALL_REASON_LABELS, type ShiftCallReason, type TeamMember } from '../../types';
 import { CALL_EXPIRY_PRESETS, DEFAULT_CALL_EXPIRY_HOURS } from '../../services/shiftCallService';
 import { isWorkerAvailableFor, periodForTime } from '../../lib/availability';
-import { plural, weekdayOf, type ShiftDraftCall, type ShiftDraftRow } from '../../lib/shiftDrafts';
+import { MISSING_WORKERS_MESSAGE, plural, weekdayOf, type ShiftDraftCall, type ShiftDraftRow } from '../../lib/shiftDrafts';
 import { roleLabel } from '../../lib/statusLabels';
 import { BusyWorkerBadge } from '../team/BusyWorkerBadge';
 import { Alert, Button, ButtonLink, ChoiceCard, Field, SkeletonList } from '../ui';
@@ -49,7 +49,7 @@ export function PeopleDialog({
             <ul className="mt-3 flex flex-col gap-2">
                 {visible.map((m) => (
                     <li key={m.worker.id}>
-                        <ChoiceCard pressed={chosen.has(m.worker.id)} onClick={() => toggle(m.worker.id)}>
+                        <ChoiceCard pressed={chosen.has(m.worker.id)} onClick={() => toggle(m.worker.id)} data-copilot="empresa.turno-lote.pessoa">
                             <span className="block truncate">{m.worker.full_name}</span>
                             <span className="flex flex-wrap items-center gap-1 text-xs font-normal text-gray-600">
                                 {m.worker.primary_role && <span>{roleLabel(m.worker.primary_role)}</span>}
@@ -63,8 +63,8 @@ export function PeopleDialog({
             </ul>
             {visible.length === 0 && <p className="mt-3 text-sm text-gray-600">Ninguém encontrado.</p>}
             <DialogActions>
-                <Button variant="secondary" onClick={onClose}>Voltar</Button>
-                <Button variant="dark" onClick={() => onSave([...chosen])}>
+                <Button variant="secondary" onClick={onClose} data-copilot="empresa.turno-lote.pessoas-voltar">Voltar</Button>
+                <Button variant="dark" onClick={() => onSave([...chosen])} data-copilot="empresa.turno-lote.pessoas-salvar">
                     Escolher {chosen.size > 0 ? `(${chosen.size})` : ''}
                 </Button>
             </DialogActions>
@@ -72,19 +72,35 @@ export function PeopleDialog({
     );
 }
 
-/** "Chamar freelas": padrão ninguém. Os chamados saem DEPOIS da publicação. */
+/**
+ * "Quem vai trabalhar": lista do elenco e/ou pessoas. Obrigatório para publicar (exceto elenco vazio).
+ * Os chamados saem logo depois de os turnos serem criados, no mesmo passo.
+ */
 export function CallSection({
-    call, onChange, data, onPickPeople, suggestedCount,
+    call, onChange, data, onPickPeople, suggestedCount, chosenCount, title = 'Quem vai trabalhar', showMissing = false,
 }: {
     call: ShiftDraftCall;
     onChange: (call: ShiftDraftCall) => void;
     data: CallData;
     onPickPeople: () => void;
     suggestedCount: number;
+    /** Pessoas que serão chamadas (já resolvidas contra o elenco). */
+    chosenCount: number;
+    title?: string;
+    /** Mostra a pendência quando a pessoa já tentou seguir sem escolher. */
+    showMissing?: boolean;
 }) {
+    const peopleCount = call.worker_ids?.length ?? 0;
+    const toggleList = (listId: string) => {
+        if (call.mode === 'list' && call.list_id === listId) {
+            onChange({ ...call, mode: peopleCount ? 'workers' : 'none', list_id: undefined });
+        } else {
+            onChange({ ...call, mode: 'list', list_id: listId });
+        }
+    };
     return (
-        <section aria-labelledby="lote-chamar" className="flex flex-col gap-2">
-            <h2 id="lote-chamar" className="text-lg font-bold">Chamar freelas</h2>
+        <section aria-labelledby="lote-chamar" className="flex flex-col gap-2" data-copilot="empresa.turno-lote.quem-trabalha">
+            <h2 id="lote-chamar" className="text-lg font-bold">{title}</h2>
             {data.loading && <SkeletonList count={2} itemClassName="h-11" />}
             {!data.loading && data.error && (
                 <Alert tone="warning" action={<Button variant="secondary" onClick={data.retry}>Tentar de novo</Button>}>
@@ -93,31 +109,34 @@ export function CallSection({
             )}
             {!data.loading && !data.error && data.members.length === 0 && (
                 <Alert tone="info" action={<ButtonLink variant="secondary" to="/company/team">Ir para Meu Elenco</ButtonLink>}>
-                    Seu elenco está vazio. Os turnos podem ser publicados mesmo assim.
+                    Seu elenco está vazio: o turno fica aberto. Traga freelas em Elenco.
                 </Alert>
             )}
             {!data.loading && data.members.length > 0 && (
                 <>
-                    <ChoiceCard pressed={call.mode === 'none'} onClick={() => onChange({ ...call, mode: 'none' })} data-copilot="empresa.turno-lote.chamar-ninguem">
-                        Ninguém agora
-                    </ChoiceCard>
+                    <p className="text-sm text-gray-600">Escolha uma lista e/ou pessoas do elenco. Elas são chamadas assim que o turno for publicado.</p>
                     {data.lists.map((list) => (
                         <ChoiceCard
                             key={list.id}
                             pressed={call.mode === 'list' && call.list_id === list.id}
-                            onClick={() => onChange({ ...call, mode: 'list', list_id: list.id })}
+                            onClick={() => toggleList(list.id)}
+                            data-copilot="empresa.turno-lote.lista"
                         >
                             Lista: {list.name}
                         </ChoiceCard>
                     ))}
                     <ChoiceCard
-                        pressed={call.mode === 'workers'}
-                        onClick={() => { onChange({ ...call, mode: 'workers' }); onPickPeople(); }}
+                        pressed={peopleCount > 0}
+                        onClick={onPickPeople}
                         data-copilot="empresa.turno-lote.chamar-pessoas"
                     >
                         Escolher pessoas
-                        {call.mode === 'workers' && ` · ${plural(call.worker_ids?.length ?? 0, 'escolhida', 'escolhidas')}`}
+                        {peopleCount > 0 && ` · ${plural(peopleCount, 'escolhida', 'escolhidas')}`}
                     </ChoiceCard>
+                    <p role="status" className="text-sm font-bold">
+                        {chosenCount > 0 ? plural(chosenCount, 'pessoa escolhida', 'pessoas escolhidas') : 'Ninguém escolhido ainda.'}
+                    </p>
+                    {showMissing && chosenCount === 0 && <Alert tone="danger" role="alert">{MISSING_WORKERS_MESSAGE}</Alert>}
                     {suggestedCount > 0 && (
                         <p className="text-xs text-gray-600">
                             {plural(suggestedCount, 'pessoa foi chamada', 'pessoas foram chamadas')} nestes turnos da vez passada. Elas aparecem primeiro, desmarcadas.

@@ -53,7 +53,7 @@ describe('chave secret-openrouter', () => {
   const cfg = (vars: Record<string, string>) => readProviderConfig((n) => vars[n])
 
   it('sozinha: openrouter com o modelo padrão', () => {
-    expect(cfg({ 'secret-openrouter': CHAVE })).toEqual({ provider: 'openrouter', model: 'anthropic/claude-haiku-5.5', apiKey: CHAVE })
+    expect(cfg({ 'secret-openrouter': CHAVE })).toEqual({ provider: 'openrouter', model: 'tencent/hy4-flash', apiKey: CHAVE })
   })
 
   it('COPILOT_LLM_API_KEY tem prioridade e continua exigindo provedor e modelo', () => {
@@ -128,7 +128,7 @@ describe('fora de eval nada muda', () => {
     const t = setup()
     const r = await t.call(corpo())
     expect(r.status).toBe(200)
-    expect(t.enviado().model).toBe('anthropic/claude-haiku-5.5')
+    expect(t.enviado().model).toBe('tencent/hy4-flash')
     expect(t.enviado().provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true, allow_fallbacks: true })
     expect(t.enviado()).not.toHaveProperty('usage')
     expect(Object.keys(r.body).sort()).toEqual(['choices', 'usage'])
@@ -137,9 +137,9 @@ describe('fora de eval nada muda', () => {
 })
 
 describe('modo de avaliação', () => {
-  it('lista = os 7 de produção mais o qwen', () => {
+  it('lista = os 8 de produção mais o qwen', () => {
     expect([...EVAL_MODELS]).toEqual([...MODELS.openrouter, QWEN])
-    expect(MODELS.openrouter).toHaveLength(7)
+    expect(MODELS.openrouter).toHaveLength(8)
     expect(MODELS.openrouter).not.toContain(QWEN)
   })
 

@@ -94,7 +94,9 @@ export interface ShiftDraftBatch {
 }
 
 export type ShiftDraftIssueKind =
-  | 'past_date' | 'crosses_midnight' | 'probable_duplicate' | 'worker_busy' | 'missing_field' | 'over_limit';
+  | 'past_date' | 'crosses_midnight' | 'probable_duplicate' | 'worker_busy' | 'missing_field' | 'over_limit' | 'missing_workers';
+
+export const MISSING_WORKERS_MESSAGE = 'Falta: escolher quem vai trabalhar.';
 
 export interface ShiftDraftIssue {
   kind: ShiftDraftIssueKind;
@@ -398,6 +400,11 @@ export interface ValidationContext {
   nowTime?: string;
   existingShifts?: ExistingShift[];
   busy?: { row_key: string; worker_name: string }[];
+  /**
+   * Escolha de quem vai trabalhar. Só vale com elenco carregado e não vazio (`teamSize > 0`): empresa sem
+   * ninguém no elenco publica o turno aberto. `countFor` = quantas pessoas serão chamadas para a linha.
+   */
+  invite?: { teamSize: number; countFor: (row: ShiftDraftRow) => number };
 }
 
 /**
@@ -415,6 +422,11 @@ export function validateBatch(batch: ShiftDraftBatch, context: ValidationContext
   if (batch.rows.length === 0) add('missing_field', '', 'Escolha pelo menos uma data.', true);
   if (mergeDrafts(batch.template, batch.rows).rows.length > MAX_BATCH_ROWS) {
     add('over_limit', '', BATCH_LIMIT_MESSAGE, true);
+  }
+
+  const invite = context.invite;
+  if (invite && invite.teamSize > 0 && batch.rows.some((r) => invite.countFor(r) === 0)) {
+    add('missing_workers', '', MISSING_WORKERS_MESSAGE, true);
   }
 
   for (const row of batch.rows) {

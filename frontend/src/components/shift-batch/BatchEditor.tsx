@@ -3,11 +3,12 @@ import { Pencil, Plus } from 'lucide-react';
 import {
     addDays, applyToAll, batchSummary, categoryName, changeCategory, createRow, duplicateRow, isValidDate,
     mergeDrafts, newId, plural, resolveSeries, validateBatch, MAX_BATCH_ROWS, BATCH_LIMIT_MESSAGE,
-    type RowDefaults, type ShiftDraftBatch, type ShiftDraftRow,
+    type RowDefaults, type ShiftDraftBatch, type ValidationContext, type ShiftDraftRow,
 } from '../../lib/shiftDrafts';
 import { SHIFT_CATEGORIES } from '../company/shiftCategories';
 import { formatBRL } from '../../lib/currency';
 import type { CompanyTag } from '../../services/shiftOperationService';
+import type { ReactNode } from 'react';
 import { ActionBar, Alert, Button, Card, Field, IconButton } from '../ui';
 import { ShiftRowCard } from './ShiftRowCard';
 import { ShiftDetailsModal } from './ShiftDetailsModal';
@@ -29,6 +30,7 @@ type Details = { scope: 'template' } | { scope: 'row'; key: string };
 export function BatchEditor({
     draft, onDraft, onMode, defaults, onDefaults, today, tags, canRepeat, directPublish,
     publishing, errorMessage, onPublish, onReview, onBack, initialEditingKey, saveModelName, onSaveModelName,
+    inviteCheck, callSection, riskWarnings, onRowPeople, inviteCount,
 }: {
     draft: ShiftDraftBatch;
     onDraft: (draft: ShiftDraftBatch) => void;
@@ -54,6 +56,13 @@ export function BatchEditor({
     /** undefined = o turno já nasceu de um modelo guardado (sem opção). null = não guardar; texto = nome do modelo. */
     saveModelName?: string | null;
     onSaveModelName: (name: string | null) => void;
+    /** Regra de "quem vai trabalhar" (sem ela, nada a exigir). */
+    inviteCheck?: ValidationContext['invite'];
+    /** Seção "Quem vai trabalhar", logo acima da barra de ação. */
+    callSection?: ReactNode;
+    riskWarnings?: string[];
+    onRowPeople?: (key: string) => void;
+    inviteCount?: (row: ShiftDraftRow) => number;
 }) {
     void onMode;
     const [details, setDetails] = useState<Details | null>(null);
@@ -89,7 +98,7 @@ export function BatchEditor({
 
     const merged = mergeDrafts(draft.template, rows).rows;
     const summary = batchSummary(draft.template, merged);
-    const blocking = validateBatch({ ...draft, rows: merged }, { today }).filter((i) => i.blocking);
+    const blocking = validateBatch({ ...draft, rows: merged }, { today, invite: inviteCheck }).filter((i) => i.blocking);
     const problems = [...new Set(blocking.map((i) => i.detail))];
     const full = rows.length >= MAX_BATCH_ROWS;
     const publishes = directPublish && rows.length === 1;
@@ -173,6 +182,8 @@ export function BatchEditor({
                             onEditDetails={() => setDetails({ scope: 'row', key: row.key })}
                             onDuplicate={() => duplicate(row.key)}
                             onRemove={() => setRows(rows.filter((r) => r.key !== row.key))}
+                            onPeople={rows.length > 1 && onRowPeople && (inviteCheck?.teamSize ?? 0) > 0 ? () => onRowPeople(row.key) : undefined}
+                            peopleCount={inviteCount?.(row)}
                         />
                     ))}
                 </ol>
@@ -234,6 +245,13 @@ export function BatchEditor({
                         </div>
                     )}
                 </section>
+            )}
+
+            {callSection}
+            {riskWarnings && riskWarnings.length > 0 && (
+                <Alert tone="warning" title="Frequência na semana">
+                    <ul>{riskWarnings.map((w) => <li key={w}>{w}</li>)}</ul>
+                </Alert>
             )}
 
             {errorMessage && <Alert tone="danger" role="alert">{errorMessage}</Alert>}

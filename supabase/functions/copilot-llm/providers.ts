@@ -10,7 +10,7 @@ export const MODELS: Record<ProviderName, readonly string[]> = {
   // Só modelos com endpoint ZDR e ferramentas (/api/v1/endpoints/zdr, 26/11/2026). Sem GPT e sem
   // variantes `:free`, `:batch` ou qualquer outro sufixo.
   openrouter: [
-    'thinkingmachines/inkling-2-mini', 'z-ai/glm-5.3-flash', 'deepseek/deepseek-v4.1-flash',
+    'tencent/hy4-flash', 'thinkingmachines/inkling-2-mini', 'z-ai/glm-5.3-flash', 'deepseek/deepseek-v4.1-flash',
     'inclusionai/ling-3.0-flash', 'upstage/solar-mini-4-5', 'google/gemma-4-26b-a4b-it', 'anthropic/claude-haiku-5.5',
   ],
 }
@@ -64,7 +64,7 @@ export function readProviderConfig(env: (name: string) => string | undefined): P
   const provider = (env('COPILOT_LLM_PROVIDER')?.trim() || (routerKey ? 'openrouter' : '')) as ProviderName | ''
   // A chave do OpenRouter nunca é enviada a outro provedor.
   if (routerKey && provider !== 'openrouter') return null
-  const model = env('COPILOT_LLM_MODEL')?.trim() || (routerKey ? 'anthropic/claude-haiku-5.5' : '')
+  const model = env('COPILOT_LLM_MODEL')?.trim() || (routerKey ? 'tencent/hy4-flash' : '')
   if (!apiKey || !provider || !model) return null
   if (!Object.prototype.hasOwnProperty.call(MODELS, provider)) return null
   if (!MODELS[provider].includes(model)) return null
@@ -72,13 +72,20 @@ export function readProviderConfig(env: (name: string) => string | undefined): P
 }
 
 /** Reservas padrão do OpenRouter, na ordem: só para falha de infraestrutura do provedor. */
-export const DEFAULT_FALLBACKS: readonly string[] = ['z-ai/glm-5.3-flash', 'deepseek/deepseek-v4.1-flash']
-export const MAX_ATTEMPTS = 3
+/**
+ * Ordem padrão: do MAIS BARATO ao mais caro, sem Haiku (preços OpenRouter, US$/Mtok entrada/saída, 26/11/2026):
+ * hy4-flash 0,035/0,14 → deepseek-v4.1-flash 0,051/0,20 → inkling-2-mini 0,075/0,30 → glm-5.3-flash 0,15/0,50.
+ * Sobe para o próximo em falha de infraestrutura E quando o modelo devolve saída inválida.
+ */
+export const DEFAULT_FALLBACKS: readonly string[] = [
+  'tencent/hy4-flash', 'deepseek/deepseek-v4.1-flash', 'thinkingmachines/inkling-2-mini', 'z-ai/glm-5.3-flash',
+]
+export const MAX_ATTEMPTS = 4
 
 /**
  * Fila de modelos de um pedido: principal + reservas (`COPILOT_LLM_FALLBACKS`, separadas por vírgula).
  * Só OpenRouter tem reservas, e cada item precisa estar na allowlist de PRODUÇÃO (com ZDR): item fora
- * dela é ignorado (contado em `ignored`, sem nome), nunca vira erro. Sem duplicatas, no máximo 3.
+ * dela é ignorado (contado em `ignored`, sem nome), nunca vira erro. Sem duplicatas, no máximo 4.
  */
 export function modelChain(
   config: ProviderConfig,
@@ -88,7 +95,8 @@ export function modelChain(
   const raw = env('COPILOT_LLM_FALLBACKS')
   const asked = raw === undefined ? [...DEFAULT_FALLBACKS] : raw.split(',').map((m) => m.trim()).filter(Boolean)
   const valid = asked.filter((m) => MODELS.openrouter.includes(m))
-  const models = [...new Set([config.model, ...valid])].slice(0, MAX_ATTEMPTS)
+  // Sem lista explícita, a ordem barata → cara manda (o modelo principal do secret não vai na frente).
+  const models = [...new Set(raw === undefined ? valid : [config.model, ...valid])].slice(0, MAX_ATTEMPTS)
   return { models, ignored: asked.length - valid.length }
 }
 
@@ -240,11 +248,32 @@ export function parseProviderResponse(provider: ProviderName, payload: unknown):
   const call = calls[0]
   let args: unknown = null
   if (call?.function?.name === TOOL_NAME && typeof call.function.arguments === 'string') {
-    try {
-      args = JSON.parse(call.function.arguments)
-    } catch {
-      args = null
-    }
+    args = parseToolArguments(call.function.arguments)
   }
   return { args, ...usage }
+}
+
+/**
+ * Argumentos da chamada de ferramenta, tolerando os defeitos comuns de modelo barato: cerca de código
+ * (```json), texto antes ou depois do objeto, vírgula sobrando e JSON duplamente codificado. Se mesmo assim
+ * não virar um OBJETO, devolve null (a validação do proxy continua recusando o que não for da lista).
+ */
+export function parseToolArguments(raw: string): unknown {
+  const attempt = (text: string): unknown => {
+    try {
+      const value = JSON.parse(text)
+      if (typeof value === 'string') return attempt(value.trim()) // codificado duas vezes
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+    } catch {
+      return null
+    }
+  }
+  const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+  const direct = attempt(text)
+  if (direct) return direct
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end <= start) return null
+  const body = text.slice(start, end + 1)
+  return attempt(body) ?? attempt(body.replace(/,\s*([}\]])/g, '$1'))
 }

@@ -75,6 +75,11 @@ describe('chamar depois de publicar', () => {
     expect(resolveInvitees(rows[0], { mode: 'none' }, list, eligible)).toEqual([]);
   });
 
+  it('lista e pessoas avulsas somam', () => {
+    expect(resolveInvitees(rows[0], { mode: 'list', list_id: 'l', worker_ids: ['c'] }, list, eligible)).toEqual(['a', 'b', 'c']);
+    expect(resolveInvitees(rows[0], { mode: 'workers', worker_ids: ['c', 'zz'] }, list, eligible)).toEqual(['c']);
+  });
+
   it('liga cada linha ao turno pela ordem e pula quem não tem convidado', () => {
     expect(buildCallPlan(rows, ['j1', 'j2', 'j3'], (r) => (r === rows[1] ? [] : ['a'])).map((p) => p.job_id))
       .toEqual(['j1', 'j3']);

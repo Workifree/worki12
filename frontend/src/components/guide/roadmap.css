@@ -3,7 +3,7 @@
  * stroke-dashoffset se movem (nada repinta a página). Cores por papel via --rm-a / --rm-b.
  * Movimento reduzido: tudo parado, já no estado final.
  */
-.wk-road { --rm-a: #2563eb; --rm-b: #7c3aed; --rm-tint: color-mix(in srgb, var(--rm-a) 8%, #fff); }
+.wk-road { --rm-a: #2563eb; --rm-b: #2563eb; --rm-tint: color-mix(in srgb, var(--rm-a) 8%, #fff); }
 
 .wk-road__node {
   position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 9999px;
@@ -14,8 +14,8 @@
 .wk-road__node:focus-visible { outline: 3px solid var(--rm-a); outline-offset: 3px; }
 .wk-road__node[data-state='done'] {
   border-color: transparent; color: #fff;
-  background: linear-gradient(135deg, var(--rm-a), var(--rm-b));
-  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--rm-a) 70%, transparent);
+  background: var(--rm-a); border: 2px solid #000;
+  box-shadow: 2px 2px 0 0 #000;
 }
 .wk-road__node[data-state='now'] { border-color: var(--rm-a); color: var(--rm-a); }
 .wk-road__node[data-state='now']::after {

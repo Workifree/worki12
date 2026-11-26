@@ -5,9 +5,12 @@ import { DEFAULT_FALLBACKS, modelChain } from '../../../../../supabase/functions
 
 const CHAVE = 'sk-or-v1-chave-ficticia-de-teste'
 const TESTE = 'bdb8aeb9-1175-42ed-ac87-0ef5e9bc8dc4'
-const HAIKU = 'anthropic/claude-haiku-5.5'
-const GLM = 'z-ai/glm-5.3-flash'
-const INKLING = 'deepseek/deepseek-v4.1-flash'
+// Ordem padrão (sem Haiku), do mais barato ao mais caro. Os nomes seguem a POSIÇÃO: HAIKU = 1º (hy4-flash),
+// GLM = 2º (deepseek), INKLING = 3º (inkling-2-mini); o 4º é o glm-5.3-flash.
+const HAIKU = 'tencent/hy4-flash'
+const GLM = 'deepseek/deepseek-v4.1-flash'
+const INKLING = 'thinkingmachines/inkling-2-mini'
+const QUARTO = 'z-ai/glm-5.3-flash'
 const QWEN = 'qwen/qwen3.7-flash'
 
 const corpo = (extra: Record<string, unknown> = {}) =>
@@ -61,10 +64,11 @@ function setup(porModelo: Record<string, Handler>, vars: Record<string, string |
 afterEach(() => vi.useRealTimers())
 
 describe('reserva de modelo', () => {
-  it('padrão: haiku 5.5, depois glm 5.3 flash, depois deepseek v4.1 flash', () => {
-    expect(DEFAULT_FALLBACKS).toEqual([GLM, INKLING])
-    const cfg = { provider: 'openrouter' as const, model: HAIKU, apiKey: CHAVE }
-    expect(modelChain(cfg, () => undefined).models).toEqual([HAIKU, GLM, INKLING])
+  it('padrão: hy4-flash, deepseek, inkling-2-mini, glm-5.3-flash (do mais barato ao mais caro, sem haiku)', () => {
+    expect(DEFAULT_FALLBACKS).toEqual([HAIKU, GLM, INKLING, QUARTO])
+    // O modelo do secret não vai na frente da ordem barata → cara.
+    const cfg = { provider: 'openrouter' as const, model: 'anthropic/claude-haiku-5.5', apiKey: CHAVE }
+    expect(modelChain(cfg, () => undefined).models).toEqual([HAIKU, GLM, INKLING, QUARTO])
   })
 
   it.each([
@@ -107,11 +111,11 @@ describe('reserva de modelo', () => {
     expect(t.modelos()).toEqual([HAIKU])
   })
 
-  it('três falhas: 502 all_providers_failed, no máximo 3 chamadas', async () => {
-    const t = setup({ [HAIKU]: http(503), [GLM]: rede, [INKLING]: http(500) })
+  it('quatro falhas: 502 all_providers_failed, no máximo 4 chamadas', async () => {
+    const t = setup({ [HAIKU]: http(503), [GLM]: rede, [INKLING]: http(500), [QUARTO]: http(503) })
     const r = await t.call()
     expect([r.status, r.body]).toEqual([502, { error: { message: 'all_providers_failed' } }])
-    expect(t.modelos()).toEqual([HAIKU, GLM, INKLING])
+    expect(t.modelos()).toEqual([HAIKU, GLM, INKLING, QUARTO])
   })
 
   it('a cota conta UMA vez por pedido e o acerto traz os tokens de quem respondeu (e de quem cobrou)', async () => {
@@ -176,9 +180,10 @@ describe('reserva de modelo', () => {
       expect(Object.keys(corpoEnviado).sort()).toEqual(['max_tokens', 'messages', 'model', 'provider', 'tool_choice', 'tools'])
       expect(corpoEnviado.models).toBeUndefined()
     }
-    expect(a.tool_choice).toBe('auto')
-    expect(b.tool_choice).toEqual({ type: 'function', function: { name: 'AgentOutput' } })
-    expect(c.tool_choice).toEqual({ type: 'function', function: { name: 'AgentOutput' } })
+    // Os quatro modelos baratos aceitam ferramenta forçada (confirmado em /api/v1/endpoints/zdr, 26/11/2026).
+    for (const corpoEnviado of [a, b, c]) {
+      expect(corpoEnviado.tool_choice).toEqual({ type: 'function', function: { name: 'AgentOutput' } })
+    }
   })
 
   it('só OpenRouter tem reservas', () => {
@@ -220,7 +225,7 @@ describe('disjuntor', () => {
 
   it('com todos fora da fila, tenta o principal mesmo assim', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    const t = setup({ [HAIKU]: http(503), [GLM]: http(503), [INKLING]: http(503) })
+    const t = setup({ [HAIKU]: http(503), [GLM]: http(503), [INKLING]: http(503), [QUARTO]: http(503) })
     expect((await t.call()).status).toBe(502)
     vi.mocked(t.deps.fetch).mockClear()
     const r = await t.call()

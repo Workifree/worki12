@@ -30,7 +30,7 @@ export default function HelpButton(props: Pick<BotaoComoFacoProps, 'variante' | 
                 const r = evento.currentTarget.getBoundingClientRect();
                 requestOpen(r.width || r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined);
             }}
-            className={`wk-trigger relative mr-2 !min-h-11 !px-3 md:hidden ${props.className ?? ''}`}
+            className={`wk-trigger wk-trigger--header relative mr-2 md:hidden ${props.className ?? ''}`}
         >
             <TriggerBody compact />
         </button>

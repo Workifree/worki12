@@ -29,5 +29,7 @@ export interface CopilotViewProps {
   navigate: (path: string) => void
   confirmArmDelayMs?: number
   showLog: boolean
+  /** Demonstração dos efeitos (cursor/toque, ondulação, pulo, gota, brilho) sem chamar a IA. */
+  demo: () => void
   setShowLog: (value: boolean) => void
 }
