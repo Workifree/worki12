@@ -80,26 +80,26 @@ describe('chave secret-openrouter', () => {
   })
 })
 
-describe('liberação fechada por padrão', () => {
-  it('só os dois ids de teste', () => {
+describe('liberação aberta por padrão (decisão do dono, 26/11/2026)', () => {
+  it('só os dois ids de teste formam a lista de reserva', () => {
     expect(TEST_USER_IDS).toEqual([TESTE, 'a4c775db-c05d-4e3b-b8fe-48661d371cb9'])
   })
 
-  it.each([undefined, '', 'false', 'TRUE', '1'])('usuário comum com COPILOT_PUBLIC=%s: 403 not_released', async (valor) => {
-    const t = setup(COMUM, { COPILOT_PUBLIC: valor })
+  it.each([undefined, '', 'true', 'TRUE', '1'])('usuário comum com COPILOT_PUBLIC=%s: liberado', async (valor) => {
+    expect((await setup(COMUM, { COPILOT_PUBLIC: valor }).call()).status).toBe(200)
+  })
+
+  it('COPILOT_PUBLIC=false fecha: só as contas de teste, ou a lista COPILOT_ALLOWED_USERS', async () => {
+    const t = setup(COMUM, { COPILOT_PUBLIC: 'false' })
     for (const raw of [undefined, corpo(), corpo({ eval: { model: QWEN } })]) {
       const r = await t.call(raw)
       expect([r.status, r.body.error.message]).toEqual([403, 'not_released'])
     }
     expect(t.deps.reserve).not.toHaveBeenCalled()
     expect(t.deps.fetch).not.toHaveBeenCalled()
-  })
-
-  it('contas de teste passam; a lista substitui o padrão; público abre', async () => {
-    for (const id of TEST_USER_IDS) expect((await setup(id).call()).status).toBe(200)
-    expect((await setup(COMUM, { COPILOT_ALLOWED_USERS: ` x, ${COMUM} ` }).call()).status).toBe(200)
-    expect((await setup(TESTE, { COPILOT_ALLOWED_USERS: COMUM }).call()).status).toBe(403)
-    expect((await setup(COMUM, { COPILOT_PUBLIC: 'true' }).call()).status).toBe(200)
+    for (const id of TEST_USER_IDS) expect((await setup(id, { COPILOT_PUBLIC: 'false' }).call()).status).toBe(200)
+    expect((await setup(COMUM, { COPILOT_PUBLIC: 'false', COPILOT_ALLOWED_USERS: ` x, ${COMUM} ` }).call()).status).toBe(200)
+    expect((await setup(TESTE, { COPILOT_PUBLIC: 'false', COPILOT_ALLOWED_USERS: COMUM }).call()).status).toBe(403)
   })
 })
 

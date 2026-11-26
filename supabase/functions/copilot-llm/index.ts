@@ -8,7 +8,7 @@
 // Se COPILOT_LLM_API_KEY não existir, a chave é o secret `secret-openrouter`, com provider
 // openrouter e modelo anthropic/claude-haiku-5.5 por padrão. Sem chave: 503, e o app oferece só o guia.
 // Não lançado: só as contas de teste (ou COPILOT_ALLOWED_USERS) passam; os demais recebem
-// 403 not_released. COPILOT_PUBLIC=true abre a todos.
+// 403 not_released só com COPILOT_PUBLIC=false.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { handleCopilot, type Deps } from './handler.ts'
 
