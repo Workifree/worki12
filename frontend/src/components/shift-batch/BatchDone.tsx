@@ -14,7 +14,7 @@ export interface PublishedBatch {
 
 /** Turnos já estão publicados. Os chamados são tentativas: cada falha tem seu "Tentar de novo". */
 export function BatchDone({
-    done, results, sending, onRetry, onMore,
+    done, results, sending, onRetry, onMore, modelSaved = null,
 }: {
     done: PublishedBatch;
     /** Por job_id. Sem entrada = ainda não tentado. */
@@ -22,6 +22,8 @@ export function BatchDone({
     sending: ReadonlySet<string>;
     onRetry: (item: CallPlanItem) => void;
     onMore: () => void;
+    /** Resultado de "Guardar como modelo" (null = não pedido). */
+    modelSaved?: 'saved' | 'duplicate' | 'limit' | 'error' | null;
 }) {
     const summary = batchSummary(done.template, done.rows);
     const all = Object.values(results);
@@ -52,6 +54,14 @@ export function BatchDone({
                     )}
                 </div>
             </header>
+            {modelSaved && (
+                <p role="status" className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+                    {modelSaved === 'saved' && 'Modelo guardado. Da próxima vez ele aparece em “Meus modelos”.'}
+                    {modelSaved === 'duplicate' && 'Já existe um modelo com esse nome, então não guardamos outro. Os turnos foram publicados.'}
+                    {modelSaved === 'limit' && 'Você atingiu o limite de 100 modelos. Exclua algum para guardar novos. Os turnos foram publicados.'}
+                    {modelSaved === 'error' && 'Os turnos foram publicados, mas não deu para guardar o modelo agora.'}
+                </p>
+            )}
 
             {failed > 0 && (
                 <Alert tone="warning">Os turnos continuam publicados. Só o aviso aos freelas falhou.</Alert>

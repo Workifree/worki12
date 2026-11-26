@@ -105,6 +105,10 @@ describe('classificação', () => {
     expect(level(<a data-t="" href="/company/jobs">Meus turnos</a>)).toBe('safe')
     expect(level(<button type="button" data-t="">Próximo mês</button>)).toBe('safe')
     expect(level(<button type="button" data-t="" data-copilot="empresa.turno-lote.do-zero">Criar do zero</button>)).toBe('safe')
+    expect(level(<button type="button" data-t="" data-copilot="empresa.turno-lote.continuar-rascunho">Continuar</button>)).toBe('safe')
+    // Excluir modelo e descartar rascunho gravam/apagam: nunca passam sem cartão.
+    expect(level(<button type="button" data-t="" data-copilot="empresa.turno-lote.excluir-modelo">Excluir modelo</button>)).not.toBe('safe')
+    expect(level(<button type="button" data-t="" data-copilot="empresa.turno-lote.descartar-rascunho">Descartar</button>)).not.toBe('safe')
     expect(level(<button type="button" data-t="" aria-expanded="false">Detalhes</button>)).toBe('safe')
   })
 

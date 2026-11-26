@@ -28,14 +28,14 @@ export function EmptyState({
   return (
     <div
       className={cx(
-        'px-4 text-center',
+        'rounded-2xl border-2 border-dashed border-gray-300 px-4 text-center',
         size === 'page' ? 'py-12' : 'py-8',
         className,
       )}
       {...rest}
     >
       {Icon && <Icon size={40} aria-hidden="true" className="mx-auto mb-3 text-gray-400" />}
-      <Heading className="text-base font-semibold text-balance text-gray-900">{title}</Heading>
+      <Heading className="text-base font-bold text-balance text-black">{title}</Heading>
       {description && <p className="mx-auto mt-1 max-w-prose text-sm text-gray-600">{description}</p>}
       {action && <div className="mt-4 flex flex-wrap items-center justify-center gap-3">{action}</div>}
     </div>

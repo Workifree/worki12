@@ -90,7 +90,7 @@ export default function Help() {
                         </p>
                         <a
                             href={`mailto:${contactEmail}`}
-                            className="flex items-center gap-3 min-h-11 p-3 rounded-xl border border-gray-200 hover:border-gray-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                            className="flex items-center gap-3 min-h-11 p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                         >
                             <Mail size={20} className="text-gray-600" aria-hidden="true" />
                             <div className="min-w-0">

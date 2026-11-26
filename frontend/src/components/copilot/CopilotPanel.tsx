@@ -7,6 +7,7 @@ import { createPortal, flushSync } from 'react-dom'
 import { CopilotDesktop } from './CopilotDesktop'
 import { CopilotMobile } from './CopilotMobile'
 import type { Availability, CopilotViewProps } from './copilotView'
+import './copilot-base.css'
 import './copilot.css'
 import { useCopilotAgent, type AgentOverrides } from '../../hooks/copilot/useCopilotAgent'
 import { useTopLayerHost } from '../../hooks/copilot/useTopLayerHost'
@@ -35,6 +36,8 @@ export interface CopilotPanelProps {
   onOpenGuide?: () => void
   /** `false`: sem a aba/pílula de abrir; abra com `requestOpen()` ou Ctrl+K. */
   showLauncher?: boolean
+  /** `false`: sem a aba lateral no celular (o app usa a pílula do cabeçalho). */
+  mobileLauncher?: boolean
   confirmArmDelayMs?: number
   overrides?: AgentOverrides
   /** Rota atual (para as sugestões). */
@@ -57,6 +60,7 @@ export default function CopilotPanel({
   services,
   onOpenGuide,
   showLauncher = true,
+  mobileLauncher = true,
   confirmArmDelayMs,
   overrides,
   pathname,
@@ -136,13 +140,16 @@ export default function CopilotPanel({
    * `view-transition-name`; a raiz não faz crossfade. Sem a API, com movimento reduzido, no celular ou sem
    * um botão de origem visível: abre e fecha direto, e o CSS faz a entrada de 260 ms.
    */
-  /** Botão visível que abriu (o que está sob o toque, o botão de ajuda do cabeçalho ou a pílula do próprio copiloto). */
+  /**
+   * Origem do morph: a pílula do copiloto (flutuante no PC, ou "Ajuda" no cabeçalho do celular). O botão sob o
+   * toque só vale quando não há nenhuma delas visível: com Ctrl+K o ponto cai em qualquer coisa da página.
+   */
   const findOrigin = useCallback((at?: OpenDetail): HTMLElement | null => {
     const visible = (node: HTMLElement | null | undefined) => (node && node.getBoundingClientRect().width > 0 ? node : null)
     const hit = at ? document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('button,a,[role="button"]') : null
     return (
+      Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o copiloto"],button[aria-label="Ajuda e copiloto"]')).find((node) => visible(node)) ??
       visible(hit) ??
-      Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Ajuda e copiloto"],button[aria-label="Abrir o copiloto"]')).find((node) => visible(node)) ??
       null
     )
   }, [])
@@ -263,6 +270,7 @@ export default function CopilotPanel({
     close,
     openIt: () => openAnimated(),
     showLauncher,
+    mobileLauncher,
     availability,
     consent,
     accept,

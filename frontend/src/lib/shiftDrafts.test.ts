@@ -4,7 +4,7 @@ import {
   distinctModels, duplicateRow, emptyTemplate, hasBlockingIssue, isValidDate, lastWeekRange,
   lastWeekendRange, mergeDrafts, newId, nowTimeInBrazil, quickDateOptions, resolveSeries, rowCost,
   separateRows, seriesDates, templateFromJob, toPublishPayload, validateBatch, weekdayOf,
-  weeklySeriesFrom, type ShiftDraftBatch, type ShiftDraftRow, type SourceJob,
+  categoryName, weeklySeriesFrom, sanitizeSavedTemplate, templateToSave, type ShiftDraftBatch, type ShiftDraftRow, type SourceJob,
 } from './shiftDrafts';
 import { toBrazilDateOnly } from './dateUtils';
 
@@ -283,5 +283,34 @@ describe('idempotência e payload', () => {
     expect(newId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     Object.defineProperty(globalThis.crypto, 'randomUUID', { value: original, configurable: true });
     spy.mockRestore();
+  });
+});
+
+describe('modelos salvos', () => {
+  it('sanitizeSavedTemplate: o que vem do banco nunca quebra a tela', () => {
+    const lixo = sanitizeSavedTemplate({
+      id: 'x', name: 'Modelo',
+      template: { title: 42, category: 'garcom', budget_type: 'mensal', has_lunch: 'sim', tag_id: 7, location: 'a'.repeat(500) },
+      defaults: { start_time: '25:99', end_time: '23:00', slots: -3, budget: 'caro' },
+    });
+    expect(lixo.template.title).toBe(categoryName('garcom'));
+    expect(lixo.template.budget_type).toBe('daily');
+    expect(lixo.template.has_lunch).toBe(false);
+    expect(lixo.template.tag_id).toBeNull();
+    expect(lixo.template.location).toHaveLength(200);
+    expect(lixo.template.source_job_id).toBeNull();
+    expect(lixo.defaults).toEqual({ start_time: '', end_time: '23:00', slots: 1, budget: 0 });
+    expect(sanitizeSavedTemplate({ id: 'y', name: 'N', template: null, defaults: 'x' }).defaults.slots).toBe(1);
+  });
+
+  it('templateToSave não leva data nem origem, e volta igual por sanitizeSavedTemplate', () => {
+    const t = { ...emptyTemplate('garcom'), title: 'Garçom sábado', location: 'Salão', has_lunch: true, source_job_id: 'job-9' };
+    const defaults = { start_time: '18:00', end_time: '23:00', slots: 3, budget: 150 };
+    const saved = templateToSave(t, defaults);
+    expect(saved.template).not.toHaveProperty('source_job_id');
+    expect(saved.template).not.toHaveProperty('date');
+    const back = sanitizeSavedTemplate({ id: 'i', name: 'Garçom sábado', ...saved });
+    expect(back.template).toMatchObject({ title: 'Garçom sábado', category: 'garcom', location: 'Salão', has_lunch: true, source_job_id: null });
+    expect(back.defaults).toEqual(defaults);
   });
 });

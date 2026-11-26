@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { CheckCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Field } from '../components/ui';
-import { AuthShell } from '../components/AuthShell';
+import { Button, Card, Field, PageHeader } from '../components/ui';
 
 export default function ForgotPassword() {
     const navigate = useNavigate();
@@ -70,57 +69,79 @@ export default function ForgotPassword() {
 
     if (sent) {
         return (
-            <AuthShell backTo="/login" backLabel="Voltar para o login" title="Email Enviado">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-green-50">
-                    <CheckCircle size={24} className="text-primary-dark" aria-hidden="true" />
-                </div>
-                <p className="mb-6 text-sm text-gray-700 sm:text-base">
-                    Se o e-mail <strong className="break-all">{email}</strong> estiver cadastrado, você receberá um link para redefinir sua senha.
-                </p>
-                <div className="flex flex-col gap-3">
-                    <Button
-                        variant="dark"
-                        size="lg"
-                        fullWidth
-                        onClick={() => { setError(''); void enviarLink(email.trim()); }}
-                        disabled={cooldown > 0 || loading}
-                    >
-                        {loading ? 'Enviando...' : cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar Email'}
-                    </Button>
-                    {error && <p role="alert" className="text-sm font-bold text-red-700">{error}</p>}
-                    <Button variant="secondary" size="lg" fullWidth onClick={() => navigate('/login')}>
-                        Voltar para Login
-                    </Button>
-                </div>
-            </AuthShell>
+            <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+                <Card padding="lg" className="max-w-md w-full text-center">
+                    <div className="w-14 h-14 bg-green-100 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle size={28} className="text-green-600" />
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight mb-2">Email Enviado</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mb-6">
+                        Se o e-mail <strong className="break-all">{email}</strong> estiver cadastrado, você receberá um link para redefinir sua senha.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                        <Button
+                            variant="dark"
+                            size="lg"
+                            fullWidth
+                            onClick={() => { setError(''); void enviarLink(email.trim()); }}
+                            disabled={cooldown > 0 || loading}
+                        >
+                            {loading ? 'Enviando...' : cooldown > 0 ? `Reenviar em ${cooldown}s` : 'Reenviar Email'}
+                        </Button>
+                        {error && <p role="alert" className="text-xs font-bold text-red-600">{error}</p>}
+                        <Button variant="secondary" size="lg" fullWidth onClick={() => navigate('/login')}>
+                            Voltar para Login
+                        </Button>
+                    </div>
+                </Card>
+            </div>
         );
     }
 
     return (
-        <AuthShell backTo="/login" title="Esqueci a Senha" subtitle="Enviaremos um link para seu e-mail">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <Field label="Email" error={error || undefined}>
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="seu@email.com"
-                        autoFocus
-                    />
-                </Field>
-
+        <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+            <Card padding="lg" className="max-w-md w-full">
                 <Button
-                    type="submit"
-                    variant="dark"
-                    size="lg"
-                    fullWidth
-                    loading={loading}
-                    disabled={!email.trim() || cooldown > 0}
-                    data-copilot="publico.recuperar-senha.enviar-link"
+                    variant="ghost"
+                    size="md"
+                    onClick={() => navigate('/login')}
+                    iconLeft={<ArrowLeft size={16} />}
+                    className="-ml-3 mb-4"
                 >
-                    {cooldown > 0 ? `Aguarde ${cooldown}s` : 'Enviar Link de Recuperação'}
+                    Voltar
                 </Button>
-            </form>
-        </AuthShell>
+
+                <PageHeader
+                    as="h1"
+                    title="Esqueci a Senha"
+                    subtitle="Enviaremos um link para seu e-mail"
+                    className="sm:mb-6"
+                />
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Field label="Email" error={error || undefined}>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            placeholder="seu@email.com"
+                            autoFocus
+                        />
+                    </Field>
+
+                    <Button
+                        type="submit"
+                        variant="dark"
+                        size="lg"
+                        fullWidth
+                        loading={loading}
+                        disabled={!email.trim() || cooldown > 0}
+                        data-copilot="publico.recuperar-senha.enviar-link"
+                    >
+                        {cooldown > 0 ? `Aguarde ${cooldown}s` : 'Enviar Link de Recuperação'}
+                    </Button>
+                </form>
+            </Card>
+        </div>
     );
 }

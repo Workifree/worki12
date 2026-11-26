@@ -205,9 +205,7 @@ describe('CompanyTeamMembers', () => {
       outcome: 'last_manager', openJobs: 0, elencoLinkRotationAdvised: false, alreadyRemoved: false,
     });
     renderPage();
-    // A ação mora no menu da linha (uma ação visível por pessoa).
-    fireEvent.click(await screen.findByRole('button', { name: /Mais opções de/ }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Remover da equipe/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Remover da equipe/ }));
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/pelo menos um Gestor/), 'error'));
   });
 
@@ -263,9 +261,7 @@ describe('CompanyTeamMembers', () => {
       .mockResolvedValueOnce({ outcome: 'would_remove', openJobs: 3, elencoLinkRotationAdvised: true, alreadyRemoved: false })
       .mockResolvedValueOnce({ outcome: 'removed', openJobs: 3, elencoLinkRotationAdvised: true, alreadyRemoved: false });
     renderPage();
-    // A ação mora no menu da linha (uma ação visível por pessoa).
-    fireEvent.click(await screen.findByRole('button', { name: /Mais opções de/ }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Remover da equipe/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Remover da equipe/ }));
 
     expect(await screen.findByText(/3 turnos abertos no nome dessa pessoa ficarão com você/)).toBeInTheDocument();
     expect(svc.removeMember).toHaveBeenNthCalledWith(1, 'c1', 'u1', true);
@@ -324,9 +320,7 @@ describe('CompanyTeamMembers', () => {
     });
     vi.mocked(svc.revokeInvite).mockResolvedValue({ outcome: 'revoked' });
     renderPage();
-    // A ação mora no menu da linha (uma ação visível por pessoa).
-    fireEvent.click(await screen.findByRole('button', { name: /Mais opções de/ }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Revogar convite/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Revogar convite/ }));
     await waitFor(() => expect(svc.revokeInvite).toHaveBeenCalledWith('m3'));
   });
 });

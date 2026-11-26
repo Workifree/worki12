@@ -3,18 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Card } from './Card'
 
 describe('Card', () => {
-  it('padrão: fundo branco, rounded-2xl, borda cinza 1px e sem sombra', () => {
+  it('aplica a gramática brutalista (borda preta 2px, rounded-2xl, fundo branco)', () => {
     render(<Card data-testid="c">x</Card>)
-    const c = screen.getByTestId('c')
-    expect(c).toHaveClass('bg-white', 'border', 'border-gray-200', 'rounded-2xl')
-    expect(c.className).not.toMatch(/shadow|border-2|border-black/)
-  })
-
-  it('flat não tem borda; highlight tem borda 1,5px preta e brutal-xs', () => {
-    const { rerender } = render(<Card data-testid="c" tone="flat">x</Card>)
-    expect(screen.getByTestId('c')).toHaveClass('border-0')
-    rerender(<Card data-testid="c" tone="highlight">x</Card>)
-    expect(screen.getByTestId('c')).toHaveClass('border-ink', 'border-black', 'shadow-brutal-xs')
+    expect(screen.getByTestId('c')).toHaveClass('bg-white', 'border-2', 'border-black', 'rounded-2xl')
   })
 
   it('padding padrão md; aceita sm, lg e none', () => {
@@ -40,7 +31,7 @@ describe('Card', () => {
     expect(screen.getByTestId('c').className).not.toMatch(/\bp-\d/)
   })
 
-  it('interactive adiciona hover; sem a prop não adiciona', () => {
+  it('interactive adiciona hover elevado; sem a prop não adiciona', () => {
     const { rerender } = render(<Card data-testid="c">x</Card>)
     expect(screen.getByTestId('c').className).not.toContain('hover:')
     rerender(
@@ -48,7 +39,7 @@ describe('Card', () => {
         x
       </Card>,
     )
-    expect(screen.getByTestId('c').className).toContain('hover:bg-gray-50')
+    expect(screen.getByTestId('c').className).toContain('hover:-translate-y-0.5')
   })
 
   it('renderiza o elemento pedido em "as"', () => {
@@ -66,7 +57,7 @@ describe('Card', () => {
         x
       </Card>,
     )
-    expect(screen.getByTestId('c')).toHaveClass('mt-4', 'border-gray-200')
+    expect(screen.getByTestId('c')).toHaveClass('mt-4', 'border-black')
   })
 
   describe('onActivate', () => {
@@ -79,7 +70,7 @@ describe('Card', () => {
       const c = screen.getByRole('button')
       expect(c).toBe(screen.getByTestId('c'))
       expect(c).toHaveAttribute('tabindex', '0')
-      expect(c.className).toContain('hover:bg-gray-50')
+      expect(c.className).toContain('hover:-translate-y-0.5')
       expect(c.className).toContain('focus-visible:ring-2')
     })
 

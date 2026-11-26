@@ -33,7 +33,7 @@ export function BotaoComoFaco({ variante = 'icone', aoAbrir, rotulo = 'Como faç
     }
     return (
         <Button
-            variant="ghost"
+            variant="secondary"
             aria-haspopup="dialog"
             data-page-agent-ignore="true"
             onClick={abrir}

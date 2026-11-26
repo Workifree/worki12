@@ -1,6 +1,7 @@
 import React from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { captureException } from '../lib/logger';
-import { ErrorState } from './ui';
+import { Button } from './ui';
 
 interface Props {
     children: React.ReactNode;
@@ -29,13 +30,30 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     render() {
         if (this.state.hasError) {
             return (
-                <main className="min-h-screen bg-canvas flex items-center justify-center font-sans">
-                    <ErrorState
-                        className="max-w-md w-full"
-                        title="Algo deu errado"
-                        message="Ocorreu um erro inesperado. Tente de novo."
-                        onRetry={() => window.location.reload()}
-                    />
+                <main className="min-h-screen bg-canvas flex items-center justify-center p-6 font-sans">
+                    <div className="bg-white border-2 border-black rounded-2xl p-6 sm:p-8 max-w-md w-full text-center shadow-brutal-lg">
+                        <AlertTriangle size={40} className="mx-auto mb-4 text-red-500" />
+                        <h2 className="text-2xl font-bold tracking-tight mb-2">Algo deu errado</h2>
+                        <p className="text-sm sm:text-base text-gray-600 mb-6">
+                            Ocorreu um erro inesperado. Tente recarregar a página.
+                        </p>
+                        <Button
+                            variant="dark"
+                            size="lg"
+                            onClick={() => window.location.reload()}
+                            iconLeft={<RefreshCw size={18} />}
+                        >
+                            Recarregar
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="lg"
+                            className="ml-2 mt-2"
+                            onClick={() => window.location.assign('/')}
+                        >
+                            Ir para o início
+                        </Button>
+                    </div>
                 </main>
             );
         }

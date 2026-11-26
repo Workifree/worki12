@@ -1,31 +1,40 @@
-import { useState } from 'react';
-import { CalendarPlus, Plus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Pencil, Plus } from 'lucide-react';
 import {
-    addDays, applyToAll, batchSummary, createRow, duplicateRow, effectiveShift, mergeDrafts, plural,
-    resolveSeries, sortRows, validateBatch, workedMinutes, MAX_BATCH_ROWS, BATCH_LIMIT_MESSAGE,
+    addDays, applyToAll, batchSummary, categoryName, changeCategory, createRow, duplicateRow, isValidDate,
+    mergeDrafts, newId, plural, resolveSeries, validateBatch, MAX_BATCH_ROWS, BATCH_LIMIT_MESSAGE,
     type RowDefaults, type ShiftDraftBatch, type ShiftDraftRow,
 } from '../../lib/shiftDrafts';
+import { SHIFT_CATEGORIES } from '../company/shiftCategories';
 import { formatBRL } from '../../lib/currency';
-import { formatShiftDuration } from '../../lib/dateUtils';
 import type { CompanyTag } from '../../services/shiftOperationService';
-import { ActionBar, Alert, Button, Card } from '../ui';
-import { TemplateFields } from './TemplateFields';
-import { DateChips, MultiDateCalendar } from './DatePickers';
-import { RowFields } from './RowFields';
-import { RowList } from './RowList';
+import { ActionBar, Alert, Button, Card, Field, IconButton } from '../ui';
+import { ShiftRowCard } from './ShiftRowCard';
+import { ShiftDetailsModal } from './ShiftDetailsModal';
 import { ApplyAll, RepeatWeekly } from './BulkTools';
 
+/** Mantido por compatibilidade: o editor agora é sempre a lista (1 cartão = turno único). */
 export type EditorMode = 'single' | 'multi';
 
-/** Edição do rascunho: um turno (caminho rápido) ou várias linhas de um mesmo comum. */
+const rowDefaults = (row: ShiftDraftRow): RowDefaults => ({
+    start_time: row.start_time, end_time: row.end_time, slots: row.slots, budget: row.budget,
+});
+
+type Details = { scope: 'template' } | { scope: 'row'; key: string };
+
+/**
+ * Editor em lista: cada turno é um cartão esticado com os campos rápidos; o lápis abre o turno
+ * inteiro em tela cheia; "Adicionar outro turno" copia o último cartão para o dia seguinte.
+ */
 export function BatchEditor({
-    draft, onDraft, mode, onMode, defaults, onDefaults, today, tags, canRepeat, directPublish,
-    publishing, errorMessage, onPublish, onReview, onBack, initialEditingKey,
+    draft, onDraft, onMode, defaults, onDefaults, today, tags, canRepeat, directPublish,
+    publishing, errorMessage, onPublish, onReview, onBack, initialEditingKey, saveModelName, onSaveModelName,
 }: {
     draft: ShiftDraftBatch;
     onDraft: (draft: ShiftDraftBatch) => void;
-    mode: EditorMode;
-    onMode: (mode: EditorMode) => void;
+    /** Ignorados: o editor é sempre a lista. */
+    mode?: EditorMode;
+    onMode?: (mode: EditorMode) => void;
     /** Horário, vagas e valor das próximas linhas. */
     defaults: RowDefaults;
     onDefaults: (defaults: RowDefaults) => void;
@@ -40,37 +49,67 @@ export function BatchEditor({
     onPublish: () => void;
     onReview: () => void;
     onBack: () => void;
+    /** Turno a trazer à vista (volta da revisão): o foco vai para a data dele. */
     initialEditingKey: string | null;
+    /** undefined = o turno já nasceu de um modelo guardado (sem opção). null = não guardar; texto = nome do modelo. */
+    saveModelName?: string | null;
+    onSaveModelName: (name: string | null) => void;
 }) {
-    const [editingKey, setEditingKey] = useState<string | null>(initialEditingKey);
+    void onMode;
+    const [details, setDetails] = useState<Details | null>(null);
     const [tried, setTried] = useState(false);
+    const focusKey = useRef<string | null>(initialEditingKey);
+    const dateInputs = useRef(new Map<string, HTMLInputElement>());
+    // Marcou "Guardar como modelo": o foco vai para o nome, acima da barra fixa (scroll-mb).
+    const modelNameRef = useRef<HTMLInputElement>(null);
+    const savingModel = saveModelName !== undefined && saveModelName !== null;
+    useEffect(() => {
+        if (savingModel) modelNameRef.current?.focus({ preventScroll: false });
+    }, [savingModel]);
+
     const rows = draft.rows;
     const setRows = (next: ShiftDraftRow[]) => onDraft({ ...draft, rows: next });
     const patchRow = (key: string, patch: Partial<ShiftDraftRow>) =>
         setRows(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
+    // Sempre há pelo menos um cartão: a lista nunca fica vazia.
+    useEffect(() => {
+        if (rows.length === 0) onDraft({ ...draft, rows: [createRow('', defaults)] });
+    }, [rows.length, draft, defaults, onDraft]);
+
+    // Leva o foco ao campo Data do cartão pedido (novo turno, cópia, volta da revisão).
+    useEffect(() => {
+        if (!focusKey.current) return;
+        const input = dateInputs.current.get(focusKey.current);
+        if (!input) return;
+        input.focus();
+        input.scrollIntoView?.({ block: 'center' });
+        focusKey.current = null;
+    }, [rows]);
+
     const merged = mergeDrafts(draft.template, rows).rows;
     const summary = batchSummary(draft.template, merged);
     const blocking = validateBatch({ ...draft, rows: merged }, { today }).filter((i) => i.blocking);
-    const selected = new Set(rows.map((r) => r.date).filter(Boolean));
-
-    const toggleDate = (date: string) => {
-        if (selected.has(date)) {
-            setRows(rows.filter((r) => r.date !== date));
-            return;
-        }
-        // A linha sem data (vinda do caminho rápido) recebe a primeira data tocada.
-        const empty = rows.find((r) => !r.date);
-        if (empty) patchRow(empty.key, { date });
-        else if (rows.length < MAX_BATCH_ROWS) setRows(sortRows([...rows, createRow(date, defaults)]));
-    };
+    const problems = [...new Set(blocking.map((i) => i.detail))];
+    const full = rows.length >= MAX_BATCH_ROWS;
+    const publishes = directPublish && rows.length === 1;
 
     const addRow = () => {
+        if (full) return;
         const last = rows[rows.length - 1];
-        const date = last?.date ? addDays(last.date, 1) : today;
-        const row = createRow(date, defaults);
-        setRows([...rows, row]);
-        setEditingKey(row.key);
+        const next: ShiftDraftRow = last
+            ? { ...last, key: newId(), date: isValidDate(last.date) ? addDays(last.date, 1) : '', invite_worker_ids: undefined, keep_separate: undefined }
+            : createRow(today, defaults);
+        focusKey.current = next.key;
+        setRows([...rows, next]);
+    };
+
+    const duplicate = (key: string) => {
+        if (full) return;
+        const index = rows.findIndex((r) => r.key === key);
+        const copy = duplicateRow(rows[index]);
+        focusKey.current = copy.key;
+        setRows([...rows.slice(0, index + 1), copy, ...rows.slice(index + 1)]);
     };
 
     // Enviar incompleto nunca é um botão morto: mostra o que falta.
@@ -79,99 +118,120 @@ export function BatchEditor({
         else next();
     };
 
-    const single = rows[0] ?? createRow('', defaults);
-    const singleShift = effectiveShift(draft.template, single);
-    const minutes = workedMinutes(single.start_time, single.end_time, singleShift.has_lunch);
-    const publishes = mode === 'single' && directPublish && merged.length === 1;
-    const problems = [...new Set(blocking.map((i) => i.detail))];
+    const base = draft.template;
+    const editingRow = details?.scope === 'row' ? rows.find((r) => r.key === details.key) : undefined;
 
     return (
         <div className="flex flex-col gap-5">
             <Button variant="ghost" className="-ml-3 self-start" onClick={onBack}>Voltar</Button>
 
-            <Card as="section" padding="sm" aria-label="O turno">
-                <TemplateFields template={draft.template} tags={tags} startOpen={!draft.template.source_job_id && !draft.template.category} onChange={(template) => onDraft({ ...draft, template })} />
-                {rows.some((r) => r.overrides?.title || r.overrides?.category) && (
-                    <p className="mt-2 text-xs text-gray-600">Algumas linhas têm função ou título próprios; os campos acima valem para as demais.</p>
+            <Card as="section" padding="sm" aria-label="O turno" className="shadow-brutal-sm">
+                <div className="flex items-center gap-3">
+                    <p className="min-w-0 flex-1 text-sm">
+                        <span className="font-bold">Turno de: </span>
+                        {base.title.trim() || 'sem título'}
+                        {base.category && base.title.trim() !== categoryName(base.category) && ` · ${categoryName(base.category)}`}
+                    </p>
+                    <IconButton
+                        variant="secondary"
+                        aria-label="Editar dados do turno"
+                        onClick={() => setDetails({ scope: 'template' })}
+                        data-copilot="empresa.turno-lote.editar-turno"
+                    >
+                        <Pencil size={18} />
+                    </IconButton>
+                </div>
+                {!base.category && (
+                    <div className="mt-3">
+                        <Field label="Função" required>
+                            <select value={base.category} onChange={(e) => onDraft({ ...draft, template: changeCategory(base, e.target.value) })}>
+                                <option value="">Selecione a função</option>
+                                {SHIFT_CATEGORIES.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                            </select>
+                        </Field>
+                    </div>
                 )}
+                <p className="mt-2 text-xs text-gray-600">Os dados do turno valem para todos os cartões abaixo. O lápis de cada cartão muda só aquele turno.</p>
             </Card>
 
-            {mode === 'single' ? (
-                <section aria-label="Quando e quanto" className="flex flex-col gap-4">
-                    <h2 className="text-lg font-bold">Quando</h2>
-                    <DateChips value={single.date} today={today} onChange={(date) => setRows([{ ...single, date }])} />
-                    <RowFields
-                        row={single}
-                        budgetType={singleShift.budget_type}
-                        onChange={(patch) => {
-                            const next = { ...single, ...patch };
-                            setRows([next]);
-                            onDefaults({ start_time: next.start_time, end_time: next.end_time, slots: next.slots, budget: next.budget });
+            <section aria-label="Turnos" className="flex flex-col gap-3">
+                <h2 className="text-lg font-bold">Quando e quanto</h2>
+                <ol aria-label="Turnos a criar" className="flex flex-col gap-3">
+                    {rows.map((row) => (
+                        <ShiftRowCard
+                            key={row.key}
+                            row={row}
+                            template={base}
+                            today={today}
+                            showProblems={tried}
+                            canRemove={rows.length > 1}
+                            dateRef={(el) => { if (el) dateInputs.current.set(row.key, el); else dateInputs.current.delete(row.key); }}
+                            onChange={(patch) => {
+                                patchRow(row.key, patch);
+                                onDefaults(rowDefaults({ ...row, ...patch }));
+                            }}
+                            onEditDetails={() => setDetails({ scope: 'row', key: row.key })}
+                            onDuplicate={() => duplicate(row.key)}
+                            onRemove={() => setRows(rows.filter((r) => r.key !== row.key))}
+                        />
+                    ))}
+                </ol>
+                <Button
+                    variant="secondary"
+                    size="lg"
+                    fullWidth
+                    iconLeft={<Plus size={18} />}
+                    disabled={full}
+                    onClick={addRow}
+                    aria-describedby="lote-add-ajuda"
+                    data-copilot="empresa.turno-lote.adicionar-turno"
+                >
+                    Adicionar outro turno
+                </Button>
+                <p id="lote-add-ajuda" className="text-center text-xs text-gray-600">Cria outro turno igual a este, com outra data.</p>
+                {full && <Alert tone="warning">{BATCH_LIMIT_MESSAGE}</Alert>}
+                {rows.length > 1 && (
+                    <ApplyAll onApply={(patch) => { onDefaults({ ...defaults, ...patch }); setRows(applyToAll(rows, patch)); }} />
+                )}
+                {canRepeat && (
+                    <RepeatWeekly
+                        dates={[...new Set(rows.map((r) => r.date).filter(Boolean))]}
+                        today={today}
+                        series={draft.series}
+                        stillSeries={resolveSeries(base, rows, draft.series, today) !== null}
+                        onGenerate={(series, dates) => {
+                            const first = rows.find((r) => r.date) ?? rows[0] ?? createRow('', defaults);
+                            onDraft({ ...draft, series, rows: dates.map((date) => createRow(date, rowDefaults(first))) });
                         }}
                     />
-                    {single.start_time && single.end_time && single.end_time < single.start_time && (
-                        <p role="status" className="text-sm font-bold">Termina {single.end_time} do dia seguinte.</p>
-                    )}
-                    <Button variant="secondary" iconLeft={<CalendarPlus size={16} />} onClick={() => onMode('multi')} data-copilot="empresa.turno-lote.varias-datas">
-                        Várias datas
-                    </Button>
-                </section>
-            ) : (
-                <section aria-label="Datas e horários" className="flex flex-col gap-4">
-                    <h2 className="text-lg font-bold">Datas</h2>
-                    <MultiDateCalendar selected={selected} today={today} onToggle={toggleDate} />
-                    {rows.some((r) => r.date) ? (
-                        <RowList
-                            template={draft.template}
-                            rows={rows.filter((r) => r.date)}
-                            today={today}
-                            editingKey={editingKey}
-                            onEdit={setEditingKey}
-                            onChange={patchRow}
-                            onDuplicate={(key) => {
-                                const index = rows.findIndex((r) => r.key === key);
-                                const copy = duplicateRow(rows[index]);
-                                setRows([...rows.slice(0, index + 1), copy, ...rows.slice(index + 1)]);
-                                setEditingKey(copy.key);
-                            }}
-                            onRemove={(key) => setRows(rows.filter((r) => r.key !== key))}
+                )}
+            </section>
+
+            {saveModelName !== undefined && (
+                <section aria-label="Guardar como modelo" className="rounded-xl border border-gray-200 bg-white p-3">
+                    <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold">
+                        <input
+                            type="checkbox"
+                            className="h-5 w-5 shrink-0"
+                            checked={saveModelName !== null}
+                            onChange={(e) => onSaveModelName(e.target.checked ? base.title.trim() || 'Meu modelo' : null)}
+                            data-copilot="empresa.turno-lote.guardar-modelo"
                         />
-                    ) : (
-                        <p className="text-sm text-gray-600">Toque nas datas do calendário. Cada data vira uma linha.</p>
-                    )}
-                    <Button variant="secondary" iconLeft={<Plus size={16} />} disabled={rows.length >= MAX_BATCH_ROWS} onClick={addRow}>Adicionar linha</Button>
-                    {rows.length >= MAX_BATCH_ROWS && <Alert tone="warning">{BATCH_LIMIT_MESSAGE}</Alert>}
-                    <details open={!defaults.start_time && rows.every((r) => !r.date)}>
-                        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold underline">Horário das próximas datas</summary>
-                        <div className="mt-2">
-                            <RowFields
-                                row={{ key: 'padrao', date: '', ...defaults }}
-                                budgetType={draft.template.budget_type}
-                                onChange={(patch) => {
-                                    const next = { ...defaults, ...patch };
-                                    onDefaults({ start_time: next.start_time, end_time: next.end_time, slots: next.slots, budget: next.budget });
-                                    // Linhas ainda sem data acompanham o padrão.
-                                    if (rows.some((r) => !r.date)) setRows(rows.map((r) => (r.date ? r : { ...r, ...patch })));
-                                }}
+                        Guardar como modelo para usar de novo
+                    </label>
+                    {saveModelName !== null && (
+                        <div className="mt-2 scroll-mb-40 pl-8">
+                            <label htmlFor="lote-nome-modelo" className="mb-1 block text-xs font-bold text-gray-600">Nome do modelo</label>
+                            <input
+                                id="lote-nome-modelo"
+                                ref={modelNameRef}
+                                type="text"
+                                maxLength={60}
+                                value={saveModelName}
+                                onChange={(e) => onSaveModelName(e.target.value)}
+                                className="min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-base"
                             />
                         </div>
-                    </details>
-                    <ApplyAll onApply={(patch) => { onDefaults({ ...defaults, ...patch }); setRows(applyToAll(rows, patch)); }} />
-                    {canRepeat && (
-                        <RepeatWeekly
-                            dates={[...selected]}
-                            today={today}
-                            series={draft.series}
-                            stillSeries={resolveSeries(draft.template, rows, draft.series, today) !== null}
-                            onGenerate={(series, dates) => {
-                                const base = rows.find((r) => r.date) ?? createRow('', defaults);
-                                onDraft({
-                                    ...draft,
-                                    series,
-                                    rows: dates.map((date) => createRow(date, { start_time: base.start_time, end_time: base.end_time, slots: base.slots, budget: base.budget })),
-                                });
-                            }}
-                        />
                     )}
                 </section>
             )}
@@ -184,13 +244,8 @@ export function BatchEditor({
             )}
 
             <ActionBar
-                summary={
-                    <p role="status">
-                        {mode === 'single'
-                            ? [minutes ? formatShiftDuration(minutes) : null, single.budget > 0 ? formatBRL(single.budget) : null].filter(Boolean).join(' · ') || 'Escolha data, horário e valor.'
-                            : `${plural(summary.shifts, 'turno', 'turnos')} · ${plural(summary.slots, 'vaga', 'vagas')} · ${formatBRL(summary.cost)} previstos`}
-                    </p>
-                }
+                stickyOnDesktop
+                summary={<p>{`${plural(summary.shifts, 'turno', 'turnos')} · ${plural(summary.slots, 'vaga', 'vagas')} · ${formatBRL(summary.cost)} previstos`}</p>}
                 primary={publishes ? (
                     <Button variant="dark" size="lg" loading={publishing} onClick={guard(onPublish)} data-copilot="empresa.turno-lote.publicar-um">
                         Publicar
@@ -201,6 +256,31 @@ export function BatchEditor({
                     </Button>
                 )}
             />
+
+            {details?.scope === 'template' && (
+                <ShiftDetailsModal
+                    scope="template"
+                    template={base}
+                    tags={tags}
+                    onClose={() => setDetails(null)}
+                    onSaveTemplate={(template) => { onDraft({ ...draft, template }); setDetails(null); }}
+                />
+            )}
+            {editingRow && (
+                <ShiftDetailsModal
+                    scope="row"
+                    template={base}
+                    tags={tags}
+                    row={editingRow}
+                    today={today}
+                    onClose={() => setDetails(null)}
+                    onSaveRow={(row) => {
+                        patchRow(row.key, row);
+                        onDefaults(rowDefaults(row));
+                        setDetails(null);
+                    }}
+                />
+            )}
         </div>
     );
 }

@@ -6,12 +6,11 @@ import type { ConfirmCard } from '../../lib/copilot/ui'
 /** Cartão montado pelo código. O botão de confirmar só habilita depois de um instante. */
 export function ConfirmCardView({
   card,
-  role,
   armDelayMs = 600,
   onAnswer,
 }: {
   card: ConfirmCard
-  role: 'company' | 'worker'
+  role?: 'company' | 'worker'
   armDelayMs?: number
   onAnswer: (ok: boolean) => void
 }) {
@@ -67,7 +66,7 @@ export function ConfirmCardView({
       <p id="copilot-confirm-action" className="break-words text-sm font-semibold">{card.action}</p>
       <p className="text-sm text-gray-600">{card.reason}</p>
       {card.fields.length > 0 && (
-        <dl className="max-h-[28dvh] min-h-16 shrink space-y-1 overflow-y-auto overscroll-contain rounded-2xl bg-white/70 p-3 ring-1 ring-black/10 text-sm">
+        <dl className="max-h-[28dvh] min-h-16 shrink space-y-1 overflow-y-auto overscroll-contain wk-field p-3 text-sm">
           {card.fields.map((field, i) => (
             <div key={`${field.label}-${i}`} className="flex flex-wrap gap-x-2">
               <dt className="text-gray-600">{field.label}:</dt>
@@ -80,7 +79,7 @@ export function ConfirmCardView({
         <PillButton ref={firstButton} tone="light" onClick={() => onAnswer(false)}>
           Não fazer
         </PillButton>
-        <PillButton tone={role === 'company' ? 'dark' : 'green'} disabled={!armed} onClick={() => onAnswer(true)}>
+        <PillButton tone="primary" disabled={!armed} onClick={() => onAnswer(true)}>
           Confirmar
         </PillButton>
       </div>

@@ -60,6 +60,12 @@ export const alvoEhRiscoD = (alvo: string): boolean => ALVOS_D.has(alvo)
  */
 const ALVOS_SEM_EFEITO: ReadonlySet<string> = new Set([
   'empresa.turno-lote.do-zero',
+  'empresa.turno-lote.usar-modelo',
+  'empresa.turno-lote.abrir-historico',
+  'empresa.modelos.usar',
+  'empresa.modelos.novo',
+  'empresa.turno-lote.repetir-recente',
+  'empresa.turno-lote.continuar-rascunho',
   'empresa.turno-lote.ler-texto',
   'empresa.turno-lote.calendario',
   'empresa.turno-lote.varias-datas',

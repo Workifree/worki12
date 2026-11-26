@@ -12,7 +12,7 @@ import WorkerCertificationsPanel from '../../components/company/WorkerCertificat
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
-import { Avatar, Button, Card, ErrorState } from '../../components/ui';
+import { Button, Card, ErrorState } from '../../components/ui';
 import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import type { TeamMember } from '../../types';
 import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
@@ -283,7 +283,7 @@ export default function WorkerPublicProfile() {
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
                 Voltar
             </Button>
-            <div className="text-center text-gray-700 font-semibold border border-dashed border-gray-300 rounded-2xl py-16 px-4">
+            <div className="text-center text-gray-700 font-semibold border-2 border-dashed border-gray-300 rounded-2xl py-16 px-4">
                 Não foi possível abrir este perfil agora.<br />
                 <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
             </div>
@@ -310,7 +310,13 @@ export default function WorkerPublicProfile() {
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8 relative">
                     {/* Avatar */}
                     <div className="absolute -top-14 left-5 sm:-top-16 sm:left-8">
-                        <Avatar size="lg" name={profile.full_name} src={profile.photo_url} className="h-28 w-28 text-4xl ring-4 ring-white sm:h-32 sm:w-32" />
+                        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex items-center justify-center">
+                            {profile.photo_url ? (
+                                <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="text-4xl text-white font-bold">{profile.full_name?.[0]}</span>
+                            )}
+                        </div>
                     </div>
 
                     {/* Basic Info */}
@@ -361,15 +367,15 @@ export default function WorkerPublicProfile() {
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Zap size={14} /> Nível</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.level}</div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Briefcase size={14} /> Turnos</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.completed_jobs} <span className="text-xs font-normal text-gray-600">concluídos</span></div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Star size={14} /> Avaliação</div>
                             <div className="text-2xl font-bold tabular-nums text-yellow-500">
                                 {(profile.reviews_count ?? 0) > 0 && (profile.rating_average ?? 0) > 0
@@ -378,7 +384,7 @@ export default function WorkerPublicProfile() {
                             </div>
                             <p className="text-xs text-gray-600">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP total</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.xp}</div>
                         </div>
@@ -400,11 +406,11 @@ export default function WorkerPublicProfile() {
                         registrado no Worki), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
-                    <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                         <h3 className="font-bold text-gray-800 text-sm mb-3">Contato e pagamento</h3>
                         {hasTeamConnection ? (
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
                                         <Phone size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.phone || 'Telefone não informado'}</span>
@@ -420,7 +426,7 @@ export default function WorkerPublicProfile() {
                                         </Button>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
                                         <Wallet size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.pix_key || 'Chave PIX não informada'}</span>
@@ -438,7 +444,7 @@ export default function WorkerPublicProfile() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-200 flex flex-col items-start gap-2">
+                            <div className="text-sm text-gray-700 bg-white p-3 rounded-xl border-2 border-gray-200 flex flex-col items-start gap-2">
                                 <p>
                                     {connectionStatus === 'pending'
                                         ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
@@ -461,7 +467,7 @@ export default function WorkerPublicProfile() {
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico recente</h3>
                     <div className="space-y-3">
                         {historyError ? <ErrorState title="Não foi possível carregar o histórico." onRetry={retryProfile} /> : history.length > 0 ? history.map((h) => (
-                            <div key={h.id} className="p-4 rounded-xl border border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
+                            <div key={h.id} className="p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
                                 <div className="min-w-0">
                                     <h4 className="font-bold text-sm">{h.job?.title}</h4>
                                     <p className="text-xs text-gray-600">{h.job?.company?.name || 'Empresa'}</p>
@@ -479,7 +485,7 @@ export default function WorkerPublicProfile() {
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare size={20} /> Comentários</h3>
                     <div className="space-y-3">
                         {reviewsError ? <ErrorState title="Não foi possível carregar os comentários." onRetry={retryProfile} /> : reviews.length > 0 ? reviews.map((r) => (
-                            <div key={r.id} className="bg-white p-4 rounded-xl border border-gray-200">
+                            <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-200">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="font-bold text-sm">{r.company?.name || 'Empresa'}</span>
                                     <div className="flex text-yellow-400">

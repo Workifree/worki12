@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Plus, Pencil, Trash2, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
+import { Users, Clock, UserPlus, ListChecks, Plus, Pencil, Trash2, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
@@ -257,7 +257,7 @@ export default function CompanyTeam() {
             value={manualLink.url}
             aria-label="Link do elenco para copiar à mão"
             onFocus={(e) => e.currentTarget.select()}
-            className="w-full min-h-11 min-w-0 rounded-xl border-ink border-black bg-white px-3 text-sm"
+            className="w-full min-h-11 min-w-0 rounded-xl border-2 border-black bg-white px-3 text-sm"
           />
         )}
       </Card>
@@ -276,8 +276,8 @@ export default function CompanyTeam() {
 
       {teamMembers.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-base font-semibold mb-3">
-            Elenco ativo
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Users size={20} aria-hidden="true" /> Elenco ativo
           </h2>
           {historyError && !restricted && (
             <Alert
@@ -288,7 +288,7 @@ export default function CompanyTeam() {
               Não foi possível carregar o histórico de turnos com você.
             </Alert>
           )}
-          <ul aria-label="Elenco ativo" className="divide-y divide-gray-200 overflow-visible rounded-2xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {teamMembers.map((member) => (
               <MemberCard
                 key={member.connection.id}
@@ -301,16 +301,16 @@ export default function CompanyTeam() {
                 historyLoading={!historyLoadedFor?.some((m) => m.worker.id === member.worker.id)}
               />
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
       {/* Listas do Elenco (F2) — atalhos por função pra chamar o grupo inteiro de uma vez */}
       {(!restricted || lists.length > 0 || listsError) && (
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <h2 className="text-base font-semibold">
-            Listas do elenco
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <ListChecks size={20} aria-hidden="true" /> Listas do elenco
           </h2>
           {!restricted && (
             <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
@@ -342,14 +342,15 @@ export default function CompanyTeam() {
             bem mais leve (só nome + contagem + 2 ações), sem avatar/rating/histórico, então
             2 colunas em telas >=sm ainda respeitam o touch target sem apertar o layout. */}
         {!loadingLists && lists.length > 0 && (
-          <ul aria-label="Listas do elenco" className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {lists.map((list) => (
-              <li
+              <Card
                 key={list.id}
-                className="flex min-h-16 items-center justify-between gap-3 px-4 py-2"
+                padding="sm"
+                className="flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{list.name}</p>
+                  <p className="font-bold truncate">{list.name}</p>
                   <p className="text-xs text-gray-600">
                     {list.memberIds.length} {list.memberIds.length === 1 ? 'membro' : 'membros'}
                   </p>
@@ -374,9 +375,9 @@ export default function CompanyTeam() {
                   </button>
                 </div>
                 )}
-              </li>
+              </Card>
             ))}
-          </ul>
+          </div>
         )}
 
         {!loadingLists && !listsError && lists.length === 0 && (
@@ -391,21 +392,21 @@ export default function CompanyTeam() {
       {/* Convites pendentes */}
       {pendingConnections.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-base font-semibold mb-3">
-            Aguardando aceite
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-700">
+            <Clock size={20} aria-hidden="true" /> Aguardando aceite
           </h2>
-          <ul aria-label="Aguardando aceite" className="divide-y divide-gray-200 rounded-2xl border border-dashed border-gray-300 bg-white">
+          <div className="space-y-3">
             {pendingConnections.map((conn) => (
               <PendingCard key={conn.id} connection={conn} restricted={restricted} />
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
       {/* Empty state */}
       {teamMembers.length === 0 && pendingConnections.length === 0 && (
-        <div className="text-center py-12 px-4">
-          <Users size={40} className="mx-auto mb-4 text-gray-400" aria-hidden="true" />
+        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+          <Users size={44} className="mx-auto mb-4 text-gray-300" aria-hidden="true" />
           <h3 className="text-lg font-bold mb-2">Elenco vazio</h3>
           <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">
             Adicione freelas pelo QR de identidade, pelo código ou pelo link de perfil que eles te enviarem.
@@ -466,7 +467,7 @@ export default function CompanyTeam() {
             locked={isDeletingList}
             className="max-w-sm text-center"
         >
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
             <h3 id="delete-list-title" className="text-lg font-bold mb-2">Excluir lista?</h3>

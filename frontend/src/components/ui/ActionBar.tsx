@@ -10,6 +10,8 @@ export interface ActionBarProps extends HTMLAttributes<HTMLDivElement> {
   summary?: ReactNode
   /** Rótulos longos: empilha no celular com a principal no topo. */
   stacked?: boolean
+  /** Também fixa no rodapé da janela no computador (formulários longos: o botão nunca fica fora da vista). */
+  stickyOnDesktop?: boolean
 }
 
 /**
@@ -21,13 +23,15 @@ export interface ActionBarProps extends HTMLAttributes<HTMLDivElement> {
  *
  * Nenhum ancestral entre ela e a página pode ter `overflow` diferente de `visible`.
  */
-export function ActionBar({ primary, secondary, summary, stacked = false, className, ...rest }: ActionBarProps) {
+export function ActionBar({ primary, secondary, summary, stacked = false, stickyOnDesktop = false, className, ...rest }: ActionBarProps) {
   return (
     <div
       className={cx(
-        'worki-action-bar sticky bottom-[var(--worki-nav-h,0px)] z-30 -mx-4 mt-6 border-t border-gray-200 bg-white px-4 py-3',
+        'worki-action-bar sticky bottom-[var(--worki-nav-h,0px)] z-30 -mx-4 mt-6 border-t-2 border-black bg-white px-4 py-3',
         'pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)-var(--worki-nav-h,0px)))]',
-        'sm:-mx-6 sm:px-6 md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:pb-0',
+        stickyOnDesktop
+          ? 'sm:-mx-6 sm:px-6 md:bottom-0 md:mx-0 md:px-0 md:pb-3'
+          : 'sm:-mx-6 sm:px-6 md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:pb-0',
         className,
       )}
       {...rest}

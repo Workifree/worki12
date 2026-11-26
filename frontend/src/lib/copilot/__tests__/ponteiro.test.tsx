@@ -61,7 +61,7 @@ describe('as duas formas do ponteiro', () => {
   })
 
   it('alvo largo é tocado perto do começo; alvo pequeno, no centro', () => {
-    expect(aimPoint(new DOMRect(100, 100, 40, 40))).toEqual({ x: 120, y: 120 })
+    expect(aimPoint(new DOMRect(100, 100, 40, 40))).toEqual({ x: 122, y: 120 }) // laboratório: 55% da largura
     expect(aimPoint(new DOMRect(100, 100, 600, 60)).x).toBe(184)
   })
 })
@@ -106,7 +106,7 @@ describe('é só imagem: nenhum evento humano ou sintético', () => {
     const t0 = performance.now()
     await pointer.act(target(), { action: 'point' }, new AbortController().signal)
     expect(performance.now() - t0).toBeLessThan(600)
-    expect(host.querySelector<HTMLElement>('.wk-ptr')!.style.transform).toContain('translateX(160px')
+    expect(host.querySelector<HTMLElement>('.wk-ptr')!.style.transform).toContain('translateX(166px')
   })
 
   it('PARAR no meio do movimento resolve na hora', async () => {
@@ -183,17 +183,19 @@ describe('brilho: níveis e gota', () => {
 
       cores(8)
       createGlowVfx(host, { mobile: false }).drop({ x: 50, y: 50 })
-      expect(animate).toHaveBeenCalledTimes(3)
+      // halo de pressão (entrada + pulso), gota e 3 ondas (laboratório)
+      expect(animate).toHaveBeenCalledTimes(6)
+      expect(host.querySelector('.wk-bead')).not.toBeNull()
       expect(host.querySelectorAll('.wk-drop__svg circle')).toHaveLength(3)
       expect(host.querySelector('filter#wk-ripple feDisplacementMap')).not.toBeNull()
       expect(host.querySelector('.wk-ring')).toBeNull()
 
-      // Celular: 2 ondas em CSS, e nenhum filtro SVG novo.
+      // Celular: 3 ondas em CSS (como o laboratório), e nenhum filtro SVG novo.
       animate.mockClear()
       host.innerHTML = ''
       createGlowVfx(host, { mobile: true }).drop({ x: 50, y: 50 })
-      expect(animate).toHaveBeenCalledTimes(2)
-      expect(host.querySelectorAll('.wk-ring')).toHaveLength(2)
+      expect(animate).toHaveBeenCalledTimes(6)
+      expect(host.querySelectorAll('.wk-ring')).toHaveLength(3)
       expect(host.querySelector('filter, feTurbulence, feDisplacementMap, .wk-drop__svg')).toBeNull()
 
       // PC fraco (até 4 núcleos): cai para a gota CSS.

@@ -2,8 +2,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
 import { supabase } from '../lib/supabase';
-import { MapPin, ShieldCheck, Edit2, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, Star, HelpCircle } from 'lucide-react';
-import { DialogActions, ActionBar, Alert, Avatar, Button, Card, Field } from '../components/ui';
+import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, HelpCircle } from 'lucide-react';
+import { DialogActions, ActionBar, Alert, Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
 import CompanyBadges from '../components/CompanyBadges';
@@ -685,20 +685,21 @@ export default function Profile() {
     return (
         <>
         <div className="mx-auto max-w-3xl space-y-6 pb-12 font-sans text-accent">
-            {/* Identidade: faixa clara de 72px (ou a capa da pessoa) + avatar + nome. */}
+            {/* Identidade: capa + avatar + nome. Em edicao, nome/cidade viram campos na secao "Dados". */}
             <Card as="section" padding="none" aria-label="Identidade" className="overflow-hidden">
-                <div className="relative h-[72px] bg-primary-light">
-                    {profile.cover_url && (
+                <div className="relative h-28 bg-gray-900 sm:h-36">
+                    {profile.cover_url ? (
                         <img src={profile.cover_url} alt="Foto de capa do perfil" className="h-full w-full object-cover" />
+                    ) : (
+                        <div className="h-full w-full bg-gradient-to-r from-gray-900 to-black" />
                     )}
-                    <div className="absolute right-1 top-1">
+                    <div className="absolute right-3 top-3">
                         <Button
-                            variant="ghost"
+                            variant="secondary"
                             onClick={() => coverInputRef.current?.click()}
                             disabled={uploading}
                             aria-label="Trocar foto de capa"
                             iconLeft={<Camera size={18} />}
-                            className="px-3"
                         />
                     </div>
                 </div>
@@ -712,16 +713,22 @@ export default function Profile() {
                     disabled={uploading}
                 />
 
-                <div className="px-4 pb-4 sm:px-6 sm:pb-6">
-                    <div className="relative -mt-10 h-20 w-20 shrink-0">
-                        <Avatar size="lg" name={profile.full_name} src={profile.avatar_url} className="ring-4 ring-white" />
+                <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+                    <div className="relative -mt-12 h-24 w-24 shrink-0 rounded-full border-2 border-black bg-white p-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:-mt-14 sm:h-28 sm:w-28">
+                        <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gray-200">
+                            {profile.avatar_url ? (
+                                <img src={profile.avatar_url} alt={profile.full_name} className="h-full w-full object-cover" />
+                            ) : (
+                                <User size={48} className="text-gray-400" />
+                            )}
+                        </div>
                         {/* Um unico gatilho de troca de foto, sempre visivel (no touch nao existe hover). */}
                         <button
                             type="button"
                             aria-label="Trocar foto de perfil"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                            className="absolute -bottom-2 -right-3 inline-flex h-11 w-11 items-center justify-center rounded-full border-ink border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="absolute -bottom-1 -right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Camera size={16} />
                         </button>
@@ -737,7 +744,7 @@ export default function Profile() {
                     </div>
 
                     <div className="mt-3 min-w-0">
-                        <h1 className="break-words text-2xl font-bold tracking-tight text-black">{profile.full_name}</h1>
+                        <h1 className="break-words text-2xl font-bold tracking-tight text-black sm:text-3xl">{profile.full_name}</h1>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600">
                             {profile.city && (
                                 <span className="inline-flex items-center gap-1">
@@ -748,7 +755,7 @@ export default function Profile() {
                             {profile.verified_identity && (
                                 <span
                                     title="Identidade Verificada"
-                                    className="inline-flex items-center gap-1 rounded-pill bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary-dark"
+                                    className="inline-flex items-center gap-1 rounded-pill bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700"
                                 >
                                     <ShieldCheck size={14} />
                                     Identidade verificada
@@ -864,29 +871,35 @@ export default function Profile() {
                 </Card>
             )}
 
-            {/* Resumo: faixa de 3 métricas (sem caixa por número) + nível + atalho de recebimentos. */}
-            <section aria-label="Resumo" className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                <div className="px-4 pt-3">
-                    <div className="flex items-baseline justify-between gap-3">
-                        <p className="text-base font-semibold">Nível {profile.level || 1}</p>
-                        <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
-                    </div>
-                    {nivel && (
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
+            {/* Resumo: nivel + numeros que importam + atalho dos recebimentos */}
+            <Card as="section" aria-label="Resumo">
+                <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary">
+                        <Award size={24} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-3">
+                            <p className="text-lg font-bold">Nível {profile.level || 1}</p>
+                            <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
                         </div>
-                    )}
+                        {nivel && (
+                            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                                <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <dl className="mt-3 grid grid-cols-3 divide-x divide-gray-200 border-y border-gray-200 text-center">
-                    <div className="min-w-0 px-2 py-3">
+
+                <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
                         <dd className="text-xl font-bold tabular-nums">{stats.completedJobs}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
                     </div>
-                    <div className="min-w-0 px-2 py-3">
-                        <dd className="text-base font-bold leading-7 tabular-nums">{stats.hoursWorked === null ? 'Indisponível' : formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked === null ? 'Indisponível' : formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
                     </div>
-                    <div className="min-w-0 px-2 py-3">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
                         <dd className="flex items-center justify-center gap-1 text-xl font-bold tabular-nums">
                             {profile.rating_average ? (
                                 <>
@@ -894,32 +907,38 @@ export default function Profile() {
                                     {profile.rating_average}
                                 </>
                             ) : (
-                                <span className="text-sm leading-7">Sem notas</span>
+                                <span className="text-sm">Sem notas</span>
                             )}
                         </dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Avaliação</dt>
                     </div>
                 </dl>
-                {/* Atalho: Recebimentos — histórico de pagamentos registrados (shift_payments) */}
-                <Link
-                    to="/recebimentos"
-                    className="flex min-h-14 items-center gap-3 px-4 py-2 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
-                >
-                    <Receipt size={20} aria-hidden="true" className="shrink-0 text-gray-700" />
-                    <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold">Recebimentos</span>
-                        <span className="block text-xs text-gray-600">Pagamentos registrados pelas empresas</span>
-                    </span>
-                    <ChevronRight size={18} aria-hidden="true" className="shrink-0" />
-                </Link>
-            </section>
 
-            {isEditing ? (
-                <>
-            {/* DADOS — edição: a página é o formulário (regras de CPF/PIX inalteradas). */}
+                {/* Atalho: Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                <div className="mt-5 border-t-2 border-gray-100 pt-5">
+                    <Button
+                        variant="secondary"
+                        fullWidth
+                        onClick={() => navigate('/recebimentos')}
+                        iconLeft={<Receipt size={18} />}
+                        iconRight={<ChevronRight size={18} />}
+                    >
+                        Recebimentos
+                    </Button>
+                    <p className="mt-2 text-center text-xs text-gray-600">Pagamentos registrados pelas empresas</p>
+                </div>
+            </Card>
+
+            {/* DADOS — contato, documento, PIX e apresentação profissional num só bloco. */}
             <Card as="section" aria-labelledby="perfil-dados">
                 <h2 id="perfil-dados" className="text-lg font-bold">Dados</h2>
-                <p className="mt-1 text-sm text-gray-600">Edite o que precisar e salve no fim.</p>
+                <p className="mt-1 text-sm text-gray-600">
+                    {isEditing
+                        ? 'Edite o que precisar e salve no fim.'
+                        : 'É o que as empresas veem quando você entra no elenco delas.'}
+                </p>
+
+                {isEditing ? (
                     <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field label="Nome completo">
                             <input
@@ -953,7 +972,7 @@ export default function Profile() {
                         {cpfJaCadastrado ? (
                             <div className="flex flex-col gap-1.5" data-copilot-private>
                                 <span className="text-sm font-bold text-black">CPF</span>
-                                <p className="flex h-11 items-center rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
+                                <p className="flex h-11 items-center rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
                                     {formatCpfCnpj(String(profile.cpf))}
                                 </p>
                                 <p className="text-xs text-gray-600">
@@ -1061,15 +1080,89 @@ export default function Profile() {
                             />
                         </Field>
                     </div>
+                ) : (
+                    <div className="mt-5 space-y-6">
+                        <dl data-copilot-private className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DataRow label="Telefone">
+                                {profile.phone ? (
+                                    <DadoMascarado rotulo="telefone" valor={profile.phone} mascarado={mascararTelefone(profile.phone)} />
+                                ) : (
+                                    'Não informado'
+                                )}
+                            </DataRow>
+                            <DataRow label="CPF">
+                                {cpfJaCadastrado ? (
+                                    <>
+                                        <DadoMascarado rotulo="CPF" valor={formatCpfCnpj(String(profile.cpf))} mascarado={mascararCpf(formatCpfCnpj(String(profile.cpf)))} />
+                                        <span className="mt-1 block text-xs font-normal text-gray-600">
+                                            Se estiver errado, <Link to="/messages" className="inline-flex min-h-11 items-center font-bold underline">fale com a empresa</Link> antes
+                                            de assinar um novo termo.
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        Não informado
+                                    </>
+                                )}
+                            </DataRow>
+                            <DataRow label="Chave PIX">
+                                {profile.pix_key ? (
+                                    <DadoMascarado rotulo="chave PIX" valor={profile.pix_key} mascarado={mascararPix(profile.pix_key)} />
+                                ) : (
+                                    'Não informada'
+                                )}
+                            </DataRow>
+                            {profile.experience_years && (
+                                <DataRow label="Experiência">{profile.experience_years}</DataRow>
+                            )}
+                            {!!profile.availability?.length && <DataRow label="Regime">
+                                <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
+                                    {Array.isArray(profile.availability) ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : profile.availability}
+                                </span>
+                            </DataRow>}
+                        </dl>
+
+                        <div>
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Especialidades</h3>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
+                                    <span key={i} className="inline-flex h-8 items-center rounded-pill border-2 border-black bg-white px-3 text-sm font-semibold">
+                                        {roleLabel(role)}
+                                    </span>
+                                ))}
+                                {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
+                                    <Button variant="secondary" onClick={() => setIsEditing(true)}>Adicionar especialidades</Button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Sobre</h3>
+                            {profile.bio ? (
+                                <p className="mt-2 text-sm leading-relaxed text-gray-700 [overflow-wrap:anywhere] sm:text-base">{profile.bio}</p>
+                            ) : (
+                                <Button variant="secondary" className="mt-2" onClick={() => setIsEditing(true)}>Contar sobre você</Button>
+                            )}
+                        </div>
+                    </div>
+                )}
             </Card>
 
-            {/* DISPONIBILIDADE — F7: grade dia × período. É SINAL, NUNCA TRAVA (DDL §1). */}
+            {/* DISPONIBILIDADE — F7: grade dia × período. É SINAL, NUNCA TRAVA
+                (DDL §1): só ordena quem a empresa vê primeiro no Chamado de Turno, nunca
+                filtra nem bloqueia ninguém. Distinta do campo legado "Regime" em Dados
+                (sem dia da semana, write-once do onboarding) — só esta grade
+                responde "disponível nesta terça de manhã?". */}
             <Card as="section" aria-labelledby="perfil-disponibilidade">
-                <h2 id="perfil-disponibilidade" className="text-lg font-bold">Disponibilidade da semana</h2>
+                <h2 id="perfil-disponibilidade" className="flex items-center gap-2 text-lg font-bold">
+                    <CalendarClock size={20} /> Disponibilidade da semana
+                </h2>
                 <p className="mt-1 text-sm text-gray-600">
                     Marque os dias e períodos em que você topa trabalhar. As empresas do seu
                     elenco te veem primeiro nos chamados de turno que casam com sua grade.
                 </p>
+
+                {isEditing ? (
                     <div className="mt-5 space-y-2">
                         {AVAILABILITY_WEEKDAYS.map((day) => (
                             <div
@@ -1091,9 +1184,9 @@ export default function Profile() {
                                                 onClick={() => toggleAvailabilitySlot(day, period)}
                                                 aria-pressed={active}
                                                 aria-label={`${AVAILABILITY_WEEKDAY_LABELS[day]} — ${AVAILABILITY_PERIOD_LABELS[period]}`}
-                                                className={`h-11 flex-1 rounded-xl border-ink text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                                                className={`h-11 flex-1 rounded-xl border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                                                     active
-                                                        ? 'border-black bg-primary-dark text-white'
+                                                        ? 'border-black bg-primary text-white'
                                                         : 'border-gray-300 bg-white text-gray-700 hover:border-black'
                                                 }`}
                                             >
@@ -1109,89 +1202,7 @@ export default function Profile() {
                             diferente de "indisponível".
                         </p>
                     </div>
-            </Card>
-                </>
-            ) : (
-            /* Visão: UM grupo de lista com seções recolhidas; a tela abre curta. */
-            <div className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                <ProfileSection title="Identidade" meta={cpfJaCadastrado ? 'Telefone, CPF e especialidades' : 'Falta o CPF'}>
-                    <div className="space-y-6">
-                        <dl data-copilot-private className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                            <DataRow label="Telefone">
-                                {profile.phone ? (
-                                    <DadoMascarado rotulo="telefone" valor={profile.phone} mascarado={mascararTelefone(profile.phone)} />
-                                ) : (
-                                    'Não informado'
-                                )}
-                            </DataRow>
-                            <DataRow label="CPF">
-                                {cpfJaCadastrado ? (
-                                    <>
-                                        <DadoMascarado
-                                            rotulo="CPF"
-                                            valor={formatCpfCnpj(String(profile.cpf))}
-                                            mascarado={mascararCpf(formatCpfCnpj(String(profile.cpf)))}
-                                        />
-                                        <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Se estiver errado, <Link to="/messages" className="inline-flex min-h-11 items-center font-bold underline">fale com a empresa</Link> antes
-                                            de assinar um novo termo.
-                                        </span>
-                                    </>
-                                ) : (
-                                    <>
-                                        Não informado
-                                    </>
-                                )}
-                            </DataRow>
-                            {profile.experience_years && (
-                                <DataRow label="Experiência">{profile.experience_years}</DataRow>
-                            )}
-                            {!!profile.availability?.length && <DataRow label="Regime">
-                                <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
-                                    {Array.isArray(profile.availability) ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : profile.availability}
-                                </span>
-                            </DataRow>}
-                        </dl>
-
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-900">Especialidades</h3>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                                {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
-                                    <span key={i} className="inline-flex h-8 items-center rounded-pill border border-gray-300 bg-white px-3 text-sm font-semibold">
-                                        {roleLabel(role)}
-                                    </span>
-                                ))}
-                                {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
-                                    <Button variant="secondary" onClick={() => setIsEditing(true)}>Adicionar especialidades</Button>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-900">Sobre</h3>
-                            {profile.bio ? (
-                                <p className="mt-2 text-sm leading-relaxed text-gray-700 [overflow-wrap:anywhere] sm:text-base">{profile.bio}</p>
-                            ) : (
-                                <Button variant="secondary" className="mt-2" onClick={() => setIsEditing(true)}>Contar sobre você</Button>
-                            )}
-                        </div>
-                    </div>
-                </ProfileSection>
-
-                <ProfileSection title="Pagamento" meta={profile.pix_key ? 'Chave PIX cadastrada' : 'Falta a chave PIX'}>
-                    <dl data-copilot-private>
-                        <DataRow label="Chave PIX">
-                            {profile.pix_key ? (
-                                <DadoMascarado rotulo="chave PIX" valor={profile.pix_key} mascarado={mascararPix(profile.pix_key)} />
-                            ) : 'Não informada'}
-                        </DataRow>
-                    </dl>
-                    <p className="mt-2 text-xs text-gray-600">É assim que as empresas te pagam por fora do Worki (PIX).</p>
-                </ProfileSection>
-
-                {/* DISPONIBILIDADE — F7: sinal, nunca trava. Distinta do campo legado "Regime". */}
-                <ProfileSection title="Disponibilidade da semana" meta={gradeDeclarada ? 'Declarada' : 'Não declarada'}>
-                {gradeDeclarada ? (
+                ) : gradeDeclarada ? (
                     <div className="mt-5 flex flex-wrap gap-2">
                         {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
                             <span
@@ -1205,7 +1216,7 @@ export default function Profile() {
                         ))}
                     </div>
                 ) : (
-                    <div className="mt-5 flex flex-col items-start gap-3 rounded-xl bg-gray-100 p-4">
+                    <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4">
                         <p className="text-sm text-gray-700">
                             Você ainda não declarou sua disponibilidade. Declare para aparecer
                             primeiro nos chamados de turno do seu elenco.
@@ -1215,35 +1226,34 @@ export default function Profile() {
                         </Button>
                     </div>
                 )}
-                </ProfileSection>
+            </Card>
 
-                <ProfileSection title="Certificações e cursos">
-                    <MyCertificationsSection />
-                </ProfileSection>
+            {/* Seções secundárias recolhidas: a tela abre curta. */}
+            <ProfileSection title="Certificações e cursos">
+                <MyCertificationsSection />
+            </ProfileSection>
 
-                {workerId && (
-                    <ProfileSection title="Avaliações das empresas">
-                        <ProfileReviews reviewedId={workerId} reviewerRole="company" />
-                    </ProfileSection>
-                )}
-
-                {/* PREFERÊNCIAS — cada bloco é um opt-in/opt-out independente (F10, F11, F12). */}
-                <ProfileSection title="Preferências e privacidade">
-                    <div className="space-y-6">
-                        <ReferralOptOutSection />
-                        <SosDiscoverySection />
-                        {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
-                    </div>
+            {workerId && (
+                <ProfileSection title="Avaliações das empresas">
+                    <ProfileReviews reviewedId={workerId} reviewerRole="company" />
                 </ProfileSection>
-            </div>
             )}
 
             {isAvisosEnabled() && <PreferenciasDeAvisos />}
 
+            {/* PREFERÊNCIAS — cada bloco é um opt-in/opt-out independente (F10, F11, F12). */}
+            <ProfileSection title="Preferências e privacidade">
+                <div className="space-y-6">
+                    <ReferralOptOutSection />
+                    <SosDiscoverySection />
+                    {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
+                </div>
+            </ProfileSection>
+
             {/* ATALHOS — paridade de navegacao mobile (R6): destinos que o BottomNav nao comporta. */}
             <nav aria-labelledby="perfil-atalhos" className="border-t-2 border-gray-200 pt-6">
-                <h2 id="perfil-atalhos" className="text-base font-semibold">Atalhos</h2>
-                <ul className="mt-2 divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                <h2 id="perfil-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h2>
+                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
                     {[
                         { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} /> },
                     ].map(item => (
@@ -1407,7 +1417,7 @@ export default function Profile() {
                         Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu código.
                     </p>
                     <div className="mb-5 flex justify-center" data-copilot-private>
-                        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                        <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <QRCodeSVG
                                 value={workerId}
                                 size={200}
@@ -1416,8 +1426,8 @@ export default function Profile() {
                             />
                         </div>
                     </div>
-                    <div data-copilot-private className="rounded-xl bg-gray-100 p-3 text-center">
-                        <p className="mb-1 text-xs font-semibold text-gray-600">Seu código</p>
+                    <div data-copilot-private className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Seu código</p>
                         <p className="break-all font-mono text-xs font-bold text-gray-700">{workerId}</p>
                     </div>
                     <div className="mt-4 flex flex-col gap-2">
@@ -1493,18 +1503,14 @@ export default function Profile() {
 }
 
 /** Seção recolhível do perfil (`<details>` nativo: teclado e leitor de tela de graça). */
-/** Seção recolhida dentro do grupo de lista do perfil (sem caixa própria). */
-function ProfileSection({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+function ProfileSection({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <details className="group bg-white">
-            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black [&::-webkit-details-marker]:hidden">
-                <span className="min-w-0">
-                    <span className="block text-base font-semibold">{title}</span>
-                    {meta && <span className="block truncate text-xs text-gray-600">{meta}</span>}
-                </span>
+        <details className="group rounded-2xl border-2 border-gray-200 bg-white">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black [&::-webkit-details-marker]:hidden">
+                {title}
                 <ChevronRight size={18} aria-hidden="true" className="shrink-0 group-open:rotate-90" />
             </summary>
-            <div className="border-t border-gray-200 p-4">{children}</div>
+            <div className="border-t-2 border-gray-200 p-3 sm:p-4">{children}</div>
         </details>
     );
 }
@@ -1552,7 +1558,7 @@ function DadoMascarado({ rotulo, valor, mascarado }: { rotulo: string; valor: st
 function DataRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="min-w-0">
-            <dt className="text-xs font-semibold text-gray-600">{label}</dt>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</dt>
             <dd className="mt-1 break-words text-sm font-medium text-black">{children}</dd>
         </div>
     );

@@ -122,7 +122,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
 
     // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
     // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).
-    const activeNavClass = isCompany ? 'bg-black text-white' : 'bg-primary-dark text-white';
+    const activeNavClass = isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white';
 
     // Recolhida (768 a 1099px): só ícones. O texto continua no DOM (`sr-only`) para leitor de tela.
     const label = 'max-[1099px]:sr-only';
@@ -135,12 +135,12 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
 
     return (
         <aside aria-label="Menu lateral" className="hidden md:flex flex-col shrink-0 w-[var(--worki-side-w)] h-[calc(100dvh-2rem)] self-start m-4 sticky top-4
-                      bg-white border border-gray-200 rounded-2xl overflow-hidden z-50">
+                      bg-white border-2 border-black rounded-2xl shadow-brutal-lg overflow-hidden z-50">
 
             {/* Cabeçalho compacto: marca + sino. Recolhida: marca em cima, sino embaixo. */}
             <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 pl-4 pr-2 max-[1099px]:h-auto max-[1099px]:flex-col max-[1099px]:justify-center max-[1099px]:gap-0 max-[1099px]:px-0 max-[1099px]:py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isCompany ? 'bg-black text-white' : 'bg-primary-dark text-white'}`}>W.</span>
+                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white'}`}>W.</span>
                     <div className={`min-w-0 leading-none ${label}`}>
                         <p className="text-base font-bold tracking-tight text-black">Worki</p>
                         {isCompany && <p className="mt-1 text-xs font-semibold text-gray-600">Empresa</p>}
@@ -159,7 +159,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                             id="sidebar-company-switch"
                             value={currentCompanyId ?? ''}
                             onChange={(e) => handleSwitchCompany(e.target.value)}
-                            className="h-11 w-full cursor-pointer appearance-none rounded-xl border-ink border-gray-300 bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 hover:border-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
+                            className="h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 hover:border-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
                         >
                             {myCompanies.map((c) => (
                                 <option key={c.company_id} value={c.company_id}>
@@ -217,7 +217,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     // No lado da empresa, quem marca "página atual" é o item Gestão do menu.
                     {...(isCompany ? { 'aria-current': undefined } : {})}
                 >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-black bg-gray-100">
                         {isCompany ? (
                             <Building2 size={18} aria-hidden="true" />
                         ) : workerData?.avatar_url ? (

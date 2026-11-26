@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     SERIES_BROKEN_MESSAGE, dayLabel, mergeDrafts, resolveSeries, separateRows, shortDate, sortRows,
     validateBatch, type ExistingShift, type ShiftDraftRow,
@@ -6,12 +7,20 @@ import {
 import { listExistingShifts, resolveInvitees } from '../../services/shiftBatchService';
 import { Alert, ButtonLink } from '../ui';
 import { BatchStart } from './BatchStart';
+import { HistoryScreen } from './HistoryScreen';
+import { TemplatesScreen } from './TemplatesScreen';
 import { BatchEditor } from './BatchEditor';
 import { BatchReview } from './BatchReview';
 import { BatchDone } from './BatchDone';
 import { CallSection, PeopleDialog } from './CallSection';
 import { useBatchLinkRisk, useCallData, useRowBusy } from './useCallData';
-import { useShiftBatch, type ShiftBatchOptions } from './useShiftBatch';
+import { useShiftBatch, type ShiftBatchOptions, type StartView } from './useShiftBatch';
+import type { SavedShiftTemplate, SourceJob } from '../../lib/shiftDrafts';
+
+/** Marca no histórico do navegador: o botão Voltar do aparelho sai da subtela e cai no hub. */
+interface ViewState { loteView?: StartView }
+
+const NO_SUGGESTIONS: ReadonlySet<string> = new Set();
 
 /** Começo → edição → revisão → publicado. */
 export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
@@ -19,7 +28,42 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
     extra?: ReactNode;
 }) {
     const flow = useShiftBatch(options);
-    const { draft, step, today } = flow;
+    const { draft, step, today, setStartView } = flow;
+    const location = useLocation();
+    const navigate = useNavigate();
+    const markedView = (location.state as ViewState | null)?.loteView ?? 'hub';
+    useEffect(() => { setStartView(markedView); }, [markedView, setStartView]);
+    const goView = useCallback((view: StartView) => {
+        navigate({ pathname: location.pathname, search: location.search }, { state: { loteView: view } satisfies ViewState });
+    }, [navigate, location.pathname, location.search]);
+    /** "Voltar" da subtela: desfaz a entrada que criamos; sem ela (tela aberta direto), troca por um hub. */
+    const backToHub = useCallback(() => {
+        const idx = (window.history.state as { idx?: number } | null)?.idx;
+        if (typeof idx === 'number' && idx > 0) navigate(-1);
+        else navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+    }, [navigate, location.pathname, location.search]);
+    /** Abrir o editor sai da subtela: ao voltar do editor o começo é o hub. */
+    const leaveView = useCallback(() => {
+        if (markedView !== 'hub') navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+    }, [markedView, navigate, location.pathname, location.search]);
+    /**
+     * Voltar do NAVEGADOR dentro do editor/revisão: ao entrar, criamos uma entrada no histórico com a marca
+     * `loteStep`; se a marca some com o editor ainda aberto, foi o Voltar do navegador e voltamos ao começo.
+     */
+    const inEditor = step === 'edit' || step === 'review';
+    const editorMarked = (location.state as { loteStep?: boolean } | null)?.loteStep === true;
+    const hadMarker = useRef(false);
+    useEffect(() => {
+        if (!inEditor) { hadMarker.current = false; return; }
+        if (editorMarked) { hadMarker.current = true; return; }
+        if (hadMarker.current) { hadMarker.current = false; flow.backToStart(); return; }
+        navigate({ pathname: location.pathname, search: location.search }, { state: { loteStep: true } });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- reage só à entrada/saída do editor e à marca
+    }, [inEditor, editorMarked]);
+    /** "Voltar" da tela: com a entrada criada, deixa o histórico desfazê-la (o efeito acima leva ao começo). */
+    const leaveEditor = () => { if (editorMarked) navigate(-1); else flow.backToStart(); };
+    const pickSaved = (saved: SavedShiftTemplate) => { leaveView(); flow.openSaved(saved); };
+    const repeatJob = (job: SourceJob) => { leaveView(); flow.openModel(job, 'repeat'); };
     /** 'all' = escolha geral; senão a chave da linha. */
     const [picking, setPicking] = useState<string | null>(null);
 
@@ -52,8 +96,10 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
 
     // Mudou de etapa: o topo da nova etapa precisa estar à vista no celular.
     useEffect(() => {
-        document.getElementById('lote-topo')?.scrollIntoView?.({ block: 'start' });
-    }, [step]);
+        // Começo: volta ao topo da página (título à vista). Outras etapas: topo da própria etapa.
+        if (step === 'start') window.scrollTo?.({ top: 0 });
+        else document.getElementById('lote-topo')?.scrollIntoView?.({ block: 'start' });
+    }, [step, flow.startView]);
 
     const issues = draft
         ? validateBatch({ ...draft, rows }, {
@@ -73,21 +119,33 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
             {step === 'start' && (
                 <>
                     {flow.startError && <Alert tone="warning" role="alert" className="mb-4">{flow.startError}</Alert>}
-                    <BatchStart
-                        models={flow.models}
-                        modelsError={flow.modelsError}
-                        onRetryModels={flow.retryModels}
-                        onModel={(job) => flow.openModel(job)}
-                        onCopy={(range) => { void flow.startCopy(range); }}
-                        copying={flow.copying}
-                        onText={flow.startFromText}
-                        textIssues={flow.textIssues}
-                        onBlank={flow.startBlank}
-                        resumeLabel={flow.stored
-                            ? `${flow.stored.batch.template.title || 'Turno sem título'} · ${flow.stored.batch.rows.length} linha(s)`
-                            : null}
-                        onResume={flow.resume}
-                    />
+                    {flow.startView === 'hub' && (
+                        <BatchStart
+                            onBlank={flow.startBlank}
+                            onModels={() => goView('models')}
+                            onHistory={() => goView('history')}
+                            templatesCount={flow.templates ? flow.templates.length : null}
+                            resumeLabel={flow.stored
+                                ? `${flow.stored.batch.template.title || 'Turno sem título'} · ${flow.stored.batch.rows.length} ${flow.stored.batch.rows.length === 1 ? 'turno' : 'turnos'}`
+                                : null}
+                            onResume={flow.resume}
+                            onDiscard={flow.discardDraft}
+                            discarded={flow.discarded !== null}
+                            onUndoDiscard={flow.undoDiscard}
+                        />
+                    )}
+                    {flow.startView === 'models' && (
+                        <TemplatesScreen companyId={options.companyId} tagsEnabled={options.tagsEnabled} onUse={pickSaved} onBack={backToHub} />
+                    )}
+                    {flow.startView === 'history' && (
+                        <HistoryScreen
+                            models={flow.models}
+                            error={flow.modelsError}
+                            onRetry={flow.retryModels}
+                            onPick={repeatJob}
+                            onBack={backToHub}
+                        />
+                    )}
                 </>
             )}
 
@@ -120,8 +178,10 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                         errorMessage={flow.errorMessage ?? Object.values(flow.rowErrors)[0] ?? null}
                         onPublish={() => { void flow.publish(() => []); }}
                         onReview={flow.review}
-                        onBack={flow.backToStart}
+                        onBack={leaveEditor}
                         initialEditingKey={flow.editingKey}
+                        saveModelName={flow.fromSavedId ? undefined : flow.saveModelName}
+                        onSaveModelName={flow.setSaveModelName}
                     />
                 </>
             )}
@@ -134,7 +194,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     notices={flow.notices}
                     onSeparate={(keys) => flow.updateDraft({ ...draft, rows: separateRows(draft.rows, keys) })}
                     onEditRow={flow.editRow}
-                    onBack={flow.reviewFromEditor ? flow.backToEditor : flow.backToStart}
+                    onBack={flow.reviewFromEditor ? flow.backToEditor : leaveEditor}
                     onPublish={() => { void flow.publish(invitees); }}
                     publishing={flow.publishing || waitingTeam}
                     errorMessage={flow.errorMessage}
@@ -151,7 +211,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                             onChange={(next) => flow.updateDraft({ ...draft, call: next })}
                             data={callData}
                             onPickPeople={() => setPicking('all')}
-                            suggestedCount={flow.suggestedIds.filter((id) => eligible.has(id)).length}
+                            suggestedCount={0}
                         />
                     }
                     riskWarnings={risks.map((r) => `${nameOf(r.worker_id)}: ${r.count} turnos na semana de ${dayLabel(r.week)}, contando este lote.`)}
@@ -164,7 +224,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     members={callData.members}
                     rows={pickingRow ? [pickingRow] : rows}
                     selected={pickingRow ? pickingRow.invite_worker_ids ?? [] : call.worker_ids ?? []}
-                    suggestedIds={new Set(flow.suggestedIds)}
+                    suggestedIds={NO_SUGGESTIONS}
                     busyIds={new Set(busy.filter((b) => !pickingRow || b.row_key === pickingRow.key).map((b) => b.worker_id))}
                     onClose={() => setPicking(null)}
                     onSave={(ids) => {
@@ -184,7 +244,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
             )}
 
             {step === 'done' && flow.done && (
-                <BatchDone done={flow.done} results={flow.results} sending={flow.sending} onRetry={flow.retryCall} onMore={flow.reset} />
+                <BatchDone done={flow.done} modelSaved={flow.modelSaved} results={flow.results} sending={flow.sending} onRetry={flow.retryCall} onMore={flow.reset} />
             )}
         </div>
     );

@@ -22,9 +22,8 @@ export default {
                     ink: '#006b33', // texto e ícone verdes: 6,66:1 no branco; 5,95:1 no primary-light
                 },
                 accent: '#111111', // Brutalist Black
-                company: '#2563EB', // azul da empresa: SÓ acento (faixa de marca), nunca CTA nem texto
                 border: 'rgba(0, 0, 0, 0.1)', // Subtle border
-                canvas: '#F4F4F0', // fundo do app
+                canvas: '#F5F6F8', // fundo do app (o mesmo do laboratório visual)
                 // Status semântico (lib/statusLabels.ts). Pares fg/bg entre 6,6:1 e 9,4:1.
                 status: {
                     neutral: { bg: '#f3f4f6', fg: '#374151', line: '#d1d5db' },
@@ -41,27 +40,20 @@ export default {
             textColor: {
                 primary: { DEFAULT: '#006b33', dark: '#006b33' },
             },
-            // Raios: controle e aviso 12 (`rounded-xl`), cartão e diálogo 16 (`rounded-2xl`), selo `rounded-pill`.
             borderRadius: {
-                'xl': '12px',
-                '2xl': '16px',
-                '3xl': '24px',
+                'xl': '16px',
+                '2xl': '24px',
+                '3xl': '32px',
                 'pill': '999px',
             },
-            // Borda de controle interativo e de cartão em foco: `border-ink` (1,5px). O resto: sem
-            // borda ou `border` cinza. `border-2` só no foco de campo.
-            borderWidth: {
-                'ink': '1.5px',
-            },
-            // Sombra: só `brutal-xs` (botão primário e cartão em foco) ou nenhuma.
-            // Os demais tokens são LEGADO, suavizados para não gritar enquanto as telas migram.
+            // 3 níveis + destaque do freela. Card em repouso não tem sombra.
             boxShadow: {
-                'brutal-xs': '2px 2px 0 0 #000',
-                'brutal-sm': '2px 2px 0 0 #000', // legado → use brutal-xs
-                'brutal': '2px 2px 0 0 #000', // legado → use brutal-xs
-                'brutal-lg': '0 12px 32px -8px rgba(17, 17, 17, 0.28)', // legado: elevação de diálogo/lateral
-                'brutal-brand': '2px 2px 0 0 #00A651', // legado: destaque do freela
-                'overlay': '0 12px 32px -8px rgba(17, 17, 17, 0.28)', // diálogo, menu e aviso flutuante
+                'brutal-sm': '3px 3px 0 0 #000', // controles, toast
+                'brutal': '4px 4px 0 0 #000', // hover de controle, card em destaque, menu
+                'brutal-lg': '6px 6px 0 0 #000', // dialog
+                'brutal-xs': '2px 2px 0 0 #000', // pequeno (selos e faixas)
+                'overlay': '0 12px 32px -8px rgba(17, 17, 17, 0.28)', // aviso flutuante (faixa de instalar)
+                'brutal-brand': '4px 4px 0 0 #00A651', // destaque do freela (convite)
             },
             transitionDuration: { press: '80ms', fast: '150ms', base: '200ms', exit: '150ms' },
             transitionTimingFunction: {

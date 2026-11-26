@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Briefcase, Wallet, Copy, Send, Share2, Trash2 } from 'lucide-react';
+import { Check, Star, Briefcase, Wallet, Copy, Send, History, Share2, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import type { TeamMember } from '../../types';
 import type { WorkerHistoryWithCompany } from './types';
-import { Button, IconButton, Menu } from '../ui';
-import { cx } from '../ui/cx';
+import { Button, Card, IconButton, Menu } from '../ui';
 import { formatHistoryDate } from './utils';
 import { roleLabel } from '../../lib/statusLabels';
 
@@ -68,77 +67,72 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
   // e.stopPropagation() para não disparar a navegação do card.
   const goToProfile = () => navigate(`/company/worker/${worker.id}`);
 
-  // Mesmo comportamento do antigo card clicável: linha inteira abre o perfil, controles internos não.
-  const INTERNO = 'button,a,input,[role="menu"],[role="menuitem"]';
-  const ativar = restricted
-    ? undefined
-    : (e: React.MouseEvent<HTMLLIElement>) => {
-        if ((e.target as HTMLElement).closest(INTERNO)) return;
-        goToProfile();
-      };
-
-  const historico = restricted || historyUnavailable
-    ? null
-    : history && history.count > 0
-      ? `${history.count} turno${history.count !== 1 ? 's' : ''} com você${history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}`
-      : historyLoading ? 'Carregando histórico...' : 'Nenhum turno ainda com você';
-
   return (
-    // Linha de lista (≈64-72px): avatar, nome, uma linha de contexto; uma ação visível + menu.
-    <li
-      onClick={ativar}
-      className={cx('flex min-h-16 items-center gap-3 px-4 py-3', !restricted && 'cursor-pointer hover:bg-gray-50')}
+    <Card
+      padding="sm"
+      onActivate={restricted ? undefined : goToProfile}
+      className="flex flex-col gap-3"
     >
-      <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-gray-100">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div aria-hidden="true" className="flex h-full w-full items-center justify-center bg-gray-900 text-sm font-bold text-white">
-            {worker.full_name?.[0]?.toUpperCase() ?? '?'}
-          </div>
-        )}
-      </div>
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={worker.full_name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-xl">
+              {worker.full_name?.[0]?.toUpperCase() ?? '?'}
+            </div>
+          )}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        {restricted ? (
-          <h3 className="line-clamp-2 text-sm font-semibold text-gray-900 [overflow-wrap:anywhere]">{worker.full_name}</h3>
-        ) : (
-          <h3 className="text-sm font-semibold text-gray-900">
-            {/* Alvo de 44px na largura inteira da coluna; nome quebra em até 2 linhas em vez de cortar. */}
-            <button
-              type="button"
-              onClick={goToProfile}
-              className="flex min-h-11 w-full items-center rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
-            >
-              <span className="line-clamp-2 [overflow-wrap:anywhere]">{worker.full_name}</span>
-            </button>
-          </h3>
-        )}
-        <p className="truncate text-xs text-gray-600 sm:text-sm">
-          {[
-            worker.primary_role ? roleLabel(worker.primary_role) : null,
-            typeof worker.rating_average === 'number' ? `★ ${worker.rating_average.toFixed(1)}` : null,
-          ].filter(Boolean).join(' · ')}
-          {historico && (
-            <>
-              {(worker.primary_role || typeof worker.rating_average === 'number') && ' · '}
-              <span className={history && history.count > 0 ? 'text-primary-ink' : undefined}>{historico}</span>
-            </>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-base truncate">{worker.full_name}</h3>
+          {worker.primary_role && (
+            <p className="text-sm text-gray-600 truncate">{roleLabel(worker.primary_role)}</p>
           )}
-        </p>
-        {/* Detalhe só a partir do tablet: no celular a linha fica curta e o PIX sai da vista (fica no menu). */}
-        <div className="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 sm:flex">
-          {typeof worker.completed_jobs_count === 'number' && (
-            <span className="inline-flex items-center gap-1">
-              <Briefcase size={12} aria-hidden="true" /> {worker.completed_jobs_count}{' '}
-              {worker.completed_jobs_count === 1 ? 'turno no total' : 'turnos no total'}
-            </span>
-          )}
-          {worker.city && <span>{worker.city}</span>}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {typeof worker.rating_average === 'number' && (
+              <span className="flex items-center gap-1 text-xs font-semibold bg-yellow-50 text-yellow-700 px-2.5 py-1 rounded-pill">
+                <Star size={12} fill="currentColor" /> {worker.rating_average.toFixed(1)}
+              </span>
+            )}
+            {typeof worker.completed_jobs_count === 'number' && (
+              <span className="flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-pill">
+                <Briefcase size={12} /> {worker.completed_jobs_count}{' '}
+                {worker.completed_jobs_count === 1 ? 'turno no total' : 'turnos no total'}
+              </span>
+            )}
+            {worker.city && (
+              <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-pill">
+                {worker.city}
+              </span>
+            )}
+            {/* Histórico com esta empresa — o dado que ajuda a decidir "chamo esse ou outro?". */}
+            {restricted || historyUnavailable ? null : history && history.count > 0 ? (
+              <span className="flex items-center gap-1 text-xs font-semibold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill">
+                <History size={12} /> {history.count} turno{history.count !== 1 ? 's' : ''} com você
+                {history.lastDate ? ` · último em ${formatHistoryDate(history.lastDate)}` : ''}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-pill">
+                <History size={12} /> {historyLoading ? 'Carregando histórico...' : 'Nenhum turno ainda com você'}
+              </span>
+            )}
+          </div>
+
+          {/* R1.3: chave PIX — bloco com botão de copiar, pra empresa pagar por fora */}
+          {/* Modo restrito (encarregado) não lê PII: nada de campo PIX, nem vazio. */}
           {!restricted && worker.pix_key?.trim() && (
-            <span data-copilot-private className="inline-flex min-w-0 items-center gap-1">
-              <Wallet size={12} className="flex-shrink-0" aria-hidden="true" />
-              <span className="max-w-48 truncate">{worker.pix_key}</span>
+            <div
+              data-copilot-private
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-between gap-2 mt-3 bg-gray-50 border border-gray-200 rounded-xl pl-3 pr-1 py-1 max-w-sm"
+            >
+              <span className="flex items-center gap-2 text-xs text-gray-700 min-w-0">
+                <Wallet size={14} className="flex-shrink-0 text-gray-500" />
+                <span className="truncate">{worker.pix_key}</span>
+              </span>
               <IconButton
                 onClick={(e) => { e.stopPropagation(); void handleCopyPix(); }}
                 aria-label={`Copiar chave PIX de ${worker.full_name}`}
@@ -146,31 +140,27 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
               >
                 {pixCopied ? <Check size={14} /> : <Copy size={14} />}
               </IconButton>
-            </span>
+            </div>
           )}
         </div>
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-1">
+      {/* Uma ação por card; repassar link e remover ficam no menu, longe do toque principal. */}
+      <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
         <Button
           variant="secondary"
-          size="sm"
-          aria-label="Convidar para turno"
+          className="flex-1 sm:flex-none"
           onClick={(e) => { e.stopPropagation(); onInvite(member); }}
-          className="max-sm:min-w-11 max-sm:px-2.5"
+          iconLeft={<Send size={16} />}
           data-copilot="empresa.elenco.convidar-turno"
         >
-          {/* No celular só o ícone (44px de toque): o nome do freela precisa do espaço. */}
-          <Send size={16} aria-hidden="true" />
-          <span className="hidden sm:inline">Convidar</span>
+          Convidar para turno
         </Button>
         {!restricted && (
           <Menu
+            className="ml-auto"
             label={`Mais opções de ${worker.full_name}`}
             items={[
-              ...(worker.pix_key?.trim()
-                ? [{ label: 'Copiar chave PIX', icon: Wallet, onSelect: () => void handleCopyPix() }]
-                : []),
               { label: 'Copiar link para outra empresa', icon: Share2, onSelect: () => void handleShareLink() },
               // Destrutivo por último; a confirmação é o RemoveMemberDialog.
               { label: 'Remover do elenco', icon: Trash2, onSelect: () => onRemove(member), danger: true },
@@ -178,6 +168,6 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
           />
         )}
       </div>
-    </li>
+    </Card>
   );
 }

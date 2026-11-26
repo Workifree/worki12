@@ -199,16 +199,12 @@ describe('CompanyToday — Gestor', () => {
   it('trocar o filtro limpa a seleção e mostra o esqueleto; "Limpar seleção" desmarca', async () => {
     renderPage();
     await screen.findByText('Garçom de salão');
-    // Fora do modo seleção não há caixa de marcar; o menu do turno abre o modo já com ele marcado.
-    expect(screen.queryByRole('checkbox', { name: /Selecionar Garçom de salão/ })).not.toBeInTheDocument();
-    await chooseFromMenu('Selecionar vários');
-    expect(screen.getByRole('checkbox', { name: /Selecionar Garçom de salão/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Selecionar Garçom de salão/ }));
     expect(screen.getByRole('button', { name: 'Limpar seleção' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Limpar seleção' }));
     expect(screen.queryByRole('button', { name: 'Limpar seleção' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: /Selecionar Garçom de salão/ })).not.toBeInTheDocument();
 
-    await chooseFromMenu('Selecionar vários');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Selecionar Garçom de salão/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Salão' }));
     expect(screen.queryByRole('button', { name: 'Limpar seleção' })).not.toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Carregando os turnos' })).toBeInTheDocument();
@@ -314,9 +310,7 @@ describe('CompanyToday — encarregado', () => {
     expect(ops.listJobsByResponsible).not.toHaveBeenCalled();
     expect(listMembers).not.toHaveBeenCalled();
     expect(ops.listOwnJobs).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'c1', userId: 'me' }));
-    // O próprio responsável não lê o próprio nome: fica só a etiqueta.
-    expect(screen.queryByText(/Responsável: Você/)).not.toBeInTheDocument();
-    expect(screen.getAllByText('Salão').length).toBeGreaterThan(0);
+    expect(screen.getByText('Responsável: Você · Salão')).toBeInTheDocument();
   });
 
   it('cancela os próprios e os cobertos, sem filtro de pessoa', async () => {

@@ -435,7 +435,7 @@ export default function CompanyProfile() {
                             />
                             <label
                                 htmlFor="cover-upload"
-                                className="absolute bottom-3 right-3 bg-white border-ink border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
+                                className="absolute bottom-3 right-3 bg-white border-2 border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
                             >
                                 <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar capa'}
                             </label>
@@ -448,7 +448,7 @@ export default function CompanyProfile() {
                     <div className="flex flex-col md:flex-row gap-4 md:gap-6 -mt-12 mb-6 items-start">
                         {/* Logo Container */}
                         <div className="relative shrink-0">
-                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border border-gray-200 flex items-center justify-center relative group overflow-hidden z-10">
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center relative group overflow-hidden z-10">
                                 {company.logo_url ? (
                                     <img src={company.logo_url} alt="Logo" className="w-full h-full object-cover" />
                                 ) : (
@@ -469,7 +469,7 @@ export default function CompanyProfile() {
                                         <label
                                             htmlFor="logo-upload"
                                             title="Trocar logo"
-                                            className="absolute bottom-1 right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-ink border-black bg-white text-black transition-colors hover:bg-gray-100 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
+                                            className="absolute bottom-1 right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary sm:h-9 sm:w-9"
                                         >
                                             {uploading === 'logo' ? (
                                                 <Loader2 className="animate-spin" size={16} />
@@ -496,7 +496,7 @@ export default function CompanyProfile() {
                                 </div>
 
                                 {/* Review Stats Badge */}
-                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-xl border border-yellow-200">
+                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-xl border-2 border-yellow-200">
                                     {/* `|| 5.0` mostrava nota cheia para empresa sem nenhuma avaliação --
                                         e este selo e a prova social que o freela le antes de aceitar convite. */}
                                     <div className="flex items-center gap-1">
@@ -516,7 +516,7 @@ export default function CompanyProfile() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                         {/* Left Column */}
                         <div className="space-y-5">
-                            <div className="border-b border-gray-200 pb-3">
+                            <div className="border-b-2 border-gray-200 pb-3">
                                 <h3 className="text-lg font-bold text-gray-900">Sobre a empresa</h3>
                                 <p className="text-sm text-gray-600">Informações principais</p>
                             </div>
@@ -566,7 +566,7 @@ export default function CompanyProfile() {
 
                         {/* Right Column */}
                         <div className="min-w-0 space-y-5">
-                            <div className="border-b border-gray-200 pb-3">
+                            <div className="border-b-2 border-gray-200 pb-3">
                                 <h3 className="text-lg font-bold text-gray-900">Contato e endereço</h3>
                                 <p className="text-sm text-gray-600">Canais de comunicação</p>
                             </div>
@@ -649,12 +649,12 @@ export default function CompanyProfile() {
                             className={`${FIELD_CONTROL_CLASS} min-h-[120px] py-3 leading-relaxed resize-none`}
                             placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
                         />
-                        <p className="text-xs font-semibold text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                        <p className="text-xs font-semibold text-yellow-800 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
                             Visível para qualquer freela que abrir o perfil da sua empresa — não inclua senhas nem dados internos.
                         </p>
                     </>
                 ) : (
-                    <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
                     </p>
                 )}
@@ -696,12 +696,12 @@ export default function CompanyProfile() {
                                 />
                                 <span
                                     aria-hidden="true"
-                                    className={`inline-flex items-center h-7 w-12 rounded-pill border-ink border-black transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
+                                    className={`inline-flex items-center h-7 w-12 rounded-pill border-2 border-black transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
                                         company.link_risk_alert_enabled !== false ? 'bg-primary' : 'bg-gray-200'
                                     }`}
                                 >
                                     <span
-                                        className={`inline-block w-5 h-5 bg-white border-ink border-black rounded-full transform transition-transform ${
+                                        className={`inline-block w-5 h-5 bg-white border-2 border-black rounded-full transform transition-transform ${
                                             company.link_risk_alert_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
                                         }`}
                                     />
@@ -735,7 +735,7 @@ export default function CompanyProfile() {
                         </div>
                     </>
                 ) : (
-                    <div className="flex items-center justify-between gap-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
                         <div>
                             <p className="font-bold text-sm">Avisar sobre frequência do mesmo freela</p>
                             <p className="text-xs text-gray-600 mt-0.5">
@@ -745,7 +745,7 @@ export default function CompanyProfile() {
                             </p>
                         </div>
                         <span
-                            className={`px-3 py-1 rounded-pill border-ink border-black font-semibold text-xs flex-shrink-0 ${
+                            className={`px-3 py-1 rounded-pill border-2 border-black font-semibold text-xs flex-shrink-0 ${
                                 company.link_risk_alert_enabled !== false ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-600'
                             }`}
                         >
@@ -891,7 +891,7 @@ export default function CompanyProfile() {
                     </Card>
 
                     {/* Zona de Perigo */}
-                    <Card className="mt-6 !border-red-500">
+                    <Card className="mt-6 !border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]">
                         <h3 className="text-red-600 font-bold text-lg mb-1">Zona de Perigo</h3>
                         <p className="text-sm text-gray-600 mb-4">A exclusão da sua empresa é irreversível. Todos os dados da empresa serão anonimizados.</p>
                         <Button variant="danger" onClick={() => setDeleteModalOpen(true)}>

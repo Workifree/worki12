@@ -29,7 +29,7 @@ export default function JobLifecycleStepper({ steps }: JobLifecycleStepperProps)
               className={`absolute right-1/2 top-3 mr-3 w-[calc(100%-1.5rem)] border-t-2 ${steps[index - 1].status === 'complete' ? 'border-black' : 'border-gray-200'}`}
             />
           )}
-          <span className={`flex h-6 w-6 items-center justify-center rounded-full border-ink ${STEP_CLASS[step.status]}`}>
+          <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${STEP_CLASS[step.status]}`}>
             {step.status === 'complete' ? <Check size={14} strokeWidth={3} /> : <span className="h-2 w-2 rounded-full bg-current" />}
           </span>
           <span className={`mt-1 text-center text-xs ${step.status === 'pending' ? 'font-medium text-gray-600' : 'font-semibold text-black'}`}>

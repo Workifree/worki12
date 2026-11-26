@@ -603,6 +603,72 @@ export function templateFromJob(job: SourceJob): { template: ShiftDraftTemplate;
   };
 }
 
+// ---------------------------------------------------------------------------
+// Modelos salvos (tabela shift_templates): o conteúdo vem do banco, então é sempre saneado
+// ---------------------------------------------------------------------------
+
+/** Modelo guardado pela empresa. `template` e `defaults` são o que `templateFromJob` devolveria. */
+export interface SavedShiftTemplate {
+  id: string;
+  name: string;
+  template: ShiftDraftTemplate;
+  defaults: RowDefaults;
+}
+
+const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : '');
+
+/** Lê o jsonb do banco sem confiar nele: tipo errado vira o valor vazio, nunca quebra a tela. */
+export function sanitizeSavedTemplate(row: { id: string; name: string; template: unknown; defaults: unknown }): SavedShiftTemplate {
+  const t = (row.template && typeof row.template === 'object' ? row.template : {}) as Record<string, unknown>;
+  const d = (row.defaults && typeof row.defaults === 'object' ? row.defaults : {}) as Record<string, unknown>;
+  const category = typeof t.category === 'string' ? t.category : '';
+  const budgetType: ShiftBudgetType = t.budget_type === 'hourly' || t.budget_type === 'project' ? t.budget_type : 'daily';
+  const slots = Number(d.slots);
+  const budget = Number(d.budget);
+  return {
+    id: row.id,
+    name: row.name,
+    template: {
+      ...emptyTemplate(category),
+      title: text(t.title, 120).trim() || categoryName(category),
+      description: text(t.description, 2000).trim() || suggestDescription(category),
+      requirements: text(t.requirements, 1000),
+      briefing: text(t.briefing, 1000),
+      certification_requirement: typeof t.certification_requirement === 'string' ? t.certification_requirement : null,
+      location: text(t.location, 200),
+      budget_type: budgetType,
+      has_lunch: t.has_lunch === true,
+      tag_id: typeof t.tag_id === 'string' ? t.tag_id : null,
+      source_job_id: null,
+    },
+    defaults: {
+      start_time: time5(typeof d.start_time === 'string' ? d.start_time : ''),
+      end_time: time5(typeof d.end_time === 'string' ? d.end_time : ''),
+      slots: Number.isInteger(slots) && slots > 0 && slots <= 999 ? slots : 1,
+      budget: Number.isFinite(budget) && budget > 0 ? budget : 0,
+    },
+  };
+}
+
+/** O que vai para o banco quando a empresa guarda o turno como modelo (sem data, sem origem). */
+export function templateToSave(template: ShiftDraftTemplate, defaults: RowDefaults): { template: Record<string, unknown>; defaults: Record<string, unknown> } {
+  return {
+    template: {
+      title: template.title,
+      category: template.category,
+      description: template.description,
+      requirements: template.requirements ?? '',
+      briefing: template.briefing ?? '',
+      certification_requirement: template.certification_requirement ?? null,
+      location: template.location ?? '',
+      budget_type: template.budget_type,
+      has_lunch: template.has_lunch,
+      tag_id: template.tag_id ?? null,
+    },
+    defaults: { start_time: defaults.start_time, end_time: defaults.end_time, slots: defaults.slots, budget: defaults.budget },
+  };
+}
+
 /** Modelos = turnos reais distintos por título, função, horário e valor (Regra 3). */
 export function distinctModels(jobs: SourceJob[], limit = 6): SourceJob[] {
   const seen = new Set<string>();

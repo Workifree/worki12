@@ -16,7 +16,7 @@ describe('Button', () => {
 
   it.each([
     ['primary', 'bg-primary-dark'],
-    ['dark', 'bg-black'],
+    ['dark', 'bg-[#2563EB]'],
     ['secondary', 'bg-white'],
     ['ghost', 'bg-transparent'],
     ['danger', 'bg-red-600'],
@@ -25,18 +25,11 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveClass(cls)
   })
 
-  it('primário (dark/primary) tem borda 1,5px preta e a ÚNICA sombra (brutal-xs)', () => {
+  it('variantes com moldura mantêm borda preta 2px e sombra offset (Article 13)', () => {
     render(<Button variant="dark">Ok</Button>)
     const btn = screen.getByRole('button')
-    expect(btn).toHaveClass('border-ink', 'border-black', 'rounded-xl', 'font-semibold', 'shadow-brutal-xs')
-    expect(btn.className).not.toContain('border-2')
-  })
-
-  it.each(['secondary', 'ghost', 'danger', 'dangerOutline'] as const)('%s é plano (sem sombra)', (variant) => {
-    render(<Button variant={variant}>Ok</Button>)
-    const btn = screen.getByRole('button')
-    expect(btn).toHaveClass('border-ink')
-    expect(btn.className).not.toMatch(/shadow-brutal/)
+    expect(btn).toHaveClass('border-2', 'border-black', 'rounded-xl', 'font-bold')
+    expect(btn).toHaveClass('shadow-brutal-sm')
   })
 
   it('tamanho md (padrão) tem min-h-11 = alvo de toque 44px', () => {

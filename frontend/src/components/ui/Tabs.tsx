@@ -33,7 +33,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, panelId, 
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={cx('worki-scroll-row flex gap-1 overflow-x-auto border-b border-gray-200', className)}
+      className={cx('flex gap-1 overflow-x-auto border-b-2 border-gray-200', className)}
     >
       {tabs.map((tab) => {
         const selected = tab.id === value
@@ -51,10 +51,10 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, panelId, 
               e.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
             }}
             className={cx(
-              '-mb-px inline-flex min-h-11 flex-auto shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 text-sm min-[360px]:px-3',
+              'inline-flex min-h-11 flex-auto shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-4 px-3 text-sm font-bold',
               'transition-colors duration-fast active:bg-gray-100',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black',
-              selected ? 'border-black font-semibold text-black' : 'border-transparent font-medium text-gray-600 hover:text-black',
+              selected ? 'border-black text-black' : 'border-transparent text-gray-600 hover:text-black',
             )}
           >
             {tab.label}

@@ -45,8 +45,8 @@ export interface PointerOptions {
 }
 
 const ARROW =
-  '<svg viewBox="0 0 30 34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-  '<path d="M3 2.4 L3 24.6 L8.9 19.3 L12.9 28.6 L17.2 26.8 L13.2 17.6 L21.4 17.4 Z" fill="#2563EB" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>' +
+  '<svg viewBox="0 0 22 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+  '<path d="M3 2 L3 18 L7.4 14 L10.4 21 L13.4 19.7 L10.5 12.9 L16.5 12.6 Z" fill="#fff" stroke="#0F1720" stroke-width="1.6" stroke-linejoin="round"/>' +
   '</svg>'
 
 const MARGIN = 14
@@ -65,7 +65,7 @@ interface Point {
 
 /** Ponto de toque: o centro do alvo; em alvo largo, perto do começo (onde fica o texto/ícone). */
 export function aimPoint(rect: DOMRect): Point {
-  const x = rect.width > 260 ? rect.left + Math.min(84, rect.width / 2) : rect.left + rect.width / 2
+  const x = rect.width > 260 ? rect.left + Math.min(84, rect.width / 2) : rect.left + rect.width * 0.55
   const y = rect.height > 160 ? rect.top + 44 : rect.top + rect.height / 2
   return {
     x: clamp(x, MARGIN, Math.max(MARGIN, window.innerWidth - MARGIN)),
@@ -74,8 +74,9 @@ export function aimPoint(rect: DOMRect): Point {
 }
 
 /** Proporcional à distância: 420 a 950 ms (receita da pesquisa visual). */
-export function moveDuration(distance: number): number {
-  return clamp(300 + distance, 420, 950)
+export function moveDuration(distance: number, finger = false): number {
+  // Laboratório: cursor 300 + d (420..950); dedo 320 + 0,9·d (420..900).
+  return finger ? clamp(320 + distance * 0.9, 420, 900) : clamp(300 + distance, 420, 950)
 }
 
 export function createVirtualPointer(host: HTMLElement, options: PointerOptions): VirtualPointer {
@@ -97,8 +98,9 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
   const body = el('div', `wk-ptr ${finger ? 'wk-ptr--finger' : 'wk-ptr--cursor'}`, root)
   const layerY = el('div', 'wk-ptr__y', body)
   const inner = el('div', 'wk-ptr__inner', layerY)
+  let dot: HTMLElement | null = null
   if (finger) {
-    el('div', 'wk-ptr__dot', inner)
+    dot = el('div', 'wk-ptr__dot', inner)
   } else {
     inner.innerHTML = ARROW
     const tag = el('b', 'wk-ptr__tag', inner)
@@ -138,8 +140,8 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
   }
 
   const start = (): Point => {
-    // Sai do meio da tela: o painel (e o PARAR) ficam nos cantos e embaixo, e o ponteiro não passa por cima deles.
-    return pos ?? { x: window.innerWidth / 2, y: window.innerHeight * (finger ? 0.52 : 0.45) }
+    // Laboratório: o cursor nasce em (36, 44); o dedo, embaixo no meio (50% × 90%).
+    return pos ?? (finger ? { x: window.innerWidth * 0.5, y: window.innerHeight * 0.9 } : { x: 36, y: 44 })
   }
 
   /** Desliza até `to` (Web Animations, só transform). Resolve no destino ou ao abortar. */
@@ -151,7 +153,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       return
     }
     const distance = Math.hypot(to.x - from.x, to.y - from.y)
-    const duration = moveDuration(distance) * scale
+    const duration = moveDuration(distance, finger) * scale
     place(from)
     if (typeof body.animate !== 'function') {
       // Sem Web Animations (testes): só espera o tempo do movimento.
@@ -160,8 +162,8 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       return
     }
     const options = (easing: string): KeyframeAnimationOptions => ({ duration, easing, fill: 'forwards' })
-    const x = body.animate([{ transform: `translateX(${from.x}px)` }, { transform: `translateX(${to.x}px)` }], options(finger ? 'cubic-bezier(.4,0,.2,1)' : 'cubic-bezier(.3,.1,.1,1)'))
-    const y = layerY.animate([{ transform: `translateY(${from.y}px)` }, { transform: `translateY(${to.y}px)` }], options(finger ? 'cubic-bezier(.4,0,.2,1)' : 'cubic-bezier(.5,0,.2,1)'))
+    const x = body.animate([{ transform: `translateX(${from.x}px)` }, { transform: `translateX(${to.x}px)` }], options('cubic-bezier(.3,.1,.1,1)'))
+    const y = layerY.animate([{ transform: `translateY(${from.y}px)` }, { transform: `translateY(${to.y}px)` }], options('cubic-bezier(.5,0,.2,1)'))
     const aborted = new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
     await Promise.race([Promise.all([x.finished, y.finished]).then(() => undefined, () => undefined), aborted, wait(duration + 400)])
     // Fixa o destino e libera a animação.
@@ -171,7 +173,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
   }
 
   const ripple = (at: Point) => {
-    const ring = el('div', `wk-ptr-ripple${finger ? ' wk-ptr-ripple--finger' : ''}`, root)
+    const ring = el('div', 'wk-ptr-ripple', root)
     ring.style.left = `${at.x}px`
     ring.style.top = `${at.y}px`
     later(() => ring.remove(), 650)
@@ -261,11 +263,37 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       } else if (request.action === 'select') {
         await wait(320 * scale, signal)
       } else if (request.action === 'click') {
-        // Pausa curta sobre o alvo, aperta, ondula; só então o clique de verdade.
-        await wait((instant() ? 160 : 110) * scale, signal)
+        // Laboratório: o cursor aperta 90 ms depois de chegar; o dedo, 60 ms (com a ondulação 40 ms depois e o alvo cedendo 120 ms depois).
+        await wait((instant() ? 160 : finger ? 60 : 90) * scale, signal)
         if (signal.aborted) return
-        root.classList.add('is-pressed')
-        ripple(at)
+        const motion = !instant() && typeof body.animate === 'function'
+        if (motion) {
+          if (finger) {
+            dot?.animate?.(
+              [
+                { transform: 'scale(1)', background: 'rgba(15,23,32,.20)' },
+                { transform: 'scale(.76)', background: 'rgba(15,23,32,.34)', offset: 0.35 },
+                { transform: 'scale(.76)', background: 'rgba(15,23,32,.34)', offset: 0.6 },
+                { transform: 'scale(1)', background: 'rgba(15,23,32,.20)' },
+              ],
+              { duration: 420, easing: 'ease-out' },
+            )
+            later(() => ripple(at), 40 * scale)
+          } else {
+            body.querySelector('svg')?.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(.84)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' })
+            ripple(at)
+          }
+          // O alvo cede um instante ao toque (hitFx do laboratório).
+          const target = element
+          later(() => {
+            if (target.isConnected) target.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(.965)', offset: 0.35 }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' })
+          }, (finger ? 120 : 0) * scale)
+        } else if (finger) {
+          dot?.animate?.([{ opacity: 1 }, { opacity: 0.5 }, { opacity: 1 }], { duration: 300 })
+          ripple(at)
+        } else {
+          ripple(at)
+        }
         if (options.vibrate && finger) {
           try {
             navigator.vibrate?.(10)
@@ -273,8 +301,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
             // sem vibração: segue
           }
         }
-        await wait(160 * scale, signal)
-        root.classList.remove('is-pressed')
+        await wait((finger ? 460 : 360) * scale, signal)
       } else {
         await wait(260 * scale, signal)
       }
