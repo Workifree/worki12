@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
-import { Button, Card, Field } from '../components/ui';
+import { Alert, Button, Field } from '../components/ui';
+import { AuthShell } from '../components/AuthShell';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 /**
  * Subtítulo da tela de acesso da EMPRESA.
@@ -29,12 +30,14 @@ const SUBTITULO_EMPRESA = 'Monte seu elenco e preencha turnos com quem você já
  * (`PENDING_MANAGER_INVITE_TOKEN_KEY`) para não colidir com o convite de equipe.
  */
 function resolvePendingInviteRedirect(explicitRedirect: string | null): string | null {
-    if (explicitRedirect && explicitRedirect.startsWith('/')) return explicitRedirect;
+    // Nunca `startsWith('/')`: `//site-externo` passava (redirect aberto) — ver lib/safeRedirect.
+    const explicitSafe = safeInternalPath(explicitRedirect);
+    if (explicitSafe) return explicitSafe;
     try {
         const pendingManagerToken = sessionStorage.getItem(PENDING_MANAGER_INVITE_TOKEN_KEY);
-        if (pendingManagerToken) return `/convite-gerente/${pendingManagerToken}`;
+        if (pendingManagerToken) return safeInternalPath(`/convite-gerente/${pendingManagerToken}`);
         const pendingToken = sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
-        if (pendingToken) return `/convite/${pendingToken}`;
+        if (pendingToken) return safeInternalPath(`/convite/${pendingToken}`);
     } catch {
         // sessionStorage indisponível — sem rede de segurança, segue fluxo padrão
     }
@@ -51,28 +54,47 @@ export default function Login() {
     // mesmo tick (Enter repetido) passavam e geravam tres POSTs em auth/v1/token.
     const enviandoRef = useRef(false);
     const [searchParams] = useSearchParams();
+    const [, setSearchParams] = useSearchParams();
     // 'explicitType' só existe quando o usuário chegou por um link que declara a intenção
     // (ex.: card "Quero Trabalhar"/"Quero Contratar"). Convites (?redirect=...) não trazem
     // 'type' — nesse caso não há intenção explícita de papel a comparar (R1).
     const explicitType = searchParams.get('type');
-    // Convite de GERENTE exige conta de empresa. Quando o token vem do sessionStorage (o
+    // Convite de GERENTE e link de contato de freela (`/convite/w_...`) exigem conta de empresa.
+    // Quando o token vem do sessionStorage (o
     // usuario voltou ao /login "seco"), nao ha `type` na URL para declarar isso — sem esta
     // deducao a tela recebe o convidado com a copy de freela e ele cria a conta errada.
     const destinoPendente = resolvePendingInviteRedirect(searchParams.get('redirect'));
     const type = explicitType
-        || (destinoPendente?.startsWith('/convite-gerente/') ? 'hire' : 'work');
+        || (destinoPendente?.startsWith('/convite-gerente/') || destinoPendente?.startsWith('/convite/w_')
+            ? 'hire'
+            : 'work');
     const reason = searchParams.get('reason');
     // Preserva o destino pretendido (ex.: /convite/<token>) quando o usuário chega ao
     // login vindo de um link que exigia sessão — ver InviteAccept.tsx (item 11 do GTM).
-    const redirectTo = searchParams.get('redirect');
+    const redirectTo = safeInternalPath(searchParams.get('redirect'));
     const navigate = useNavigate();
+
+    // Quem chegou por um link de convite precisa saber disso (a tela de login sozinha não diz).
+    const tipoDeConvite: 'elenco' | 'contato' | 'gerente' | null = destinoPendente?.startsWith('/convite-gerente/')
+        ? 'gerente'
+        : destinoPendente?.startsWith('/convite/w_')
+            ? 'contato'
+            : destinoPendente?.startsWith('/convite/') ? 'elenco' : null;
 
     // Os CTAs "Cadastrar como…" da landing e do onboarding levavam para ca em modo ENTRAR:
     // quem chegava novo digitava e recebia "Email ou senha incorretos", como se tivesse
     // errado a senha de uma conta que nem existe. O link agora declara a intencao.
-    const [isSignUp, setIsSignUp] = useState(searchParams.get('cadastro') === '1');
+    // Convidado costuma ser conta nova: o link de convite abre no cadastro (`cadastro=0` abre o login).
+    const [isSignUp, setIsSignUp] = useState(() => {
+        const cadastro = searchParams.get('cadastro');
+        return cadastro === '1' || (tipoDeConvite !== null && cadastro !== '0');
+    });
+    // Cadastro que exige confirmar o e-mail: troca o formulário por uma tela própria.
+    const [aguardandoEmail, setAguardandoEmail] = useState(false);
+    const [reenvio, setReenvio] = useState<'idle' | 'enviando' | 'enviado' | 'erro'>('idle');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [mostrarSenha, setMostrarSenha] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -82,6 +104,31 @@ export default function Login() {
     const [roleMismatch, setRoleMismatch] = useState<{ actualType: 'work' | 'hire' } | null>(null);
 
     const isHire = type === 'hire';
+
+    const reenviarConfirmacao = async () => {
+        setReenvio('enviando');
+        const retorno = resolvePendingInviteRedirect(redirectTo);
+        try {
+            const { error: resendError } = await supabase.auth.resend({
+                type: 'signup',
+                email,
+                ...(retorno ? { options: { emailRedirectTo: `${window.location.origin}${retorno}` } } : {}),
+            });
+            if (resendError) throw resendError;
+            setReenvio('enviado');
+        } catch (err) {
+            logError('Login.reenviarConfirmacao', err);
+            setReenvio('erro');
+        }
+    };
+
+    const escolherPapel = (papel: 'work' | 'hire') => {
+        const next = new URLSearchParams(searchParams);
+        next.set('type', papel);
+        setSearchParams(next, { replace: true });
+        setError(null);
+        setRoleMismatch(null);
+    };
 
     const handleGoToCorrectDashboard = () => {
         if (!roleMismatch) return;
@@ -120,6 +167,10 @@ export default function Login() {
                     return;
                 }
                 // Sign Up
+                // Se o projeto exigir confirmação de e-mail, o link abre em OUTRA aba (sem o
+                // sessionStorage do convite): o destino precisa ir no próprio retorno. A URL tem
+                // de estar nas Redirect URLs do Supabase Auth; fora da lista, cai na Site URL.
+                const conviteDeRetorno = resolvePendingInviteRedirect(redirectTo);
                 const { data, error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
@@ -127,6 +178,9 @@ export default function Login() {
                         data: {
                             user_type: type, // 'work' or 'hire'
                         },
+                        ...(conviteDeRetorno
+                            ? { emailRedirectTo: `${window.location.origin}${conviteDeRetorno}` }
+                            : {}),
                     },
                 });
 
@@ -154,6 +208,8 @@ export default function Login() {
                 } else if (data.user) {
                     // Email confirmation required
                     setSuccessMessage('Conta criada! Verifique seu email para confirmar.');
+                    setAguardandoEmail(true);
+                    setReenvio('idle');
                 }
             } else {
                 // Sign In
@@ -212,56 +268,100 @@ export default function Login() {
         }
     };
 
+    const papelAtivo = 'flex-1 min-h-11 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black';
+
+    const rodape = (
+        <>
+            <div className="border-t border-gray-200 pt-3 text-center text-sm text-gray-600">
+                {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}{' '}
+                <button
+                    type="button"
+                    onClick={() => {
+                        setIsSignUp(!isSignUp);
+                        setError(null);
+                        setSuccessMessage(null);
+                        setRoleMismatch(null);
+                        setAguardandoEmail(false);
+                    }}
+                    className="inline-flex items-center min-h-11 px-1 underline decoration-2 underline-offset-2 font-bold text-black hover:text-primary-dark transition-colors"
+                >
+                    {isSignUp ? 'Fazer Login' : 'Cadastre-se'}
+                </button>
+            </div>
+
+            <nav aria-label="Links institucionais" className="mt-1 flex flex-wrap justify-center gap-x-2 text-sm text-gray-600">
+                <Link to="/sobre" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Sobre a Worki</Link>
+                <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 px-2 hover:text-black transition-colors">Termos</Link>
+                <Link to="/privacidade" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Privacidade</Link>
+                <Link to="/licencas" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Licenças</Link>
+                <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 px-2 hover:text-black transition-colors">Ajuda</Link>
+            </nav>
+        </>
+    );
+
     return (
-        <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
-                    ${isHire ? 'bg-accent' : 'bg-[#F4F4F0]'}`}>
+        <AuthShell
+            role={isHire ? 'hire' : 'work'}
+            backTo="/"
+            title={isSignUp
+                ? (isHire ? 'Criar conta de empresa' : 'Criar conta de freela')
+                : (isHire ? 'Entrar como empresa' : 'Entrar como freela')}
+            subtitle={isSignUp
+                ? 'Preencha os dados para se cadastrar.'
+                : (isHire ? SUBTITULO_EMPRESA : 'Seus turnos, presença e recibos.')}
+            footer={rodape}
+        >
             <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
 
-            {/* Back Button */}
-            <Button
-                variant="secondary"
-                size="md"
-                onClick={() => navigate('/')}
-                iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
-                className="absolute top-4 left-4 sm:top-6 sm:left-6"
-            >
-                Voltar
-            </Button>
+                {tipoDeConvite && !aguardandoEmail && (
+                    <Alert tone="info" title="Você recebeu um convite" className="mb-4">
+                        {tipoDeConvite === 'elenco' && 'Crie sua conta de freela (ou entre) para ver o convite de Elenco. '}
+                        {tipoDeConvite === 'contato' && 'Crie ou acesse a conta da sua empresa para usar o link do freela. '}
+                        {tipoDeConvite === 'gerente' && 'Crie ou acesse uma conta de empresa para ver o convite de Gestor. '}
+                        Nada é aceito sem você tocar no botão.
+                    </Alert>
+                )}
 
-            {/* Main Card */}
-            <Card
-                padding="lg"
-                className={`w-full max-w-md ${isHire
-                    ? 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]'
-                    : 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}
-            >
-                <div className="text-center mb-6">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-                        {isSignUp
-                            ? 'Criar Conta'
-                            : (isHire ? 'Contratar Talentos' : 'Começar a Trabalhar')}
-                    </h1>
-                    <p className="text-sm sm:text-base text-gray-600">
-                        {isSignUp
-                            ? 'Preencha os dados para se cadastrar.'
-                            : (isHire ? SUBTITULO_EMPRESA : 'Ganhe dinheiro no seu próprio horário.')}
-                    </p>
-                </div>
+                {!tipoDeConvite && !aguardandoEmail && (
+                    <div role="group" aria-label="Tipo de conta" className="mb-5 flex gap-1 rounded-xl bg-gray-100 p-1">
+                        <button
+                            type="button"
+                            aria-pressed={!isHire}
+                            onClick={() => escolherPapel('work')}
+                            className={`${papelAtivo} ${!isHire ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-black'}`}
+                        >
+                            Sou freela
+                        </button>
+                        <button
+                            type="button"
+                            aria-pressed={isHire}
+                            onClick={() => escolherPapel('hire')}
+                            className={`${papelAtivo} ${isHire ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-black'}`}
+                        >
+                            Sou empresa
+                        </button>
+                    </div>
+                )}
 
                 {reason === 'session_expired' && !error && !successMessage && (
-                    <div role="status" className="mb-4 p-3 bg-yellow-50 border-2 border-yellow-400 text-yellow-900 rounded-xl text-sm font-medium">
-                        Sua sessao expirou. Faca login novamente para continuar.
+                    <div role="status" className="mb-4 p-3 bg-yellow-50 border border-yellow-400 text-yellow-900 rounded-xl text-sm font-medium">
+                        Sua sessão expirou. Faça login novamente para continuar.
                     </div>
                 )}
 
                 {error && (
-                    <div role="alert" className="mb-4 p-3 bg-red-50 border-2 border-red-500 text-red-700 rounded-xl text-sm font-medium">
+                    <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-500 text-red-700 rounded-xl text-sm font-medium">
                         {error}
+                        {error.startsWith('Por favor, verifique seu email') && (
+                            <Button variant="secondary" fullWidth className="mt-2" loading={reenvio === 'enviando'} onClick={() => void reenviarConfirmacao()}>
+                                {reenvio === 'enviado' ? 'E-mail reenviado' : 'Reenviar e-mail de confirmação'}
+                            </Button>
+                        )}
                     </div>
                 )}
 
                 {roleMismatch && (
-                    <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl text-sm font-medium space-y-3">
+                    <div className="mb-4 p-4 bg-amber-50 border border-amber-400 text-amber-900 rounded-xl text-sm font-medium space-y-3">
                         <p>
                             Este e-mail já está cadastrado como <strong className="font-bold">{roleLabel(roleMismatch.actualType)}</strong>.
                             {' '}Não é possível entrar como {roleLabel(explicitType)} com esta conta.
@@ -278,16 +378,36 @@ export default function Login() {
                 )}
 
                 {successMessage && (
-                    <div role="status" className="mb-4 p-3 bg-green-50 border-2 border-green-500 text-green-800 rounded-xl text-sm font-medium">
+                    <div role="status" className="mb-4 p-3 bg-green-50 border border-green-500 text-green-800 rounded-xl text-sm font-medium">
                         {successMessage}
                     </div>
                 )}
 
+                {aguardandoEmail && (
+                    <div className="space-y-3 [overflow-wrap:anywhere]">
+                        <p className="text-sm text-gray-700">
+                            Enviamos um link para <strong>{email}</strong>. Abra o e-mail e confirme. Se não chegar, confira o spam.
+                        </p>
+                        {reenvio === 'enviado' && <p role="status" className="text-sm font-bold text-primary-dark">E-mail reenviado.</p>}
+                        {reenvio === 'erro' && <p role="alert" className="text-sm font-bold text-red-600">Não foi possível reenviar agora. Aguarde um minuto e tente de novo.</p>}
+                        <Button variant={isHire ? 'dark' : 'primary'} size="lg" fullWidth loading={reenvio === 'enviando'} onClick={() => void reenviarConfirmacao()}>
+                            Reenviar e-mail
+                        </Button>
+                        <Button variant="secondary" size="lg" fullWidth onClick={() => { setAguardandoEmail(false); setSuccessMessage(null); }}>
+                            Trocar e-mail
+                        </Button>
+                    </div>
+                )}
+
+                {!aguardandoEmail && (
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     <Field label="Email">
                         <input
                             type="email"
-                            autoComplete="email"
+                            name="email"
+                            inputMode="email"
+                            autoComplete={isSignUp ? 'email' : 'username'}
+                            autoCapitalize="none"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
@@ -296,9 +416,10 @@ export default function Login() {
                     </Field>
 
                     <div>
-                        <Field label="Senha">
+                        <Field label="Senha" hint={isSignUp ? 'Mínimo de 8 caracteres.' : undefined}>
                             <input
-                                type="password"
+                                type={mostrarSenha ? 'text' : 'password'}
+                                name="password"
                                 autoComplete={isSignUp ? "new-password" : "current-password"}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -307,6 +428,15 @@ export default function Login() {
                                 placeholder="••••••••"
                             />
                         </Field>
+                        <label className="mt-1 inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-gray-600">
+                            <input
+                                type="checkbox"
+                                className="h-5 w-5"
+                                checked={mostrarSenha}
+                                onChange={(e) => setMostrarSenha(e.target.checked)}
+                            />
+                            Mostrar senha
+                        </label>
                         {isSignUp && password.length > 0 && (() => {
                             const strength = getPasswordStrength(password);
                             return (
@@ -327,9 +457,17 @@ export default function Login() {
                         fullWidth
                         loading={loading}
                         className="mt-2"
+                        data-copilot={isSignUp ? 'publico.login.criar-conta' : 'publico.login.entrar'}
                     >
-                        {isSignUp ? 'Criar Conta' : 'Entrar'}
+                        {isSignUp ? 'Criar conta' : 'Entrar'}
                     </Button>
+
+                    {isSignUp && (
+                        <p className="text-center text-xs text-gray-600">
+                            Antes de usar, você lê e aceita os <Link to="/termos" className="font-bold underline">Termos de Uso</Link> e a{' '}
+                            <Link to="/privacidade" className="font-bold underline">Política de Privacidade</Link>.
+                        </p>
+                    )}
 
                     {!isSignUp && (
                         <div className="text-center">
@@ -339,30 +477,8 @@ export default function Login() {
                         </div>
                     )}
                 </form>
+                )}
 
-                <div className="mt-4 pt-4 border-t-2 border-gray-100 text-center text-sm text-gray-600">
-                    {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}{' '}
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setIsSignUp(!isSignUp);
-                            setError(null);
-                            setSuccessMessage(null);
-                            setRoleMismatch(null);
-                        }}
-                        className="inline-flex items-center min-h-11 px-1 underline decoration-2 underline-offset-2 font-bold text-black hover:text-primary transition-colors"
-                    >
-                        {isSignUp ? 'Fazer Login' : 'Cadastre-se'}
-                    </button>
-                </div>
-
-                <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
-                    <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
-                    <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
-                    <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Ajuda</Link>
-                </nav>
-            </Card>
-        </div>
+        </AuthShell>
     );
 }

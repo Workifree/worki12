@@ -6,6 +6,7 @@ import { todayLocalDate } from '../../lib/dateUtils';
 import { JobSeriesService } from '../../services/jobSeriesService';
 import { describeSeriesPreview } from './seriesPreviewText';
 import { Button } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 interface CancelSeriesModalProps {
     seriesId: string;
@@ -94,13 +95,13 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
     };
 
     return (
-        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="cancel-series-title"
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6"
-            >
+        <Dialog
+            labelledBy="cancel-series-title"
+            onClose={onClose}
+            locked={loading}
+            focusKey={phase}
+            initialFocus="panel"
+        >
                 <div className="flex items-center justify-between mb-4">
                     <h2 id="cancel-series-title" className="text-lg font-bold tracking-tight">Cancelar a série</h2>
                     <button
@@ -115,7 +116,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
 
                 {phase === 'confirm' && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-red-300 bg-red-50">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-red-300 bg-red-50">
                             <AlertTriangle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm font-bold text-red-800">
                                 <p>A série para de gerar novos turnos e, a partir de hoje, as ocorrências futuras <strong>sem
@@ -144,12 +145,14 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                                 )}
                             </div>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="worki-dialog-actions flex gap-3">
                             <Button variant="secondary" onClick={onClose} disabled={loading} className="flex-1">
                                 Voltar
                             </Button>
                             <Button
                                 variant="danger"
+                                data-copilot="empresa.serie.encerrar-confirmar"
+                                data-copilot-risk="D"
                                 onClick={handleConfirm}
                                 disabled={confirmDisabled}
                                 loading={loading}
@@ -163,7 +166,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
 
                 {phase === 'result' && result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.cancelled} turno{result.cancelled !== 1 ? 's' : ''} cancelado{result.cancelled !== 1 ? 's' : ''}.
@@ -171,7 +174,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                             </p>
                         </div>
                         {(result.skippedFilled > 0 || result.skippedCalled > 0) && (
-                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
                                 {result.skippedFilled > 0 && (
                                     <p>{result.skippedFilled} turno{result.skippedFilled !== 1 ? 's' : ''} com freela confirmado {result.skippedFilled !== 1 ? 'não foram cancelados' : 'não foi cancelado'} — dispense manualmente se necessário.</p>
                                 )}
@@ -185,7 +188,6 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                         </Button>
                     </div>
                 )}
-            </div>
-        </div>
+        </Dialog>
     );
 }

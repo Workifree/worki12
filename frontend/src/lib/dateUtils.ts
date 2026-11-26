@@ -140,6 +140,27 @@ export function formatDurationMs(ms: number): string {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
 }
 
+/**
+ * Minutos entre duas horas soltas `HH:MM` (cruza a meia-noite quando a saída é antes da entrada),
+ * descontando `breakMinutes`. 0 se faltar horário.
+ */
+export function shiftMinutes(start: string, end: string, breakMinutes = 0): number {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  let total = eh * 60 + em - (sh * 60 + sm);
+  if (total < 0) total += 24 * 60;
+  return Math.max(0, total - breakMinutes);
+}
+
+/** Duração em português claro: "3 h 40 min", "4 h", "45 min" (nunca "3.7 h"). */
+export function formatShiftDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
 export function formatDurationShort(fromIso: string, toIso: string): string {
   const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
   return formatDurationMs(ms);

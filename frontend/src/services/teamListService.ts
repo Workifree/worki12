@@ -103,7 +103,7 @@ export const TeamListService = {
 
       if (error) {
         logError('teamList.listLists', error);
-        return [];
+        throw error;
       }
 
       type Row = TeamList & { team_list_members: Array<{ worker_id: string }> | null };
@@ -119,7 +119,7 @@ export const TeamListService = {
       }));
     } catch (err) {
       logError('teamList.listLists', err);
-      return [];
+      throw err;
     }
   },
 

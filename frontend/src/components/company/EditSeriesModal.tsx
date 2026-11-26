@@ -7,6 +7,7 @@ import { JobSeriesService } from '../../services/jobSeriesService';
 import { SHIFT_CATEGORIES } from './shiftCategories';
 import { describeSeriesPreview } from './seriesPreviewText';
 import { Button, Field } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 /**
  * Snapshot mínimo de um `jobs` que pertence a uma série — o suficiente para pré-preencher o
@@ -161,13 +162,14 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
     };
 
     return (
-        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="edit-series-title"
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-lg p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-            >
+        <Dialog
+            labelledBy="edit-series-title"
+            onClose={onClose}
+            locked={saving}
+            focusKey={phase}
+            initialFocus="panel"
+            className="max-w-lg"
+        >
                 <div className="flex items-center justify-between mb-4">
                     <h2 id="edit-series-title" className="text-lg font-bold tracking-tight flex items-center gap-2">
                         <Repeat size={20} /> Editar os futuros
@@ -277,15 +279,17 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                             />
                         </Field>
 
-                        <Button variant="dark" size="lg" fullWidth onClick={() => setPhase('confirm')} disabled={!canContinue}>
-                            Continuar
-                        </Button>
+                        <div className="worki-dialog-actions">
+                            <Button variant="dark" size="lg" fullWidth onClick={() => setPhase('confirm')} disabled={!canContinue}>
+                                Continuar
+                            </Button>
+                        </div>
                     </div>
                 )}
 
                 {phase === 'confirm' && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-amber-300 bg-amber-50">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50">
                             <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm font-bold text-amber-800">
                                 <p>Essa alteração vai ser aplicada a partir de hoje em todas as ocorrências futuras desta série
@@ -310,11 +314,11 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                                 )}
                             </div>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="worki-dialog-actions flex gap-3">
                             <Button variant="secondary" onClick={() => setPhase('form')} disabled={saving} className="flex-1">
                                 Voltar
                             </Button>
-                            <Button variant="dark" onClick={handleApply} disabled={confirmDisabled} loading={saving} className="flex-1">
+                            <Button variant="dark" data-copilot="empresa.serie.aplicar-edicao" onClick={handleApply} disabled={confirmDisabled} loading={saving} className="flex-1">
                                 {saving ? 'Aplicando...' : 'Confirmar e aplicar'}
                             </Button>
                         </div>
@@ -323,14 +327,14 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
 
                 {phase === 'result' && result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.updated} turno{result.updated !== 1 ? 's' : ''} atualizado{result.updated !== 1 ? 's' : ''}.
                             </p>
                         </div>
                         {(result.skippedFilled > 0 || result.skippedCalled > 0) && (
-                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
                                 {result.skippedFilled > 0 && (
                                     <p>{result.skippedFilled} turno{result.skippedFilled !== 1 ? 's não foram alterados' : ' não foi alterado'} porque já tem{result.skippedFilled !== 1 ? 'm' : ''} freela confirmado.</p>
                                 )}
@@ -344,7 +348,6 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
                         </Button>
                     </div>
                 )}
-            </div>
-        </div>
+        </Dialog>
     );
 }

@@ -2,12 +2,19 @@ import { forwardRef } from 'react'
 import type { HTMLAttributes, KeyboardEvent, MouseEvent, Ref } from 'react'
 import { cx } from './cx'
 
+export type CardTone = 'default' | 'flat' | 'nested' | 'highlight'
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg'
 export type CardElement = 'div' | 'section' | 'article' | 'li' | 'aside'
 
 export interface CardProps extends HTMLAttributes<HTMLElement> {
   /** none = 0 · sm = p-4 · md = p-5 sm:p-6 · lg = p-6 sm:p-8 */
   padding?: CardPadding
+  /**
+   * default = 1º nível (borda cinza 1px) · flat = sem borda (grupo de lista, faixa) · nested = dentro
+   * de outro card ou item de lista (borda cinza) · highlight = pede ação agora (borda preta 1,5px +
+   * `brutal-xs`; no máximo um por tela)
+   */
+  tone?: CardTone
   /** Hover elevado (cards clicáveis). */
   interactive?: boolean
   /**
@@ -27,11 +34,20 @@ const PADDING: Record<CardPadding, string> = {
   lg: 'p-6 sm:p-8',
 }
 
-const INTERACTIVE_SELECTOR = 'button,a,input,select,textarea,label,summary,[role="button"],[role="link"]'
+const TONE: Record<CardTone, string> = {
+  default: 'border border-gray-200',
+  flat: 'border-0',
+  nested: 'border border-gray-200',
+  highlight: 'border-ink border-black shadow-brutal-xs',
+}
+
+const INTERACTIVE_SELECTOR =
+  'button,a,input,select,textarea,label,summary,[role="button"],[role="link"],[role="menu"]'
 
 export const Card = forwardRef<HTMLElement, CardProps>(function Card(
   {
     padding = 'md',
+    tone = 'default',
     interactive = false,
     onActivate,
     as = 'div',
@@ -74,12 +90,13 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
       role={activatable ? (role ?? 'button') : role}
       tabIndex={activatable ? (tabIndex ?? 0) : tabIndex}
       className={cx(
-        'bg-white border-2 border-black rounded-2xl',
+        'bg-white rounded-2xl',
+        TONE[tone],
         PADDING[padding],
         (interactive || activatable) &&
-          'transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]',
+          'transition-[border-color,background-color] duration-fast ease-standard motion-reduce:transition-none hover:border-gray-400 hover:bg-gray-50',
         activatable &&
-          'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2',
+          'cursor-pointer active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2',
         className,
       )}
       onClick={activatable || onClick ? handleClick : undefined}

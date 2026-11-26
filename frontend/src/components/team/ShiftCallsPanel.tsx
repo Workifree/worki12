@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
 import { Megaphone, Siren, Clock, CheckCircle2, XCircle, MinusCircle, Timer } from 'lucide-react';
 import { formatDurationShort } from '../../lib/dateUtils';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
 import type { ShiftCall, ShiftCallTarget } from '../../types';
-import { Button, Card } from '../ui';
+import { Button, Card, DialogActions, DialogHeader } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // Painel de chamados do turno (visão da empresa).
@@ -45,7 +47,12 @@ function targetVisual(target: ShiftCallTarget, callStatus?: ShiftCall['status'])
       return { icon: MinusCircle, className: 'text-gray-400', label };
     }
     default:
-      return { icon: Clock, className: 'text-yellow-600', label: 'Aguardando' };
+      // Chamado já vencido ou encerrado sem a resposta desta pessoa nunca diz "Aguardando".
+      if (callStatus && callStatus !== 'open') {
+        const label = callStatus === 'cancelled' ? 'Chamado cancelado' : callStatus === 'filled' ? 'Vaga preenchida' : 'Não respondeu a tempo';
+        return { icon: MinusCircle, className: 'text-gray-400', label };
+      }
+      return { icon: Clock, className: 'text-yellow-700', label: 'Aguardando' };
   }
 }
 
@@ -54,9 +61,11 @@ export interface ShiftCallsPanelProps {
   loading: boolean;
   cancellingId: string | null;
   onCancel: (callId: string) => void;
+  /** "open" = só o chamado vivo (topo da tela); "history" = só os encerrados, recolhidos. */
+  part?: 'all' | 'open' | 'history';
 }
 
-export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: ShiftCallsPanelProps) {
+export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part = 'all' }: ShiftCallsPanelProps) {
   // `Date.now()` no corpo do render e chamada impura: o mesmo componente, com as mesmas props,
   // renderiza diferente conforme a hora -- e o React Compiler recusa (lint error, Article 3).
   // Trocar por relogio em estado corrige junto um resquicio da propria derivacao de expiracao:
@@ -64,19 +73,35 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
   // pagina, que e exatamente a mentira que essa derivacao existe para evitar. 30s e resolucao de
   // sobra para um campo que mostra minuto.
   const [agora, setAgora] = useState(() => Date.now());
+  // Cancelar um chamado não tem volta (quem foi chamado perde o convite): pede confirmação.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const confirmLock = useRef(false);
+  const askCancel = (callId: string) => {
+    confirmLock.current = false;
+    setConfirmingId(callId);
+  };
+  const confirmCancel = () => {
+    if (!confirmingId || confirmLock.current) return;
+    confirmLock.current = true;
+    onCancel(confirmingId);
+    setConfirmingId(null);
+  };
   useEffect(() => {
     const id = setInterval(() => setAgora(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
   if (loading) {
-    return <div className="h-24 bg-gray-100 rounded-2xl animate-pulse mb-6" />;
+    if (part === 'history') return null;
+    return <div className="h-24 bg-gray-100 rounded-2xl animate-pulse motion-reduce:animate-none mb-6" role="status"><span className="sr-only">Carregando</span></div>;
   }
   if (calls.length === 0) return null;
 
-  return (
-    <div className="space-y-4 mb-8">
-      {calls.map((call) => {
+  // Encerrado = não está mais aberto, inclusive o que venceu sem ninguém marcar no banco.
+  const isLive = (call: ShiftCall) =>
+    call.status === 'open' && !(!!call.expires_at && new Date(call.expires_at).getTime() <= agora);
+
+  const renderCall = (call: ShiftCall) => {
         const isSos = call.origin === 'sos';
         const rawTargets = call.targets ?? [];
         // F11: para SOS, `rawTargets` já vem filtrado pela RLS a só quem aceitou — não confiar
@@ -96,13 +121,16 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
         // tamanho do array de alvos carregados no client.
         const notifiedCount = isSos ? call.targets_count : targets.length;
 
+        const effectiveStatus: ShiftCall['status'] = call.status === 'open' && jaVenceu ? 'expired' : call.status;
+        const allDeclined = isOpen && !isSos && targets.length > 0 && targets.every((t) => t.response === 'declined');
+
         return (
           <Card
             key={call.id}
             padding="sm"
-            className={isOpen ? 'bg-yellow-50' : 'border-gray-200'}
+            tone={isOpen ? 'default' : 'nested'}
           >
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex flex-col items-start gap-3 mb-3 sm:flex-row sm:justify-between">
               <div className="min-w-0">
                 <p className="font-bold text-sm flex items-center gap-2 flex-wrap">
                   {isSos ? <Siren size={16} /> : <Megaphone size={16} />}
@@ -115,11 +143,9 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
                       : jaVenceu && call.status === 'open'
                         ? 'Chamado expirou'
                         : 'Chamado encerrado'}
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-black text-white">
-                    {SHIFT_CALL_REASON_LABELS[call.reason]}
-                  </span>
+                  <span className="text-xs font-normal text-gray-600">Motivo: {SHIFT_CALL_REASON_LABELS[call.reason]}</span>
                   {isSos && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-white border-2 border-black">
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-white border border-gray-200">
                       Fora do Elenco
                     </span>
                   )}
@@ -133,37 +159,41 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
 
               {isOpen && (
                 <Button
-                  variant="secondary"
-                  onClick={() => onCancel(call.id)}
+                  variant="dangerOutline"
+                  size="sm"
+                  onClick={() => askCancel(call.id)}
                   disabled={cancellingId === call.id}
                   loading={cancellingId === call.id}
                   className="flex-shrink-0"
+                  data-copilot="empresa.presenca.encerrar-chamado"
                 >
-                  Cancelar
+                  Encerrar chamado
                 </Button>
               )}
             </div>
 
             {/* A métrica que prova o valor do produto. */}
             {call.first_claim_at && (
-              <p className="flex items-center gap-1.5 text-xs font-bold text-primary bg-primary-light rounded-xl px-3 py-2 mb-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-primary-dark bg-primary-light rounded-xl px-3 py-2 mb-3">
                 <Timer size={14} />
                 Primeira vaga preenchida em {formatDurationShort(call.created_at, call.first_claim_at)}
               </p>
             )}
 
+            {allDeclined && <p className="mb-3 text-sm font-bold">Todos recusaram. Encerre e chame mais gente.</p>}
+
             {!call.first_claim_at && (isOpen || (jaVenceu && call.status === 'open')) && (
               <p className="flex items-center gap-1.5 text-xs text-gray-700 mb-3">
                 <Clock size={14} />
                 {isOpen
-                  ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                  ? `Ninguém aceitou ainda · expira ${new Date(call.expires_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
                   : `Expirou às ${new Date(call.expires_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} sem ninguém aceitar — chame de novo`}
               </p>
             )}
 
             <div className="flex flex-wrap gap-2">
               {targets.map((target) => {
-                const visual = targetVisual(target, call.status);
+                const visual = targetVisual(target, effectiveStatus);
                 const Icon = visual.icon;
                 return (
                   <span
@@ -181,7 +211,41 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel }: Shif
             </div>
           </Card>
         );
-      })}
+  };
+
+  const live = calls.filter(isLive);
+  const closed = calls.filter((call) => !isLive(call));
+  const showLive = part !== 'history' && live.length > 0;
+  const showClosed = part !== 'open' && closed.length > 0;
+  if (!showLive && !showClosed) return null;
+
+  return (
+    <div className="space-y-4 mb-6">
+      {showLive && live.map(renderCall)}
+
+      {showClosed && (
+        <details className="rounded-2xl border border-gray-200 bg-white">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-bold">
+            Histórico de chamados ({closed.length})
+          </summary>
+          <div className="space-y-3 px-3 pb-3">{closed.map(renderCall)}</div>
+        </details>
+      )}
+
+      {confirmingId && (
+        <Dialog labelledBy="cancelar-chamado-titulo" onClose={() => setConfirmingId(null)}>
+          <DialogHeader titleId="cancelar-chamado-titulo" title="Encerrar este chamado?" />
+          <p className="text-sm text-gray-600">
+            Quem ainda não respondeu deixa de poder aceitar e é avisado. Quem já aceitou continua no turno.
+          </p>
+          <DialogActions>
+            <Button variant="secondary" data-autofocus onClick={() => setConfirmingId(null)}>
+              Voltar
+            </Button>
+            <Button variant="danger" onClick={confirmCancel}>Encerrar chamado</Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -1,3 +1,8 @@
+/**
+ * Degraus de XP: espelho de `worker_level_for_xp` (banco), travado por teste de paridade.
+ * O NÍVEL exibido é sempre `workers.level`, gravado pelo banco; o app nunca o calcula. Os degraus
+ * servem só para desenhar o progresso até o próximo.
+ */
 export const LEVELS = [
     { level: 1, minXp: 0 },
     { level: 2, minXp: 100 },
@@ -11,34 +16,27 @@ export const LEVELS = [
     { level: 10, minXp: 4500 },
 ];
 
-export const calculateLevel = (xp: number) => {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-        if (xp >= LEVELS[i].minXp) {
-            return LEVELS[i].level;
-        }
-    }
-    return 1;
-};
-
 /**
- * Progresso REAL dentro do nível atual, pelos degraus de LEVELS.
+ * Progresso REAL dentro do nível gravado no banco.
  *
  * As barras de XP usavam `xp % 100` ("assumindo 100 XP por nível") — mas os degraus
  * crescem (lvl 3=300, lvl 4=600...): um freela com 350 XP via "50/100" quando faltavam
  * 250. Número inventado sobre progresso é anti-motivação (Nielsen #1).
  * No nível máximo devolve barra cheia e restante 0.
+ * Devolve `null` quando `level` e `xp` gravados se contradizem (dado antigo): melhor não mostrar
+ * barra do que contradizer o nível exibido.
  */
-export const levelProgress = (xp: number) => {
-    const nivel = calculateLevel(xp);
-    const atual = LEVELS.find(l => l.level === nivel) ?? LEVELS[0];
-    const proximo = LEVELS.find(l => l.level === nivel + 1);
+export const levelProgress = (xp: number, level: number) => {
+    const atual = LEVELS.find(l => l.level === level);
+    const proximo = LEVELS.find(l => l.level === level + 1);
+    if (!atual || xp < atual.minXp || (proximo && xp >= proximo.minXp)) return null;
     if (!proximo) return { percent: 100, dentroDoNivel: 0, tamanhoDoNivel: 0, faltam: 0 };
     const tamanho = proximo.minXp - atual.minXp;
-    const dentro = Math.max(0, xp - atual.minXp);
+    const dentro = xp - atual.minXp;
     return {
         percent: Math.min(100, Math.round((dentro / tamanho) * 100)),
         dentroDoNivel: dentro,
         tamanhoDoNivel: tamanho,
-        faltam: Math.max(0, proximo.minXp - xp),
+        faltam: proximo.minXp - xp,
     };
 };

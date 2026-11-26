@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Button, Card } from './ui';
+import { Card } from './ui';
+import WorkerSwitch from './WorkerSwitch';
 import { Siren } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { SosService } from '../services/sosService';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Descoberta em urgência" (F11) — seção de opt-in no perfil do freela.
@@ -37,10 +39,9 @@ export default function SosDiscoverySection() {
   const carregar = useCallback(async () => {
     setLoading(true);
     setErroCarga(false);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    const session = await checkSession();
+    if (session.status !== 'ok') { setErroCarga(true); setLoading(false); return; }
+    const user = session.user;
 
     const { data, error } = await supabase
       .from('workers')
@@ -87,7 +88,7 @@ export default function SosDiscoverySection() {
   };
 
   if (loading) {
-    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" />;
+    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>;
   }
 
   if (erroCarga) {
@@ -133,21 +134,14 @@ export default function SosDiscoverySection() {
         nenhum efeito no seu perfil. Você pode desligar isto a qualquer momento.
       </p>
 
-      <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">
-        <span className="font-bold text-sm">
-          {discoverable ? 'Descoberta ativada' : 'Descoberta desativada'}
-        </span>
-        <Button
-          role="switch"
-          aria-checked={discoverable}
-          aria-label="Ativar descoberta em urgência para empresas fora do meu Elenco"
-          variant={discoverable ? 'secondary' : 'primary'}
-          onClick={() => void handleToggle()}
-          loading={saving}
-        >
-          {discoverable ? 'Desativar' : 'Ativar'}
-        </Button>
-      </div>
+      <WorkerSwitch
+        checked={discoverable}
+        label="Ativar descoberta em urgência para empresas fora do meu Elenco"
+        text={discoverable ? 'Descoberta ativada' : 'Descoberta desativada'}
+        data-copilot="freela.perfil.sos"
+        onToggle={() => void handleToggle()}
+        disabled={saving}
+      />
     </Card>
   );
 }

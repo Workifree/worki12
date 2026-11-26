@@ -59,7 +59,7 @@ function Steps({ steps, circleClass }: StepsProps) {
       {steps.map((item) => (
         <div key={item.step} className="flex flex-col items-center text-center">
           <div
-            className={`w-12 h-12 text-white rounded-full border-2 border-black flex items-center justify-center text-lg font-bold mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${circleClass}`}
+            className={`w-12 h-12 text-white rounded-full flex items-center justify-center text-lg font-bold mb-4 ${circleClass}`}
           >
             {item.step}
           </div>
@@ -75,18 +75,18 @@ export default function LandingPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0]">
+    <div className="min-h-screen bg-canvas">
       <PageMeta
         title="Confiança e registro para o trabalho freela"
         description="Empresa organiza e registra sua equipe de freelas de confiança. Freela constrói uma carreira que é sua — histórico, avaliação e comprovante de renda. Sem vínculo, sem bagunça."
       />
 
       {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-[#F4F4F0]/95 backdrop-blur-sm border-b-2 border-black/10 px-4 py-3">
+      <nav className="sticky top-0 z-50 bg-canvas/95 backdrop-blur-sm border-b-2 border-black/10 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={() => navigate('/')}
-            className="inline-flex items-center min-h-11 pr-3 text-2xl font-black tracking-tighter hover:text-primary transition-colors"
+            className="inline-flex items-center min-h-11 pr-3 text-2xl font-bold tracking-tight hover:text-primary transition-colors"
           >
             Worki
           </button>
@@ -113,10 +113,10 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button variant="dark" size="lg" onClick={() => navigate('/login?type=hire&cadastro=1')}>
-              Cadastrar como Empresa
+              Criar conta de empresa
             </Button>
             <Button variant="secondary" size="lg" onClick={() => navigate('/login?type=work&cadastro=1')}>
-              Cadastrar como Profissional
+              Criar conta de freela
             </Button>
           </div>
         </div>
@@ -192,6 +192,7 @@ export default function LandingPage() {
         <div className="flex flex-wrap gap-x-2 justify-center mt-3">
           <button onClick={() => navigate('/termos')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Termos de Uso</button>
           <button onClick={() => navigate('/privacidade')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Política de Privacidade</button>
+          <button onClick={() => navigate('/licencas')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Licenças</button>
           <button onClick={() => navigate('/ajuda')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Ajuda</button>
         </div>
       </footer>

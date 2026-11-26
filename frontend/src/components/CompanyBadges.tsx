@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Star, EyeOff, Eye, ShieldOff } from 'lucide-react';
+import { Building2, Star, EyeOff, Eye } from 'lucide-react';
+import WorkerSwitch from './WorkerSwitch';
 import { BadgeService } from '../services/badgeService';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
@@ -181,52 +182,36 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
       </h3>
 
       {mode === 'manage' && (
-        <div className="flex items-start justify-between gap-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 mb-5">
-          <div className="flex items-start gap-2 min-w-0">
-            <ShieldOff size={18} className="mt-0.5 flex-shrink-0 text-gray-600" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900">Não exibir onde já trabalhei</p>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Chave-mestra: liga e nenhuma empresa vê seus selos (nem esta seção), mesmo com vínculo
-                ativo. Você continua vendo tudo aqui para poder desligar de novo quando quiser.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={badgesHiddenGlobal}
-            aria-label="Não exibir onde já trabalhei para outras empresas"
+        <div className="mb-5">
+          <WorkerSwitch
+            checked={!badgesHiddenGlobal}
+            label="Mostrar onde já trabalhei para outras empresas"
+            text="Mostrar onde já trabalhei"
+            data-copilot="freela.perfil.selos"
+            onToggle={() => void handleToggleGlobal()}
             disabled={savingGlobal}
-            onClick={() => void handleToggleGlobal()}
-            className={`relative flex-shrink-0 w-14 h-8 rounded-pill border-2 border-black transition-colors min-h-11 ${
-              badgesHiddenGlobal ? 'bg-black' : 'bg-gray-200'
-            } ${savingGlobal ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white border-2 border-black transition-transform ${
-                badgesHiddenGlobal ? 'translate-x-6' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          />
+          <p className="mt-2 text-xs text-gray-600">
+            Desligado, nenhuma empresa vê esta seção, mesmo as do seu elenco. Você continua vendo tudo aqui.
+          </p>
         </div>
       )}
 
       {loading ? (
-        <div className="space-y-3 animate-pulse">
+        <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(2)].map((_, i) => (
             <div key={i} className="h-20 bg-gray-200 rounded-xl" />
           ))}
         </div>
       ) : failed ? (
-        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+        <div className="bg-gray-100 rounded-xl p-4 text-center">
           <p className="text-sm text-gray-600 mb-3">Não foi possível carregar os selos agora.</p>
           <Button variant="dark" onClick={() => void load()}>
             Tentar de novo
           </Button>
         </div>
       ) : badges.length === 0 ? (
-        <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+        <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
           Ainda sem selos. Eles aparecem aqui depois do primeiro turno concluído em uma empresa.
         </p>
       ) : (
@@ -243,7 +228,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                   navigate(`${profileBase}/${badge.company_id}`);
                 }
               }}
-              className={`text-left border-2 border-black rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 min-h-11 ${
+              className={`text-left border border-gray-200 rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-colors hover:bg-gray-50 min-h-11 ${
                 badge.hidden ? 'opacity-60 bg-gray-50' : 'bg-white'
               }`}
             >
@@ -251,11 +236,11 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                 <img
                   src={badge.company_logo_url}
                   alt={`Logo de ${badge.company_name}`}
-                  className="w-11 h-11 rounded-xl border-2 border-black object-cover flex-shrink-0"
+                  className="w-11 h-11 rounded-xl border border-gray-200 object-cover flex-shrink-0"
                 />
               ) : (
                 <div
-                  className="w-11 h-11 rounded-xl border-2 border-black bg-black text-white flex items-center justify-center font-bold text-sm flex-shrink-0"
+                  className="w-11 h-11 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-sm flex-shrink-0"
                   aria-hidden="true"
                 >
                   {initialsFrom(badge.company_name)}
@@ -286,7 +271,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                     e.stopPropagation();
                     void handleToggleBadge(badge.company_id, badge.hidden);
                   }}
-                  className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border-2 border-black transition-colors ${
+                  className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border-ink border-black transition-colors ${
                     savingCompanyId === badge.company_id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
                   }`}
                 >

@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
+import { supabase } from '../../lib/supabase';
+import { useBusyWorkers } from '../../hooks/useBusyWorkers';
+import { buildShiftWindow } from '../../services/shiftOperationService';
+import type { BusyWindow } from '../../hooks/useBusyWorkers';
+import { BusyWorkerBadge } from '../team/BusyWorkerBadge';
 import { ShiftCallService } from '../../services/shiftCallService';
 import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import type { TeamMember } from '../../types';
-import { Button } from '../ui';
+import { Alert, Button } from '../ui';
 
 import {
     DEFAULT_LINK_RISK_THRESHOLD,
@@ -14,6 +19,8 @@ import {
     weekRangeLabel,
     type InviteSeriesTarget,
 } from './seriesWeekRisk';
+import { Dialog } from '../ui/Dialog';
+import { roleLabel } from '../../lib/statusLabels';
 
 // Re-exportado para quem já importa o tipo a partir do componente (ex.: CompanyJobs.tsx).
 export type { InviteSeriesTarget } from './seriesWeekRisk';
@@ -21,6 +28,9 @@ export type { InviteSeriesTarget } from './seriesWeekRisk';
 
 /** Quantas requisições de `createShiftCall` disparar em paralelo por vez (R10). */
 const INVITE_BATCH_SIZE = 10;
+
+/** Teto de ocorrências conferidas no aviso de conflito (as mais próximas). */
+const MAX_BUSY_WINDOWS = 30;
 
 interface InviteSeriesModalProps {
     /** Ocorrências futuras, abertas e ainda sem freela desta série (calculadas pelo pai). */
@@ -46,7 +56,7 @@ interface InviteSeriesModalProps {
  */
 export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSeriesModalProps) {
     const { addToast } = useToast();
-    const { teamMembers, loading: teamLoading } = useCompanyTeam();
+    const { teamMembers, loading: teamLoading, erroCarga: teamError, refresh: refreshTeam } = useCompanyTeam();
     const [inviting, setInviting] = useState(false);
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [result, setResult] = useState<{ invited: number; failed: number } | null>(null);
@@ -59,6 +69,50 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const [riskByWorker, setRiskByWorker] = useState<Map<string, Map<string, number>>>(new Map());
 
     const targetJobIds = useMemo(() => targets.map((t) => t.jobId), [targets]);
+
+    // E5/R14 — aviso de conflito por freela nas ocorrências da série. Os horários vêm dos próprios
+    // turnos (o alvo só traz a data). Só AVISA: erro em qualquer etapa = sem selo + log.
+    const [busyWindows, setBusyWindows] = useState<BusyWindow[]>([]);
+    const [busyTruncated, setBusyTruncated] = useState(false);
+    const [busyCompanyId, setBusyCompanyId] = useState<string | null>(null);
+    useEffect(() => {
+        if (targetJobIds.length === 0) return;
+        let active = true;
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('jobs')
+                    .select('id, company_id, start_date, work_start_time, work_end_time')
+                    .in('id', targetJobIds.slice(0, 100));
+                if (error) throw error;
+                // Uma janela por ocorrência, cada uma excluindo o PRÓPRIO turno (um chamado aberto
+                // nele mesmo não é conflito). Conflito com as outras ocorrências da série não existe:
+                // elas ainda não têm freela.
+                const all: BusyWindow[] = [];
+                const rows = (data ?? []) as Array<{ id: string; company_id: string | null; start_date: string | null; work_start_time: string | null; work_end_time: string | null }>;
+                rows.forEach((j) => {
+                        const w = buildShiftWindow(j.start_date, j.work_start_time, j.work_end_time);
+                        if (w) all.push({ ...w, excludeJobId: j.id });
+                    });
+                all.sort((a, b) => a.start.localeCompare(b.start));
+                if (active) {
+                    setBusyWindows(all.slice(0, MAX_BUSY_WINDOWS));
+                    setBusyCompanyId(rows.find((r) => r.company_id)?.company_id ?? null);
+                    setBusyTruncated(all.length > MAX_BUSY_WINDOWS || targetJobIds.length > 100);
+                }
+            } catch (error) {
+                logError('InviteSeriesModal.busyWindows', error);
+                if (active) { setBusyWindows([]); setBusyTruncated(false); }
+            }
+        })();
+        return () => { active = false; };
+    }, [targetJobIds]);
+    const busyWorkerIds = useBusyWorkers({
+        windows: busyWindows,
+        workerIds: teamMembers.map((m) => m.worker.id),
+        companyId: busyCompanyId,
+        enabled: !teamLoading && busyWindows.length > 0,
+    });
 
     useEffect(() => {
         if (teamLoading || teamMembers.length === 0 || targets.length === 0) return;
@@ -113,7 +167,12 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
     const riskEnabled = riskConfig?.enabled !== false;
     const riskThreshold = riskConfig?.threshold ?? DEFAULT_LINK_RISK_THRESHOLD;
 
+    // Trava síncrona: dois toques no mesmo instante não disparam a série em dobro.
+    const inviteLock = useRef(false);
+
     const handleInvite = async (workerId: string) => {
+        if (inviteLock.current) return;
+        inviteLock.current = true;
         setInviting(true);
         setProgress({ done: 0, total: targetJobIds.length });
         try {
@@ -139,18 +198,18 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
             logError('InviteSeriesModal.handleInvite', error);
             addToast('Não foi possível convidar o freela para a série. Tente novamente.', 'error');
         } finally {
+            inviteLock.current = false;
             setInviting(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="invite-series-title"
-                className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6"
-            >
+        <Dialog
+            labelledBy="invite-series-title"
+            onClose={onClose}
+            locked={inviting}
+            initialFocus="panel"
+        >
                 <div className="flex items-center justify-between mb-4">
                     <h2 id="invite-series-title" className="text-lg font-bold tracking-tight">Convidar para a série</h2>
                     <button
@@ -171,13 +230,23 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         </p>
 
                         {teamLoading && (
-                            <div className="space-y-3 animate-pulse">
+                            <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
                             </div>
                         )}
 
-                        {!teamLoading && teamMembers.length === 0 && (
-                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+                        {!teamLoading && teamError && (
+                            <Alert
+                                tone="warning"
+                                role="alert"
+                                action={<Button variant="secondary" onClick={() => { void refreshTeam(); }}>Tentar de novo</Button>}
+                            >
+                                Não conseguimos carregar o seu elenco.
+                            </Alert>
+                        )}
+
+                        {!teamLoading && !teamError && teamMembers.length === 0 && (
+                            <div className="text-center py-8 border border-dashed border-gray-200 rounded-2xl text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Seu elenco está vazio.</p>
                             </div>
@@ -194,9 +263,9 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                         ? weeksOverThreshold(targets, riskThreshold, existingByWeek)
                                         : [];
                                     return (
-                                        <div key={member.connection.id} className="p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors">
+                                        <div key={member.connection.id} className="p-3 rounded-xl border border-gray-200 hover:border-black transition-colors">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                <div className="w-10 h-10 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                                     {avatarUrl ? (
                                                         <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
                                                     ) : (
@@ -207,15 +276,19 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                                                    {busyWorkerIds.has(member.worker.id) && (
+                                                        <div className="mt-1"><BusyWorkerBadge /></div>
+                                                    )}
                                                     {/* Linha do cargo — reservada para o selo verde de disponibilidade
                                                         da F7 (spec pronta, ainda não construída). O selo de risco de
                                                         vínculo (amarelo) NÃO entra aqui, de propósito. */}
                                                     {member.worker.primary_role && (
-                                                        <p className="text-xs text-gray-600 truncate">{member.worker.primary_role}</p>
+                                                        <p className="text-xs text-gray-600 truncate">{roleLabel(member.worker.primary_role)}</p>
                                                     )}
                                                 </div>
                                                 <Button
                                                     variant="dark"
+                                                    data-copilot="empresa.serie.convidar"
                                                     onClick={() => handleInvite(member.worker.id)}
                                                     disabled={inviting}
                                                     loading={inviting}
@@ -233,7 +306,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                                     {riskyWeeks.map((w) => (
                                                         <span
                                                             key={w.weekStart}
-                                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
+                                                            className="inline-flex items-center gap-1 text-xs font-bold text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5"
                                                         >
                                                             <AlertTriangle size={10} className="flex-shrink-0" />
                                                             Ficaria {w.count}x com você na sem. {weekRangeLabel(w.weekStart)}
@@ -245,6 +318,12 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                     );
                                 })}
                             </div>
+                        )}
+
+                        {teamMembers.length > 0 && busyTruncated && (
+                            <p className="text-xs text-gray-600 mt-3">
+                                O aviso de "já está em outro turno" confere só as primeiras {MAX_BUSY_WINDOWS} ocorrências da série.
+                            </p>
                         )}
 
                         {teamMembers.length > 0 && riskEnabled && (
@@ -259,14 +338,14 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
 
                 {result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.invited} chamado{result.invited !== 1 ? 's' : ''} disparado{result.invited !== 1 ? 's' : ''}.
                             </p>
                         </div>
                         {result.failed > 0 && (
-                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-600">
                                 {result.failed} turno{result.failed !== 1 ? 's' : ''} não recebeu convite — tente convidar manualmente na agenda.
                             </div>
                         )}
@@ -275,7 +354,6 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         </Button>
                     </div>
                 )}
-            </div>
-        </div>
+        </Dialog>
     );
 }

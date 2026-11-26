@@ -29,6 +29,10 @@ vi.mock('../contexts/ToastContext', () => ({
   }),
 }))
 
+vi.mock('../services/companyScopeService', () => ({
+  getAuthenticatedCompanyId: vi.fn().mockResolvedValue('user-1'),
+}))
+
 import { supabase } from '../lib/supabase'
 
 beforeEach(() => {

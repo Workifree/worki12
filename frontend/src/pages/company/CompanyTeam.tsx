@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Clock, UserPlus, ListChecks, Plus, Pencil, Trash2, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
+import { Users, UserPlus, Plus, Pencil, Trash2, AlertTriangle, Link2, Copy, Check } from 'lucide-react';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
@@ -14,7 +16,12 @@ import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import { RemoveMemberDialog } from '../../components/team/RemoveMemberDialog';
 import { TeamListModal } from '../../components/team/TeamListModal';
 import type { WorkerHistoryWithCompany } from '../../components/team/types';
-import { Button, Card, PageHeader } from '../../components/ui';
+import { DialogActions, Alert, Button, Card, PageHeader } from '../../components/ui';
+import SectionTabs from '../../components/SectionTabs';
+import { Dialog } from '../../components/ui/Dialog';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { companyTeamSources } from '../../lib/realtime/liveSources';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
@@ -25,28 +32,55 @@ import { Button, Card, PageHeader } from '../../components/ui';
 // ---------------------------------------------------------------------------
 
 export default function CompanyTeam() {
-  const { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
+  const { teamMembers, pendingConnections, loading, erroCarga, companyId, addWorker, removeWorker, refresh } = useCompanyTeam();
   const { addToast } = useToast();
+  // Encarregado: lê o Elenco e traz freelas (R7/R10b); remover, listas e histórico são do Gestor.
+  // Falha ao saber o papel = modo restrito.
+  const { company, resolved: roleResolved, error: roleError } = useCurrentCompanyState();
+  const restricted = roleError || company?.role === 'encarregado';
   const [showAddModal, setShowAddModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Link pré-carregado: o Safari/iOS só deixa copiar dentro do próprio toque, e uma ida à rede
+  // antes do `writeText` perde essa permissão.
+  const [teamLink, setTeamLink] = useState<{ companyId: string; url: string } | null>(null);
+  // Cópia recusada pelo navegador: mostra o link na tela para copiar à mão.
+  const [manualLink, setManualLink] = useState<{ companyId: string; url: string } | null>(null);
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   // R "Convidar direto do elenco": modal por membro + histórico batch (1 query p/ todo o elenco).
   const [invitingMember, setInvitingMember] = useState<TeamMember | null>(null);
   const [historyByWorker, setHistoryByWorker] = useState<Record<string, WorkerHistoryWithCompany>>({});
 
+  const [historyError, setHistoryError] = useState(false);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  // Para qual elenco o histórico já chegou: antes disso, ausência no mapa não é "nenhum turno".
+  const [historyLoadedFor, setHistoryLoadedFor] = useState<TeamMember[] | null>(null);
+
   // F2: Listas salvas do elenco — CRUD organizacional, não toca team_connections/saldo.
   const [lists, setLists] = useState<TeamListWithMembers[]>([]);
   const [loadingLists, setLoadingLists] = useState(true);
+  const [listsError, setListsError] = useState(false);
   const [showListModal, setShowListModal] = useState(false);
   const [editingList, setEditingList] = useState<TeamListWithMembers | null>(null);
   const [deletingList, setDeletingList] = useState<TeamListWithMembers | null>(null);
   const [isDeletingList, setIsDeletingList] = useState(false);
 
+  const dialogOpen = useAnyDialogOpen();
+  useLiveRefresh({
+    sources: companyId ? companyTeamSources(companyId) : [],
+    onRefresh: () => refresh({ silent: true }),
+    paused: loading || dialogOpen || showAddModal || isDeleting || isDeletingList,
+  });
+
   const refreshLists = useCallback(async () => {
     setLoadingLists(true);
-    const data = await TeamListService.listLists();
-    setLists(data);
+    try {
+      setLists(await TeamListService.listLists());
+      setListsError(false);
+    } catch (error) {
+      logError('CompanyTeam.refreshLists', error);
+      setListsError(true);
+    }
     setLoadingLists(false);
   }, []);
 
@@ -81,7 +115,7 @@ export default function CompanyTeam() {
 
   // Histórico com a empresa (turnos concluídos) para TODO o elenco de uma vez — evita N+1.
   useEffect(() => {
-    if (!companyId || teamMembers.length === 0) {
+    if (!roleResolved || restricted || !companyId || teamMembers.length === 0) {
       setHistoryByWorker({});
       return;
     }
@@ -97,9 +131,11 @@ export default function CompanyTeam() {
 
       if (error) {
         logError('CompanyTeam.fetchHistory', error);
+        if (active) setHistoryError(true);
         return;
       }
       if (!active) return;
+      setHistoryError(false);
 
       const map: Record<string, WorkerHistoryWithCompany> = {};
       interface CompletedRow {
@@ -115,31 +151,54 @@ export default function CompanyTeam() {
         map[row.worker_id] = entry;
       });
       setHistoryByWorker(map);
+      setHistoryLoadedFor(teamMembers);
     })();
     return () => { active = false; };
-  }, [companyId, teamMembers]);
+  }, [companyId, teamMembers, roleResolved, restricted, historyAttempt]);
 
-  // Link do elenco: mesmo caminho do Perfil Empresa (token estável via serviço, falha tratada).
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    void (async () => {
+      try {
+        const gerado = await TeamConnectionService.generateInviteToken(companyId);
+        if (active && gerado) setTeamLink({ companyId, url: gerado.url });
+      } catch (err) {
+        // Sem aviso aqui: o toque em "Copiar link" tenta de novo e avisa se falhar.
+        logError('CompanyTeam.prefetchTeamLink', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [companyId]);
+
+  // Link do elenco: mesmo caminho de Dados da empresa (token estável via serviço, falha tratada).
   const handleCopyTeamLink = async () => {
     if (!companyId) return;
-    const gerado = await TeamConnectionService.generateInviteToken(companyId);
-    if (!gerado) {
-      addToast('Não foi possível obter o link do seu elenco agora.', 'error');
-      return;
+    let url = teamLink?.companyId === companyId ? teamLink.url : null;
+    if (!url) {
+      const gerado = await TeamConnectionService.generateInviteToken(companyId);
+      if (!gerado) {
+        addToast('Não foi possível obter o link do seu elenco agora.', 'error');
+        return;
+      }
+      url = gerado.url;
+      setTeamLink({ companyId, url });
     }
     try {
-      await navigator.clipboard.writeText(gerado.url);
+      await navigator.clipboard.writeText(url);
+      setManualLink(null);
       setLinkCopied(true);
       addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
       setTimeout(() => setLinkCopied(false), 2500);
     } catch {
-      addToast('Não foi possível copiar o link.', 'error');
+      setManualLink({ companyId, url });
+      addToast('Não foi possível copiar sozinho. Copie o link que apareceu na tela.', 'error');
     }
   };
 
-  if (loading) {
+  if (loading || !roleResolved) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20">
+      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-20" role="status"><span className="sr-only">Carregando</span>
         <div className="h-9 bg-gray-200 rounded-xl w-48" />
         <div className="h-11 bg-gray-200 rounded-xl w-40" />
         <div className="space-y-4">
@@ -151,22 +210,31 @@ export default function CompanyTeam() {
     );
   }
 
+  if (erroCarga && teamMembers.length === 0 && pendingConnections.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto pb-20">
+        <ErroDeCarga onRetry={() => { void refresh(); }} />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-4xl mx-auto pb-20">
+      {!restricted && <SectionTabs section="elenco" />}
       <PageHeader
         title="Meu Elenco"
         subtitle={`${teamMembers.length} freela${teamMembers.length !== 1 ? 's' : ''} no elenco${
           pendingConnections.length > 0 ? ` · ${pendingConnections.length} aguardando aceite` : ''
         }`}
         action={
-          <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>
-            Adicionar Freela
+          <Button variant="dark" size="md" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />} data-copilot="empresa.elenco.adicionar-freela">
+            Adicionar freela
           </Button>
         }
       />
 
-      {/* Link do elenco — antes só existia dentro do Perfil Empresa. Discreto: secundário, sem competir com a ação principal. */}
-      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:items-center gap-3">
+      {/* Link do elenco — antes só existia nos dados da empresa. Discreto: secundário, sem competir com a ação principal. */}
+      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do seu elenco</p>
           <p className="text-xs text-gray-600 mt-1">
@@ -177,69 +245,116 @@ export default function CompanyTeam() {
           variant="secondary"
           size="md"
           onClick={handleCopyTeamLink}
+          data-copilot="empresa.elenco.copiar-link"
           disabled={!companyId}
           iconLeft={linkCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
         >
           {linkCopied ? 'Link copiado!' : 'Copiar link'}
         </Button>
+        {manualLink && manualLink.companyId === companyId && (
+          <input
+            readOnly
+            value={manualLink.url}
+            aria-label="Link do elenco para copiar à mão"
+            onFocus={(e) => e.currentTarget.select()}
+            className="w-full min-h-11 min-w-0 rounded-xl border-ink border-black bg-white px-3 text-sm"
+          />
+        )}
       </Card>
 
       {/* Elenco aceito */}
+      {erroCarga && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-4"
+          action={<Button variant="secondary" onClick={() => { void refresh(); }}>Tentar de novo</Button>}
+        >
+          Não conseguimos atualizar o elenco. O que está abaixo pode estar desatualizado.
+        </Alert>
+      )}
+
       {teamMembers.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Users size={20} aria-hidden="true" /> Elenco ativo
+          <h2 className="text-base font-semibold mb-3">
+            Elenco ativo
           </h2>
-          <div className="grid grid-cols-1 gap-4">
+          {historyError && !restricted && (
+            <Alert
+              tone="warning"
+              className="mb-3"
+              action={<Button variant="secondary" onClick={() => setHistoryAttempt((n) => n + 1)}>Tentar de novo</Button>}
+            >
+              Não foi possível carregar o histórico de turnos com você.
+            </Alert>
+          )}
+          <ul aria-label="Elenco ativo" className="divide-y divide-gray-200 overflow-visible rounded-2xl border border-gray-200 bg-white">
             {teamMembers.map((member) => (
               <MemberCard
                 key={member.connection.id}
                 member={member}
+                restricted={restricted}
                 onRemove={(m) => setRemovingMember(m)}
                 onInvite={(m) => setInvitingMember(m)}
                 history={historyByWorker[member.worker.id]}
+                historyUnavailable={historyError}
+                historyLoading={!historyLoadedFor?.some((m) => m.worker.id === member.worker.id)}
               />
             ))}
-          </div>
+          </ul>
         </section>
       )}
 
       {/* Listas do Elenco (F2) — atalhos por função pra chamar o grupo inteiro de uma vez */}
+      {(!restricted || lists.length > 0 || listsError) && (
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <ListChecks size={20} aria-hidden="true" /> Listas do elenco
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <h2 className="text-base font-semibold">
+            Listas do elenco
           </h2>
-          <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
-            Nova lista
-          </Button>
+          {!restricted && (
+            <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
+              Nova lista
+            </Button>
+          )}
         </div>
 
         {loadingLists && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             {[...Array(2)].map((_, i) => (
               <div key={i} className="h-20 bg-gray-200 rounded-2xl" />
             ))}
           </div>
         )}
 
+        {!loadingLists && listsError && (
+          <Alert
+            tone="warning"
+            role="alert"
+            className="mb-4"
+            action={<Button variant="secondary" onClick={() => void refreshLists()}>Tentar de novo</Button>}
+          >
+            Não conseguimos carregar as listas do elenco.
+          </Alert>
+        )}
+
         {/* Grid diverge de propósito do "Elenco Ativo" (grid-cols-1 puro): card de lista é
             bem mais leve (só nome + contagem + 2 ações), sem avatar/rating/histórico, então
             2 colunas em telas >=sm ainda respeitam o touch target sem apertar o layout. */}
         {!loadingLists && lists.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ul aria-label="Listas do elenco" className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
             {lists.map((list) => (
-              <Card
+              <li
                 key={list.id}
-                padding="sm"
-                className="flex items-center justify-between gap-3"
+                className="flex min-h-16 items-center justify-between gap-3 px-4 py-2"
               >
                 <div className="min-w-0">
-                  <p className="font-bold truncate">{list.name}</p>
+                  <p className="text-sm font-semibold truncate">{list.name}</p>
                   <p className="text-xs text-gray-600">
                     {list.memberIds.length} {list.memberIds.length === 1 ? 'membro' : 'membros'}
                   </p>
                 </div>
+                {!restricted && (
                 <div className="flex gap-1 shrink-0">
                   <button
                     type="button"
@@ -258,40 +373,42 @@ export default function CompanyTeam() {
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
-              </Card>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
-        {!loadingLists && lists.length === 0 && (
+        {!loadingLists && !listsError && lists.length === 0 && (
           <p className="text-sm text-gray-600">
             Nenhuma lista ainda. Crie atalhos por função (ex.: "Cozinha", "Salão") para chamar o time
             inteiro de uma vez ao abrir um turno.
           </p>
         )}
       </section>
+      )}
 
       {/* Convites pendentes */}
       {pendingConnections.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-700">
-            <Clock size={20} aria-hidden="true" /> Aguardando aceite
+          <h2 className="text-base font-semibold mb-3">
+            Aguardando aceite
           </h2>
-          <div className="space-y-3">
+          <ul aria-label="Aguardando aceite" className="divide-y divide-gray-200 rounded-2xl border border-dashed border-gray-300 bg-white">
             {pendingConnections.map((conn) => (
-              <PendingCard key={conn.id} connection={conn} />
+              <PendingCard key={conn.id} connection={conn} restricted={restricted} />
             ))}
-          </div>
+          </ul>
         </section>
       )}
 
       {/* Empty state */}
       {teamMembers.length === 0 && pendingConnections.length === 0 && (
-        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
-          <Users size={44} className="mx-auto mb-4 text-gray-300" aria-hidden="true" />
+        <div className="text-center py-12 px-4">
+          <Users size={40} className="mx-auto mb-4 text-gray-400" aria-hidden="true" />
           <h3 className="text-lg font-bold mb-2">Elenco vazio</h3>
           <p className="text-sm text-gray-600 mb-6 max-w-sm mx-auto">
-            Adicione freelas pelo QR de identidade, Worki ID ou pelo link de perfil que eles te enviarem.
+            Adicione freelas pelo QR de identidade, pelo código ou pelo link de perfil que eles te enviarem.
             Eles aparecerão aqui após aceitarem.
           </p>
           <Button variant="dark" size="lg" onClick={() => setShowAddModal(true)} iconLeft={<UserPlus size={18} aria-hidden="true" />}>
@@ -343,14 +460,13 @@ export default function CompanyTeam() {
 
       {/* Modal de Confirmação de Exclusão de Lista (F2/R7) */}
       {deletingList && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingList) setDeletingList(null);
-          }}
+        <Dialog
+            labelledBy="delete-list-title"
+            onClose={() => setDeletingList(null)}
+            locked={isDeletingList}
+            className="max-w-sm text-center"
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="delete-list-title" className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
             <h3 id="delete-list-title" className="text-lg font-bold mb-2">Excluir lista?</h3>
@@ -360,22 +476,21 @@ export default function CompanyTeam() {
             <p className="text-xs text-gray-600 mb-6">
               Excluir esta lista não remove ninguém do Elenco.
             </p>
-            <div className="flex gap-3">
-              <Button variant="secondary" fullWidth onClick={() => setDeletingList(null)} disabled={isDeletingList}>
-                Cancelar
+            <DialogActions>
+              <Button variant="secondary" onClick={() => setDeletingList(null)} disabled={isDeletingList}>
+                Voltar
               </Button>
               <Button
                 variant="danger"
-                fullWidth
+               
                 loading={isDeletingList}
                 onClick={() => void handleConfirmDeleteList()}
                 iconLeft={<Trash2 size={16} aria-hidden="true" />}
               >
                 {isDeletingList ? 'Excluindo...' : 'Excluir'}
               </Button>
-            </div>
-          </div>
-        </div>
+            </DialogActions>
+        </Dialog>
       )}
     </div>
   );

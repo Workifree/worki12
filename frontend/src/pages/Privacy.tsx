@@ -1,9 +1,14 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, PageHeader } from '../components/ui';
+import { CONTACT_PENDING_TEXT, getContactEmail } from '../lib/contact';
 
 export default function Privacy() {
   const navigate = useNavigate();
+  const contactEmail = getContactEmail();
+  const mailLink = contactEmail && (
+    <a href={`mailto:${contactEmail}`} className="text-primary font-bold break-all">{contactEmail}</a>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
@@ -16,7 +21,7 @@ export default function Privacy() {
         >
           Voltar
         </Button>
-        <PageHeader title="Política de Privacidade" subtitle="Última atualização: 16 de agosto de 2026" />
+        <PageHeader title="Política de Privacidade" subtitle="Última atualização: 25 de novembro de 2026" />
         <Card padding="lg" className="space-y-4 text-sm sm:text-base leading-relaxed text-gray-800">
 
           <p>Esta Política de Privacidade descreve como a Worki ("nós", "nossa Plataforma") coleta, utiliza, compartilha e protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).</p>
@@ -63,11 +68,20 @@ export default function Privacy() {
             <li><strong>Contratante com vínculo:</strong> a chave PIX e o telefone do Worker ficam visíveis apenas para a Contratante com quem ele tem <strong>elenco aceito</strong> (um convite de elenco ainda pendente NÃO dá esse acesso — só o aceite do Worker dá), ou pelo menos uma candidatura/convite de turno em comum (incluindo turnos já concluídos ou cancelados, para manter o recibo e o histórico legíveis) — com a finalidade exclusiva de permitir que essa Contratante efetue o pagamento combinado pelo turno. A base legal é a execução do contrato entre as partes. Nenhuma outra conta da Plataforma tem acesso a esses dados. Quando o vínculo é só de elenco (sem turno já registrado), o Worker pode encerrar esse acesso a qualquer momento saindo do elenco ou bloqueando a Contratante — e o bloqueio feito pelo Worker não pode ser desfeito pela Contratante</li>
             <li><strong>CPF e data de nascimento do Worker:</strong> essa mesma regra de vínculo controla o acesso no banco de dados a esses dois campos, mas nenhuma tela da Plataforma hoje os exibe para a Contratante — eles ficam armazenados para verificação de identidade e obrigações legais da Worki, não para consulta pela Contratante</li>
             <li><strong>Supabase:</strong> infraestrutura de banco de dados e autenticação (dados criptografados)</li>
-            <li><strong>Resend:</strong> envio de e-mails transacionais (apenas e-mail e nome)</li>
+            <li><strong>Resend e provedor de inteligência artificial:</strong> só quando os recursos descritos na Seção 4-A estiverem ativos, e apenas para as finalidades e com os dados ali informados</li>
             <li><strong>Sentry:</strong> monitoramento de erros (dados anonimizados, sem dados pessoais)</li>
             <li><strong>Autoridades competentes:</strong> quando exigido por lei ou ordem judicial</li>
           </ul>
           <p>Não vendemos, alugamos ou compartilhamos seus dados com terceiros para fins de marketing.</p>
+
+          <h2 className="text-lg font-bold mt-8 first:mt-0">4-A. Recursos que só valem quando ativados</h2>
+          <p>Esta seção descreve recursos que podem ainda não estar disponíveis. <strong>Cada item vale somente a partir do momento em que o recurso estiver ativo e aparecer para você na Plataforma.</strong> Enquanto isso, o tratamento descrito nele não acontece.</p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li><strong>Localização no registro de presença:</strong> em turnos que exigem QR do local e localização, a localização do aparelho é lida quando você toca para registrar a chegada ou a saída (se a leitura ficar velha antes do envio, ela é refeita). Não há acompanhamento contínuo. As coordenadas são enviadas ao nosso banco de dados para calcular a distância até o local do turno e <strong>não são armazenadas</strong>. Guardamos o resultado, a distância e a precisão: das tentativas que falharam, por 90 dias; da presença verificada ou confirmada manualmente, enquanto existir o recibo do turno. Se você não quiser ou não conseguir compartilhar a localização, pode pedir a confirmação ao responsável pelo turno. A finalidade é conferir a presença no turno (execução de contrato e interesse legítimo).</li>
+            <li><strong>Avisos no celular (push):</strong> se você ligar os avisos e permitir no navegador, guardamos o endereço de inscrição e as chaves do aparelho, a identificação do navegador e suas preferências. A entrega passa pelo serviço de push do próprio navegador ou do sistema (por exemplo, Google, Apple ou Mozilla). Você pode desligar no Perfil ou nas configurações do navegador.</li>
+            <li><strong>Avisos por e-mail (Resend):</strong> para entregar avisos sobre turnos e pagamentos, a Resend, empresa que faz o envio por nós, recebe seu endereço de e-mail e o conteúdo do aviso (como nome da empresa, dia, hora, cidade e um link para o app). Você pode desligar no Perfil ou pelo link de descadastro da mensagem.</li>
+            <li><strong>Assistente com inteligência artificial de terceiro:</strong> só age quando você pede ajuda a ele. O texto do seu pedido e das suas respostas, e partes da tela em uso (como botões, rótulos, títulos, avisos e campos), são enviados a um provedor externo de inteligência artificial, que pode tratar esses dados fora do Brasil. Antes do envio, filtros removem áreas marcadas como privadas e padrões como CPF, CNPJ, telefone, e-mail e chave PIX nos formatos que reconhecem. <strong>Esses filtros têm limites:</strong> nome, endereço ou outro dado que você digitar no pedido pode ser enviado, e valores, horários e funções exibidos na tela também podem ir. Não digite no assistente o que não quer compartilhar. Você pode usar a Plataforma sem ele.</li>
+          </ul>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">5. Retenção de Dados</h2>
           <ul className="list-disc pl-6 space-y-1">
@@ -99,7 +113,11 @@ export default function Privacy() {
             <li><strong>Informação sobre compartilhamento:</strong> saber com quais entidades seus dados são compartilhados</li>
             <li><strong>Oposição:</strong> opor-se ao tratamento quando não baseado em consentimento</li>
           </ul>
-          <p className="mt-2">Para exercer seus direitos, envie um e-mail para <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a> com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
+          {contactEmail ? (
+            <p className="mt-2">Para exercer seus direitos, envie um e-mail para {mailLink} com o assunto "Direitos LGPD". Responderemos em até 15 dias úteis.</p>
+          ) : (
+            <p className="mt-2">{CONTACT_PENDING_TEXT}</p>
+          )}
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">8. Cookies</h2>
           <p>Utilizamos apenas cookies essenciais para autenticação e funcionamento da Plataforma (tokens de sessão). Não utilizamos cookies de rastreamento, publicidade ou analíticos de terceiros.</p>
@@ -111,11 +129,11 @@ export default function Privacy() {
           <p>Podemos atualizar esta Política periodicamente. Alterações significativas serão comunicadas por e-mail ou pela Plataforma. O uso continuado após as alterações constitui aceitação da nova Política.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">11. Contato e Encarregado (DPO)</h2>
-          <p>Para questões de privacidade e proteção de dados:</p>
-          <ul className="list-disc pl-6 space-y-1">
-            <li><strong>E-mail:</strong> <a href="mailto:privacidade@worki.com.br" className="text-primary font-bold">privacidade@worki.com.br</a></li>
-            <li><strong>E-mail geral:</strong> <a href="mailto:contato@worki.com.br" className="text-primary font-bold">contato@worki.com.br</a></li>
-          </ul>
+          {contactEmail ? (
+            <p>Para questões de privacidade e proteção de dados: {mailLink}</p>
+          ) : (
+            <p>{CONTACT_PENDING_TEXT}</p>
+          )}
         </Card>
       </div>
     </div>

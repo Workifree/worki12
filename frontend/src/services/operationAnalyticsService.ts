@@ -774,6 +774,16 @@ function computeCostPerHour(
   };
 }
 
+/**
+ * Piso do custo por hora: com horas zeradas ou mínimas (marcação de teste, entrada e saída no mesmo
+ * minuto) a divisão devolve milhares de reais por hora. Exige pelo menos 1h no total e, em média,
+ * 30 min por turno que entrou na soma; abaixo disso não há valor (a UI mostra "—" e explica).
+ */
+function costPerHourOf(c: CostPerHourComputation): number | null {
+  const counted = Math.max(0, c.shiftsCount - c.inconsistentDurationShiftsCount - c.noHoursSourceShiftsCount);
+  return c.totalHours >= Math.max(1, counted * 0.5) ? c.totalSpend / c.totalHours : null;
+}
+
 function buildCostPerHourBlock(
   raw: RawAnalyticsData,
   currentStart: Date,
@@ -787,8 +797,8 @@ function buildCostPerHourBlock(
   const current = computeCostPerHour(raw, currentStart, currentEnd, currentSpend, calculateWorkedHours);
   if (!current.hasSource) return { state: 'sem-fonte' };
   const previous = computeCostPerHour(raw, prevStart, prevEnd, prevSpend, calculateWorkedHours);
-  const currentCostPerHour = current.totalHours > 0 ? current.totalSpend / current.totalHours : null;
-  const previousCostPerHour = previous.hasSource && previous.totalHours > 0 ? previous.totalSpend / previous.totalHours : null;
+  const currentCostPerHour = costPerHourOf(current);
+  const previousCostPerHour = previous.hasSource ? costPerHourOf(previous) : null;
   return {
     state: 'ok',
     costPerHour: currentCostPerHour,
@@ -798,7 +808,7 @@ function buildCostPerHourBlock(
     estimatedHoursShiftsCount: current.estimatedHoursShiftsCount,
     inconsistentDurationShiftsCount: current.inconsistentDurationShiftsCount,
     noHoursSourceShiftsCount: current.noHoursSourceShiftsCount,
-    delta: computeDelta(currentCostPerHour ?? 0, previousCostPerHour),
+    delta: computeDelta(currentCostPerHour ?? 0, currentCostPerHour === null ? null : previousCostPerHour),
   };
 }
 

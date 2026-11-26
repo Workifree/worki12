@@ -24,6 +24,8 @@ import type {
   InvitationResponse,
 } from '../types';
 import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
+import { getSessionUserOrThrow } from '../lib/authSession';
+import { formatBRL } from '../lib/currency';
 
 // ---------------------------------------------------------------------------
 // Tipos do resultado estruturado de autorização de pagamento
@@ -208,7 +210,7 @@ export interface AttendanceSignals {
  * Os três sinais, nenhum redundante — cobrem os três jeitos reais de um turno começar:
  *  1. `worker_checkin_at`             — o próprio freela bateu chegada no app.
  *  2. `company_checkin_confirmed_at`  — a empresa confirmou a chegada pela tela, MESMO sem o
- *     freela nunca ter aberto o app (`handleConfirmCheckin`/"Confirmar Presença" —
+ *     freela nunca ter aberto o app (`handleConfirmCheckin`/"Confirmar presença" —
  *     justamente o caminho canônico do modo A, freela que não usa o app).
  *  3. `company_checkout_confirmed_at` — a empresa já confirmou a SAÍDA (turno claramente
  *     aconteceu, mesmo no caso raro de o checkin nunca ter sido confirmado).
@@ -216,7 +218,7 @@ export interface AttendanceSignals {
  * Centralizado e nomeado de propósito (não replicado condição a condição em cada chamador):
  * foi a ausência do sinal (2) numa versão anterior desta guarda — presente só em
  * `shiftInviteService.dismissFromShift` e no render de `CompanyJobCandidates` — que deixava
- * "Dispensar" disponível depois de "Confirmar Presença" sem o freela ter batido check-in no
+ * "Dispensar" disponível depois de "Confirmar presença" sem o freela ter batido check-in no
  * app (o caminho normal quando ele não usa o app). Uma quarta forma de "o turno começou" no
  * futuro só precisa entrar AQUI, uma vez, para os dois lados (UI e service) ficarem corretos.
  */
@@ -688,51 +690,51 @@ export const ShiftInviteService = {
    */
   async listPendingInvites(): Promise<Application[]> {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from('applications')
-        .select(
-          `
-          *,
-          job:jobs (
-            id,
-            title,
-            description,
-            briefing,
-            location,
-            start_date,
-            work_start_time,
-            work_end_time,
-            budget,
-            has_lunch,
-            company_id,
-            company:companies (
-              id,
-              name,
-              logo_url,
-              rating_average
-            )
-          )
-        `,
-        )
-        .eq('worker_id', user.id)
-        .eq('status', 'invited')
-        .order('invited_by_company_at', { ascending: false });
-
-      if (error) {
-        logError('shiftInvite.listPendingInvites', error);
-        return [];
-      }
-
-      return (data ?? []) as Application[];
+      return await this.listPendingInvitesChecked();
     } catch (err) {
       logError('shiftInvite.listPendingInvites', err);
       return [];
     }
+  },
+
+  /** Como `listPendingInvites`, mas LANÇA quando a consulta falha (lista vazia = não há nada mesmo). */
+  async listPendingInvitesChecked(): Promise<Application[]> {
+    const user = await getSessionUserOrThrow();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('applications')
+      .select(
+        `
+        *,
+        job:jobs (
+          id,
+          title,
+          description,
+          briefing,
+          location,
+          start_date,
+          work_start_time,
+          work_end_time,
+          budget,
+          has_lunch,
+          company_id,
+          company:companies (
+            id,
+            name,
+            logo_url,
+            rating_average
+          )
+        )
+      `,
+      )
+      .eq('worker_id', user.id)
+      .eq('status', 'invited')
+      .order('invited_by_company_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []) as Application[];
   },
 
   /**
@@ -835,7 +837,7 @@ export function buildShiftInviteWhatsAppMessage(params: ShiftInviteWhatsAppMessa
 
   const valueLabel =
     typeof amount === 'number' && amount > 0
-      ? `Valor: R$ ${amount.toFixed(2).replace('.', ',')}`
+      ? `Valor: ${formatBRL(amount).replace(/\s/g, ' ')}`
       : null;
 
   const lines = [

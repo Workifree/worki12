@@ -1,0 +1,283 @@
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSimulatedStack, click, done, goTo, humanClick, installDomStubs, isHuman, type Brain } from '../../lib/copilot/__tests__/harness'
+import { Dialog } from '../ui/Dialog'
+import { requestOpen } from '../../lib/copilot/openEvent'
+import { GuiaContext, type GuiaContextValue } from '../../hooks/useGuide'
+import { CopilotRoot, type CopilotRootProps } from './CopilotRoot'
+
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1' }, loading: false }) }))
+
+// O painel é carregado sob demanda: aquecer o módulo evita estourar o prazo do primeiro teste.
+beforeAll(async () => {
+  installDomStubs()
+  await import('./CopilotPanel')
+})
+beforeEach(() => {
+  window.localStorage.clear()
+  goTo('/company/jobs')
+  for (const method of ['log', 'group', 'groupEnd', 'error', 'debug'] as const) {
+    vi.spyOn(console, method).mockImplementation(() => {})
+  }
+})
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+function setup(brain: Brain = () => done(), props: CopilotRootProps = {}, available = true, page: React.ReactNode = null, path = '/company/jobs') {
+  const stack = createSimulatedStack(brain)
+  const services = { checkAvailability: vi.fn(async () => available), createLlmFetch: () => stack.llmFetch }
+  const utils = render(
+    <MemoryRouter initialEntries={[path]}>
+      {page}
+      <CopilotRoot enabled services={services} confirmArmDelayMs={0} overrides={{ isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'desktop' }} {...props} />
+    </MemoryRouter>,
+  )
+  return { ...utils, stack, services }
+}
+
+const open = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Abrir o copiloto' }))
+}
+const acceptNotice = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Entendi, quero usar' }))
+}
+const ask = (text: string) => {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Como posso ajudar?' }), { target: { value: text } })
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar pedido' }))
+}
+
+describe('ativação', () => {
+  it('desligado por padrão: nada é renderizado', () => {
+    render(<MemoryRouter><CopilotRoot /></MemoryRouter>)
+    expect(document.querySelector('[data-testid="copilot-host"]')).toBeNull()
+  })
+
+  it('some em rota de convite', async () => {
+    setup(undefined, {}, true, null, '/convite/abc')
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Abrir o copiloto' })).toBeNull()
+  })
+
+  it('some com o aceite de Termos na tela', async () => {
+    setup(undefined, {}, true, <div data-testid="tos-gate-modal" />)
+    await act(async () => {})
+    expect(screen.queryByRole('button', { name: 'Abrir o copiloto' })).toBeNull()
+  })
+
+  it('só consulta o servidor quando a pessoa abre', async () => {
+    const { services } = setup()
+    await screen.findByRole('button', { name: 'Abrir o copiloto' })
+    expect(services.checkAvailability).not.toHaveBeenCalled()
+  })
+})
+
+describe('sem a IA, o app segue com o guia', () => {
+  it('esconde o modo agente e oferece o guia', async () => {
+    const onOpenGuide = vi.fn()
+    setup(undefined, { onOpenGuide }, false)
+    await open()
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir o guia' }))
+    expect(onOpenGuide).toHaveBeenCalled()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('radio')).toBeNull()
+  })
+})
+
+describe('conversa', () => {
+  it('pede ciência sobre o envio antes do primeiro uso, e os dois modos existem', async () => {
+    const { stack } = setup()
+    await open()
+    await screen.findByText(/inteligência artificial de outra empresa/)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    await acceptNotice()
+    expect(screen.getByRole('radio', { name: 'Me mostre' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Faça pra mim' })).toBeInTheDocument()
+    expect(stack.bodies).toHaveLength(0)
+    ask('oi')
+    // O ciclo do agente passa de 1 s (padrão do findBy) quando a máquina está carregada.
+    await screen.findByText('Pronto.', {}, { timeout: 8000 })
+  })
+
+  it('confirmação aparece com o alvo real; confirmar executa uma vez', async () => {
+    const save = vi.fn()
+    setup(({ step, find }) => (step === 0 ? click(find(/Salvar lista/)) : done()), {}, true, <button type="button" onClick={save}>Salvar lista</button>)
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('salve a lista')
+    const card = await screen.findByRole('alertdialog', {}, { timeout: 8000 })
+    expect(within(card).getByText('Tocar no botão "Salvar lista"')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PARAR' })).toBeInTheDocument()
+    humanClick(within(card).getByRole('button', { name: 'Confirmar' }))
+    await screen.findByText('Pronto.', {}, { timeout: 8000 })
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('com um <dialog> aberto, o copiloto e o PARAR ficam DENTRO do modal; ao fechar, voltam ao body', async () => {
+    const page = (
+      <Dialog onClose={() => {}} labelledBy="h">
+        <h2 id="h">Nova lista</h2>
+        <button type="button">Salvar lista</button>
+      </Dialog>
+    )
+    setup(({ find }) => click(find(/Salvar lista/)), {}, true, page)
+    await open()
+    const dialog = document.querySelector('dialog')!
+    const host = screen.getByTestId('copilot-host')
+    await waitFor(() => expect(dialog.contains(host)).toBe(true))
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('salve')
+    await screen.findByRole('alertdialog', {}, { timeout: 8000 })
+    const stop = screen.getByRole('button', { name: 'PARAR' })
+    expect(dialog.contains(stop)).toBe(true)
+    humanClick(stop)
+    await screen.findByText('Parei, como você pediu.', {}, { timeout: 8000 })
+    act(() => dialog.removeAttribute('open'))
+    await waitFor(() => expect(host.parentElement).toBe(document.body))
+  })
+
+  it('"Me mostre": destaca e segue quando a pessoa toca no item de verdade', async () => {
+    const tap = vi.fn()
+    setup(({ step, find }) => (step === 0 ? click(find(/Salvar lista/)) : done('Muito bem.')), {}, true, <button type="button" onClick={tap}>Salvar lista</button>)
+    await open()
+    await acceptNotice()
+    ask('como salvo?')
+    await screen.findByText('Toque em "Salvar lista".', {}, { timeout: 8000 })
+    const target = screen.getByRole('button', { name: 'Salvar lista' })
+    expect(target).toHaveAttribute('data-copilot-highlight')
+    expect(tap).not.toHaveBeenCalled()
+    humanClick(target)
+    await screen.findByText('Muito bem.', {}, { timeout: 8000 })
+    expect(tap).toHaveBeenCalledTimes(1)
+    expect(target).not.toHaveAttribute('data-copilot-highlight')
+  })
+})
+
+describe('barra de comando e duas experiências', () => {
+  it('Ctrl+K abre a barra de comando de qualquer tela, sem aba nem botão', async () => {
+    setup(undefined, { showLauncher: false })
+    await act(async () => {
+      await import('./CopilotPanel')
+    })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(within(dialog).getByRole('heading', { name: 'Como posso ajudar?' })).toBeInTheDocument()
+    // Esc fecha e devolve o foco.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+  })
+
+  it('PC usa a seta; celular usa o dedo virtual e o bottom sheet (sem seta de mouse)', async () => {
+    const desktop = setup()
+    await open()
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(document.querySelector('[data-copilot-pointer="cursor"]')).not.toBeNull()
+    expect(document.querySelector('[data-copilot-pointer="finger"]')).toBeNull()
+    desktop.unmount()
+    cleanup()
+
+    setup(undefined, { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'mobile' } })
+    await open()
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(document.querySelector('[data-copilot-pointer="finger"]')).not.toBeNull()
+    expect(document.querySelector('[data-copilot-pointer="cursor"]')).toBeNull()
+  })
+
+  it('aviso de dado pessoal aparece colado ao campo', async () => {
+    setup()
+    await open()
+    await acceptNotice()
+    await screen.findByRole('textbox', { name: 'Como posso ajudar?' })
+    expect(screen.getByText(/Não digite CPF, senha/)).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Como posso ajudar?' }), { target: { value: 'meu cpf é 123.456.789-09' } })
+    expect(screen.getByText(/parece um dado pessoal/)).toBeInTheDocument()
+  })
+
+  it('quando o agente PERGUNTA: mostra a pergunta com respostas rápidas e segue com a resposta (não encerra sozinho)', async () => {
+    const question = 'Qual turno? Por exemplo: o de hoje, o de amanhã ou o de sábado'
+    setup(({ step }) => (step === 0 ? { ask_user: { question } } : done('Abri o de amanhã.')))
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('abra o turno')
+    await screen.findByText(question, {}, { timeout: 8000 })
+    expect(screen.getByRole('button', { name: 'PARAR' })).toBeInTheDocument()
+    const chips = screen.getByRole('list', { name: 'Respostas rápidas' })
+    expect(within(chips).getByRole('button', { name: 'o de hoje' })).toBeInTheDocument()
+    expect(within(chips).getByRole('button', { name: 'Deixa para lá' })).toBeInTheDocument()
+    humanClick(within(chips).getByRole('button', { name: 'o de amanhã' }))
+    await screen.findByText('Abri o de amanhã.', {}, { timeout: 8000 })
+    expect(screen.queryByText(/Parei/)).toBeNull()
+  })
+
+  it('"deixa para lá" na pergunta encerra com mensagem própria, não com a do botão PARAR', async () => {
+    setup(({ step }) => (step === 0 ? { ask_user: { question: 'Qual turno?' } } : done()))
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('abra o turno')
+    humanClick(await screen.findByRole('button', { name: 'Deixa para lá' }, { timeout: 8000 }))
+    await screen.findByText(/Certo, parei por aqui/, {}, { timeout: 8000 })
+    expect(screen.queryByText('Parei, como você pediu.')).toBeNull()
+  })
+
+  it('em /recibo aberto direto o papel vem do guia (empresa não vira freela)', async () => {
+    const guide = { papel: 'gestor' } as unknown as GuiaContextValue
+    const stack = createSimulatedStack(() => done())
+    const createLlmFetch = vi.fn(() => stack.llmFetch)
+    render(
+      <GuiaContext.Provider value={guide}>
+        <MemoryRouter initialEntries={['/recibo/12']}>
+          <CopilotRoot enabled services={{ checkAvailability: async () => true, createLlmFetch }} confirmArmDelayMs={0} overrides={{ isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'desktop' }} />
+        </MemoryRouter>
+      </GuiaContext.Provider>,
+    )
+    await open()
+    await acceptNotice().catch(() => {})
+    ask('oi')
+    await waitFor(() => expect(createLlmFetch).toHaveBeenCalledWith('company'), { timeout: 8000 })
+    // Espera a tarefa acabar: enquanto roda, a guarda de eventos fica armada e barraria o Esc do teste seguinte.
+    await screen.findByText('Pronto.', {}, { timeout: 8000 })
+  })
+
+  it('PC: o botão vira a barra de comando (View Transition em morph) e a barra volta a ser o botão; sem a API, abre direto', async () => {
+    const doc = document as unknown as { startViewTransition?: unknown }
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 10, 120, 44))
+    const names: string[] = []
+    const start = vi.fn((update: () => void) => {
+      // O nome de transição precisa estar no elemento de origem ANTES da troca (estado antigo).
+      names.push(`antes:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      update()
+      names.push(`depois:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(true)
+      return { finished: Promise.resolve() }
+    })
+    doc.startViewTransition = start
+    try {
+      setup()
+      await screen.findByRole('button', { name: 'Abrir o copiloto' })
+      act(() => requestOpen({ x: 10, y: 10 }))
+      const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(names[0]).toBe('antes:wk-cmd-vt')
+      expect(dialog).toHaveAttribute('data-copilot-palette')
+      await waitFor(() => expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(false))
+      // Fechar também faz o morph de volta (a barra → o botão).
+      fireEvent.keyDown(document, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+      expect(start).toHaveBeenCalledTimes(2)
+      expect(names.at(-1)).toBe('depois:wk-cmd-vt')
+    } finally {
+      delete doc.startViewTransition
+    }
+    cleanup()
+    setup()
+    await screen.findByRole('button', { name: 'Abrir o copiloto' })
+    act(() => requestOpen())
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+  })
+})

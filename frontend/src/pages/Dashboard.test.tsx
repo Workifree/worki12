@@ -19,6 +19,7 @@ vi.mock('../lib/supabase', () => ({
       getUser: vi.fn(),
     },
     from: vi.fn(),
+    rpc: vi.fn(),
   },
 }))
 
@@ -120,6 +121,8 @@ function setupMocks(availabilityDays: unknown, pendingReceipts: unknown[] = []) 
     error: null,
   } as never)
 
+  vi.mocked(supabase.rpc).mockResolvedValue({ data: workerRow(availabilityDays), error: null } as never)
+
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'workers') return workersFromChain(workerRow(availabilityDays)) as never
     if (table === 'applications') return applicationsFromChain() as never
@@ -215,5 +218,18 @@ describe('Dashboard — pagamento aguardando confirmação (indicador persistent
       expect(screen.queryByText(/carregando/i)).not.toBeInTheDocument()
     })
     expect(screen.queryByText('Pagamento para confirmar')).not.toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — aviso de chave PIX ausente', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('aparece com atalho quando o perfil não tem chave PIX', async () => {
+    setupMocks({ '1': ['tarde'] })
+    renderDashboard()
+
+    expect(await screen.findByRole('button', { name: /preencher chave pix/i })).toBeInTheDocument()
   })
 })

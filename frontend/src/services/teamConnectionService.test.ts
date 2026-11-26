@@ -425,20 +425,16 @@ describe('TeamConnectionService', () => {
       expect(result[0].worker?.full_name).toBe('Ana Souza');
     });
 
-    it('devolve lista vazia (sem lançar) quando a RPC retorna erro', async () => {
+    it('lança quando a RPC retorna erro', async () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
 
-      const result = await TeamConnectionService.listAllConnections();
-
-      expect(result).toEqual([]);
+      await expect(TeamConnectionService.listAllConnections()).rejects.toMatchObject({ message: 'boom' });
     });
 
-    it('devolve lista vazia quando a RPC devolve outcome != "ok" (ex.: unauthenticated)', async () => {
+    it('lança quando a RPC devolve outcome != "ok" (ex.: unauthenticated)', async () => {
       mockRpc.mockResolvedValueOnce({ data: { outcome: 'unauthenticated' }, error: null });
 
-      const result = await TeamConnectionService.listAllConnections();
-
-      expect(result).toEqual([]);
+      await expect(TeamConnectionService.listAllConnections()).rejects.toThrow('outcome=unauthenticated');
     });
   });
 

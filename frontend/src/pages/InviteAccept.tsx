@@ -1,267 +1,388 @@
 /**
- * InviteAccept — página de aceite de convite de equipe via link (Slice 1, R1-b)
- * + link transitivo de contato (R-transitivo).
+ * InviteAccept — convite de Elenco por link (Slice 1, R1-b) + link transitivo de contato.
  *
- * Rota: /convite/:token  (PÚBLICA — fora do ProtectedRoute, ver App.tsx)
+ * Rota: /convite/:token  (PÚBLICA — fora do ProtectedRoute, ver App.tsx: sob o guard, sem sessão
+ * o token do link se perderia).
+ *
+ * CONSENTIMENTO: abrir o link NUNCA grava nada. A página só confere a sessão e mostra o convite;
+ * `addToTeamByToken` / `addWorkerToTeamByToken` rodam apenas no toque do botão principal.
  *
  * Duas direções, distinguidas pelo prefixo do token (ver teamConnectionService):
- *   - Token de EMPRESA (sem prefixo): quem abre precisa estar logado como WORKER.
- *     Chama `addToTeamByToken` (deriva workerId da sessão, empresa vem do token).
- *   - Token de WORKER (prefixo `w_`): quem abre precisa estar logado como EMPRESA.
- *     Chama `addWorkerToTeamByToken` (deriva companyId da sessão, worker vem do token).
- *     Esse é o link "transitivo": uma empresa que já tem o worker no elenco pode
- *     repassar o MESMO link a outra empresa, sem precisar pedir ao worker de novo.
+ *   - sem prefixo: link de EMPRESA, quem aceita é o freela logado;
+ *   - `w_`: link de contato de FREELA, quem age é a empresa logada.
  *
- * Item 11 (bug crítico do GTM) — fluxo sem conta:
- * A rota é PÚBLICA para não perder o token: se ela ficasse sob ProtectedRoute, o guard
- * mandava o freela sem sessão para "/" antes deste componente montar, e o token do link
- * desaparecia da URL. Agora, ao montar, checamos a sessão diretamente aqui: sem sessão,
- * guardamos o token em sessionStorage (`pending_invite_token`, rede de segurança) e
- * navegamos para `/login?redirect=/convite/<token>`. O Login (Login.tsx) lê `redirect` e
- * volta para cá após cadastro/login — a conexão é então processada normalmente.
+ * Nome de quem convida: antes do aceite só a RPC `get_invite_preview` pode dizer (tolerante a
+ * falha: sem ela o texto fica genérico). Depois do aceite o nome vem de `companies`.
  */
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, Building2, User, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { TeamConnectionService } from '../services/teamConnectionService';
+import { TeamConnectionService, NOT_A_WORKER_ERROR } from '../services/teamConnectionService';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import PageMeta from '../components/PageMeta';
-import { Button, Card } from '../components/ui';
+import { Button, Card, ErrorState } from '../components/ui';
+import { checkSession } from '../lib/authSession';
+import { getInvitePreviewName } from '../services/invitePreviewService';
+import { isAvisosEnabled } from '../lib/features';
+import { leaveDevice } from '../lib/leaveDevice';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
 
-type PageState = 'loading' | 'success' | 'already_exists' | 'blocked' | 'error';
-type InviteDirection = 'company' | 'worker';
-
-interface PageData {
-  state: PageState;
-  errorMsg?: string;
-}
+type PageState =
+  | 'loading' | 'confirm' | 'accepting' | 'success' | 'pending' | 'already_exists'
+  | 'blocked' | 'invalid' | 'wrong_role' | 'error' | 'offline';
 
 interface StatusCardProps {
   icon: ReactNode;
   iconClassName: string;
-  shadowClassName?: string;
   title: string;
   children?: ReactNode;
 }
 
-/** Moldura única dos estados da página (ícone, título, corpo e UMA ação). */
-function StatusCard({ icon, iconClassName, shadowClassName, title, children }: StatusCardProps) {
+/** Moldura única dos estados da página. */
+function StatusCard({ icon, iconClassName, title, children }: StatusCardProps) {
   return (
-    <Card padding="lg" className={`text-center ${shadowClassName ?? 'shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}`}>
-      <div className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${iconClassName}`}>
+    <Card padding="lg" className="text-center [overflow-wrap:anywhere] max-sm:border-0 max-sm:p-0">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 ${iconClassName}`}>
         {icon}
       </div>
-      <h1 className="text-2xl font-bold tracking-tight mb-2">{title}</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-2 text-balance">{title}</h1>
       {children}
     </Card>
   );
 }
 
+function forgetPendingToken() {
+  try {
+    sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
 export default function InviteAccept() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const [page, setPage] = useState<PageData>({ state: 'loading' });
+  const [state, setState] = useState<PageState>('loading');
+  const [errorMsg, setErrorMsg] = useState<string | undefined>();
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  // Nome de quem convida, quando a prévia responde; `null` = texto genérico.
+  const [inviterName, setInviterName] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   // Direção do convite é conhecida só pelo prefixo do token — não depende de rede.
-  const direction: InviteDirection = token && TeamConnectionService.isWorkerInviteToken(token)
-    ? 'worker'
-    : 'company';
-  const redirectTo = direction === 'worker' ? '/company/team' : '/my-jobs';
-  const redirectLabel = direction === 'worker' ? 'Ver Meu Elenco' : 'Ver Meus Turnos';
+  const isWorkerLink = !!token && TeamConnectionService.isWorkerInviteToken(token);
+  const redirectTo = isWorkerLink ? '/company/team' : '/carteira';
+  const redirectLabel = isWorkerLink ? 'Ver meu Elenco' : 'Ver minhas empresas';
 
+  // Montar a página só LÊ a sessão. Nenhuma escrita acontece aqui.
   useEffect(() => {
     let active = true;
 
-    async function processInvite() {
-      if (!token) {
-        if (active) setPage({ state: 'error', errorMsg: 'Link de convite inválido.' });
+    async function open() {
+      // O mesmo teste que o service faz antes de gravar: se ele recusaria, o link é inválido
+      // e dá para dizer isso já, sem custar um cadastro.
+      const workerLink = !!token && TeamConnectionService.isWorkerInviteToken(token);
+      const resolved = !token
+        ? null
+        : workerLink
+          ? TeamConnectionService.resolveWorkerInviteToken(token)
+          : TeamConnectionService.resolveInviteToken(token);
+      if (!token || !resolved) {
+        forgetPendingToken();
+        if (active) setState('invalid');
         return;
       }
 
-      // Sem sessão: preserva o token e manda pro login em vez de deixar o
-      // service falhar com "sessão expirada" — ver nota do item 11 no topo do arquivo.
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        if (!active) return;
+      const session = await checkSession();
+      if (!active) return;
+      if (session.status === 'unavailable') {
+        logError('InviteAccept.session', session.error);
+        setState('offline');
+        return;
+      }
+      if (session.status === 'signed_out') {
         try {
           sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, token);
         } catch {
-          // sessionStorage indisponível (ex.: modo privado restrito) — segue só com o query param
+          // sessionStorage indisponível — segue só com o query param
         }
-        navigate(`/login?redirect=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
+        // Link de contato de freela (`w_`) só serve a EMPRESA: sem `type=hire` o /login assume
+        // freela, a conta nasce com o papel errado e o link fica inutilizável para ela.
+        const papel = workerLink ? 'type=hire&' : '';
+        navigate(`/login?${papel}redirect=${encodeURIComponent(`/convite/${token}`)}`, { replace: true });
         return;
       }
 
-      try {
-        const result = TeamConnectionService.isWorkerInviteToken(token)
-          ? await TeamConnectionService.addWorkerToTeamByToken(token)
-          : await TeamConnectionService.addToTeamByToken(token);
-
+      const userType = session.user.user_metadata?.user_type;
+      setAccountEmail(session.user.email ?? null);
+      const wrongRole = workerLink ? userType === 'work' : userType === 'hire';
+      if (!wrongRole) {
+        const name = await getInvitePreviewName(token, workerLink ? 'freela' : 'elenco');
         if (!active) return;
-
-        if (result.error) {
-          setPage({ state: 'error', errorMsg: result.error });
-          return;
-        }
-
-        try {
-          sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
-        } catch {
-          // ignora — best-effort
-        }
-
-        if (result.alreadyExists) {
-          // O freela vetou a empresa (status 'blocked') — o veto continua íntegro no banco
-          // (policy de DELETE guardada); aqui só não podemos afirmar sucesso nem revelar que
-          // houve bloqueio. Mesma copy neutra do hook (useTeamConnections.addWorker).
-          if (result.blocked) {
-            setPage({ state: 'blocked' });
-            return;
-          }
-          setPage({ state: 'already_exists' });
-          return;
-        }
-
-        setPage({ state: 'success' });
-      } catch (err) {
-        logError('InviteAccept.processInvite', err);
-        if (active) {
-          setPage({ state: 'error', errorMsg: 'Ocorreu um erro inesperado. Tente novamente.' });
-        }
+        setInviterName(name);
       }
+      setState(wrongRole ? 'wrong_role' : 'confirm');
     }
 
-    void processInvite();
+    void open();
     return () => { active = false; };
-  }, [token, navigate]);
+  }, [token, navigate, attempt]);
 
-  const successTitle = direction === 'worker' ? 'Freela Convidado!' : 'Convite Aceito!';
-  const successBody = direction === 'worker'
-    ? 'O freela do link entrou (pendente de aceite dele) no seu elenco. Assim que ele confirmar, você poderá convidá-lo para turnos.'
-    : 'Você entrou para o elenco da empresa. Agora pode receber convites de turno diretamente.';
-  const alreadyTitle = direction === 'worker' ? 'Já está no seu elenco' : 'Você já está no elenco';
-  const alreadyBody = direction === 'worker'
-    ? 'Esse freela já tem uma conexão com a sua empresa. Não é necessário repetir.'
-    : 'Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.';
+  const accept = async () => {
+    if (!token || state === 'accepting') return;
+    setState('accepting');
+    try {
+      const result = isWorkerLink
+        ? await TeamConnectionService.addWorkerToTeamByToken(token)
+        : await TeamConnectionService.addToTeamByToken(token);
 
-  const GREEN_SHADOW = 'shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]';
+      // Desfecho final nesta aba: sem limpar, o próximo login "seco" voltaria para cá.
+      forgetPendingToken();
+
+      if (result.error) {
+        setErrorMsg(result.error);
+        setState('error');
+        return;
+      }
+      if (result.alreadyExists) {
+        // O freela vetou a empresa (status 'blocked'): não afirmar sucesso nem revelar o bloqueio.
+        setState(result.blocked ? 'blocked' : 'already_exists');
+        return;
+      }
+
+      if (!isWorkerLink) {
+        // A RPC devolve a linha que já existia sem mudar o status: só 'accepted' é "entrou".
+        const status = result.connection?.status;
+        if (status === 'blocked') {
+          setState('blocked');
+          return;
+        }
+        const companyId = result.connection?.company_id;
+        if (companyId) {
+          try {
+            const { data } = await supabase.from('companies').select('name').eq('id', companyId).maybeSingle();
+            setCompanyName((data as { name?: string | null } | null)?.name ?? null);
+          } catch (err) {
+            logError('InviteAccept.companyName', err);
+          }
+        }
+        if (status === 'pending') {
+          setState('pending');
+          return;
+        }
+      }
+      setState('success');
+    } catch (err) {
+      logError('InviteAccept.accept', err);
+      setErrorMsg('Ocorreu um erro inesperado. Tente novamente.');
+      setState('error');
+    }
+  };
+
+  const decline = () => {
+    forgetPendingToken();
+    navigate('/');
+  };
+
+  const switchAccount = async () => {
+    try {
+      await leaveDevice();
+      await supabase.auth.signOut();
+    } catch (err) {
+      logError('InviteAccept.signOut', err);
+    }
+    setState('loading');
+    setAttempt((n) => n + 1);
+  };
+
+  const brand = isWorkerLink ? 'dark' : 'primary';
+  const inviteIcon = isWorkerLink
+    ? <User size={28} className="text-primary" aria-hidden="true" />
+    : <Building2 size={28} className="text-primary" aria-hidden="true" />;
+
+  const goOn = (
+    <Button variant={brand} size="lg" fullWidth onClick={() => navigate(redirectTo)} iconRight={<ArrowRight size={18} />}>
+      {redirectLabel}
+    </Button>
+  );
+
+  const home = (
+    <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/')} iconRight={<ArrowRight size={18} />}>
+      Voltar ao início
+    </Button>
+  );
+
+  const outcome = (title: string, body: string, ok: boolean, action: ReactNode = goOn) => (
+    <StatusCard
+      iconClassName={ok ? 'bg-primary-light' : 'bg-gray-100'}
+      icon={ok
+        ? <CheckCircle2 size={28} className="text-primary" aria-hidden="true" />
+        : <XCircle size={28} className="text-gray-600" aria-hidden="true" />}
+      title={title}
+    >
+      <p className="text-sm sm:text-base text-gray-600 mb-6" role="status">{body}</p>
+      {action}
+    </StatusCard>
+  );
+
+  const company = companyName ?? 'a empresa';
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] flex items-center justify-center p-4">
-      <PageMeta
-        title="Convite de Elenco"
-        description="Aceite o convite para entrar no elenco de uma empresa no Worki."
-      />
+    <div className="min-h-screen bg-white sm:bg-canvas flex items-start sm:items-center justify-center p-4 pt-8">
+      <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Worki." noindex />
 
       <div className="w-full max-w-md">
-        {/* Loading */}
-        {page.state === 'loading' && (
-          <StatusCard
-            iconClassName="bg-primary-light"
-            icon={direction === 'worker'
-              ? <User size={28} className="text-primary" />
-              : <Building2 size={28} className="text-primary" />}
-            title="Convite de Elenco"
-          >
+        {state === 'loading' && (
+          <StatusCard iconClassName="bg-primary-light" icon={inviteIcon} title="Convite de Elenco">
             <div className="flex items-center justify-center gap-3 text-gray-600 mt-5" role="status">
               <Loader2 className="animate-spin text-primary" size={22} />
-              <span className="text-sm font-semibold">Processando convite...</span>
+              <span className="text-sm font-semibold">Abrindo o convite...</span>
             </div>
           </StatusCard>
         )}
 
-        {/* Sucesso */}
-        {page.state === 'success' && (
+        {state === 'offline' && (
+          <ErrorState onRetry={() => { setState('loading'); setAttempt((n) => n + 1); }} />
+        )}
+
+        {(state === 'confirm' || state === 'accepting') && (
           <StatusCard
-            iconClassName="bg-primary"
-            shadowClassName={GREEN_SHADOW}
-            icon={<CheckCircle2 size={28} className="text-white" />}
-            title={successTitle}
+            iconClassName="bg-primary-light"
+            icon={inviteIcon}
+            title={isWorkerLink
+              ? `Convidar ${inviterName ?? 'um freela'} para o seu Elenco`
+              : `${inviterName ?? 'Uma empresa'} te convidou para o Elenco dela`}
           >
-            <p className="text-sm sm:text-base text-gray-600 mb-6">{successBody}</p>
-            <Button
-              variant={direction === 'worker' ? 'dark' : 'primary'}
-              size="lg"
-              fullWidth
-              onClick={() => navigate(redirectTo)}
-              iconRight={<ArrowRight size={18} />}
-            >
-              {redirectLabel}
-            </Button>
+            <p className="text-sm text-gray-600 mb-4">
+              {isWorkerLink
+                ? inviterName
+                  ? `Você abriu o link de contato de ${inviterName}.`
+                  : 'Você abriu o link de contato de um freela. O nome dele aparece no seu Elenco depois que você enviar o convite.'
+                : inviterName
+                  ? `Confira se é mesmo ${inviterName} quem te enviou o link. Nada é aceito sem o seu toque.`
+                  : 'Não foi possível mostrar o nome da empresa antes do aceite. Só continue se você sabe quem te enviou. Nada é aceito sem o seu toque.'}
+            </p>
+            <div className="mb-4 rounded-xl border border-gray-200 p-4 text-left text-sm">
+              {isWorkerLink ? (
+                <>
+                  <p className="font-bold mb-1">O que acontece</p>
+                  <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                    <li>O freela entra como aguardando resposta.</li>
+                    <li>Você vê nome, foto, função, cidade e nota.</li>
+                    <li>Telefone e chave PIX só aparecem se ele aceitar.</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="font-bold mb-1">Se você aceitar, {inviterName ?? 'a empresa'} poderá ver</p>
+                  <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                    <li>seu nome, foto, funções, cidade e avaliações;</li>
+                    <li>seu telefone e sua chave PIX;</li>
+                    <li>os dados do seu cadastro, como CPF e data de nascimento.</li>
+                  </ul>
+                  <p className="mt-2 text-gray-600">Ela também poderá te convidar para turnos. Você pode sair do Elenco quando quiser, em Empresas.</p>
+                </>
+              )}
+            </div>
+            {accountEmail && (
+              <p data-copilot-private className="mb-4 text-sm text-gray-600">
+                Você está com a conta <strong>{accountEmail}</strong>.
+              </p>
+            )}
+            <div className="space-y-3">
+              <Button
+                variant={brand}
+                size="lg"
+                fullWidth
+                loading={state === 'accepting'}
+                onClick={() => void accept()}
+                data-copilot="publico.convite-elenco.aceitar"
+              >
+                {isWorkerLink ? 'Convidar para o Elenco' : 'Entrar no Elenco'}
+              </Button>
+              <Button variant="secondary" size="lg" fullWidth disabled={state === 'accepting'} onClick={decline}>
+                Agora não
+              </Button>
+            </div>
           </StatusCard>
         )}
 
-        {/* Já existe (idempotência) */}
-        {page.state === 'already_exists' && (
-          <StatusCard
-            iconClassName="bg-primary-light"
-            shadowClassName={GREEN_SHADOW}
-            icon={<CheckCircle2 size={28} className="text-primary" />}
-            title={alreadyTitle}
-          >
-            <p className="text-sm sm:text-base text-gray-600 mb-6">{alreadyBody}</p>
-            <Button
-              variant={direction === 'worker' ? 'dark' : 'primary'}
-              size="lg"
-              fullWidth
-              onClick={() => navigate(redirectTo)}
-              iconRight={<ArrowRight size={18} />}
-            >
-              {redirectLabel}
-            </Button>
-          </StatusCard>
+        {state === 'success' && outcome(
+          isWorkerLink ? 'Convite enviado' : 'Você entrou no Elenco',
+          isWorkerLink
+            ? 'Falta o freela aceitar. Depois disso você pode chamá-lo para turnos.'
+            : `Agora ${company} pode te convidar para turnos. Você será avisado quando houver um convite.`,
+          true,
+        )}
+
+        {state === 'success' && !isWorkerLink && isAvisosEnabled() && (
+          <div className="mt-4"><PedidoDeAvisos /></div>
+        )}
+
+        {state === 'pending' && outcome(
+          'Falta você responder em Empresas',
+          `Já existe um convite pendente de ${company}. Abra Empresas para aceitar ou recusar.`,
+          true,
+        )}
+
+        {state === 'already_exists' && outcome(
+          isWorkerLink ? 'Já está no seu elenco' : 'Você já está no elenco',
+          isWorkerLink
+            ? 'Já existe uma conexão com este freela. Veja no Elenco se ela está aceita ou aguardando resposta.'
+            : 'Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.',
+          true,
         )}
 
         {/* Bloqueado — não afirma sucesso, mas também não revela que houve veto do freela */}
-        {page.state === 'blocked' && (
-          <StatusCard
-            iconClassName="bg-gray-50"
-            icon={<XCircle size={28} className="text-gray-500" />}
-            title="Não Foi Possível Concluir"
-          >
-            <p className="text-sm sm:text-base text-gray-600 mb-6">
-              Não é possível adicionar este freela agora.
-            </p>
-            <Button
-              variant="dark"
-              size="lg"
-              fullWidth
-              onClick={() => navigate(redirectTo)}
-              iconRight={<ArrowRight size={18} />}
-            >
-              {redirectLabel}
-            </Button>
-          </StatusCard>
+        {state === 'blocked' && outcome(
+          'Não foi possível concluir',
+          isWorkerLink ? 'Não é possível adicionar este freela agora.' : 'Não é possível concluir este convite agora.',
+          false,
         )}
 
-        {/* Erro */}
-        {page.state === 'error' && (
+        {state === 'invalid' && outcome(
+          'Link de convite inválido',
+          `Este link está incompleto ou não vale mais. Confira se copiou o link inteiro ou peça um novo ${isWorkerLink ? 'ao freela' : 'à empresa'}.`,
+          false,
+          home,
+        )}
+
+        {state === 'wrong_role' && outcome(
+          isWorkerLink ? 'Este link é para empresas' : 'Este link é para freelas',
+          isWorkerLink
+            ? 'Só uma conta de empresa pode usar este link. Para continuar, entre com a conta da empresa.'
+            : `${NOT_A_WORKER_ERROR} Você está com uma conta de empresa. Se o convite é para você, entre com sua conta de freela.`,
+          false,
+          <div className="space-y-3">
+            <Button variant="dark" size="lg" fullWidth onClick={() => void switchAccount()}>
+              Sair e usar outra conta
+            </Button>
+            <Button variant="secondary" size="lg" fullWidth onClick={decline}>
+              Agora não
+            </Button>
+          </div>,
+        )}
+
+        {state === 'error' && (
           <StatusCard
-            iconClassName="bg-red-50"
-            icon={<XCircle size={28} className="text-red-500" />}
-            title="Não foi possível abrir o convite"
+            iconClassName="bg-gray-100"
+            icon={<XCircle size={28} className="text-red-600" aria-hidden="true" />}
+            title="Não foi possível concluir o convite"
           >
             <p className="text-sm sm:text-base text-gray-600 mb-1" role="alert">
-              {page.errorMsg ?? 'Não foi possível processar este convite.'}
+              {errorMsg ?? 'Não foi possível processar este convite.'}
             </p>
-            <p className="text-xs sm:text-sm text-gray-600 mb-6">
-              {direction === 'worker'
-                ? 'Este link só pode ser aberto por uma conta de empresa.'
-                : 'Peça à empresa um novo link de convite.'}
-            </p>
-            <Button
-              variant="dark"
-              size="lg"
-              fullWidth
-              onClick={() => navigate('/')}
-              iconRight={<ArrowRight size={18} />}
-            >
-              Voltar ao início
-            </Button>
+            {errorMsg !== NOT_A_WORKER_ERROR && (
+              <p className="text-sm text-gray-600">
+                Se continuar, peça um novo link {isWorkerLink ? 'ao freela' : 'à empresa'}.
+              </p>
+            )}
+            <div className="mt-6">{home}</div>
           </StatusCard>
         )}
       </div>

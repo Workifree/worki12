@@ -8,6 +8,8 @@ import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
 import type { WorkerReferral } from '../types';
 import { Button, Card, PageHeader } from '../components/ui';
+import SectionTabs from '../components/SectionTabs';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Quem te indicou" (F10) — o freela decide sobre indicações que empresas do seu
@@ -43,11 +45,15 @@ export default function QuemTeIndicou() {
   const [respondingAction, setRespondingAction] = useState<'accept' | 'decline' | null>(null);
 
   const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    const session = await checkSession();
+    if (session.status === 'signed_out') {
       navigate('/login');
+      return;
+    }
+    if (session.status === 'unavailable') {
+      logError('QuemTeIndicou.session', session.error);
+      setErroCarga(true);
+      setLoading(false);
       return;
     }
 
@@ -138,7 +144,7 @@ export default function QuemTeIndicou() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto pb-20 space-y-4 animate-pulse">
+      <div className="max-w-2xl mx-auto pb-20 space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
         <div className="h-10 bg-gray-200 rounded-xl w-56" />
         {[...Array(2)].map((_, i) => (
           <div key={i} className="h-40 bg-gray-200 rounded-2xl" />
@@ -148,7 +154,8 @@ export default function QuemTeIndicou() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-2xl mx-auto pb-20">
+      <SectionTabs section="empresas" role="worker" />
       <PageHeader
         title="Quem te indicou"
         subtitle="Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita."
@@ -193,9 +200,9 @@ export default function QuemTeIndicou() {
                 </div>
               </div>
 
-              {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+              {item.message && <p className="text-sm text-gray-600 italic [overflow-wrap:anywhere]">"{item.message}"</p>}
 
-              <div className="bg-primary-light text-primary rounded-xl p-4 text-sm font-semibold leading-relaxed">
+              <div className="bg-primary-light text-primary-dark rounded-xl p-4 text-sm font-semibold leading-relaxed">
                 Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
                 pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
                 recusar, nada muda: você continua no elenco de quem te indicou normalmente.

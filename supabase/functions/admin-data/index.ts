@@ -1,12 +1,32 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { corsHeaders, ASAAS_API_URL, getAsaasHeaders } from '../_shared/asaas.ts';
+import { getCorsHeaders, ASAAS_API_URL, getAsaasHeaders } from '../_shared/asaas.ts';
+import { handleBonusAction, isBonusAction, isBonusInputError, isBonusForbiddenError } from './bonus.ts';
 
-const ADMIN_EMAILS = Deno.env.get('ADMIN_EMAILS')
-    ? Deno.env.get('ADMIN_EMAILS')!.split(',').map(e => e.trim())
-    : [];
+// Normaliza (trim + minúsculas) e descarta itens vazios: "a@x.com,," não pode gerar '' como admin.
+const ADMIN_EMAILS = (Deno.env.get('ADMIN_EMAILS') ?? '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e.length > 0);
+
+// Comparação em tempo constante (via digest SHA-256 de tamanho fixo) do token com a chave service_role.
+async function isServiceRoleToken(token: string): Promise<boolean> {
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!key || !token) return false;
+    const enc = new TextEncoder();
+    const [a, b] = await Promise.all([
+        crypto.subtle.digest('SHA-256', enc.encode(token)),
+        crypto.subtle.digest('SHA-256', enc.encode(key)),
+    ]);
+    const va = new Uint8Array(a);
+    const vb = new Uint8Array(b);
+    let diff = 0;
+    for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+    return diff === 0;
+}
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
@@ -21,7 +41,8 @@ serve(async (req) => {
 
         // Allow service_role key OR admin user email
         const token = authHeader.replace('Bearer ', '');
-        const isServiceRole = token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const isServiceRole = await isServiceRoleToken(token);
+        let adminUserId: string | null = null;
 
         if (!isServiceRole) {
             const supabaseAnon = createClient(
@@ -30,11 +51,13 @@ serve(async (req) => {
                 { global: { headers: { Authorization: authHeader } } }
             );
             const { data: { user }, error: authError } = await supabaseAnon.auth.getUser();
-            if (authError || !user || !ADMIN_EMAILS.includes(user.email || '')) {
+            const userEmail = (user?.email ?? '').trim().toLowerCase();
+            if (authError || !user || !user.email_confirmed_at || !userEmail || !ADMIN_EMAILS.includes(userEmail)) {
                 return new Response(JSON.stringify({ error: 'Forbidden' }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403
                 });
             }
+            adminUserId = user.id;
         }
 
         const supabaseAdmin = createClient(
@@ -42,8 +65,44 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
-        const body = await req.json();
+        // deno-lint-ignore no-explicit-any -- campos legados (user_id, amount) são validados em cada ação
+        let body: Record<string, any>;
+        try {
+            const parsed: unknown = await req.json();
+            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not-object');
+            body = parsed as typeof body;
+        } catch {
+            return new Response(JSON.stringify({ error: 'Corpo da requisição inválido' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400
+            });
+        }
         const { action } = body;
+
+        // Trilha de bônus (admin): lógica isolada em ./bonus.ts, mesma checagem de admin acima.
+        if (isBonusAction(action)) {
+            try {
+                const result = await handleBonusAction(supabaseAdmin, adminUserId, body);
+                return new Response(JSON.stringify(result), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            } catch (e: unknown) {
+                if (isBonusForbiddenError(e)) {
+                    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403
+                    });
+                }
+                if (isBonusInputError(e)) {
+                    return new Response(JSON.stringify({ error: e.message }), {
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400
+                    });
+                }
+                // Erro de banco/rede: detalhe só no log do servidor (sem nome de constraint para o client).
+                console.error('Admin bonus error:', e instanceof Error ? e.message : 'unknown');
+                return new Response(JSON.stringify({ error: 'Não foi possível concluir a ação de bônus' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500
+                });
+            }
+        }
 
         // Helper: build a map of wallet_id → { user_id, email, user_type, name }
         async function buildWalletUserMap() {

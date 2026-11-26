@@ -39,7 +39,7 @@ export function InsufficientState({ message }: InsufficientStateProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
       <p className="text-3xl font-black text-gray-300">—</p>
-      <p className="text-xs font-bold text-gray-400 max-w-xs">{message}</p>
+      <p className="text-xs font-bold text-gray-600 max-w-xs">{message}</p>
     </div>
   );
 }

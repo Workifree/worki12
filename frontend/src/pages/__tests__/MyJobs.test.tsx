@@ -191,7 +191,7 @@ describe('MyJobs - Tabs de status', () => {
       expect(screen.getByText('Convites')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Em Andamento')).toBeInTheDocument()
+    expect(screen.getByText('Em andamento')).toBeInTheDocument()
     expect(screen.getByText('Agendados')).toBeInTheDocument()
     expect(screen.getByText(/Histórico/)).toBeInTheDocument()
     // Aba "Candidaturas" foi removida no pivô push (invite-only).
@@ -206,8 +206,8 @@ describe('MyJobs - Tabs de status', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    // Em Andamento
-    fireEvent.click(screen.getByText('Em Andamento'))
+    // Em andamento
+    fireEvent.click(screen.getByText('Em andamento'))
     await waitFor(() => {
       expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
     })
@@ -229,14 +229,14 @@ describe('MyJobs - Botao check-out', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Em Andamento'))
+    fireEvent.click(screen.getByText('Em andamento'))
 
     await waitFor(() => {
       expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
     })
 
     // worker_checkin_at setado e worker_checkout_at null → botão Check-out visível
-    expect(screen.getByText('Check-out')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar saída' })).toBeInTheDocument()
   })
 
   // Caso central (QA pré-piloto): a empresa registrou a saída sozinha
@@ -244,7 +244,7 @@ describe('MyJobs - Botao check-out', () => {
   // O freela que abrir o app NÃO pode ver um CTA "Check-out" ativo — se tocar, sobrescreveria o
   // worker_checkout_at, e o recibo prioriza esse campo sobre a confirmação da empresa mesmo em
   // turno já pago (ReceiptView).
-  it('esconde o CTA Check-out e mostra "Empresa registrou sua saída" quando a empresa confirmou sem o freela', async () => {
+  it('saída confirmada só pela empresa: sem CTA Check-out; o turno vai ao Histórico como "Saída confirmada"', async () => {
     const companyCheckedOutApp: ApplicationRow = {
       ...APP_IN_PROGRESS,
       worker_checkin_at: '2026-03-17T08:00:00Z',
@@ -255,13 +255,14 @@ describe('MyJobs - Botao check-out', () => {
     setupMocks([companyCheckedOutApp])
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
-    await screen.findByText('Barman para Festa')
-
+    fireEvent.click(await screen.findByText('Em andamento'))
+    expect(screen.queryByText('Barman para Festa')).not.toBeInTheDocument()
     // Não pode existir CTA "Check-out" (button) — a empresa já fechou essa etapa.
-    expect(screen.queryByRole('button', { name: 'Check-out' })).not.toBeInTheDocument()
-    // O freela vê que foi a EMPRESA quem registrou a saída, não ele.
-    expect(screen.getByText('Empresa registrou sua saída')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Registrar saída' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Histórico/i }))
+    expect(screen.getByText('Barman para Festa')).toBeInTheDocument()
+    expect(screen.getByText('Saída confirmada')).toBeInTheDocument()
   })
 
   // Mesmo problema no check-in: empresa pode confirmar chegada sem o freela ter apertado
@@ -278,14 +279,14 @@ describe('MyJobs - Botao check-out', () => {
     setupMocks([companyCheckedInApp])
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     await screen.findByText('Barman para Festa')
 
-    expect(screen.queryByRole('button', { name: 'Check-in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Registrar chegada' })).not.toBeInTheDocument()
     expect(screen.getByText('Empresa registrou sua chegada')).toBeInTheDocument()
     // Check-out também não pode ficar disponível: o freela nunca chegou a fazer check-in
     // por conta própria, mas a etapa "chegada" já está fechada, então o botão de saída aparece.
-    expect(screen.getByRole('button', { name: 'Check-out' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar saída' })).toBeInTheDocument()
   })
 })
 
@@ -296,7 +297,7 @@ describe('MyJobs - Botao check-out', () => {
 // banco intocado.
 // ---------------------------------------------------------------------------
 
-// status='in_progress' (não 'hired') para cair de forma determinística na aba "Em Andamento"
+// status='in_progress' (não 'hired') para cair de forma determinística na aba "Em andamento"
 // (isInProgress = app.status === 'in_progress', sem depender de data/horário do turno).
 const APP_SCHEDULED_NO_CHECKIN: ApplicationRow = {
   ...APP_IN_PROGRESS,
@@ -304,6 +305,12 @@ const APP_SCHEDULED_NO_CHECKIN: ApplicationRow = {
   status: 'in_progress',
   worker_checkin_at: null,
   company_checkin_confirmed_at: null,
+  job: {
+    ...APP_IN_PROGRESS.job!,
+    start_date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    work_start_time: null,
+    work_end_time: null,
+  },
 }
 
 describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pode ser sucesso', () => {
@@ -321,12 +328,12 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
-    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    fireEvent.click(await screen.findByText('Em andamento'))
+    const checkinButton = await screen.findByRole('button', { name: 'Registrar chegada' })
     fireEvent.click(checkinButton)
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Chegada registrada!', 'success')
     })
   })
 
@@ -344,17 +351,17 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
-    const checkinButton = await screen.findByRole('button', { name: /Check-in/i })
+    fireEvent.click(await screen.findByText('Em andamento'))
+    const checkinButton = await screen.findByRole('button', { name: 'Registrar chegada' })
     fireEvent.click(checkinButton)
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Não foi possível fazer check-in. Atualize a página e tente novamente.',
+        'Não foi possível registrar a chegada. Atualize a página e tente novamente.',
         'error',
       )
     })
-    expect(mockAddToast).not.toHaveBeenCalledWith('Check-in realizado com sucesso!', 'success')
+    expect(mockAddToast).not.toHaveBeenCalledWith('Chegada registrada!', 'success')
   })
 
   it('check-out com sucesso: UPDATE afetou 1 linha', async () => {
@@ -370,8 +377,8 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
-    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    fireEvent.click(await screen.findByText('Em andamento'))
+    const checkoutButton = await screen.findByRole('button', { name: 'Registrar saída' })
     fireEvent.click(checkoutButton)
 
     await waitFor(() => {
@@ -395,13 +402,13 @@ describe('MyJobs - handleCheckin/handleCheckout: UPDATE negado pela RLS não pod
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
-    const checkoutButton = await screen.findByRole('button', { name: 'Check-out' })
+    fireEvent.click(await screen.findByText('Em andamento'))
+    const checkoutButton = await screen.findByRole('button', { name: 'Registrar saída' })
     fireEvent.click(checkoutButton)
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Não foi possível fazer check-out. Atualize a página e tente novamente.',
+        'Não foi possível registrar a saída. Atualize a página e tente novamente.',
         'error',
       )
     })
@@ -478,7 +485,7 @@ describe('MyJobs - computeWorkerSteps (lógica pura)', () => {
 })
 
 describe('MyJobs - Estado vazio por tab', () => {
-  it('exibe estado vazio na tab Em Andamento quando nao ha turnos', async () => {
+  it('exibe estado vazio na tab Em andamento quando nao ha turnos', async () => {
     setupMocks([])
     renderComponent()
 
@@ -486,7 +493,7 @@ describe('MyJobs - Estado vazio por tab', () => {
       expect(screen.getByText('Meus Turnos')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Em Andamento'))
+    fireEvent.click(screen.getByText('Em andamento'))
 
     await waitFor(() => {
       expect(screen.getByText('Nenhum trabalho em andamento.')).toBeInTheDocument()
@@ -543,14 +550,14 @@ describe('MyJobs - Erro de autenticacao', () => {
 })
 
 describe('MyJobs - Falar com a empresa', () => {
-  it('cria a Conversation e navega ao clicar em "Falar com a empresa" (Em Andamento)', async () => {
+  it('cria a Conversation e navega ao clicar em "Falar com a empresa" (Em andamento)', async () => {
     const { mockNavigate, conversationChain } = setupMocks([APP_IN_PROGRESS], {
       limit: vi.fn().mockResolvedValue({ data: [], error: null }), // nenhuma Conversation existente ainda
       insert: vi.fn().mockResolvedValue({ data: null, error: null }),
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
     fireEvent.click(chatButton)
 
@@ -570,7 +577,7 @@ describe('MyJobs - Falar com a empresa', () => {
     })
     renderComponent()
 
-    fireEvent.click(await screen.findByText('Em Andamento'))
+    fireEvent.click(await screen.findByText('Em andamento'))
     const chatButton = await screen.findByRole('button', { name: /Falar com a empresa/i })
     fireEvent.click(chatButton)
 

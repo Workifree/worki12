@@ -1,16 +1,26 @@
 
+import { BrandMark, BrandStripe } from '../../components/BrandMark';
 import { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { ActionBar, Button, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
 import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
 
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../../types';
+import { checkSession } from '../../lib/authSession';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { leaveDevice } from '../../lib/leaveDevice';
+import { setMyWorkerIdentity } from '../../services/workerIdentityService';
+import { saoPauloDay } from '../../lib/checkinWindow';
+
+const CONTA_EXCLUIDA = 'Esta conta foi excluída e não aceita um novo cadastro.';
 
 /**
  * Converte os cinco chips rápidos do cadastro na grade dia×período do F7.
@@ -63,6 +73,18 @@ const PIX_KEY_PLACEHOLDERS: Record<PixKeyType, string> = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type CampoFreela =
+    | 'fullName' | 'cpf' | 'birthDate' | 'phone' | 'city' | 'pixKeyType' | 'pixKey'
+    | 'roles' | 'experienceYears' | 'availability' | 'tos';
+
+interface Pendencia {
+    campo: CampoFreela;
+    /** Como aparece no resumo "Falta preencher". */
+    falta: string;
+    /** Mensagem junto do campo. */
+    erro: string;
+}
+
 export default function WorkerOnboarding() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -70,7 +92,10 @@ export default function WorkerOnboarding() {
     const [saidaArmada, setSaidaArmada] = useState(false);
     const { addToast } = useToast();
     const [step, setStep] = useState(1);
+    const [tentou, setTentou] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+    // Erro ao salvar fica ao lado do botão; o aviso flutuante some e aparece longe dele.
+    const [erroSalvar, setErroSalvar] = useState(false);
     const [tosAccepted, setTosAccepted] = useState(false);
 
     const TOTAL_STEPS = 3;
@@ -101,17 +126,26 @@ export default function WorkerOnboarding() {
         'Manhã', 'Tarde', 'Noite', 'Madrugada', 'Fim de Semana'
     ];
 
+    const [erroSessao, setErroSessao] = useState(false);
+    // Valores que o servidor recusou: o campo acusa o erro até a pessoa mudar o que digitou.
+    const [cpfRecusado, setCpfRecusado] = useState<string | null>(null);
+    const [nascimentoRecusado, setNascimentoRecusado] = useState<string | null>(null);
+    const [tentativa, setTentativa] = useState(0);
+
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => {
-            if (data.user) {
-                setUserId(data.user.id);
-                checkIfOnboardingComplete(data.user.id);
-            } else {
+        checkSession().then((session) => {
+            if (session.status === 'ok') {
+                setErroSessao(false);
+                setUserId(session.user.id);
+                checkIfOnboardingComplete(session.user.id);
+            } else if (session.status === 'signed_out') {
                 navigate('/login');
+            } else {
+                setErroSessao(true);
             }
         });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- carrega dados iniciais apenas no mount, navigate estavel
-    }, [navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- carrega dados iniciais no mount e a cada nova tentativa
+    }, [navigate, tentativa]);
 
     const checkIfOnboardingComplete = async (uid: string) => {
         const { data } = await supabase
@@ -194,53 +228,57 @@ export default function WorkerOnboarding() {
     };
 
     /**
-     * O que ainda falta no passo atual, em português, na ordem em que aparece na tela.
-     *
-     * Antes, o botão simplesmente ficava `disabled` e a pessoa não tinha **como saber qual campo
-     * estava faltando** — testando o cadastro no navegador em 22/08/2026 eu mesmo fiquei preso
-     * nesse estado, com todos os campos visivelmente preenchidos e o botão morto (o que faltava
-     * era o tipo da chave PIX, que o `<select>` exibia como "CPF" sem ter valor no estado).
-     *
-     * Esta lista é a FONTE ÚNICA: `canProceed()` deriva dela. Ter as duas regras separadas era o
-     * risco real — a mensagem diria uma coisa e o botão obedeceria outra.
+     * O que ainda falta no passo atual, na ordem em que aparece na tela. FONTE ÚNICA do resumo
+     * ("Falta preencher") e das mensagens junto de cada campo: duas regras separadas fariam a
+     * mensagem dizer uma coisa e o envio obedecer outra.
      */
-    const camposFaltantes = (): string[] => {
-        switch (step) {
-            case 1: {
-                const falta: string[] = [];
-                if (!formData.fullName.trim()) falta.push('nome completo');
-                if (formData.cpf.replace(/\D/g, '').length !== 11) falta.push('CPF (11 dígitos)');
-                if (!formData.birthDate) falta.push('data de nascimento');
-                if (!formData.phone.trim()) falta.push('celular');
-                if (!formData.city.trim()) falta.push('cidade');
-                if (!formData.pixKeyType) falta.push('tipo da chave PIX');
-                else if (!isValidPixKey()) {
-                    falta.push(formData.pixKey.trim()
-                        ? `chave PIX válida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}"`
-                        : 'chave PIX');
-                }
-                return falta;
+    const pendenciasDoPasso = (): Pendencia[] => {
+        const lista: Pendencia[] = [];
+        const marcar = (campo: CampoFreela, falta: string, erro: string) => lista.push({ campo, falta, erro });
+        if (step === 1) {
+            if (!formData.fullName.trim()) marcar('fullName', 'nome completo', 'Informe seu nome completo.');
+            if (formData.cpf.replace(/\D/g, '').length !== 11) marcar('cpf', 'CPF (11 dígitos)', 'Informe o CPF com 11 dígitos.');
+            else if (!validateCPFOrCNPJ(formData.cpf)) marcar('cpf', 'CPF válido', 'CPF inválido. Confira os números.');
+            else if (cpfRecusado === formData.cpf) marcar('cpf', 'CPF válido', 'CPF inválido. Confira os números.');
+            if (!formData.birthDate) marcar('birthDate', 'data de nascimento', 'Informe sua data de nascimento.');
+            // Mesma regra do banco: data passada (São Paulo), de 1900 em diante.
+            else if (formData.birthDate < '1900-01-01' || formData.birthDate >= saoPauloDay(new Date()) || nascimentoRecusado === formData.birthDate) {
+                marcar('birthDate', 'data de nascimento válida', 'Confira a data de nascimento.');
             }
-            case 2: {
-                const falta: string[] = [];
-                if (formData.roles.length === 0) falta.push('ao menos uma especialidade');
-                if (!formData.experienceYears) falta.push('tempo de experiência');
-                return falta;
+            if (!formData.phone.trim()) marcar('phone', 'celular', 'Informe seu celular.');
+            if (!formData.city.trim()) marcar('city', 'cidade', 'Informe sua cidade.');
+            if (!formData.pixKeyType) marcar('pixKeyType', 'tipo da chave PIX', 'Escolha o tipo da chave PIX.');
+            else if (!isValidPixKey()) {
+                const preenchida = formData.pixKey.trim();
+                marcar(
+                    'pixKey',
+                    preenchida ? `chave PIX válida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}"` : 'chave PIX',
+                    preenchida ? `Chave inválida para o tipo "${PIX_KEY_LABELS[formData.pixKeyType]}".` : 'Informe sua chave PIX.',
+                );
             }
-            case 3: {
-                const falta: string[] = [];
-                if (formData.availability.length === 0) falta.push('ao menos um período de disponibilidade');
-                if (!tosAccepted) falta.push('aceite dos Termos de Uso');
-                return falta;
-            }
-            default: return [];
+        } else if (step === 2) {
+            if (formData.roles.length === 0) marcar('roles', 'ao menos uma especialidade', 'Marque ao menos uma especialidade.');
+            if (!formData.experienceYears) marcar('experienceYears', 'tempo de experiência', 'Escolha seu tempo de experiência.');
+        } else if (step === 3) {
+            if (formData.availability.length === 0) marcar('availability', 'ao menos um período de disponibilidade', 'Marque ao menos um período.');
+            if (!tosAccepted) marcar('tos', 'aceite dos Termos de Uso', 'Aceite os Termos de Uso para continuar.');
         }
+        return lista;
     };
 
-    const canProceed = () => camposFaltantes().length === 0;
+    const erroDe = (campo: CampoFreela) =>
+        tentou ? pendenciasDoPasso().find((p) => p.campo === campo)?.erro : undefined;
 
-    const handleNext = async (e: React.FormEvent) => {
+    const handleNext = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (loading) return;
+        if (pendenciasDoPasso().length > 0) {
+            const form = e.currentTarget;
+            flushSync(() => setTentou(true));
+            focusFirstInvalid(form);
+            return;
+        }
+        setTentou(false);
         if (step < TOTAL_STEPS) {
             setStep(step + 1);
         } else {
@@ -252,7 +290,18 @@ export default function WorkerOnboarding() {
         if (!userId) return;
 
         setLoading(true);
+        setErroSalvar(false);
         try {
+            // Sem argumentos a RPC não escreve nada: serve para saber se a migration cpf-restrito
+            // já está no banco. Sem ela, cpf e nascimento seguem no upsert, como antes.
+            const sonda = await setMyWorkerIdentity();
+            if (sonda.outcome === 'anonymized') throw new Error(CONTA_EXCLUIDA);
+            if (sonda.outcome === 'error' || sonda.outcome === 'unauthenticated') {
+                throw new Error('Erro ao salvar perfil. Tente novamente.');
+            }
+            const identidadePorRpc = sonda.outcome !== 'unavailable';
+            const cpf = formData.cpf.replace(/\D/g, '');
+
             const { error } = await supabase
                 .from('workers')
                 .upsert({
@@ -260,8 +309,7 @@ export default function WorkerOnboarding() {
                     full_name: formData.fullName,
                     phone: formData.phone,
                     city: formData.city,
-                    cpf: formData.cpf.replace(/\D/g, ''),
-                    birth_date: formData.birthDate,
+                    ...(identidadePorRpc ? {} : { cpf, birth_date: formData.birthDate }),
                     pix_key: normalizePixKeyForStorage(formData.pixKeyType, formData.pixKey),
                     roles: formData.roles,
                     // A empresa NUNCA vê `roles`. Todas as telas dela — cartão do Elenco
@@ -294,13 +342,38 @@ export default function WorkerOnboarding() {
                     // que continua sendo o lugar de edição fina.
                     availability_days: gradeAPartirDosChips(formData.availability),
                     goal: formData.goal,
-                    onboarding_completed: true,
+                    // Pela RPC, o cadastro só é concluído depois de cpf/nascimento gravados.
+                    ...(identidadePorRpc ? {} : { onboarding_completed: true }),
                     accepted_tos: true,
                     tos_version: 'v1',
                     tos_accepted_at: new Date().toISOString()
                 });
 
             if (error) throw error;
+
+            if (identidadePorRpc) {
+                const { outcome } = await setMyWorkerIdentity({ cpf, birthDate: formData.birthDate });
+                if (outcome === 'invalid_cpf' || outcome === 'invalid_birth_date') {
+                    if (outcome === 'invalid_cpf') setCpfRecusado(formData.cpf);
+                    else setNascimentoRecusado(formData.birthDate);
+                    setStep(1);
+                    setTentou(true);
+                    addToast(outcome === 'invalid_cpf' ? 'CPF inválido. Confira os números.' : 'Confira a data de nascimento.', 'error');
+                    return;
+                }
+                if (outcome === 'anonymized') throw new Error(CONTA_EXCLUIDA);
+                // `*_locked`: já havia valor gravado, que permanece. O cadastro segue.
+                if (outcome !== 'saved' && outcome !== 'cpf_locked' && outcome !== 'birth_date_locked') {
+                    throw new Error('Erro ao salvar perfil. Tente novamente.');
+                }
+                const { data: concluido, error: erroConclusao } = await supabase
+                    .from('workers')
+                    .update({ onboarding_completed: true })
+                    .eq('id', userId)
+                    .select('id');
+                if (erroConclusao) throw erroConclusao;
+                if (!concluido || concluido.length === 0) throw new Error('Erro ao salvar perfil. Tente novamente.');
+            }
 
             // Wallet e legado do modelo de pagamento pausado (ADR-20260822): se falhar DEPOIS
             // do perfil salvo, abortar aqui mostraria 'Erro ao salvar perfil' — mentira que
@@ -315,6 +388,7 @@ export default function WorkerOnboarding() {
             window.location.href = '/dashboard';
         } catch (err: unknown) {
             logError('Error saving worker profile:', err);
+            setErroSalvar(true);
             addToast(err instanceof Error ? err.message : 'Erro ao salvar perfil. Tente novamente.', 'error');
         } finally {
             setLoading(false);
@@ -322,22 +396,31 @@ export default function WorkerOnboarding() {
     };
 
     const stepLabels = ['Dados', 'Profissão', 'Objetivos'];
-    const pendencias = camposFaltantes();
+    const pendencias = pendenciasDoPasso().map((p) => p.falta);
 
     const chipClass = (selected: boolean) =>
-        `min-h-11 px-4 py-2 rounded-full border-2 font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+        `min-h-11 px-4 py-2 rounded-full border-ink font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
             selected
                 ? 'bg-primary-dark text-white border-black'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-black'
         }`;
 
+    if (erroSessao) return (
+        <div className="mx-auto max-w-md p-4 pt-10">
+            <ErroDeCarga onRetry={() => { setErroSessao(false); setTentativa((n) => n + 1); }} />
+        </div>
+    );
+
     return (
-        <div className="min-h-screen bg-[#F4F4F0] flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
+        <div className="min-h-screen bg-white sm:bg-canvas flex flex-col items-center px-4 pt-4 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
+            {/* Um acento de marca por tela: faixa verde de 4px + selo "W." */}
+            <BrandStripe role="work" className="fixed inset-x-0 top-0 z-10" />
 
             <div className="w-full max-w-2xl">
-                {/* Exit button */}
-                <div className="flex justify-end mb-2">
+                {/* Marca à esquerda, saída à direita */}
+                <div className="flex items-center justify-between gap-3 mb-2">
+                    <BrandMark role="work" />
                     <button
                         onClick={async () => {
                             if (!saidaArmada) {
@@ -345,6 +428,7 @@ export default function WorkerOnboarding() {
                                 setTimeout(() => setSaidaArmada(false), 4000);
                                 return;
                             }
+                            await leaveDevice();
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
@@ -377,75 +461,88 @@ export default function WorkerOnboarding() {
                 </div>
 
                 {/* Form Card */}
-                <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                <div className="sm:rounded-2xl sm:border sm:border-gray-200 sm:bg-white sm:p-8">
 
-                    <form onSubmit={handleNext} className="space-y-6">
+                    <form onSubmit={handleNext} noValidate className="space-y-5">
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-4" data-copilot-private>
                                 <h2 className="text-lg font-bold">Quem é você?</h2>
 
-                                <div className="space-y-4">
-                                    <Field label="Nome completo" required>
+                                <div className="space-y-3">
+                                    <Field label="Nome completo" error={erroDe('fullName')}>
                                         <input
                                             type="text"
                                             required
                                             value={formData.fullName}
                                             onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                                            name="name"
+                                            autoComplete="name"
                                             aria-label="Nome completo"
                                             placeholder="Seu nome completo"
                                         />
                                     </Field>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="CPF" required>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="CPF" error={erroDe('cpf')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.cpf}
                                                 onChange={e => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
+                                                name="cpf"
+                                                autoComplete="off"
+                                                inputMode="numeric"
                                                 aria-label="CPF"
                                                 placeholder="000.000.000-00"
                                             />
                                         </Field>
-                                        <Field label="Data de nascimento" required>
+                                        <Field label="Data de nascimento" error={erroDe('birthDate')}>
                                             <input
                                                 type="date"
                                                 required
                                                 value={formData.birthDate}
                                                 onChange={e => setFormData({ ...formData, birthDate: e.target.value })}
+                                                name="bday"
+                                                autoComplete="bday"
                                                 aria-label="Data de nascimento"
                                             />
                                         </Field>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Celular / WhatsApp" required>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="Celular / WhatsApp" error={erroDe('phone')}>
                                             <input
                                                 type="tel"
                                                 required
                                                 value={formData.phone}
                                                 onChange={e => setFormData({ ...formData, phone: formatPhone(e.target.value) })}
+                                                name="tel"
+                                                autoComplete="tel"
+                                                inputMode="tel"
                                                 aria-label="Celular ou WhatsApp"
                                                 placeholder="(00) 00000-0000"
                                             />
                                         </Field>
-                                        <Field label="Cidade" required>
+                                        <Field label="Cidade" error={erroDe('city')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData({ ...formData, city: e.target.value })}
+                                                name="city"
+                                                autoComplete="address-level2"
                                                 aria-label="Cidade"
                                                 placeholder="Ex: São Paulo"
                                             />
                                         </Field>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Tipo de chave PIX" required>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="Tipo de chave PIX" error={erroDe('pixKeyType')}>
                                             <select
                                                 required
                                                 value={formData.pixKeyType}
                                                 onChange={e => setFormData({ ...formData, pixKeyType: e.target.value as PixKeyType, pixKey: '' })}
+                                                name="pixKeyType"
                                                 aria-label="Tipo de chave PIX"
                                             >
                                                 {(Object.keys(PIX_KEY_LABELS) as PixKeyType[]).map(type => (
@@ -453,12 +550,15 @@ export default function WorkerOnboarding() {
                                                 ))}
                                             </select>
                                         </Field>
-                                        <Field label="Chave PIX" required>
+                                        <Field label="Chave PIX" error={erroDe('pixKey')}>
                                             <input
                                                 type="text"
                                                 required
                                                 value={formData.pixKey}
                                                 onChange={e => setFormData({ ...formData, pixKey: formatPixKey(formData.pixKeyType, e.target.value) })}
+                                                name="pixKey"
+                                                autoComplete="off"
+                                                inputMode={formData.pixKeyType === 'email' ? 'email' : formData.pixKeyType === 'telefone' ? 'tel' : formData.pixKeyType === 'aleatoria' ? 'text' : 'numeric'}
                                                 aria-label="Chave PIX"
                                                 placeholder={PIX_KEY_PLACEHOLDERS[formData.pixKeyType]}
                                             />
@@ -473,16 +573,15 @@ export default function WorkerOnboarding() {
 
                         {/* Step 2: Professional */}
                         {step === 2 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Profissão</h2>
 
                                 <div className="space-y-4">
                                     <fieldset>
                                         <legend className="text-sm font-bold mb-2">
                                             Quais suas especialidades?
-                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2" role="group" aria-label="Especialidades" aria-describedby={erroDe('roles') ? 'roles-error' : undefined} data-invalid={erroDe('roles') ? 'true' : undefined} tabIndex={-1}>
                                             {rolesList.map(role => (
                                                 <button
                                                     key={role}
@@ -495,9 +594,10 @@ export default function WorkerOnboarding() {
                                                 </button>
                                             ))}
                                         </div>
+                                        {erroDe('roles') && <p id="roles-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('roles')}</p>}
                                     </fieldset>
 
-                                    <Field label="Tempo de experiência" required>
+                                    <Field label="Tempo de experiência" error={erroDe('experienceYears')}>
                                         <select
                                             required
                                             value={formData.experienceYears}
@@ -527,15 +627,15 @@ export default function WorkerOnboarding() {
 
                         {/* Step 3: Goals & Availability */}
                         {step === 3 && (
-                            <div className="space-y-5 animate-in slide-in-from-right duration-500">
+                            <div className="space-y-5">
                                 <h2 className="text-lg font-bold">Objetivos</h2>
 
                                 <div className="space-y-5">
                                     <fieldset>
-                                        <legend className="text-sm font-bold mb-2">O que você procura como freela?</legend>
+                                        <legend className="text-sm font-bold mb-2">O que você procura como freela? <span className="font-normal text-gray-600">(opcional)</span></legend>
                                         <div className="grid grid-cols-1 gap-2">
                                             {['Renda extra com quem já confio', 'Mais turnos / mais trabalho', 'Construir minha reputação e histórico'].map(opt => (
-                                                <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                <label key={opt} className={`border-ink rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input
                                                         type="radio"
                                                         name="goal"
@@ -554,9 +654,8 @@ export default function WorkerOnboarding() {
                                     <fieldset>
                                         <legend className="text-sm font-bold mb-2">
                                             Disponibilidade
-                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="flex flex-wrap gap-2" role="group" aria-label="Disponibilidade" aria-describedby={erroDe('availability') ? 'availability-error' : undefined} data-invalid={erroDe('availability') ? 'true' : undefined} tabIndex={-1}>
                                             {availabilityOptions.map(opt => (
                                                 <button
                                                     key={opt}
@@ -569,23 +668,28 @@ export default function WorkerOnboarding() {
                                                 </button>
                                             ))}
                                         </div>
+                                        {erroDe('availability') && <p id="availability-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('availability')}</p>}
                                     </fieldset>
 
-                                    <div className="flex items-start gap-3">
+                                    {/* Linha inteira clicável, 44px; os links da frase também têm 44px de altura. */}
+                                    <div className="flex min-h-11 items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
+                                            aria-invalid={erroDe('tos') ? true : undefined}
+                                            aria-describedby={erroDe('tos') ? 'tos-error' : undefined}
                                             checked={tosAccepted}
                                             onChange={e => setTosAccepted(e.target.checked)}
-                                            className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
+                                            className="mt-3 h-5 w-5 flex-shrink-0 rounded border-ink border-black accent-primary"
                                         />
-                                        <label htmlFor="tos" className="text-sm text-gray-700">
+                                        <label htmlFor="tos" className="min-h-11 py-2.5 text-sm leading-6 text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Política de Privacidade</a>
                                         </label>
                                     </div>
+                                    {erroDe('tos') && <p id="tos-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('tos')}</p>}
                                 </div>
                             </div>
                         )}
@@ -596,38 +700,39 @@ export default function WorkerOnboarding() {
                             <p
                                 role="status"
                                 aria-live="polite"
-                                className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                                className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl p-3"
                             >
                                 Falta preencher: {pendencias.join(', ')}.
                             </p>
                         )}
 
-                        <div className="pt-5 flex justify-between items-center border-t-2 border-gray-100">
-                            {step > 1 ? (
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => setStep(step - 1)}
-                                    iconLeft={<ArrowLeft size={18} />}
-                                >
+                        {erroSalvar && (
+                            <p role="alert" className="text-sm font-bold text-red-600">
+                                Não foi possível salvar. O que você preencheu continua na tela: tente de novo.
+                            </p>
+                        )}
+
+                        <ActionBar
+                            secondary={step > 1 ? (
+                                <Button variant="secondary" onClick={() => setStep(step - 1)} iconLeft={<ArrowLeft size={18} />}>
                                     Voltar
                                 </Button>
-                            ) : (
-                                <div /> /* Spacer */
-                            )}
-
-                            <Button
-                                type="submit"
-                                size="lg"
-                                loading={loading}
-                                disabled={!canProceed()}
-                                iconRight={<ArrowRight size={18} />}
-                            >
-                                {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
-                            </Button>
-                        </div>
+                            ) : undefined}
+                            primary={
+                                <Button
+                                    type="submit"
+                                    data-copilot="freela.cadastro.avancar"
+                                    loading={loading}
+                                    iconRight={<ArrowRight size={18} />}
+                                    size="lg"
+                                                                    >
+                                    {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
+                                </Button>
+                            }
+                        />
 
                     </form>
-                </Card>
+                </div>
             </div>
         </div>
     );

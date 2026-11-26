@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
 import { ListChecks, Search, Check } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
 import type { TeamMember, TeamListWithMembers } from '../../types';
 import { ModalShell } from './ModalShell';
 import { Button, Field } from '../ui';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Modal "Nova lista" / "Editar lista" (F2 — Listas salvas do elenco).
@@ -37,8 +37,6 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
   const [selected, setSelected] = useState<Set<string>>(new Set(list?.memberIds ?? []));
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
-    // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
-    useModalDismiss(() => { if (!saving) onClose(); });
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -158,13 +156,13 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nome ou função"
           disabled={saving}
-          className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+          className="w-full h-11 border-ink border-gray-900 focus:ring-2 focus:ring-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
         />
       </div>
 
       {/* Checklist do elenco */}
       {teamMembers.length === 0 && (
-        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+        <div className="text-center py-8 px-4 text-gray-600">
           <ListChecks size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">Nenhum freela aceito no elenco ainda.</p>
           <p className="text-xs mt-1">Você pode salvar a lista vazia e adicionar membros depois.</p>
@@ -182,7 +180,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
         return (
           <label
             key={member.worker.id}
-            className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
+            className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-ink cursor-pointer transition-colors ${
               isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
             }`}
           >
@@ -193,7 +191,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
               disabled={saving}
               className="w-5 h-5 accent-black flex-shrink-0"
             />
-            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
               {member.worker.avatar_url ? (
                 <img
                   src={member.worker.avatar_url}
@@ -210,7 +208,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
               <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
               {member.worker.primary_role && (
                 <p className="text-xs text-gray-600 truncate">
-                  {member.worker.primary_role}
+                  {roleLabel(member.worker.primary_role)}
                 </p>
               )}
             </div>

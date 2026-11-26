@@ -23,6 +23,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { fillMissingWorkers } from './workerCardsService';
 import type {
   PendingInvite,
   ShiftCall,
@@ -31,6 +32,7 @@ import type {
   ShiftCallTarget,
 } from '../types';
 import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
+import { getSessionUserOrThrow } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // Janela de expiração
@@ -275,12 +277,16 @@ export const ShiftCallService = {
 
       if (error) {
         logError('shiftCall.listCallsByJob', error);
-        return [];
+        throw error;
       }
-      return (data ?? []) as ShiftCall[];
+      return await Promise.all(
+        ((data ?? []) as ShiftCall[]).map(async (call) =>
+          call.targets ? { ...call, targets: await fillMissingWorkers(call.targets, jobId) } : call,
+        ),
+      );
     } catch (err) {
       logError('shiftCall.listCallsByJob', err);
-      return [];
+      throw err;
     }
   },
 
@@ -330,6 +336,26 @@ export const ShiftCallService = {
     }
   },
 
+  /** A própria sessão já ocupa vaga neste turno? `null` = não deu para saber. */
+  async isOnShift(jobId: string): Promise<boolean | null> {
+    try {
+      const user = await getSessionUserOrThrow();
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('worker_id', user.id)
+        .in('status', ['hired', 'in_progress', 'completed'])
+        .limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    } catch (err) {
+      logError('shiftCall.isOnShift', err);
+      return null;
+    }
+  },
+
   /** Recusa. NEUTRA — zero punição (R6). */
   async declineCall(callId: string): Promise<ShiftCallRpcResult> {
     try {
@@ -355,63 +381,64 @@ export const ShiftCallService = {
    */
   async listPendingForWorker(): Promise<PendingInvite[]> {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from('shift_call_targets')
-        .select(
-          `
-          id, call_id, worker_id, notified_at, responded_at, response,
-          call:shift_calls (
-            id, job_id, slots, reason, message, targets_count, status, expires_at, created_at,
-            job:jobs (
-              id, title, description, briefing, location, start_date,
-              work_start_time, work_end_time, budget, has_lunch, slots, company_id,
-              company:companies ( id, name, logo_url, rating_average )
-            )
-          )
-        `,
-        )
-        .eq('worker_id', user.id)
-        .is('response', null)
-        .order('notified_at', { ascending: false });
-
-      if (error) {
-        logError('shiftCall.listPendingForWorker', error);
-        return [];
-      }
-
-      const now = Date.now();
-
-      return (data ?? [])
-        .map((row) => {
-          const target = row as unknown as ShiftCallTarget;
-          const call = target.call;
-          if (!call || call.status !== 'open') return null;
-          if (new Date(call.expires_at).getTime() <= now) return null;
-
-          const invite: PendingInvite = {
-            source: 'call',
-            id: target.id,
-            callId: call.id,
-            jobId: call.job_id,
-            expiresAt: call.expires_at,
-            disputed: (call.targets_count ?? 1) > 1,
-            targetsCount: call.targets_count ?? 1,
-            slots: call.slots ?? 1,
-            reason: call.reason,
-            message: call.message,
-            job: call.job,
-          };
-          return invite;
-        })
-        .filter((invite): invite is PendingInvite => invite !== null);
+      return await this.listPendingForWorkerChecked();
     } catch (err) {
       logError('shiftCall.listPendingForWorker', err);
       return [];
     }
+  },
+
+  /** Como `listPendingForWorker`, mas LANÇA quando a consulta falha (lista vazia = não há nada mesmo). */
+  async listPendingForWorkerChecked(): Promise<PendingInvite[]> {
+    const user = await getSessionUserOrThrow();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('shift_call_targets')
+      .select(
+        `
+        id, call_id, worker_id, notified_at, responded_at, response,
+        call:shift_calls (
+          id, job_id, slots, reason, message, targets_count, status, expires_at, created_at, origin,
+          job:jobs (
+            id, title, description, briefing, location, start_date,
+            work_start_time, work_end_time, budget, has_lunch, slots, company_id,
+            company:companies ( id, name, logo_url, rating_average )
+          )
+        )
+      `,
+      )
+      .eq('worker_id', user.id)
+      .is('response', null)
+      .order('notified_at', { ascending: false });
+
+    if (error) throw error;
+
+    const now = Date.now();
+
+    return (data ?? [])
+      .map((row) => {
+        const target = row as unknown as ShiftCallTarget;
+        const call = target.call;
+        if (!call || call.status !== 'open') return null;
+        if (new Date(call.expires_at).getTime() <= now) return null;
+
+        const invite: PendingInvite = {
+          source: 'call',
+          id: target.id,
+          callId: call.id,
+          jobId: call.job_id,
+          expiresAt: call.expires_at,
+          disputed: (call.targets_count ?? 1) > 1,
+          targetsCount: call.targets_count ?? 1,
+          slots: call.slots ?? 1,
+          reason: call.reason,
+          message: call.message,
+          origin: call.origin,
+          job: call.job,
+        };
+        return invite;
+      })
+      .filter((invite): invite is PendingInvite => invite !== null);
   },
 };

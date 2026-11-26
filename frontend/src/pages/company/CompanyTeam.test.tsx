@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import CompanyTeam from './CompanyTeam'
 import type { TeamMember } from '../../types'
+import { TeamConnectionService } from '../../services/teamConnectionService'
 
 // Mock supabase — factory com só vi.fn() inline
 vi.mock('../../lib/supabase', () => ({
@@ -123,6 +124,8 @@ beforeEach(() => {
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
   getMyCompanies: vi.fn().mockResolvedValue([{ company_id: 'company-1' }]),
+  pickCurrentCompany: () => null,
+  subscribeCompanyScope: () => () => undefined,
 }))
 
 describe('CompanyTeam - Histórico com a empresa', () => {
@@ -274,5 +277,41 @@ describe('CompanyTeam - Convidar direto do elenco', () => {
     })
     // O hook foi chamado (em algum render) já com o jobId escolhido no picker.
     expect(mockUseCompanyInvites.mock.calls.some(([jobId]) => jobId === 'job-future')).toBe(true)
+  })
+})
+
+describe('CompanyTeam - Link do elenco', () => {
+  const url = 'https://app.test/convite/tok123'
+
+  async function preparar(writeText: () => Promise<void>) {
+    vi.mocked(supabase.from).mockImplementation(() => buildChain() as unknown as ReturnType<typeof supabase.from>)
+    const spy = vi.spyOn(TeamConnectionService, 'generateInviteToken').mockResolvedValue({ token: 'tok123', url })
+    const escrever = vi.fn(writeText)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: escrever }, configurable: true })
+    renderComponent()
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('company-1'))
+    await act(async () => { await Promise.resolve() })
+    return { spy, escrever }
+  }
+
+  it('copia dentro do próprio toque, com o link já carregado (Safari/iOS)', async () => {
+    const { spy, escrever } = await preparar(() => Promise.resolve())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar link' }))
+
+    // síncrono: nenhuma ida à rede entre o toque e a cópia
+    expect(escrever).toHaveBeenCalledWith(url)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('button', { name: 'Link copiado!' })).toBeInTheDocument()
+    spy.mockRestore()
+  })
+
+  it('cópia recusada pelo navegador: mostra o link para copiar à mão', async () => {
+    const { spy } = await preparar(() => Promise.reject(new Error('NotAllowedError')))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar link' }))
+
+    expect(await screen.findByLabelText('Link do elenco para copiar à mão')).toHaveValue(url)
+    spy.mockRestore()
   })
 })

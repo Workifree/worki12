@@ -66,6 +66,9 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { getSessionUserOrThrow } from '../lib/authSession';
+import { getAuthenticatedCompanyId } from './companyScopeService';
+import { roleLabel } from '../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -237,22 +240,24 @@ export const OrderReportService = {
     };
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Rede fora lança (a tela mostra erro); só "sem sessão" devolve o relatório vazio.
+      const user = await getSessionUserOrThrow();
       if (!user) return empty;
+
+      // Empresa OPERADA pela sessão (dono, gerente, encarregado) — nunca `user.id`, que só
+      // coincide com o company_id para o dono direto (Equipe e encarregados, gate G / seam).
+      const companyId = await getAuthenticatedCompanyId();
 
       // 1. Turnos da empresa (todos, exceto deletados) — filtragem por período é feita
       //    em JS pois precisamos do fallback start_date -> created_at.
       const { data: jobsData, error: jobsErr } = await supabase
         .from('jobs')
         .select('id, title, category, budget, start_date, created_at, status')
-        .eq('company_id', user.id)
+        .eq('company_id', companyId)
         .neq('status', 'deleted');
 
       if (jobsErr) {
-        logError('orderReport.getReport.jobs', jobsErr);
-        return empty;
+        throw jobsErr;
       }
 
       const fromDate = startOfDayLocal(from);
@@ -291,12 +296,9 @@ export const OrderReportService = {
           .in('job_id', jobIds),
       ]);
 
-      if (paymentsResult.error) {
-        logError('orderReport.getReport.shiftPayments', paymentsResult.error);
-      }
-      if (appsResult.error) {
-        logError('orderReport.getReport.applications', appsResult.error);
-      }
+      // Sem pagamentos ou candidaturas o relatório mostraria "em aberto" e R$ 0 pago: é erro.
+      if (paymentsResult.error) throw paymentsResult.error;
+      if (appsResult.error) throw appsResult.error;
 
       const payments = (paymentsResult.data ?? []) as ShiftPaymentRow[];
       const applications = (appsResult.data ?? []) as ApplicationRow[];
@@ -433,7 +435,7 @@ export const OrderReportService = {
       return { rows, summary };
     } catch (err) {
       logError('orderReport.getReport', err);
-      return empty;
+      throw err;
     }
   },
 };
@@ -459,7 +461,7 @@ export function toCSV(report: OrderReport): string {
     const paidAtStr = row.paidAt ? formatDDMMYYYY(row.paidAt) : '';
     const valorStr = row.amount.toFixed(2).replace('.', ',');
     const formaStr = row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—';
-    const funcaoStr = row.category ?? row.title;
+    const funcaoStr = roleLabel(row.category) || row.title;
     const statusStr = ORDER_STATUS_LABELS[row.status];
 
     lines.push(

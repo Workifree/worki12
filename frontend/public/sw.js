@@ -3,7 +3,7 @@
  * Worki — service worker (escrito à mão, sem Workbox).
  *
  * REGRA Nº 1: este worker NUNCA guarda dado de usuário. Só entram em cache arquivos ESTÁTICOS e
- * PÚBLICOS do próprio site (casca HTML, /assets/* com hash, ícones, fontes). Ficam de fora, sem
+ * PÚBLICOS do próprio site (página offline, /assets/* com hash, ícones, fontes). Ficam de fora, sem
  * exceção:
  *   - qualquer origem diferente da nossa (Supabase *.supabase.co, Sentry, Asaas...);
  *   - caminhos de API mesmo que algum dia sejam same-origin (/rest/, /auth/, /functions/,
@@ -15,7 +15,9 @@
  * respondWith) — o comportamento padrão do navegador é o fallback seguro.
  *
  * Estratégias:
- *   navegação (HTML)         network-first; sem rede -> casca em cache -> /offline.html
+ *   navegação (HTML)         network-first; sem rede -> /offline.html. O HTML do app NÃO é
+ *                            cacheado: sem rede o app não consegue validar a sessão e mostraria
+ *                            login/onboarding, como se a pessoa tivesse sido deslogada.
  *   /assets/* (hash no nome)  cache-first, imutável
  *   imagens / fontes / ícones stale-while-revalidate
  *
@@ -30,9 +32,10 @@ const BUILD_ID = '__BUILD_ID__'
 /** Prefixo comum a todos os caches do Worki (lib/pwa.ts apaga por este prefixo). */
 const CACHE_PREFIX = 'worki-'
 /** Muda quando a ESTRUTURA dos caches muda (não a cada deploy). */
-const SCHEMA = 'v1'
+const SCHEMA = 'v2'
 
-const CORE_CACHE = `${CACHE_PREFIX}core-${SCHEMA}-${BUILD_ID}` // casca + offline; trocado a cada deploy
+const CORE_PREFIX = `${CACHE_PREFIX}core-`
+const CORE_CACHE = `${CACHE_PREFIX}core-${SCHEMA}-${BUILD_ID}` // página offline; trocado a cada deploy
 const ASSETS_CACHE = `${CACHE_PREFIX}assets-${SCHEMA}` // /assets/* com hash: imutável, compartilhado entre deploys
 const STATIC_CACHE = `${CACHE_PREFIX}static-${SCHEMA}` // imagens/fontes: stale-while-revalidate
 const KNOWN_CACHES = [CORE_CACHE, ASSETS_CACHE, STATIC_CACHE]
@@ -40,7 +43,6 @@ const KNOWN_CACHES = [CORE_CACHE, ASSETS_CACHE, STATIC_CACHE]
 const MAX_ASSET_ENTRIES = 160
 const MAX_STATIC_ENTRIES = 80
 
-const SHELL_URL = '/'
 const OFFLINE_URL = '/offline.html'
 
 /** Obrigatório no install: sem isto não há fallback offline. */
@@ -86,47 +88,6 @@ async function trimCache(cacheName, maxEntries) {
   }
 }
 
-/** URLs /assets/... referenciadas pela casca (script, modulepreload, css). */
-function extractAssetUrls(html) {
-  const urls = new Set()
-  const pattern = /(?:src|href)="(\/assets\/[^"]+)"/g
-  let match = pattern.exec(html)
-  while (match) {
-    urls.add(match[1])
-    match = pattern.exec(html)
-  }
-  return [...urls]
-}
-
-/**
- * Guarda a casca atual (index.html) e os assets que ela referencia. Sem isso, abrir o app pela
- * primeira vez já offline mostraria uma casca sem JavaScript. Melhor esforço: nunca derruba o install.
- */
-async function precacheShell() {
-  try {
-    const response = await fetch(SHELL_URL, { cache: 'reload' })
-    if (!response.ok || !isHtmlResponse(response)) return
-    const html = await response.clone().text()
-    const core = await caches.open(CORE_CACHE)
-    await core.put(SHELL_URL, response)
-
-    const assets = await caches.open(ASSETS_CACHE)
-    await Promise.all(
-      extractAssetUrls(html).map(async (url) => {
-        try {
-          if (await assets.match(url)) return
-          const asset = await fetch(url)
-          if (isCacheableStatic(asset)) await assets.put(url, asset)
-        } catch {
-          // asset isolado falhou — será baixado sob demanda (cache-first)
-        }
-      }),
-    )
-  } catch {
-    // sem rede no install da casca: o runtime reaproveita a navegação seguinte
-  }
-}
-
 async function precacheCore() {
   const core = await caches.open(CORE_CACHE)
   await core.addAll(PRECACHE_REQUIRED)
@@ -139,7 +100,6 @@ async function precacheCore() {
       }
     }),
   )
-  await precacheShell()
 }
 
 /* ------------------------------------------------------------------------------------------- *
@@ -160,6 +120,11 @@ self.addEventListener('activate', (event) => {
           .filter((name) => name.startsWith(CACHE_PREFIX) && !KNOWN_CACHES.includes(name))
           .map((name) => caches.delete(name)),
       )
+      // Garante o fallback offline: o cache core pode ter sumido enquanto este worker esperava.
+      if (!(await caches.match(OFFLINE_URL, { cacheName: CORE_CACHE }))) {
+        // Sem rede agora: a ativação não pode falhar por isso.
+        await precacheCore().catch(() => undefined)
+      }
       await self.clients.claim()
     })(),
   )
@@ -179,11 +144,17 @@ self.addEventListener('message', (event) => {
   }
 
   if (data.type === 'CLEAR_CACHES') {
-    // Logout: apaga TUDO e recompõe só o essencial para o modo offline.
+    // Logout: apaga os caches e recompõe só o essencial para o modo offline. Os outros caches
+    // `core` ficam: um deles pode ser do worker novo em espera (só têm arquivos públicos).
     event.waitUntil(
       (async () => {
         const names = await caches.keys()
-        await Promise.all(names.filter((name) => name.startsWith(CACHE_PREFIX)).map((name) => caches.delete(name)))
+        await Promise.all(
+          names
+            .filter((name) => name.startsWith(CACHE_PREFIX) && !name.startsWith(CORE_PREFIX))
+            .map((name) => caches.delete(name)),
+        )
+        await caches.delete(CORE_CACHE)
         await precacheCore()
       })(),
     )
@@ -199,23 +170,22 @@ self.addEventListener('message', (event) => {
  * Estratégias de fetch
  * ------------------------------------------------------------------------------------------- */
 
-async function handleNavigation(event) {
+async function handleNavigation(request) {
   try {
-    const response = await fetch(event.request)
-    // Atualiza a casca em cache a cada navegação bem-sucedida (todas as rotas do SPA devolvem o mesmo index.html).
-    if (response.ok && isHtmlResponse(response)) {
-      const copy = response.clone()
-      event.waitUntil(
-        caches.open(CORE_CACHE).then((cache) => cache.put(SHELL_URL, copy)),
-      )
-    }
-    return response
+    return await fetch(request)
   } catch {
-    // Sem rede: 1) casca do app (abre a UI e as telas já visitadas), 2) página offline.
-    const shell = await caches.match(SHELL_URL, { cacheName: CORE_CACHE })
-    if (shell) return shell
     const offline = await caches.match(OFFLINE_URL, { cacheName: CORE_CACHE })
     return offline || new Response('Sem conexão', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+  }
+}
+
+/** Guardar em cache é melhor esforço: cota cheia não pode derrubar uma resposta que a rede entregou. */
+async function storeSafely(cacheName, cache, request, response, maxEntries) {
+  try {
+    await cache.put(request, response)
+    await trimCache(cacheName, maxEntries)
+  } catch {
+    // segue sem cache
   }
 }
 
@@ -225,8 +195,7 @@ async function cacheFirstImmutable(request) {
   if (hit) return hit
   const response = await fetch(request)
   if (isCacheableStatic(response)) {
-    await cache.put(request, response.clone())
-    await trimCache(ASSETS_CACHE, MAX_ASSET_ENTRIES)
+    await storeSafely(ASSETS_CACHE, cache, request, response.clone(), MAX_ASSET_ENTRIES)
   }
   return response
 }
@@ -239,8 +208,7 @@ async function staleWhileRevalidate(event) {
   const refresh = fetch(event.request)
     .then(async (response) => {
       if (isCacheableStatic(response)) {
-        await cache.put(event.request, response.clone())
-        await trimCache(STATIC_CACHE, MAX_STATIC_ENTRIES)
+        await storeSafely(STATIC_CACHE, cache, event.request, response.clone(), MAX_STATIC_ENTRIES)
       }
       return response
     })
@@ -272,10 +240,10 @@ self.addEventListener('fetch', (event) => {
   // O próprio worker e o manifesto sempre vão à rede (o navegador cuida da revalidação).
   if (url.pathname === '/sw.js' || url.pathname === '/manifest.webmanifest') return
 
-  // Navegação: só rotas do SPA (sem extensão). /offline.html aberto direto não é "casca".
+  // Navegação: só rotas do SPA (sem extensão). Arquivos abertos direto seguem para a rede.
   if (request.mode === 'navigate') {
     if (/\.[a-z0-9]+$/i.test(url.pathname)) return
-    event.respondWith(handleNavigation(event))
+    event.respondWith(handleNavigation(request))
     return
   }
 
@@ -298,10 +266,69 @@ self.addEventListener('fetch', (event) => {
 })
 
 /* ------------------------------------------------------------------------------------------- *
- * PUSH — fase futura (exige backend + chaves VAPID)
- *
- * Quando houver backend de push, os handlers entram aqui:
- *   self.addEventListener('push', (event) => { ... self.registration.showNotification(...) })
- *   self.addEventListener('notificationclick', (event) => { ... clients.openWindow(url) })
- * Mantidos fora do arquivo hoje de propósito: handler de push sem emissor é superfície morta.
+ * Web Push (avisos multicanal). Não toca no cache nem no ciclo de vida acima.
+ * Emissor: supabase/functions/notice-dispatch. O clique só ABRE uma tela: nunca executa ação.
  * ------------------------------------------------------------------------------------------- */
+
+const DEFAULT_NOTICE_TITLE = 'Worki'
+
+/** Só caminho relativo desta origem. Qualquer outra coisa vira '/'. */
+function safeNoticePath(path) {
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) return '/'
+  // barra invertida e espaços/controles são normalizados pelo navegador e poderiam virar outra origem
+  if (path.includes('\\') || /\s|\p{Cc}/u.test(path)) return '/'
+  try {
+    return new URL(path, self.location.origin).origin === self.location.origin ? path : '/'
+  } catch {
+    return '/'
+  }
+}
+
+function readPush(event) {
+  try {
+    const data = event.data ? event.data.json() : null
+    return data && typeof data === 'object' ? data : {}
+  } catch {
+    return {}
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const message = readPush(event)
+  const data = message.data && typeof message.data === 'object' ? message.data : {}
+  const options = {
+    body: typeof message.body === 'string' ? message.body : 'Você tem um aviso novo. Abra o Worki.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    lang: 'pt-BR',
+    data: { path: safeNoticePath(data.path), eventId: typeof data.eventId === 'string' ? data.eventId : null },
+  }
+  // mesma tag = o aviso é substituído, não empilhado
+  if (typeof message.tag === 'string' && message.tag) options.tag = message.tag
+  // Sempre mostra algo: o iOS cancela a inscrição de quem recebe push silencioso.
+  const title = typeof message.title === 'string' && message.title ? message.title : DEFAULT_NOTICE_TITLE
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+async function openNotice(data) {
+  const path = safeNoticePath(data.path)
+  const target = new URL(path, self.location.origin)
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  // Reaproveita a janela que JÁ está nessa tela. Não navega as outras: perderia formulário aberto.
+  const existing = windows.find((client) => {
+    const url = new URL(client.url)
+    return url.origin === target.origin && url.pathname === target.pathname
+  })
+  if (existing) {
+    if (data.eventId) existing.postMessage({ type: 'NOTICE_OPENED', eventId: data.eventId })
+    return existing.focus()
+  }
+  // ?aviso= deixa o app registrar a abertura (services/pushService.watchNoticeOpens).
+  if (data.eventId) target.searchParams.set('aviso', data.eventId)
+  return self.clients.openWindow(target.pathname + target.search)
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(openNotice(event.notification.data || {}))
+})

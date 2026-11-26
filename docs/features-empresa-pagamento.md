@@ -54,6 +54,4 @@ Para usar pagamentos no Worki **agora**:
 
 ## Contato
 
-Dúvidas sobre o cronograma de features futuras?
-- **Chat no app** — fale com o time Worki
-- **E-mail:** [suporte@worki.com]
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

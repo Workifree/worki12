@@ -14,6 +14,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { fillMissingWorkers } from './workerCardsService';
 import { getAuthenticatedCompanyId as resolveAuthenticatedCompanyId } from './companyScopeService';
 import type {
   TeamConnection,
@@ -83,6 +84,9 @@ async function getAuthenticatedCompanyId(): Promise<string> {
 // ---------------------------------------------------------------------------
 // TeamConnectionService
 // ---------------------------------------------------------------------------
+
+/** Quem abriu o link do elenco não é conta de freela (ex.: a própria empresa testando). */
+export const NOT_A_WORKER_ERROR = 'Apenas freelas entram em um elenco por este link.';
 
 export const TeamConnectionService = {
   // -------------------------------------------------------------------------
@@ -172,7 +176,7 @@ export const TeamConnectionService = {
    *
    * O token é um segredo opaco em `company_invite_links` (lido via RLS por quem opera a
    * empresa). Se ainda não existir linha, a RPC `get_company_invite_token(p_company_id)` a cria.
-   * A UI monta a URL: `https://app.worki.com/convite/{token}`. Retorna null em qualquer falha.
+   * A UI monta a URL: `<origem do app>/convite/{token}`. Retorna null em qualquer falha.
    */
   async generateInviteToken(companyId: string): Promise<ConnectionInviteToken | null> {
     // Era `btoa(companyId)` -- ou seja, o "token" era o id PUBLICO da empresa em base64, e
@@ -350,7 +354,7 @@ export const TeamConnectionService = {
       logError('teamConnection.addToTeamByToken.rpc', error);
       const m = error.message ?? '';
       const msg = m.includes('company_not_found') ? 'Empresa do convite não encontrada.'
-        : m.includes('not_a_worker') ? 'Apenas freelas entram em um elenco por este link.'
+        : m.includes('not_a_worker') ? NOT_A_WORKER_ERROR
         : m.includes('invalid_token') ? 'Link de convite inválido ou expirado.'
         : 'Não foi possível registrar o convite.';
       return { connection: null, error: msg };
@@ -563,10 +567,16 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listTeamMembers', error);
-        return [];
+        throw error;
       }
 
-      return ((data ?? []) as Array<TeamConnection & { worker: WorkerProfile }>).map(
+      // Encarregado: o embed volta `null` (RLS de PII). Os cartões sem PII preenchem; quem não
+      // aparece em nenhuma fonte ganha só o rótulo neutro, para a tela nunca receber `null`.
+      const rows = await fillMissingWorkers(
+        (data ?? []) as Array<TeamConnection & { worker: WorkerProfile | null }>,
+      );
+
+      return rows.map(
         (row) => ({
           connection: {
             id: row.id,
@@ -579,12 +589,12 @@ export const TeamConnectionService = {
             accepted_at: row.accepted_at,
             updated_at: row.updated_at,
           },
-          worker: row.worker,
+          worker: row.worker ?? ({ id: row.worker_id, full_name: 'Freela' } as WorkerProfile),
         }),
       );
     } catch (err) {
       logError('teamConnection.listTeamMembers', err);
-      return [];
+      throw err;
     }
   },
 
@@ -606,21 +616,18 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.listAllConnections', error);
-        return [];
+        throw error;
       }
 
       const result = data as { outcome: string; items?: TeamConnection[] } | null;
       if (!result || result.outcome !== 'ok') {
-        if (result && result.outcome !== 'ok') {
-          logError('teamConnection.listAllConnections', new Error(`outcome=${result.outcome}`));
-        }
-        return [];
+        throw new Error(`outcome=${result?.outcome ?? 'sem_resposta'}`);
       }
 
       return result.items ?? [];
     } catch (err) {
       logError('teamConnection.listAllConnections', err);
-      return [];
+      throw err;
     }
   },
 

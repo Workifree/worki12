@@ -24,3 +24,9 @@ frontend/playwright-report/
 scripts/.gemini-key
 .env*
 frontend/dist-teste
+
+# credenciais das contas de teste do simulador de usuario (nunca commitar)
+scripts/.e2e-credenciais
+
+# Resultados locais da avaliacao de modelos
+scripts/copiloto-eval/resultados/

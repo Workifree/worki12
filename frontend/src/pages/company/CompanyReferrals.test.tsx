@@ -51,6 +51,7 @@ vi.mock('../../lib/logger', () => ({ logError: vi.fn() }));
 const mockCompaniesIn = vi.fn();
 vi.mock('../../lib/supabase', () => ({
   supabase: {
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }) },
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       in: (...args: unknown[]) => mockCompaniesIn(...args),

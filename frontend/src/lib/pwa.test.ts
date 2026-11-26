@@ -352,9 +352,48 @@ describe('lib/pwa — service worker', () => {
     expect(container.controller.postMessage).toHaveBeenCalledWith({ type: 'CLEAR_CACHES' })
   })
 
+  it('sem controller, apaga os caches do Worki mas preserva o core offline', async () => {
+    removeContainer()
+    const remove = vi.fn().mockResolvedValue(true)
+    vi.stubGlobal('caches', {
+      keys: vi.fn().mockResolvedValue(['worki-core-v2-a', 'worki-static-v2', 'worki-assets-v2', 'outro']),
+      delete: remove,
+    })
+    const pwa = await loadPwa()
+
+    pwa.clearServiceWorkerCaches()
+
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(2))
+    expect(remove.mock.calls.map(([name]) => name)).toEqual(['worki-static-v2', 'worki-assets-v2'])
+    vi.unstubAllGlobals()
+  })
+
   it('clearServiceWorkerCaches nunca lança, mesmo sem worker nem Cache API', async () => {
     removeContainer()
     const pwa = await loadPwa()
     expect(() => pwa.clearServiceWorkerCaches()).not.toThrow()
+  })
+})
+
+describe('lib/pwa — chunk antigo após deploy', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    window.sessionStorage.clear()
+  })
+
+  it('recarrega no máximo uma vez por janela (sem loop)', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    window.sessionStorage.clear()
+    const pwa = await loadPwa()
+    pwa.initPwa({ registerServiceWorker: false })
+
+    window.dispatchEvent(new Event('vite:preloadError'))
+    const first = reload.mock.calls.length
+    window.dispatchEvent(new Event('vite:preloadError'))
+
+    // módulos de testes anteriores também escutam o window; a trava no sessionStorage vale para todos
+    expect(first).toBe(1)
+    expect(reload).toHaveBeenCalledTimes(1)
   })
 })

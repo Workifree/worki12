@@ -20,16 +20,19 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { checkSession } from '../lib/authSession';
+import { logError } from '../lib/logger';
 import { ShiftInviteService } from '../services/shiftInviteService';
 import { ShiftCallService } from '../services/shiftCallService';
 import { useToast } from '../contexts/ToastContext';
+import { useLatestResponse } from './useLatestResponse';
 import type {
   Application,
   InvitationResponse,
   PendingInvite,
   ShiftCall,
   ShiftCallOutcome,
+  ShiftCallRpcResult,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -104,6 +107,42 @@ function messageForOutcome(outcome: ShiftCallOutcome): OutcomeMessage {
   }
 }
 
+/**
+ * Resposta em andamento, por turno. É de MÓDULO porque o takeover e a página usam instâncias
+ * diferentes do hook, e SÍNCRONA porque `respondingId` só vale depois do re-render: dois cliques
+ * no mesmo instante chamavam a RPC duas vezes ("claimed" e depois "filled" para o vencedor).
+ */
+const respostasEmCurso = new Set<string>();
+
+/**
+ * "filled" (ou "already_responded" de um aceite) também chega para quem GANHOU a vaga em outra
+ * chamada (outra aba, retry): antes de dizer que outro aceitou, confere se a pessoa está no turno.
+ */
+async function messageForClaim(result: ShiftCallRpcResult, jobId: string): Promise<OutcomeMessage> {
+  const ambiguo =
+    result.outcome === 'filled' || (result.outcome === 'already_responded' && result.response === 'accepted');
+  if (!ambiguo) return messageForOutcome(result.outcome);
+  const noTurno = await ShiftCallService.isOnShift(jobId);
+  if (noTurno === true) return messageForOutcome('already_hired');
+  if (noTurno === null) {
+    return { text: 'A vaga deste chamado já foi preenchida. Confira em Meus Turnos.', tone: 'info', ok: true };
+  }
+  return messageForOutcome(result.outcome);
+}
+
+const NO_INVITES: Application[] = [];
+
+/** Alvos que ainda contam como convidados: chamado aberto e sem resposta, ou aceito. */
+function activeCallWorkerIds(calls: ShiftCall[]): string[] {
+  const now = Date.now();
+  return calls.flatMap((call) => {
+    const open = call.status === 'open' && !(new Date(call.expires_at).getTime() <= now);
+    return (call.targets ?? [])
+      .filter((target) => target.response === 'accepted' || (open && !target.response))
+      .map((target) => target.worker_id);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Hook para WORKER — aba "Convites"
 // ---------------------------------------------------------------------------
@@ -112,12 +151,14 @@ export interface UseWorkerInvitesResult {
   /** Convites pendentes, de qualquer origem (chamado novo ou convite legado). */
   pendingInvites: PendingInvite[];
   loading: boolean;
+  /** Não deu para carregar (rede). Diferente de "nenhum convite": a tela oferece tentar de novo. */
+  error?: boolean;
   /** ID do convite sendo processado (para loading state no botão). */
   respondingId: string | null;
   /** Aceitar ou recusar. Recebe o `id` do PendingInvite (não o do chamado). */
   respond: (inviteId: string, response: InvitationResponse) => Promise<boolean>;
-  /** Recarregar. */
-  refresh: () => void;
+  /** Recarregar. `silent`: recarga de fundo (sem esqueleto; falha mantém o que está na tela). */
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 /**
@@ -132,12 +173,19 @@ export interface UseWorkerInvitesResult {
  * janela. `origem` evita que quem disparou recarregue duas vezes.
  */
 export const EVENTO_CONVITES = 'worki:convites-mudaram';
+
+export interface ConvitesMudaramDetail {
+  origem?: number;
+  /** Turno (job) que o freela acabou de aceitar, quando a resposta foi um aceite sem erro. */
+  jobAceito?: string;
+}
 let proximaInstancia = 0;
 
 export function useWorkerInvites(): UseWorkerInvitesResult {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
   const instanciaIdRef = useRef<number | null>(null);
@@ -147,8 +195,8 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
   const fetchInvites = useCallback(async (): Promise<PendingInvite[]> => {
     // As duas origens em paralelo — nenhuma depende da outra.
     const [calls, legacy] = await Promise.all([
-      ShiftCallService.listPendingForWorker(),
-      ShiftInviteService.listPendingInvites(),
+      ShiftCallService.listPendingForWorkerChecked(),
+      ShiftInviteService.listPendingInvitesChecked(),
     ]);
 
     // Um chamado e um convite legado do MESMO turno seriam a mesma vaga aparecendo duas vezes.
@@ -162,41 +210,57 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     ];
   }, []);
 
-  const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    setPendingInvites(await fetchInvites());
-    setLoading(false);
-  }, [navigate, fetchInvites]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
+  const beginLoad = useLatestResponse();
+  const load = useCallback(
+    async (isActive: () => boolean = () => true, silent = false) => {
+      const claim = beginLoad();
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
+        if (!silent) navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        logError('useWorkerInvites.session', session.error);
+        if (silent) return;
+        setError(true);
+        setLoading(false);
         return;
       }
 
-      setLoading(true);
-      const invites = await fetchInvites();
-      if (!active) return;
-      setPendingInvites(invites);
+      if (!silent) setLoading(true);
+      try {
+        const invites = await fetchInvites();
+        if (!isActive() || !claim()) return;
+        setError(false);
+        setPendingInvites(invites);
+      } catch (err) {
+        logError('useWorkerInvites.fetch', err);
+        if (!isActive() || silent) return;
+        // Mantém o que já estava na tela: falha de consulta não esvazia a lista.
+        setError(true);
+      }
       setLoading(false);
-    })();
+    },
+    [navigate, fetchInvites, beginLoad],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [navigate, fetchInvites]);
+  }, [load]);
+
+  const refresh = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = load(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [load],
+  );
 
   // Outra instancia respondeu um convite — esta precisa refletir isso.
   useEffect(() => {
@@ -213,41 +277,54 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
       const invite = pendingInvites.find((item) => item.id === inviteId);
       if (!invite) return false;
 
-      setRespondingId(inviteId);
+      if (respostasEmCurso.has(invite.jobId)) return false;
+      respostasEmCurso.add(invite.jobId);
+      try {
+        setRespondingId(inviteId);
 
-      let ok: boolean;
-      if (invite.source === 'legacy' && invite.applicationId) {
-        const result = await ShiftInviteService.respondToInvite(invite.applicationId, response);
-        ok = !result.error;
-        if (result.error) {
-          addToast(result.error, 'error');
+        let ok: boolean;
+        if (invite.source === 'legacy' && invite.applicationId) {
+          const result = await ShiftInviteService.respondToInvite(invite.applicationId, response);
+          ok = !result.error;
+          if (result.error) {
+            addToast(result.error, 'error');
+          } else {
+            addToast(
+              response === 'accepted' ? 'Turno confirmado! Bom trabalho.' : 'Convite recusado.',
+              response === 'accepted' ? 'success' : 'info',
+            );
+          }
         } else {
-          addToast(
-            response === 'accepted' ? 'Turno confirmado! Bom trabalho.' : 'Convite recusado.',
-            response === 'accepted' ? 'success' : 'info',
-          );
+          const result =
+            response === 'accepted'
+              ? await ShiftCallService.claimSlot(invite.callId ?? '')
+              : await ShiftCallService.declineCall(invite.callId ?? '');
+          const message =
+            response === 'accepted'
+              ? await messageForClaim(result, invite.jobId)
+              : messageForOutcome(result.outcome);
+          addToast(message.text, message.tone);
+          ok = message.ok;
         }
-      } else {
-        const result =
-          response === 'accepted'
-            ? await ShiftCallService.claimSlot(invite.callId ?? '')
-            : await ShiftCallService.declineCall(invite.callId ?? '');
-        const message = messageForOutcome(result.outcome);
-        addToast(message.text, message.tone);
-        ok = message.ok;
-      }
 
-      setRespondingId(null);
-      // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
-      load();
-      // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
-      window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail: { origem: instanciaId } }));
-      return ok;
+        // Recarrega sempre: mesmo quando o freela perde a corrida, a lista mudou (o chamado saiu).
+        load();
+        // ...e avisa as OUTRAS instancias do hook (takeover <-> pagina) que a lista mudou.
+        const detail: ConvitesMudaramDetail = {
+          origem: instanciaId,
+          jobAceito: ok && response === 'accepted' ? invite.jobId : undefined,
+        };
+        window.dispatchEvent(new CustomEvent(EVENTO_CONVITES, { detail }));
+        return ok;
+      } finally {
+        respostasEmCurso.delete(invite.jobId);
+        setRespondingId(null);
+      }
     },
     [pendingInvites, addToast, load, instanciaId],
   );
 
-  return { pendingInvites, loading, respondingId, respond, refresh: load };
+  return { pendingInvites, loading, error, respondingId, respond, refresh };
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +334,15 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
 export interface UseCompanyInvitesResult {
   /** Convites enviados para o turno (fluxo legado + histórico). */
   invites: Application[];
+  /**
+   * Quem já está convidado para o turno, das DUAS origens: `applications` (convite legado ou já
+   * aceito) e alvos de `shift_calls` (o convite de hoje, que não cria application até o aceite).
+   * É o que decide entre "Convidar" e "Convidado".
+   */
+  invitedWorkerIds: string[];
   loading: boolean;
+  /** A leitura de convites/chamados falhou: lista vazia não significa "ninguém convidado". */
+  loadError: boolean;
   /** ID do worker sendo convidado (para loading state). */
   invitingWorkerId: string | null;
   /** Convidar UM worker (atalho de chamado com um alvo). */
@@ -266,65 +351,86 @@ export interface UseCompanyInvitesResult {
   refresh: () => void;
 }
 
+const NO_CALLS: ShiftCall[] = [];
+
 export function useCompanyInvites(jobId: string | null | undefined): UseCompanyInvitesResult {
-  const [invites, setInvites] = useState<Application[]>([]);
+  // O que foi lido vem carimbado com o turno: ao trocar de turno, nada do anterior vaza.
+  const [loaded, setLoaded] = useState<{ jobId: string; invites: Application[]; calledIds: string[] } | null>(
+    null,
+  );
+  // Marcado na hora em que o envio dá certo, sem esperar a releitura (que pode falhar na rede).
+  const [justInvited, setJustInvited] = useState<{ jobId: string; workerId: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [invitingWorkerId, setInvitingWorkerId] = useState<string | null>(null);
+  // `invitingWorkerId` só vale depois do re-render: dois cliques no mesmo instante passavam os dois
+  // e criavam dois chamados. A trava é por ref, síncrona, por turno+freela.
+  const inFlight = useRef(new Set<string>());
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
-    // (`job_id=eq.` vazio é filtro inválido no PostgREST).
-    if (!jobId) {
-      setInvites([]);
-      setLoading(false);
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    const list = await ShiftInviteService.listInvitesByJob(jobId);
-    setInvites(list);
-    setLoading(false);
-  }, [jobId, navigate]);
-
-  useEffect(() => {
-    let active = true;
-
-    void (async () => {
+  const load = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      // Guarda: jobId ainda não existe (ex.: turno em criação) — não consulta, evita 400
+      // (`job_id=eq.` vazio é filtro inválido no PostgREST).
       if (!jobId) {
-        if (!active) return;
-        setInvites([]);
         setLoading(false);
         return;
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
         navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        logError('useCompanyInvites.session', session.error);
+        setLoadError(true);
+        setLoading(false);
         return;
       }
 
       setLoading(true);
-      const list = await ShiftInviteService.listInvitesByJob(jobId);
-      if (!active) return;
-      setInvites(list);
+      try {
+        const [list, calls] = await Promise.all([
+          ShiftInviteService.listInvitesByJob(jobId),
+          ShiftCallService.listCallsByJob(jobId),
+        ]);
+        if (!isActive()) return;
+        setLoaded({ jobId, invites: list, calledIds: activeCallWorkerIds(calls) });
+        setLoadError(false);
+      } catch (error) {
+        if (!isActive()) return;
+        logError('useCompanyInvites.load', error);
+        setLoadError(true);
+      }
       setLoading(false);
-    })();
+    },
+    [jobId, navigate],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [jobId, navigate]);
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    void load();
+  }, [load]);
+
+  const current = loaded && loaded.jobId === jobId ? loaded : null;
+  const invites = current?.invites ?? NO_INVITES;
+  const invitedWorkerIds = Array.from(
+    new Set([
+      ...invites.map((item) => item.worker_id),
+      ...(current?.calledIds ?? []),
+      ...justInvited.filter((item) => item.jobId === jobId).map((item) => item.workerId),
+    ]),
+  );
 
   const invite = useCallback(
     async (
@@ -335,12 +441,22 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
         addToast('Turno ainda não foi criado. Tente novamente em instantes.', 'error');
         return false;
       }
+      const key = `${jobId}:${workerId}`;
+      if (inFlight.current.has(key)) return false;
+      inFlight.current.add(key);
       setInvitingWorkerId(workerId);
-      const result = await ShiftInviteService.inviteWorkerToShift(jobId, workerId, opts);
-      setInvitingWorkerId(null);
+      let result: Awaited<ReturnType<typeof ShiftInviteService.inviteWorkerToShift>>;
+      try {
+        result = await ShiftInviteService.inviteWorkerToShift(jobId, workerId, opts);
+      } finally {
+        inFlight.current.delete(key);
+        setInvitingWorkerId(null);
+      }
 
       if (result.alreadyInvited) {
+        setJustInvited((prev) => [...prev, { jobId, workerId }]);
         addToast('Este freela já foi convidado para este turno.', 'info');
+        load();
         return true;
       }
       if (result.error) {
@@ -348,6 +464,7 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
         return false;
       }
 
+      setJustInvited((prev) => [...prev, { jobId, workerId }]);
       addToast('Convite enviado com sucesso!', 'success');
       load();
       return true;
@@ -355,7 +472,7 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
     [jobId, addToast, load],
   );
 
-  return { invites, loading, invitingWorkerId, invite, refresh: load };
+  return { invites, invitedWorkerIds, loading, loadError, invitingWorkerId, invite, refresh };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,49 +482,66 @@ export function useCompanyInvites(jobId: string | null | undefined): UseCompanyI
 export interface UseShiftCallsResult {
   calls: ShiftCall[];
   loading: boolean;
+  /** A leitura falhou: lista vazia não significa "nenhum chamado". */
+  loadError: boolean;
   /** Chamado ainda aberto deste turno (o que a UI destaca), se houver. */
   openCall: ShiftCall | null;
   cancellingId: string | null;
   cancel: (callId: string) => Promise<boolean>;
-  refresh: () => void;
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 export function useShiftCalls(jobId: string | null | undefined): UseShiftCallsResult {
-  const [calls, setCalls] = useState<ShiftCall[]>([]);
+  // Carimbado com o turno: uma falha mantém o já lido, sem vazar de um turno para outro.
+  const [loaded, setLoaded] = useState<{ jobId: string; calls: ShiftCall[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    if (!jobId) {
-      setCalls([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setCalls(await ShiftCallService.listCallsByJob(jobId));
-    setLoading(false);
-  }, [jobId]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
+  const beginLoad = useLatestResponse();
+  const load = useCallback(
+    async (isActive: () => boolean = () => true, silent = false) => {
       if (!jobId) {
-        if (!active) return;
-        setCalls([]);
         setLoading(false);
         return;
       }
-      setLoading(true);
-      const list = await ShiftCallService.listCallsByJob(jobId);
-      if (!active) return;
-      setCalls(list);
+      const claim = beginLoad();
+      if (!silent) setLoading(true);
+      try {
+        const list = await ShiftCallService.listCallsByJob(jobId);
+        if (!isActive() || !claim()) return;
+        setLoaded({ jobId, calls: list });
+        setLoadError(false);
+      } catch (error) {
+        if (!isActive()) return;
+        logError('useShiftCalls.load', error);
+        if (silent) return;
+        setLoadError(true);
+      }
       setLoading(false);
-    })();
+    },
+    [jobId, beginLoad],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [jobId]);
+  }, [load]);
+
+  const refresh = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = load(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [load],
+  );
+
+  const calls = loaded && loaded.jobId === jobId ? loaded.calls : NO_CALLS;
 
   const cancel = useCallback(
     async (callId: string): Promise<boolean> => {
@@ -420,13 +554,13 @@ export function useShiftCalls(jobId: string | null | undefined): UseShiftCallsRe
         return false;
       }
       addToast('Chamado cancelado.', 'info');
-      load();
+      refresh();
       return true;
     },
-    [addToast, load],
+    [addToast, refresh],
   );
 
   const openCall = calls.find((call) => call.status === 'open') ?? null;
 
-  return { calls, loading, openCall, cancellingId, cancel, refresh: load };
+  return { calls, loading, loadError, openCall, cancellingId, cancel, refresh };
 }

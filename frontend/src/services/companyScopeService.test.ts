@@ -77,6 +77,22 @@ describe('companyScopeService', () => {
       const manager = row({ company_id: 'comp-manager', role: 'manager' });
       expect(pickPrimaryCompany([manager])?.company_id).toBe('comp-manager');
     });
+
+    it('segue a ordem de poder: owner > operator > manager > encarregado, ignorando a ordem da RPC', () => {
+      // A RPC ordena por papel em ordem alfabética ('encarregado' vem antes de 'owner').
+      const encarregado = row({ company_id: 'comp-enc', role: 'encarregado' });
+      const manager = row({ company_id: 'comp-man', role: 'manager' });
+      const operator = row({ company_id: 'comp-op', role: 'operator' });
+      expect(pickPrimaryCompany([encarregado, manager])?.company_id).toBe('comp-man');
+      expect(pickPrimaryCompany([encarregado, manager, operator])?.company_id).toBe('comp-op');
+      expect(pickPrimaryCompany([encarregado])?.company_id).toBe('comp-enc');
+    });
+
+    it('empate de papel preserva a ordem original', () => {
+      const a = row({ company_id: 'a', role: 'manager' });
+      const b = row({ company_id: 'b', role: 'manager' });
+      expect(pickPrimaryCompany([a, b])?.company_id).toBe('a');
+    });
   });
 
   describe('pickCurrentCompany (R13 — seletor de unidade)', () => {

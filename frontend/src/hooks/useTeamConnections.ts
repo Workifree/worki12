@@ -10,17 +10,21 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import { useToast } from '../contexts/ToastContext';
 import type { TeamConnection, TeamMember, MyStore, TeamConnectionSource } from '../types';
 import { getAuthenticatedCompanyId } from '../services/companyScopeService';
+import { checkSession } from '../lib/authSession';
+import { logError } from '../lib/logger';
+import { useLatestResponse } from './useLatestResponse';
 
 // ---------------------------------------------------------------------------
 // Hook para EMPRESA — gerenciar "minha equipe"
 // ---------------------------------------------------------------------------
 
 export interface UseCompanyTeamResult {
+  /** Sessão ou consulta falharam: lista vazia aqui não significa Elenco vazio. */
+  erroCarga: boolean;
   /** Membros aceitos (com perfil do worker). */
   teamMembers: TeamMember[];
   /** Convites de equipe pendentes (empresa enviou, aguarda worker). */
@@ -32,8 +36,8 @@ export interface UseCompanyTeamResult {
   addWorker: (workerId: string, source: TeamConnectionSource) => Promise<boolean>;
   /** Remover worker do elenco da empresa. */
   removeWorker: (workerId: string) => Promise<boolean>;
-  /** Recarregar dados. */
-  refresh: () => void;
+  /** Recarregar dados. `silent`: sem esqueleto e sem trocar a tela por erro. */
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 export function useCompanyTeam(): UseCompanyTeamResult {
@@ -41,64 +45,70 @@ export function useCompanyTeam(): UseCompanyTeamResult {
   const [pendingConnections, setPendingConnections] = useState<TeamConnection[]>([]);
   const [companyId, setCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState(false);
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
-    // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
-    // seam) aparecesse — duas metades da mesma tela discordando sobre qual empresa e esta.
-    const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
-    if (empresaOperada) setCompanyId(empresaOperada);
-
-    const [members, all] = await Promise.all([
-      TeamConnectionService.listTeamMembers(),
-      TeamConnectionService.listAllConnections(),
-    ]);
-
-    setTeamMembers(members);
-    setPendingConnections(all.filter((c) => c.status === 'pending'));
-    setLoading(false);
-  }, [navigate]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
+  const beginTeam = useLatestResponse();
+  const fetchTeam = useCallback(
+    async (isActive: () => boolean = () => true, silent = false) => {
+      const claim = beginTeam();
+      const session = await checkSession();
+      if (session.status === 'signed_out') {
+        if (!silent) navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        if (!isActive() || silent) return;
+        setErroCarga(true);
+        setLoading(false);
         return;
       }
 
-      setLoading(true);
+      if (!silent) setLoading(true);
+      // `owner_id` sozinho e a ancora antiga: para o gerente de unidade isto ficava NULO e o
+      // historico "N turnos com voce" do cartao sumia, embora a lista de membros (que ja usa o
+      // seam) aparecesse — duas metades da mesma tela discordando sobre qual empresa e esta.
       const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
-      if (active && empresaOperada) setCompanyId(empresaOperada);
+      if (isActive() && empresaOperada) setCompanyId(empresaOperada);
 
-      const [members, all] = await Promise.all([
-        TeamConnectionService.listTeamMembers(),
-        TeamConnectionService.listAllConnections(),
-      ]);
-
-      if (!active) return;
-      setTeamMembers(members);
-      setPendingConnections(all.filter((c) => c.status === 'pending'));
+      try {
+        const [members, all] = await Promise.all([
+          TeamConnectionService.listTeamMembers(),
+          TeamConnectionService.listAllConnections(),
+        ]);
+        if (!isActive() || !claim()) return;
+        setTeamMembers(members);
+        setPendingConnections(all.filter((c) => c.status === 'pending'));
+        setErroCarga(false);
+      } catch (error) {
+        if (!isActive()) return;
+        // Mantém o que já estava na tela e sinaliza a falha.
+        logError('useCompanyTeam.load', error);
+        if (silent) return;
+        setErroCarga(true);
+      }
       setLoading(false);
-    })();
+    },
+    [navigate, beginTeam],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void fetchTeam(() => active);
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [fetchTeam]);
+
+  const load = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = fetchTeam(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [fetchTeam],
+  );
 
   const addWorker = useCallback(
     async (workerId: string, source: TeamConnectionSource): Promise<boolean> => {
@@ -142,7 +152,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
     [addToast, load],
   );
 
-  return { teamMembers, pendingConnections, loading, companyId, addWorker, removeWorker, refresh: load };
+  return { teamMembers, pendingConnections, loading, erroCarga, companyId, addWorker, removeWorker, refresh: load };
 }
 
 // ---------------------------------------------------------------------------
@@ -161,8 +171,8 @@ export interface UseWorkerStoresResult {
   /** Bloquear/sair de uma empresa. */
   blockConnection: (connectionId: string) => Promise<boolean>;
   declineConnection: (connectionId: string) => Promise<boolean>;
-  /** Recarregar dados. */
-  refresh: () => void;
+  /** Recarregar dados. `silent`: sem esqueleto e sem trocar a tela por erro. */
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 export function useWorkerStores(): UseWorkerStoresResult {
@@ -173,56 +183,58 @@ export function useWorkerStores(): UseWorkerStoresResult {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    setLoading(true);
-    const [stores, pending] = await Promise.all([
-      TeamConnectionService.listMyStores(),
-      TeamConnectionService.listPendingConnections(),
-    ]);
-
-    // null = fetch falhou; manter o que ja esta na tela e sinalizar erro em vez de
-    // esvaziar a carteira ("Voce ainda nao tem clientes" mentiria — N1).
-    setErroCarga(stores === null || pending === null);
-    if (stores !== null) setMyStores(stores);
-    if (pending !== null) setPendingConnections(pending);
-    setLoading(false);
-  }, [navigate]);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
+  const beginStores = useLatestResponse();
+  const load = useCallback(
+    async (isActive: () => boolean = () => true, silent = false) => {
+      const claim = beginStores();
+      const session = await checkSession();
+      if (!isActive()) return;
+      if (session.status === 'signed_out') {
+        if (!silent) navigate('/login');
+        return;
+      }
+      if (session.status === 'unavailable') {
+        if (silent) return;
+        setErroCarga(true);
+        setLoading(false);
         return;
       }
 
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [stores, pending] = await Promise.all([
         TeamConnectionService.listMyStores(),
         TeamConnectionService.listPendingConnections(),
       ]);
+      if (!isActive()) return;
+      if (silent && (stores === null || pending === null)) return;
+      if (!claim()) return;
 
-      if (!active) return;
+      // null = fetch falhou; manter o que ja esta na tela e sinalizar erro em vez de
+      // esvaziar a carteira ("Voce ainda nao tem clientes" mentiria — N1).
       setErroCarga(stores === null || pending === null);
       if (stores !== null) setMyStores(stores);
       if (pending !== null) setPendingConnections(pending);
       setLoading(false);
-    })();
+    },
+    [navigate, beginStores],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [load]);
+
+  const refresh = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = load(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [load],
+  );
 
   const acceptConnection = useCallback(
     async (connectionId: string): Promise<boolean> => {
@@ -273,6 +285,6 @@ export function useWorkerStores(): UseWorkerStoresResult {
     acceptConnection,
     blockConnection,
     declineConnection,
-    refresh: load,
+    refresh,
   };
 }

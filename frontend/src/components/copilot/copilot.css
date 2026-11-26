@@ -1,0 +1,190 @@
+/*
+ * Visual do copiloto. Receitas e medições: .harness/spec/copiloto-worki/pesquisa-visual-agentico.md.
+ * Só `transform` e `opacity` se movem (compositor); nada aqui repinta a página nem recebe toque.
+ * Ocioso = nenhuma animação. O brilho e a gota são trocáveis: ver lib/copilot/vfx.
+ */
+:root {
+  --wk-spectrum: #2563eb 0%, #7c3aed 26%, #00a651 54%, #2563eb 76%, #f59e0b 87%, #2563eb 97%, #2563eb 100%;
+  --wk-ease-out: cubic-bezier(0.22, 0.9, 0.24, 1);
+  --wk-ease-io: cubic-bezier(0.45, 0, 0.15, 1);
+}
+
+/* ---------- superfícies ---------- */
+/* Vidro SUTIL só no painel flutuante e na barra de comando do PC. No celular e no resto, sólido. */
+.wk-glass {
+  background: rgba(255, 255, 255, 0.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  box-shadow: 0 24px 70px -16px rgba(17, 17, 17, 0.34), 0 2px 8px rgba(17, 17, 17, 0.08);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .wk-glass { background: rgba(255, 255, 255, 0.98); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .wk-glass { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.wk-solid {
+  background: #fff;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  box-shadow: 0 18px 48px -14px rgba(17, 17, 17, 0.4), 0 2px 8px rgba(17, 17, 17, 0.08);
+}
+
+/* ---------- entradas (barra de comando abre em 260 ms) ---------- */
+@keyframes wk-rise { from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.975); } to { opacity: 1; transform: none; } }
+@keyframes wk-sheet { from { opacity: 0.6; transform: translate3d(0, 24px, 0); } to { opacity: 1; transform: none; } }
+.wk-rise { animation: wk-rise 0.26s var(--wk-ease-out) both; }
+.wk-sheet { animation: wk-sheet 0.26s var(--wk-ease-out) both; }
+
+/* orbe do copiloto: gira devagar enquanto trabalha (3,6 s) */
+@keyframes wk-orb { to { transform: rotate(360deg); } }
+.wk-orb {
+  position: relative; flex: none; width: 28px; height: 28px; border-radius: 9999px; overflow: hidden;
+  background: #fff; box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.08);
+}
+.wk-orb::before {
+  content: ''; position: absolute; inset: -40%;
+  background: conic-gradient(#111111, #d1d5db, #111111); /* monocromático: acento do produto, sem arco-íris */
+  animation: wk-orb 3.6s linear infinite;
+}
+.wk-orb::after { content: ''; position: absolute; inset: 3px; border-radius: 9999px; background: rgba(255, 255, 255, 0.9); }
+.wk-orb--idle::before { animation: none; }
+.wk-orb > svg { position: absolute; inset: 7px; z-index: 1; width: 14px; height: 14px; }
+
+/* shimmer do passo atual: janela deslizante (duas transform opostas), sem background-clip */
+.wk-shim { position: relative; display: inline-block; max-width: 100%; white-space: nowrap; color: #4b5563; vertical-align: bottom; }
+.wk-shim__win {
+  position: absolute; inset: 0 auto 0 0; width: calc(var(--w, 0px) * 0.5); overflow: hidden; opacity: 0; pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
+}
+.wk-shim__txt { position: absolute; left: 0; top: 0; width: var(--w, 0px); color: #111; }
+
+@keyframes wk-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.wk-dots span { display: inline-block; width: 4px; height: 4px; margin: 0 1px; border-radius: 9999px; background: currentColor; animation: wk-dots 1.2s infinite; }
+.wk-dots span:nth-child(2) { animation-delay: 0.15s; }
+.wk-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ---------- brilho em volta da tela (lib/copilot/vfx) ---------- */
+.wk-glow {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; contain: strict;
+  opacity: 0; transition: opacity 0.8s var(--wk-ease-io);
+  --g: 28px; --lw: 2px; --alpha: 0.78; /* largura fixa: a intensidade só muda a opacidade */
+}
+.wk-glow[data-on='true'] { opacity: 1; }
+.wk-glow[data-level='low'] { --alpha: 0.55; --g: 24px; }
+.wk-glow[data-level='high'] { --alpha: 0.84; --g: 40px; }
+.wk-glow__halo {
+  position: absolute; inset: 0; overflow: hidden; opacity: var(--alpha);
+  --ramp: #000 0, rgba(0, 0, 0, 0.88) var(--lw), rgba(0, 0, 0, 0.3) calc(var(--g) * 0.3), rgba(0, 0, 0, 0.08) calc(var(--g) * 0.62), transparent var(--g);
+  -webkit-mask-image: linear-gradient(to bottom, var(--ramp)), linear-gradient(to top, var(--ramp)), linear-gradient(to right, var(--ramp)), linear-gradient(to left, var(--ramp));
+  mask-image: linear-gradient(to bottom, var(--ramp)), linear-gradient(to top, var(--ramp)), linear-gradient(to right, var(--ramp)), linear-gradient(to left, var(--ramp));
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
+}
+.wk-glow__sweep {
+  position: absolute; left: 50%; top: 50%; width: calc(100vw + 100vh); aspect-ratio: 1;
+  margin: calc((100vw + 100vh) / -2) 0 0 calc((100vw + 100vh) / -2);
+  background: conic-gradient(from 0deg, var(--wk-spectrum)); /* fallback sRGB */
+  background: conic-gradient(in oklab from 0deg, var(--wk-spectrum)); /* sem "sujar" no meio */
+  transform: rotate(24deg);
+}
+/* Movimento: só quando a pessoa NÃO pediu para reduzir e o agente está ativo (volta 7 s, respira 5,4 s) */
+@media (prefers-reduced-motion: no-preference) {
+  .wk-glow[data-on='true'] .wk-glow__sweep { will-change: transform; animation: wk-sweep 7s linear infinite; }
+  .wk-glow[data-on='true'][data-level='low'] .wk-glow__sweep { animation-duration: 10s; }
+  .wk-glow[data-on='true'][data-level='high'] .wk-glow__sweep { animation-duration: 5.5s; }
+  .wk-glow[data-on='true'] .wk-glow__halo { animation: wk-breathe 5.4s ease-in-out infinite; }
+}
+@keyframes wk-sweep { to { transform: rotate(384deg); } }
+@keyframes wk-breathe { 0%, 100% { opacity: calc(var(--alpha) * 0.72); } 50% { opacity: var(--alpha); } }
+/* Aparelho fraco: estático, sem rotação */
+html[data-copilot-fx='lite'] .wk-glow__sweep, html[data-copilot-fx='lite'] .wk-glow__halo { animation: none !important; will-change: auto; }
+/* Contraste alto / cores forçadas: o brilho é decorativo; o estado vai por borda sólida e pelo texto */
+@media (prefers-contrast: more), (forced-colors: active) {
+  .wk-glow__halo { display: none; }
+  .wk-glow { box-shadow: inset 0 0 0 3px Highlight; }
+}
+/* Aba oculta: pausa tudo */
+html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root *, html.is-hidden .wk-orb::before { animation-play-state: paused !important; }
+
+/* ---------- gota: ondas a partir do ponto que abriu ---------- */
+.wk-drop { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; }
+.wk-drop__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wk-drop__svg circle { will-change: transform, opacity; }
+.wk-ring {
+  position: absolute; border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(closest-side, transparent 80%, rgba(37, 99, 235, 0) 83%, rgba(37, 99, 235, 0.2) 92%, rgba(124, 58, 237, 0.24) 97%, transparent 100%);
+}
+
+/* ---------- ponteiro virtual: seta (PC) e dedo (celular), só transform ---------- */
+.wk-ptr-root { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 0.16s ease; contain: layout style; }
+.wk-ptr-root.is-on { opacity: 1; }
+.wk-ptr { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+.wk-ptr__y { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+.wk-ptr__inner { position: absolute; transform-origin: 0 0; transition: transform 0.26s var(--wk-ease-out); }
+.wk-ptr--cursor .wk-ptr__inner { left: -3px; top: -2px; }
+.wk-ptr--cursor svg { display: block; width: 22px; height: 24px; filter: drop-shadow(0 2px 3px rgba(15, 23, 32, 0.28)); }
+.wk-ptr__tag {
+  position: absolute; left: 14px; top: 20px; background: #2563eb; color: #fff; font: 700 10.5px/1 system-ui, sans-serif;
+  padding: 3px 8px; border-radius: 7px; white-space: nowrap;
+}
+.wk-ptr-root.is-pressed .wk-ptr--cursor .wk-ptr__inner { transform: scale(0.84); }
+/* dedo virtual: disco escuro translúcido com aro branco (legível sobre azul e sobre branco) */
+.wk-ptr--finger .wk-ptr__inner { left: -23px; top: -23px; width: 46px; height: 46px; transform-origin: 50% 50%; }
+.wk-ptr__dot {
+  width: 100%; height: 100%; border-radius: 9999px; background: rgba(15, 23, 32, 0.2); border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1.5px rgba(15, 23, 32, 0.3), 0 8px 18px rgba(15, 23, 32, 0.22);
+}
+.wk-ptr-root.is-pressed .wk-ptr--finger .wk-ptr__inner { transform: scale(0.76); transition-duration: 0.42s; }
+
+.wk-ptr-ripple {
+  position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1.5px rgba(15, 23, 32, 0.32); background: rgba(37, 99, 235, 0.14); will-change: transform, opacity;
+  animation: wk-ripple 0.64s cubic-bezier(0.25, 0.6, 0.3, 1) forwards;
+}
+.wk-ptr-ripple--finger { width: 76px; height: 76px; margin: -38px 0 0 -38px; }
+@keyframes wk-ripple {
+  from { transform: scale(0.3); opacity: 1; }
+  40% { transform: scale(0.95); opacity: 0.7; }
+  to { transform: scale(1.45); opacity: 0; }
+}
+
+/* halo no alvo e balão */
+@keyframes wk-halo { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.55; } }
+.wk-ptr-halo { position: absolute; border-radius: 14px; border: 3px solid #2563eb; box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.22); opacity: 0; transition: opacity 0.16s ease; }
+.wk-ptr-halo.is-on { opacity: 1; animation: wk-halo 1.6s ease-in-out infinite; }
+.wk-ptr-say {
+  position: absolute; padding: 8px 12px; border-radius: 14px; background: #111; color: #fff; font-size: 13px; line-height: 1.35;
+  font-weight: 600; box-shadow: 0 10px 28px rgba(17, 17, 17, 0.35); opacity: 0; transform: translate3d(0, 4px, 0);
+  transition: opacity 0.16s ease, transform 0.16s ease; overflow-wrap: anywhere;
+}
+.wk-ptr-say.is-on { opacity: 1; transform: none; }
+.wk-ptr-say.is-typing::after { content: ''; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.12em; background: currentColor; animation: wk-caret 0.9s steps(1) infinite; }
+@keyframes wk-caret { 50% { opacity: 0; } }
+
+/* ---------- movimento reduzido: tudo estático, nada pisca ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .wk-glow { transition: opacity 0.2s linear; }
+  .wk-orb::before { animation: none; }
+  .wk-rise, .wk-sheet { animation: none; }
+  .wk-dots span { animation: none; opacity: 0.7; }
+  .wk-ptr-root, .wk-ptr__inner, .wk-ptr-say { transition: none; }
+  .wk-ptr-ripple { animation: none; opacity: 0.6; transform: none; }
+  .wk-ptr-halo.is-on { animation: none; }
+  .wk-ptr-say.is-typing::after { animation: none; }
+  .wk-ptr-root.is-pressed .wk-ptr__inner { transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wk-shim__win { opacity: 1; will-change: transform; animation: wk-win 2.4s linear infinite; }
+  .wk-shim__txt { will-change: transform; animation: wk-txt 2.4s linear infinite; }
+}
+@keyframes wk-win { from { transform: translateX(calc(var(--w, 0px) * -0.5)); } to { transform: translateX(var(--w, 0px)); } }
+@keyframes wk-txt { from { transform: translateX(calc(var(--w, 0px) * 0.5)); } to { transform: translateX(calc(var(--w, 0px) * -1)); } }
+
+/* ---------- barra de comando no PC: View Transition (fallback: wk-rise, 260 ms) ---------- */
+html[data-wk-vt]::view-transition-old(root), html[data-wk-vt]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-wk-vt] [data-copilot-palette] { view-transition-name: wk-cmd-vt; }
+html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.26s; animation-timing-function: var(--wk-ease-out); }
+html[data-wk-vt] .wk-rise { animation: none; }
+@media (prefers-reduced-motion: reduce) { html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.01s; } }

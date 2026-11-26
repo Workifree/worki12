@@ -1,13 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
+import ChatComposerField from '../../components/ChatComposerField';
 import { supabase } from '../../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, User, Check, CheckCheck, Briefcase } from 'lucide-react';
+import { MessageSquare, Send, ArrowLeft, Check, CheckCheck, Briefcase } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
-import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui'
+import { fillMissingWorkers } from '../../services/workerCardsService';
+import { Avatar, Button, IconButton, PageHeader } from '../../components/ui'
+import ErroDeCarga from '../../components/ErroDeCarga'
+import { checkSession } from '../../lib/authSession'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { conversationListSources } from '../../lib/realtime/liveSources';
+import { mergeMessages } from '../../lib/mergeMessages';
+import { activeShiftLabel, type ShiftAttendanceLike } from '../../lib/shiftProgress'
+import { TONE_CLASS, getStatus, statusLabel } from '../../lib/statusLabels';
 
 interface ConversationItem {
     id: string;
@@ -17,9 +27,26 @@ interface ConversationItem {
     job_title: string;
     last_message?: string;
     last_message_at?: string;
+    /** Prévia confiável ausente: a conversa não tem mensagem alguma. */
+    no_messages?: boolean;
     unread_count: number;
     status: string;
+    attendance?: ShiftAttendanceLike;
 }
+
+/** Teto da consulta de prévias: acima disso, ausência de prévia não prova conversa vazia. */
+const PREVIEW_LIMIT = 500;
+
+/** Não lidas primeiro; depois a atividade mais recente. */
+const sortConversations = (list: ConversationItem[]): ConversationItem[] =>
+    [...list].sort((a, b) =>
+        Number(b.unread_count > 0) - Number(a.unread_count > 0)
+        || new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime());
+
+const formatWhen = (iso: string): string => {
+    const date = new Date(iso);
+    return format(date, date.toDateString() === new Date().toDateString() ? 'HH:mm' : 'dd/MM');
+};
 
 interface Message {
     id: string;
@@ -39,32 +66,78 @@ export default function CompanyMessages() {
     const [loading, setLoading] = useState(true);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
+    // De qual conversa o histórico já chegou: antes disso é "carregando", não "vazio".
+    const [messagesFor, setMessagesFor] = useState<string | null>(null);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
     const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
+    // Trava do envio por ref: o campo NÃO é desabilitado (desabilitar fecha o teclado no celular).
+    const sendingRef = useRef(false);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const { addToast } = useToast();
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const logRef = useRef<HTMLDivElement>(null);
+    // Conversa aberta agora: o envio é assíncrono e o eco não pode cair em outra conversa.
+    const openConversationRef = useRef<string | null>(null);
+    openConversationRef.current = selectedConversation?.id ?? null;
     const presenceChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isOtherTyping, setIsOtherTyping] = useState(false);
 
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    // Falha de carga ≠ "nenhuma conversa".
+    const [erroCarga, setErroCarga] = useState(false);
+    // Falha ao abrir a conversa ≠ "nenhuma mensagem".
+    const [erroMensagens, setErroMensagens] = useState(false);
+    const [messagesAttempt, setMessagesAttempt] = useState(0);
 
+    const updatePreview = (conversationId: string, content: string, at: string, mine: boolean) => {
+        setConversations(prev => sortConversations(prev.map(c => c.id === conversationId
+            ? { ...c, last_message: mine ? `Você: ${content}` : content, last_message_at: at, no_messages: false }
+            : c)));
+    };
+
+    // Quem subiu para ler o histórico não é puxado para o fim quando chega algo.
+    const stickToEndRef = useRef(true);
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const log = logRef.current;
+        if (log && (stickToEndRef.current || messages[messages.length - 1]?.is_mine)) log.scrollTop = log.scrollHeight;
     }, [messages]);
 
-    const loadData = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return navigate('/login');
+    const openId = selectedConversation?.id ?? null;
+    useEffect(() => {
+        stickToEndRef.current = true;
+    }, [openId]);
+
+    const beginList = useLatestResponse();
+
+    const falharCarga = (contexto: string, causa: unknown) => {
+        logError(contexto, causa);
+        setErroCarga(true);
+        setLoading(false);
+    };
+
+    // `silent` = recarga ao vivo: falha mantém a tela e a conversa não é reescolhida pela URL.
+    const loadData = async (silent = false) => {
+        const claim = beginList();
+        const falhar = (contexto: string, causa: unknown) =>
+            silent ? logError(contexto, causa) : falharCarga(contexto, causa);
+        const session = await checkSession();
+        if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
+        if (session.status === 'unavailable') return falhar('CompanyMessages.session', session.error);
+        const user = session.user;
         setCurrentUser(user.id);
 
         // Todas as unidades que a sessao OPERA — inclui gerente (company_members), que a
         // consulta por `owner_id` deixava de fora: ele nao via conversa nenhuma.
-        const operadas = await getMyCompanies();
+        let operadas: Awaited<ReturnType<typeof getMyCompanies>>;
+        try {
+            operadas = await getMyCompanies();
+        } catch (causa) {
+            return falhar('CompanyMessages.companies', causa);
+        }
         const companyIds = new Set(operadas.map(c => c.company_id));
         companyIds.add(user.id); // dono cujo company_id E o proprio uid
 
@@ -78,7 +151,11 @@ export default function CompanyMessages() {
                 islocked,
                 application:applications!fk_conversation_application_uuid (
                     id,
+                    worker_id,
                     status,
+                    worker_checkin_at,
+                    company_checkin_confirmed_at,
+                    company_checkout_confirmed_at,
                     worker:workers (
                         id,
                         full_name,
@@ -93,11 +170,8 @@ export default function CompanyMessages() {
             `)
             .order('createdat', { ascending: false });
 
-        if (error) {
-            logError('SUPABASE ERROR fetching conversations:', error);
-            setLoading(false);
-            return;
-        }
+        if (error) return falhar('SUPABASE ERROR fetching conversations:', error);
+        if (!silent) setErroCarga(false);
 
         // Filter to only show conversations for jobs belonging to any of the user's companies
         interface ConversationData {
@@ -107,7 +181,11 @@ export default function CompanyMessages() {
             islocked: boolean;
             application?: {
                 id: string;
+                worker_id?: string;
                 status: string;
+                worker_checkin_at?: string | null;
+                company_checkin_confirmed_at?: string | null;
+                company_checkout_confirmed_at?: string | null;
                 worker?: {
                     id: string;
                     full_name: string;
@@ -121,7 +199,7 @@ export default function CompanyMessages() {
             };
         }
 
-        const myConversations = ((convData || []) as unknown as ConversationData[]).filter((c) => {
+        const ownConversations = ((convData || []) as unknown as ConversationData[]).filter((c) => {
             if (!c.application || !c.application.job) {
                 return false; // Skip malformed data
             }
@@ -130,23 +208,47 @@ export default function CompanyMessages() {
             return companyIds.has(jobCorpId);
         });
 
+        // Encarregado: o embed `workers` volta `null`; os cartões das RPCs dão o nome.
+        const filledApps = await fillMissingWorkers(ownConversations.map((c) => c.application!));
+        const myConversations = ownConversations.map((c, i) => ({ ...c, application: filledApps[i] }));
+
         // Fetch all unread messages for these conversations
         const conversationIds = myConversations.map((c) => c.id);
         let unreadCounts: Record<string, number> = {};
 
         if (conversationIds.length > 0) {
-            const { data: unreadData } = await supabase
+            const { data: unreadData, error: unreadError } = await supabase
                 .from('Message')
                 .select('conversationid')
                 .in('conversationid', conversationIds)
                 .neq('senderid', user.id) // Messages sent by OTHERS (workers)
                 .is('read_at', null);     // That are NOT read
 
+            if (unreadError) return falhar('CompanyMessages.unread', unreadError);
+
             if (unreadData) {
                 unreadCounts = unreadData.reduce((acc: Record<string, number>, curr) => {
                     acc[curr.conversationid] = (acc[curr.conversationid] || 0) + 1;
                     return acc;
                 }, {} as Record<string, number>);
+            }
+        }
+
+        // Prévia: as mensagens mais recentes destas conversas (só leitura, mesma tabela).
+        const latest = new Map<string, { content: string; senderid: string; createdat: string }>();
+        let previewsComplete = false;
+        if (conversationIds.length > 0) {
+            const { data: previewData, error: previewError } = await supabase
+                .from('Message')
+                .select('conversationid, content, senderid, createdat')
+                .in('conversationid', conversationIds)
+                .order('createdat', { ascending: false })
+                .limit(PREVIEW_LIMIT);
+            if (previewError) return falhar('CompanyMessages.preview', previewError);
+            const rows = (previewData ?? []) as Array<{ conversationid: string; content: string; senderid: string; createdat: string }>;
+            previewsComplete = rows.length < PREVIEW_LIMIT;
+            for (const row of rows) {
+                if (!latest.has(row.conversationid)) latest.set(row.conversationid, row);
             }
         }
 
@@ -157,12 +259,26 @@ export default function CompanyMessages() {
             worker_avatar: c.application?.worker?.avatar_url,
             job_title: c.application?.job?.title || 'Turno sem título',
             status: c.application?.status || 'pending',
-            last_message: undefined,
-            last_message_at: c.createdat,
+            attendance: c.application,
+            last_message: latest.has(c.id)
+                ? `${latest.get(c.id)!.senderid === user.id ? 'Você: ' : ''}${latest.get(c.id)!.content}`
+                : undefined,
+            last_message_at: latest.get(c.id)?.createdat ?? c.createdat,
+            no_messages: previewsComplete && !latest.has(c.id),
             unread_count: unreadCounts[c.id] || 0
         }));
 
-        setConversations(convList);
+        if (!claim()) return;
+
+        if (silent) {
+            const open = openConversationRef.current;
+            setErroCarga(false);
+            setConversations(sortConversations(convList.map(c => (c.id === open ? { ...c, unread_count: 0 } : c))));
+            setSelectedConversation(prev => (prev ? convList.find(c => c.id === prev.id) ?? prev : prev));
+            return;
+        }
+
+        setConversations(sortConversations(convList));
 
         if (selectedConversationId) {
             const conv = convList.find(c => c.id === selectedConversationId);
@@ -201,36 +317,47 @@ export default function CompanyMessages() {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData usa state setters estaveis, deps cobrem triggers de refresh
     }, [navigate, selectedConversationId, refreshTrigger]);
 
-    // Realtime subscription for list updates
-    useEffect(() => {
-        const channel = supabase
-            .channel('company_conversations_list')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'Conversation'
-            }, () => {
-                setRefreshTrigger(prev => prev + 1);
-            })
-            .subscribe();
+    // Recupera o que o canal da conversa aberta possa ter perdido, mesclando por id.
+    const recoverMessages = async () => {
+        if (!openId || !currentUser || messagesFor !== openId) return;
+        const { data, error } = await supabase
+            .from('Message')
+            .select('*')
+            .eq('conversationid', openId)
+            .order('createdat', { ascending: true });
+        if (error) {
+            logError('CompanyMessages.recover', error);
+            return;
+        }
+        if (openConversationRef.current !== openId) return;
+        const rows = ((data || []) as Omit<Message, 'is_mine'>[]).map(m => ({ ...m, is_mine: m.senderid === currentUser }));
+        setMessages(prev => mergeMessages(prev, rows));
+        if (rows.some(m => !m.is_mine && !m.read_at)) void markAsRead(openId, currentUser);
+    };
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
+    useLiveRefresh({
+        sources: conversationListSources(),
+        onRefresh: () => Promise.all([loadData(true), recoverMessages()]),
+        paused: loading,
+    });
 
     useEffect(() => {
-        if (!selectedConversation) return;
+        if (!openId) return;
+
+        setErroMensagens(false);
+        setMessages([]);
+        setMessagesFor(null);
 
         const loadMessages = async () => {
             const { data, error } = await supabase
                 .from('Message')
                 .select('*')
-                .eq('conversationid', selectedConversation.id)
+                .eq('conversationid', openId)
                 .order('createdat', { ascending: true });
 
             if (error) {
                 logError('Error fetching messages:', error);
+                setErroMensagens(true);
                 return;
             }
 
@@ -238,40 +365,41 @@ export default function CompanyMessages() {
                 ...m,
                 is_mine: m.senderid === currentUser
             })));
+            setMessagesFor(openId);
 
             // Mark as read when opening
             if (currentUser) {
-                markAsRead(selectedConversation.id, currentUser);
+                markAsRead(openId, currentUser);
             }
         };
 
         loadMessages();
 
         const channel = supabase
-            .channel(`company-messages:${selectedConversation.id}`)
+            .channel(`company-messages:${openId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'Message',
-                filter: `conversationid=eq.${selectedConversation.id}`
+                filter: `conversationid=eq.${openId}`
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
+                updatePreview(openId, newMsg.content, newMsg.createdat, isMine);
 
-                setMessages(prev => [...prev, {
-                    ...newMsg,
-                    is_mine: isMine
-                }]);
+                setMessages(prev => prev.some(m => m.id === newMsg.id)
+                    ? prev
+                    : [...prev, { ...newMsg, is_mine: isMine }]);
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine && currentUser) {
-                    markAsRead(selectedConversation.id, currentUser);
+                    markAsRead(openId, currentUser);
                 }
             })
             .subscribe();
 
         // Presence channel for typing indicator
-        const pChannel = supabase.channel(`typing:${selectedConversation.id}`)
+        const pChannel = supabase.channel(`typing:${openId}`)
         pChannel
             .on('presence', { event: 'sync' }, () => {
                 const state = pChannel.presenceState();
@@ -291,11 +419,13 @@ export default function CompanyMessages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser]);
+        // Pelo id: reler a lista troca o objeto da conversa sem recarregar (nem piscar) o histórico.
+    }, [openId, currentUser, messagesAttempt]);
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !selectedConversation || !currentUser) return;
+        if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
 
+        sendingRef.current = true;
         setSending(true);
         const messageContent = newMessage.trim();
         setNewMessage('');
@@ -304,22 +434,35 @@ export default function CompanyMessages() {
         presenceChannel.current?.track({ typing: false, userId: currentUser });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+        const sent = {
+            id: crypto.randomUUID(),
+            conversationid: selectedConversation.id,
+            senderid: currentUser,
+            content: messageContent,
+            createdat: new Date().toISOString()
+        };
         const { error } = await supabase
             .from('Message')
-            .insert({
-                id: crypto.randomUUID(),
-                conversationid: selectedConversation.id,
-                senderid: currentUser,
-                content: messageContent,
-                createdat: new Date().toISOString()
-            });
+            .insert(sent);
+
+        // Eco imediato (como em Messages.tsx): com o Realtime fora, a mensagem não aparecia para
+        // quem enviou. O id nasce no client, então o evento do Realtime não duplica.
+        if (!error && openConversationRef.current === sent.conversationid) {
+            setMessages(prev => prev.some(m => m.id === sent.id)
+                ? prev
+                : [...prev, { ...sent, read_at: null, is_mine: true }]);
+        }
+
+        if (!error) updatePreview(sent.conversationid, sent.content, sent.createdat, true);
 
         if (error) {
             logError('Error sending message:', error);
-            setNewMessage(messageContent);
+            // Devolve o texto sem apagar o que foi digitado enquanto enviava.
+            setNewMessage((atual) => (atual ? `${messageContent} ${atual}` : messageContent));
             addToast('Erro ao enviar mensagem. Tente novamente.', 'error');
         }
 
+        sendingRef.current = false;
         setSending(false);
     };
 
@@ -328,38 +471,16 @@ export default function CompanyMessages() {
         navigate(`/company/messages?conversation=${conv.id}`, { replace: true });
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'hired':
-            case 'in_progress':
-                return 'bg-green-100 text-green-700';
-            case 'declined':
-            case 'rejected':
-                return 'bg-red-100 text-red-700';
-            case 'completed':
-                return 'bg-blue-100 text-blue-700';
-            default:
-                return 'bg-yellow-100 text-yellow-700';
-        }
-    };
+    const getStatusColor = (status: string) => TONE_CLASS[getStatus('application', status).tone];
 
-    const getStatusLabel = (status: string) => {
-        switch (status) {
-            case 'invited': return 'Convidado';
-            case 'hired': return 'Contratado';
-            case 'in_progress': return 'Em Andamento';
-            case 'completed': return 'Concluído';
-            case 'declined':
-            case 'rejected': return 'Recusado';
-            default: return status;
-        }
-    };
+    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) =>
+        (attendance ? activeShiftLabel(attendance) : null) ?? statusLabel('application', status);
 
     if (loading) {
         return (
-            <div className="flex flex-col h-[calc(100vh-140px)] max-w-6xl mx-auto animate-pulse">
+            <div className="worki-chat flex flex-col max-w-6xl mx-auto animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-4" />
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
+                <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
                     <div className="space-y-3">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="h-16 bg-gray-200 rounded-xl" />
@@ -372,22 +493,26 @@ export default function CompanyMessages() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] font-sans text-accent max-w-6xl mx-auto">
+        <div className="worki-chat flex flex-col font-sans text-accent max-w-6xl mx-auto">
             <PageHeader
                 title="Mensagens"
                 subtitle="Converse com os freelas dos seus turnos."
-                className="!mb-4"
+                className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
-            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex-1 flex min-h-0 bg-white overflow-hidden max-md:-mx-4 sm:max-md:-mx-6 max-md:border-t max-md:border-gray-200 md:rounded-2xl md:border md:border-gray-200">
 
-                <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Freelas ({conversations.length})</h3>
+                <div className={`w-full md:w-80 md:border-r md:border-gray-200 flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="px-4 py-2 border-b border-gray-200">
+                        <h2 className="text-sm font-semibold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
-                        {conversations.length === 0 ? (
+                        {erroCarga ? (
+                            <div className="p-4">
+                                <ErroDeCarga onRetry={() => { setLoading(true); setRefreshTrigger(n => n + 1); }} />
+                            </div>
+                        ) : conversations.length === 0 ? (
                             <div className="p-6 text-center text-gray-600">
                                 <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                 <p className="font-bold">Nenhuma conversa ainda.</p>
@@ -398,33 +523,36 @@ export default function CompanyMessages() {
                                 <button
                                     key={conv.id}
                                     onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
+                                    className={`w-full min-h-16 px-4 py-3 text-left border-b border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selectedConversation?.id === conv.id ? 'bg-gray-100' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
-                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            {conv.worker_avatar ? (
-                                                <img src={conv.worker_avatar} alt={conv.worker_name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <User size={20} className="text-gray-400" />
-                                            )}
-                                        </div>
+                                        <Avatar name={conv.worker_name} src={conv.worker_avatar} />
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <h4 className="font-bold text-sm truncate">{conv.worker_name}</h4>
-                                                {conv.unread_count > 0 ? (
-                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white tabular-nums">
+                                            <div className="flex justify-between items-baseline gap-2">
+                                                <h3 className="font-semibold text-sm truncate">{conv.worker_name}</h3>
+                                                {conv.last_message_at && !conv.no_messages && (
+                                                    <span className="shrink-0 text-xs text-gray-600 tabular-nums">{formatWhen(conv.last_message_at)}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p data-copilot-private className={`min-w-0 truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
+                                                    {conv.last_message ?? (conv.no_messages ? 'Sem mensagens ainda' : 'Abra para ver as mensagens')}
+                                                </p>
+                                                {conv.unread_count > 0 && (
+                                                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full bg-red-600 text-white tabular-nums">
                                                         {conv.unread_count}
-                                                    </span>
-                                                ) : (
-                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status)}
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className={`text-xs truncate mt-1 flex items-center gap-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
-                                                <Briefcase size={10} />
-                                                {conv.job_title}
-                                            </p>
+                                            <div className="mt-1 flex items-center justify-between gap-2">
+                                                <p className="flex min-w-0 items-center gap-1 text-xs text-gray-600">
+                                                    <Briefcase size={10} aria-hidden="true" className="shrink-0" />
+                                                    <span className="truncate">{conv.job_title}</span>
+                                                </p>
+                                                <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
+                                                    {getStatusLabel(conv.status, conv.attendance)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </button>
@@ -433,37 +561,52 @@ export default function CompanyMessages() {
                     </div>
                 </div>
 
-                <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                {/* min-w-0: a coluna precisa encolher a 320px, senão Enviar, bolha e selo saem do cartão. */}
+                <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
-                            <div className="p-4 border-b-2 border-black flex items-center gap-3">
-                                <button aria-label="Voltar para a lista de conversas"
+                            <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center gap-2 sm:gap-3">
+                                <IconButton
+                                    aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
-                                    className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                                    className="md:hidden -ml-2 shrink-0"
                                 >
                                     <ArrowLeft size={20} />
-                                </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                                    {selectedConversation.worker_avatar ? (
-                                        <img src={selectedConversation.worker_avatar} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <User size={20} className="text-gray-400" />
-                                    )}
+                                </IconButton>
+                                <Avatar name={selectedConversation.worker_name} src={selectedConversation.worker_avatar} />
+                                {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
+                                    ("Saída confirmada") esmagava o nome e o título do turno. */}
+                                <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+                                        <h4 className="font-bold truncate">{selectedConversation.worker_name}</h4>
+                                        <p className="text-xs text-gray-600 flex items-center gap-1">
+                                            <Briefcase size={10} className="shrink-0" />
+                                            <span className="truncate">{selectedConversation.job_title}</span>
+                                        </p>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 self-start sm:self-auto ${getStatusColor(selectedConversation.status)}`}>
+                                        {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
+                                    </span>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold truncate">{selectedConversation.worker_name}</h4>
-                                    <p className="text-xs text-gray-600 flex items-center gap-1">
-                                        <Briefcase size={10} />
-                                        {selectedConversation.job_title}
-                                    </p>
-                                </div>
-                                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status)}
-                                </span>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                                {messages.length === 0 ? (
+                            <div
+                                ref={logRef}
+                                onScroll={(e) => {
+                                    const log = e.currentTarget;
+                                    stickToEndRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+                                }}
+                                data-copilot-private
+                                role="log"
+                                aria-label="Mensagens da conversa"
+                                tabIndex={0}
+                                className="flex-1 min-h-0 overflow-y-auto overscroll-contain motion-safe:scroll-smooth p-4 space-y-4 bg-gray-50"
+                            >
+                                {erroMensagens ? (
+                                    <ErroDeCarga onRetry={() => setMessagesAttempt(n => n + 1)} />
+                                ) : messagesFor !== selectedConversation.id ? (
+                                    <p role="status" className="py-12 text-center text-sm font-semibold text-gray-600">Carregando mensagens...</p>
+                                ) : messages.length === 0 ? (
                                     <div className="text-center py-12 text-gray-600">
                                         <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
                                         <p className="font-bold">Nenhuma mensagem ainda.</p>
@@ -472,9 +615,9 @@ export default function CompanyMessages() {
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl ${msg.is_mine ? 'bg-black text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
+                                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
                                                         relógio ao lado de uma mensagem significa "pendente" em qualquer app de
                                                         conversa — aqui não significava nada, e nunca sumia.
@@ -498,7 +641,6 @@ export default function CompanyMessages() {
                                         </div>
                                     ))
                                 )}
-                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Typing Indicator */}
@@ -511,14 +653,20 @@ export default function CompanyMessages() {
                                 </div>
                             )}
 
-                            <div className="p-4 border-t-2 border-black bg-white">
-                                <div className="flex gap-2 sm:gap-3">
-                                    <input
-                                        type="text"
-                                        aria-label="Mensagem"
+                            <div className="shrink-0 p-2 sm:p-4 border-t-2 border-black bg-white">
+                                <form
+                                    className="flex items-end gap-2 sm:gap-3"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        void handleSendMessage();
+                                        inputRef.current?.focus();
+                                    }}
+                                >
+                                    <ChatComposerField
+                                        inputRef={inputRef}
                                         value={newMessage}
-                                        onChange={(e) => {
-                                            setNewMessage(e.target.value);
+                                        onChange={(value) => {
+                                            setNewMessage(value);
                                             if (selectedConversation && currentUser) {
                                                 presenceChannel.current?.track({ typing: true, userId: currentUser });
                                                 if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -527,22 +675,19 @@ export default function CompanyMessages() {
                                                 }, 3000);
                                             }
                                         }}
-                                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                        placeholder="Digite sua mensagem..."
-                                        className={`${FIELD_CONTROL_CLASS} flex-1 min-w-0`}
-                                        disabled={sending}
                                     />
                                     <Button
                                         variant="dark"
-                                        onClick={handleSendMessage}
+                                        type="submit"
                                         disabled={!newMessage.trim()}
                                         loading={sending}
                                         aria-label="Enviar mensagem"
+                                        data-copilot="empresa.mensagens.enviar"
                                         iconLeft={<Send size={18} />}
                                     >
                                         <span className="hidden sm:inline">Enviar</span>
                                     </Button>
-                                </div>
+                                </form>
                             </div>
                         </>
                     ) : (

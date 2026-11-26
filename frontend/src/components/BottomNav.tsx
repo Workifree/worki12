@@ -1,74 +1,64 @@
-import { Home, User, MessageSquare, PlusCircle, Users, Contact, Inbox, Briefcase, Receipt } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { useCurrentCompany } from '../hooks/useCurrentCompany';
+import { useCompanyNavContext } from '../hooks/useCompanyNavContext';
+import { getCompanyNav, getWorkerNav, isNavActive, toBottomNav } from '../lib/navigation';
 
 interface BottomNavProps {
     type?: 'worker' | 'company';
 }
 
+/**
+ * Barra inferior do celular. Altura fixa de 4rem + borda + safe-area (`--worki-nav-h`, index.css):
+ * quem fica acima dela (ActionBar, avisos PWA, botão do copiloto) lê essa variável.
+ * Item ativo: pílula suave atrás do ícone + rótulo em negrito; nada muda de tamanho ao trocar.
+ */
 export default function BottomNav({ type = 'worker' }: BottomNavProps) {
-    // Nav push-first (pivô empresa-primeiro, jun/2026): "Vagas" (busca pública)
-    // sai do bottom nav — Fase 2, ver ADR-20260630-pagamento-opcional-piloto.
-    const workerNavItems = [
-        { icon: Home, label: 'Início', path: '/dashboard' },
-        { icon: Inbox, label: 'Turnos', path: '/my-jobs' },
-        { icon: Contact, label: 'Empresas', path: '/carteira' },
-        { icon: Receipt, label: 'Recebimentos', path: '/recebimentos' },
-        { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
-        { icon: User, label: 'Perfil', path: '/profile' },
-    ];
-
-    const companyNavItems = [
-        { icon: Home, label: 'Início', path: '/company/dashboard' },
-        { icon: Users, label: 'Elenco', path: '/company/team' },
-        { icon: PlusCircle, label: 'Criar', path: '/company/create' },
-        { icon: Briefcase, label: 'Turnos', path: '/company/jobs' },
-        { icon: MessageSquare, label: 'Mensagens', path: '/company/messages' },
-        { icon: User, label: 'Perfil', path: '/company/profile' },
-    ];
-
-    const navItems = type === 'company' ? companyNavItems : workerNavItems;
     const isCompany = type === 'company';
+    const { pathname } = useLocation();
+    const currentCompany = useCurrentCompany(isCompany);
+    const companyNav = useCompanyNavContext(currentCompany);
+    const navItems = toBottomNav(isCompany ? getCompanyNav(companyNav) : getWorkerNav());
 
     return (
-        <nav aria-label="Menu de navegacao" className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t-2 border-black pb-safe z-50">
-            <div className="flex justify-around items-stretch h-16 px-1">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        aria-label={item.label}
-                        className={({ isActive }) => `
-                 relative flex flex-col items-center justify-center w-full min-h-11 gap-1 py-2 px-1
-                 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
+        <nav data-bottom-nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 z-50 w-full border-t border-gray-200 bg-white pb-safe">
+            <div className="flex h-16 items-stretch">
+                {navItems.map((item) => {
+                    const isActive = isNavActive(pathname, item);
+                    const label = item.shortLabel ?? item.label;
+                    return (
+                        <Link
+                            key={item.id}
+                            to={item.path}
+                            aria-label={label}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={`
+                 group flex min-h-11 min-w-11 flex-1 basis-0 flex-col items-center justify-center gap-1 px-px
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
-                                ? (isCompany ? 'text-blue-600' : 'text-primary')
-                                : 'text-gray-500 hover:text-black'}
+                                    ? (isCompany ? 'text-blue-700' : 'text-primary-ink')
+                                    : 'text-gray-600 hover:text-black'}
                `}
-                    >
-                        {({ isActive }) => (
-                            <>
-                                {/* Indicador de rota ativa: barrinha na borda superior (sutil, sem
-                                    mudar a largura nem a altura do item). */}
-                                <span
-                                    aria-hidden="true"
-                                    className={`absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full transition-opacity duration-150 ${isCompany ? 'bg-blue-600' : 'bg-primary'} ${isActive ? 'opacity-100' : 'opacity-0'}`}
-                                />
-                                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
-                                {/* px-1 (em vez de p-2) libera ~4px/item — medido com Playwright: fecha o
-                                    overflow horizontal do nav do worker a 320px (iPhone SE 1ª geração,
-                                    o pior caso) sem reduzir a fonte de 10px em nenhum item, nos dois papéis.
-                                    `truncate` (SEM `min-w-0` no link pai) é só rede de segurança: cai o
-                                    texto com reticências se algum rótulo futuro/escala de fonte do SO
-                                    não couber, sem alterar a distribuição no caso normal. Rótulos SEM
-                                    uppercase e SEM font-black (semibold é mais estreito que bold/black):
-                                    "Recebimentos" precisa caber a 390px. */}
-                                <span className="text-[10px] leading-none font-semibold truncate max-w-full">
-                                    {item.label}
-                                </span>
-                            </>
-                        )}
-                    </NavLink>
-                ))}
+                        >
+                            {/* Pílula do item ativo: aparece com fade (sem mudar largura nem altura). */}
+                            <span
+                                aria-hidden="true"
+                                className={`flex h-7 w-14 items-center justify-center rounded-pill transition-colors duration-fast ease-standard motion-reduce:transition-none group-active:bg-gray-200 ${isActive ? (isCompany ? 'bg-blue-100' : 'bg-primary-light') : 'bg-transparent'}`}
+                            >
+                                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                            </span>
+                            {/* Células iguais (flex-1 basis-0): 64px a 320. Abaixo de 360px o item com
+                                `tinyLabel` troca o rótulo visível; `truncate` fica só como rede. */}
+                            <span className={`max-w-full truncate whitespace-nowrap text-xs leading-none tracking-tighter ${isActive ? 'font-bold' : 'font-semibold'}`}>
+                                {item.tinyLabel ? (
+                                    <>
+                                        <span aria-hidden="true" className="min-[360px]:hidden">{item.tinyLabel}</span>
+                                        <span className="hidden min-[360px]:inline">{label}</span>
+                                    </>
+                                ) : label}
+                            </span>
+                        </Link>
+                    );
+                })}
             </div>
         </nav>
     );

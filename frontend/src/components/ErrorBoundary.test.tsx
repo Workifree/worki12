@@ -29,7 +29,7 @@ describe('ErrorBoundary', () => {
 
     expect(screen.getByText('Algo deu errado')).toBeInTheDocument()
     expect(screen.getByText(/Ocorreu um erro inesperado/)).toBeInTheDocument()
-    expect(screen.getByText('Recarregar')).toBeInTheDocument()
+    expect(screen.getByText('Tentar de novo')).toBeInTheDocument()
 
     vi.restoreAllMocks()
   })

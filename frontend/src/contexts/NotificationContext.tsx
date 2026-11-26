@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { notificationSources } from '../lib/realtime/liveSources';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logError } from '../lib/logger'
@@ -35,29 +38,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const unreadCount = notifications.filter(n => !n.read_at).length;
 
-    useEffect(() => {
-        if (!user) {
-            return () => {
-                setNotifications([]);
-            };
-        }
-
-        let isActive = true;
-
-        const createId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
-        const loadNotifications = async () => {
+    const beginLoad = useLatestResponse();
+    const loadNotifications = useCallback(
+        async (userId: string, isActive: () => boolean, silent = false) => {
             if (!dbAvailable) return;
+            const claim = beginLoad();
             const { data, error } = await supabase
                 .from('notifications')
                 .select('*')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(50);
 
-            if (!isActive) return;
+            if (!isActive()) return;
+
+            // Recarga de fundo que falha mantém a lista que já está no sino.
+            if (error && silent) return;
+            if (!claim()) return;
 
             setCarregando(false);
             if (error) {
@@ -70,9 +67,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             setErroCarga(false);
             if (data) setNotifications(data);
-        };
+        },
+        [dbAvailable, beginLoad],
+    );
 
-        loadNotifications();
+    // O canal abaixo não se recupera de queda: foco, rede e polling conferem de novo.
+    useLiveRefresh({
+        sources: user ? notificationSources(user.id) : [],
+        onRefresh: (ctx) => (user ? loadNotifications(user.id, ctx.isCurrent, true) : undefined),
+    });
+
+    useEffect(() => {
+        if (!user) {
+            return () => {
+                setNotifications([]);
+            };
+        }
+
+        let isActive = true;
+
+        void loadNotifications(user.id, () => isActive);
 
         const dbChannel = dbAvailable ? supabase
             .channel('notifications-changes')
@@ -86,7 +100,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        setNotifications(prev => [payload.new as Notification, ...prev]);
+                        // A recarga pode já ter trazido a mesma linha.
+                        setNotifications(prev => prev.some(n => n.id === payload.new.id)
+                            ? prev
+                            : [payload.new as Notification, ...prev]);
                     } else if (payload.eventType === 'UPDATE') {
                         setNotifications(prev => prev.map(n => n.id === payload.new.id ? payload.new as Notification : n));
                     }
@@ -94,28 +111,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             )
             .subscribe() : null;
 
-        const broadcastChannel = supabase
-            .channel(`user:${user.id}`)
-            .on('broadcast', { event: 'new_notification' }, (payload) => {
-                const data = payload.payload as Partial<Notification> & { message?: string; link?: string; title?: string; type?: Notification['type'] };
-                const createdAt = new Date().toISOString();
-                const notification: Notification = {
-                    id: data.id ?? createId(),
-                    type: data.type ?? 'system',
-                    title: data.title ?? 'Notificação',
-                    message: data.message ?? '',
-                    link: data.link,
-                    read_at: null,
-                    created_at: data.created_at ?? createdAt
-                };
-                setNotifications(prev => [notification, ...prev]);
-            })
-            .subscribe();
-
         return () => {
             isActive = false;
             if (dbChannel) supabase.removeChannel(dbChannel);
-            supabase.removeChannel(broadcastChannel);
         };
     // Depender do OBJETO `user` refazia tudo 3x por sessao: o supabase-js emite
     // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED e cada evento produz um objeto novo com o

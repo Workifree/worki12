@@ -221,7 +221,7 @@ describe('CompanyBadges', () => {
 
     await waitFor(() => expect(screen.getByText('Divino Fogão')).toBeInTheDocument());
 
-    const toggle = screen.getByLabelText('Não exibir onde já trabalhei para outras empresas');
+    const toggle = screen.getByLabelText('Mostrar onde já trabalhei para outras empresas');
     fireEvent.click(toggle);
 
     await waitFor(() => expect(mockSetBadgesHiddenGlobal).toHaveBeenCalledWith('worker-1', true));

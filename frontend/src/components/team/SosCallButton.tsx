@@ -116,12 +116,14 @@ export function SosCallButton({ jobId, refreshKey, onDispatched }: SosCallButton
         title={!checking && !eligible ? eligibilityMessage(reasonBlocked) : undefined}
         iconLeft={<Siren size={16} />}
         className="flex-shrink-0"
+        data-copilot="empresa.presenca.sos"
       >
         SOS: fora do Elenco
       </Button>
 
+      {/* O motivo do botão apagado precisa ser visível: `title` não existe no toque. */}
       {!checking && !eligible && (
-        <p className="sr-only">{eligibilityMessage(reasonBlocked)}</p>
+        <p className="text-xs text-gray-600 sm:max-w-60">{eligibilityMessage(reasonBlocked)}</p>
       )}
 
       {modalOpen && (
@@ -175,7 +177,7 @@ function SosModal({ reason, message, dispatching, onReasonChange, onMessageChang
     >
       <div className="space-y-4">
         {/* A membrana da feature — nunca escondida em texto pequeno. */}
-        <div className="flex items-start gap-2 text-sm text-black bg-yellow-50 border-2 border-black rounded-xl p-3">
+        <div className="flex items-start gap-2 text-sm text-black bg-yellow-50 border border-gray-200 rounded-xl p-3">
           <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
           <span>
             Você não vai ver quem foi chamado — só quantos foram avisados, e depois quem

@@ -1,29 +1,54 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import LocalDoTurno from '../components/LocalDoTurno';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
+import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
-import { CheckCircle2, Clock, XCircle, DollarSign, Star, Play, Square, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt } from 'lucide-react';
-import { Button, Card, PageHeader } from '../components/ui';
+import { CheckCircle2, Clock, XCircle, DollarSign, Star, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt, ChevronRight, History } from 'lucide-react';
+import { Alert, Button, Card, DialogActions, EmptyState, IconButton, Menu, PageHeader, SkeletonList, StatusBadge, Tabs } from '../components/ui';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, isToday, parseISO, isWithinInterval, setHours, setMinutes } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import RateModal from '../components/RateModal';
-import JobLifecycleStepper from '../components/JobLifecycleStepper';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { useWorkerInvites } from '../hooks/useShiftInvites';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { workerShiftSources } from '../lib/realtime/liveSources';
+import { useWorkerInvites, EVENTO_CONVITES, type ConvitesMudaramDetail } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
+import { hasArrived, hasLeftShift } from '../lib/shiftPresence';
+import TodayShiftCard, { type TodayShift } from '../components/TodayShiftCard';
+import { isAvisosEnabled, isPresencaEnabled } from '../lib/features';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
+import { attendanceGuardMessage, checkinWindow, isTodayShift } from '../lib/checkinWindow';
+import { openShiftConversation } from '../lib/shiftChat';
 import type {
     ReviewDirection,
     ShiftAttendanceConfirmation,
     AttendanceConfirmationResponse,
     AttendanceConfirmationOutcome,
 } from '../types';
+import { Dialog } from '../components/ui/Dialog';
+
+const RATE_PROMPTED_KEY = 'worki_rate_prompted';
+function readRatePrompted(): boolean {
+    try {
+        return sessionStorage.getItem(RATE_PROMPTED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+function markRatePrompted(): void {
+    try {
+        sessionStorage.setItem(RATE_PROMPTED_KEY, '1');
+    } catch {
+        // sem storage vale só a trava por visita (ref)
+    }
+}
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
 // 'confirmed'/'cannot_attend'/'already_responded'/'unauthenticated' têm tratamento dedicado no handler;
@@ -52,11 +77,11 @@ export function computeWorkerSteps(job: JobApplication): Step[] {
 
     return [
         {
-            label: 'Chegada registrada',
+            label: checkinDone ? 'Chegada registrada' : 'Registrar chegada',
             status: checkinDone ? 'complete' : 'active'
         },
         {
-            label: 'Check-out',
+            label: checkoutDone ? 'Saída registrada' : 'Registrar saída',
             status: checkoutDone
                 ? 'complete'
                 : checkinDone && !checkoutDone
@@ -64,7 +89,9 @@ export function computeWorkerSteps(job: JobApplication): Step[] {
                     : 'pending'
         },
         {
-            label: 'Aguardando empresa',
+            label: companyConfirmed
+                ? 'Empresa confirmou'
+                : checkoutDone ? 'Aguardando empresa' : 'Confirmação da empresa',
             status: companyConfirmed
                 ? 'complete'
                 : checkoutDone && !companyConfirmed
@@ -82,7 +109,8 @@ export interface JobApplication {
     company_id: string;
     company_name: string;
     company_logo: string | null;
-    pay: number;
+    /** null = valor não informado (nunca vira R$ 0,00). */
+    pay: number | null;
     date: string;
     raw_date: string | null;
     time: string;
@@ -95,9 +123,17 @@ export interface JobApplication {
     company_checkin_confirmed_at: string | null;
     company_checkout_confirmed_at: string | null;
     created_at?: string;
+    presence_mode?: string | null;
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
+
+/** Selo do Histórico para turno com saída registrada que a empresa ainda não fechou. */
+function awaitingLabel(job: JobApplication): string | null {
+    if (job.status !== 'hired' && job.status !== 'in_progress') return null;
+    return job.company_checkout_confirmed_at ? 'Saída confirmada' : 'Aguardando confirmação';
+}
+
 
 // Rotulo de "quando" para o card de confirmacao de vespera.
 // O texto era chumbado em "amanha", mas `request_attendance_confirmation` aceita turno de ate
@@ -126,51 +162,76 @@ function fmtTime(iso: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Peças visuais locais (só desta tela): chip de meta, linha de status, estado vazio.
+// Peças visuais e ordenação locais (só desta tela).
 // ---------------------------------------------------------------------------
 
 type ChipTone = 'neutral' | 'brand' | 'info';
 
 const CHIP_TONES: Record<ChipTone, string> = {
     neutral: 'bg-gray-100 text-gray-700',
-    brand: 'bg-primary-light text-primary',
+    brand: 'bg-primary-light text-primary-dark',
     info: 'bg-blue-50 text-blue-700',
 };
 
 function Chip({ tone = 'neutral', children }: { tone?: ChipTone; children: ReactNode }) {
     return (
-        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl ${CHIP_TONES[tone]}`}>
+        <span className={`inline-flex max-w-full items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl [overflow-wrap:anywhere] ${CHIP_TONES[tone]}`}>
             {children}
         </span>
     );
 }
 
-type StatusTone = 'success' | 'info' | 'waiting' | 'neutral';
-
-const STATUS_TONES: Record<StatusTone, string> = {
-    success: 'bg-green-50 text-green-800',
-    info: 'bg-blue-50 text-blue-700',
-    waiting: 'bg-yellow-50 text-yellow-800',
-    neutral: 'bg-gray-100 text-gray-700',
-};
-
-function StatusLine({ tone, icon, children }: { tone: StatusTone; icon: ReactNode; children: ReactNode }) {
-    return (
-        <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${STATUS_TONES[tone]}`}>
-            {icon}
-            {children}
-        </div>
-    );
+function payLabel(pay: number | null): string {
+    return pay ? formatBRL(pay) : 'Valor não informado';
 }
 
-function EmptyState({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
-    return (
-        <div className="text-center py-12 px-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            {icon && <div className="mb-3 flex justify-center text-gray-300">{icon}</div>}
-            <p className="font-semibold text-gray-700">{title}</p>
-            {description && <p className="text-sm text-gray-600 mt-1">{description}</p>}
-        </div>
-    );
+/** Data e hora do turno, comparáveis como texto. Sem data vai para o fim. */
+function shiftKey(job: JobApplication, missing: string): string {
+    return `${job.raw_date?.slice(0, 10) ?? missing} ${job.time}`;
+}
+
+const byShiftDate = (a: JobApplication, b: JobApplication) => shiftKey(a, '9999').localeCompare(shiftKey(b, '9999'));
+const byShiftDateDesc = (a: JobApplication, b: JobApplication) => shiftKey(b, '0000').localeCompare(shiftKey(a, '0000'));
+
+function weekdayDate(job: JobApplication): string {
+    if (!job.raw_date) return job.date;
+    const parsed = new Date(job.raw_date.length === 10 ? `${job.raw_date}T12:00:00` : job.raw_date);
+    const weekday = parsed.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+    return `${weekday} ${job.date.slice(0, 5)}`;
+}
+
+function scheduleOf(job: JobApplication) {
+    return { startDate: job.raw_date, startTime: job.time, endTime: job.end_time };
+}
+
+function toTodayShift(job: JobApplication): TodayShift {
+    return {
+        applicationId: job.id,
+        status: job.status,
+        title: job.title,
+        companyName: job.company_name,
+        startDate: job.raw_date,
+        startTime: /^\d/.test(job.time) ? job.time : null,
+        endTime: job.end_time,
+        location: job.location,
+        pay: job.pay,
+        worker_checkin_at: job.worker_checkin_at,
+        worker_checkout_at: job.worker_checkout_at,
+        company_checkin_confirmed_at: job.company_checkin_confirmed_at,
+        company_checkout_confirmed_at: job.company_checkout_confirmed_at,
+        presenceMode: job.presence_mode,
+    };
+}
+
+function isTodayJob(job: JobApplication): boolean {
+    return isTodayShift({ ...job, ...scheduleOf(job) });
+}
+
+function HistoryStatus({ job }: { job: JobApplication }) {
+    const waiting = awaitingLabel(job);
+    return waiting
+        ? <StatusBadge tone="warning" icon={Clock}>{waiting}</StatusBadge>
+        : <StatusBadge domain="application" status={job.status} />;
 }
 
 export default function MyJobs() {
@@ -193,7 +254,8 @@ export default function MyJobs() {
         if (recusaTimerRef.current) clearTimeout(recusaTimerRef.current);
         recusaTimerRef.current = setTimeout(() => setRecusaArmada(null), 4000);
     };
-    const [activeTab, setActiveTab] = useState<ActiveTab>('invites');
+    // Sem escolha da pessoa, abre a primeira aba que tem o que fazer (ver `activeTab`).
+    const [chosenTab, setActiveTab] = useState<ActiveTab | null>(null);
     const [jobs, setJobs] = useState<{
         in_progress: JobApplication[],
         scheduled: JobApplication[],
@@ -202,13 +264,8 @@ export default function MyJobs() {
 
     // Rating State
     const [rateModalOpen, setRateModalOpen] = useState(false);
-    // ESC do modal de detalhe do historico (heuristica #3). O RateModal ja tem o proprio ESC via
-    // useModalDismiss interno; a guarda !rateModalOpen garante que, com os dois abertos, um ESC
-    // fecha UM por vez (avaliacao primeiro, detalhe no proximo) — nunca os dois de uma tacada.
-    useModalDismiss(() => { if (!rateModalOpen) setDetailJob(null); });
     const [selectedJobToRate, setSelectedJobToRate] = useState<JobApplication | null>(null);
     const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set());
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
     // Detalhe do turno no histórico (chegada/saída, valor, avaliação, foto).
     const [detailJob, setDetailJob] = useState<JobApplication | null>(null);
     // Confirmação de cancelamento de turno agendado (aba "Agendados").
@@ -217,19 +274,30 @@ export default function MyJobs() {
     // "Falar com a empresa" — o gesto simétrico do freela (empresa já tinha o ícone de chat
     // na tela de presença). id da application sendo processada (loading do botão).
     const [chattingId, setChattingId] = useState<string | null>(null);
-    // Avaliação obrigatória: abre automática 1x por visita para o 1º turno pago sem avaliação.
+    // Pedido de avaliação: abre sozinho 1x por sessão para o 1º turno pago sem avaliação.
     const autoRatePrompted = useRef(false);
     const { addToast } = useToast();
 
     // Hook de convites push
-    const { pendingInvites, loading: invitesLoading, respondingId, respond } = useWorkerInvites();
+    const {
+        pendingInvites,
+        loading: invitesLoading,
+        error: invitesError,
+        refresh: refreshInvites,
+        respondingId,
+        respond,
+    } = useWorkerInvites();
 
     // Confirmação de véspera (D-1) — pedidos pendentes (`response IS NULL`) endereçados a este
     // freela. Fetch independente do `fetchJobs` (mesmo padrão de `useWorkerInvites`): a tela não
     // precisa esperar o histórico completo carregar para mostrar o card de confirmação.
     const [pendingConfirmations, setPendingConfirmations] = useState<ShiftAttendanceConfirmation[]>([]);
     const [confirmationsLoading, setConfirmationsLoading] = useState(true);
+    const [erroConfirmacoes, setErroConfirmacoes] = useState(false);
     const [respondingConfirmationId, setRespondingConfirmationId] = useState<string | null>(null);
+    const answeredRef = useRef(new Set<string>());
+    const [busyCards, setBusyCards] = useState(0);
+    const trackBusyCard = useCallback((busy: boolean) => setBusyCards((n) => n + (busy ? 1 : -1)), []);
     // R7/A3/A4 (requisito duro, não superado pelo ddl-aprovado.md): depois de responder, o card
     // NÃO some — troca os botões por um badge ("Confirmado"/"Avisou que não vai"), pra o freela
     // conseguir conferir "será que eu respondi?" sem precisar lembrar. `getMyPendingConfirmations`
@@ -245,18 +313,40 @@ export default function MyJobs() {
         Record<string, AttendanceConfirmationResponse | 'already_responded'>
     >({});
 
-    const fetchJobs = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return navigate('/login');
+    const [userId, setUserId] = useState<string | null>(null);
+    const beginJobs = useLatestResponse();
+    const beginConfirmations = useLatestResponse();
+
+    // `silent` = recarga ao vivo: sem esqueleto e, se falhar, a tela fica como está.
+    const fetchJobs = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginJobs();
+        const session = await checkSession();
+        if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
+        if (session.status === 'unavailable') {
+            logError('MyJobs.fetchJobs.session', session.error);
+            if (silent) return;
+            setErroCarga(true);
+            setLoading(false);
+            return;
+        }
+        const user = session.user;
+        setUserId(user.id);
 
         // Fetch my reviews to know what I've rated
-        const { data: myReviews } = await supabase
+        const { data: myReviews, error: reviewsError } = await supabase
             .from('reviews')
             .select('job_id')
             .eq('reviewer_id', user.id);
+        // Sem saber o que já foi avaliado, a tela ofereceria (e abriria sozinha) avaliação repetida.
+        if (reviewsError) {
+            logError('MyJobs.fetchJobs.reviews', reviewsError);
+            if (silent) return;
+            setErroCarga(true);
+            setLoading(false);
+            return;
+        }
 
         const reviewedSet = new Set(myReviews?.map(r => r.job_id) || []);
-        setReviewedJobIds(reviewedSet);
 
         const { data, error } = await supabase
             .from('applications')
@@ -269,6 +359,7 @@ export default function MyJobs() {
                 company_checkin_confirmed_at,
                 company_checkout_confirmed_at,
                 job:jobs (
+                    ${isPresencaEnabled() ? 'presence_mode,' : ''}
                     id,
                     title,
                     budget,
@@ -290,14 +381,16 @@ export default function MyJobs() {
 
         if (error) {
             logError('Error fetching applications:', error);
+            if (silent) return;
             setErroCarga(true);
         } else {
+            if (!claim()) return;
+            setReviewedJobIds(reviewedSet);
             setErroCarga(false);
             const in_progress: JobApplication[] = [];
             const scheduled: JobApplication[] = [];
             const history: JobApplication[] = [];
-
-            const now = new Date();
+            const awaiting: JobApplication[] = [];
 
             interface ApplicationRow {
                 id: string;
@@ -315,6 +408,7 @@ export default function MyJobs() {
                     work_start_time: string | null;
                     work_end_time: string | null;
                     location: string | null;
+                    presence_mode?: string | null;
                     company: {
                         id: string;
                         name: string;
@@ -334,7 +428,7 @@ export default function MyJobs() {
                     company_id: app.job.company?.id || '',
                     company_name: app.job.company?.name || 'Empresa',
                     company_logo: app.job.company?.logo_url ?? null,
-                    pay: app.job.budget || 0,
+                    pay: app.job.budget > 0 ? app.job.budget : null,
                     date: app.job.start_date ? new Date(app.job.start_date).toLocaleDateString('pt-BR') : 'Data a definir',
                     raw_date: app.job.start_date ?? null,
                     time: app.job.work_start_time || 'Horário a definir',
@@ -346,37 +440,20 @@ export default function MyJobs() {
                     worker_checkout_at: app.worker_checkout_at,
                     company_checkin_confirmed_at: app.company_checkin_confirmed_at,
                     company_checkout_confirmed_at: app.company_checkout_confirmed_at,
-                    created_at: app.created_at
+                    created_at: app.created_at,
+                    presence_mode: app.job.presence_mode
                 };
 
-                const isJobToday = application.raw_date && isToday(parseISO(application.raw_date));
-                let isWithinWorkHours = false;
+                // "Em andamento" = em curso, ou contratado com a chegada liberada agora.
+                const isInProgress = app.status === 'in_progress'
+                    || (app.status === 'hired'
+                        && (hasArrived(application) || checkinWindow(scheduleOf(application)).state === 'open'));
 
-                if (isJobToday && application.time && application.end_time) {
-                    try {
-                        const [startH, startM] = application.time.split(':').map(Number);
-                        const [endH, endM] = application.end_time.split(':').map(Number);
-
-                        const todayDate = new Date();
-                        const startTime = setMinutes(setHours(todayDate, startH), startM);
-                        let endTime = setMinutes(setHours(todayDate, endH), endM);
-
-                        if (endTime.getTime() <= startTime.getTime()) {
-                            endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
-                        }
-
-                        const startBuffer = new Date(startTime.getTime() - 30 * 60 * 1000);
-                        const endBuffer = new Date(endTime.getTime() + 60 * 60 * 1000);
-
-                        isWithinWorkHours = isWithinInterval(now, { start: startBuffer, end: endBuffer });
-                    } catch (e) {
-                        logError('Error parsing work hours:', e);
-                    }
-                }
-
-                const isInProgress = (app.status === 'hired' && isJobToday && isWithinWorkHours) || app.status === 'in_progress';
-
-                if (isInProgress) {
+                // Saída já registrada: o turno acabou para o freela, mesmo antes de a empresa
+                // fechar. Vai para o Histórico como "aguardando", nunca para "Em Andamento".
+                if ((app.status === 'hired' || app.status === 'in_progress') && hasLeftShift(application)) {
+                    awaiting.push(application);
+                } else if (isInProgress) {
                     in_progress.push(application);
                 } else if (app.status === 'hired') {
                     scheduled.push(application);
@@ -385,25 +462,56 @@ export default function MyJobs() {
                 }
             });
 
-            setJobs({ in_progress, scheduled, history });
+            // Quem ainda espera a empresa vem primeiro.
+            in_progress.sort(byShiftDate);
+            scheduled.sort(byShiftDate);
+            history.sort(byShiftDateDesc);
+            awaiting.sort(byShiftDateDesc);
+            setJobs({ in_progress, scheduled, history: [...awaiting, ...history] });
+            setLoading(false);
+            return { in_progress, scheduled };
         }
         setLoading(false);
-    }, [navigate]);
+    }, [navigate, beginJobs]);
 
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
 
-    const fetchConfirmations = useCallback(async () => {
+    // Convite respondido (pelo aviso em tela cheia ou pela aba): os turnos mudaram. Sem reler, o
+    // turno aceito não aparecia em aba nenhuma até recarregar a página.
+    useEffect(() => {
+        const aoMudarConvites = (e: Event) => {
+            const jobAceito = (e as CustomEvent<ConvitesMudaramDetail>).detail?.jobAceito;
+            void (async () => {
+                const listas = await fetchJobs();
+                if (!jobAceito || !listas) return;
+                if (listas.in_progress.some((j) => j.job_id === jobAceito)) setActiveTab('in_progress');
+                else if (listas.scheduled.some((j) => j.job_id === jobAceito)) setActiveTab('scheduled');
+            })();
+        };
+        window.addEventListener(EVENTO_CONVITES, aoMudarConvites);
+        return () => window.removeEventListener(EVENTO_CONVITES, aoMudarConvites);
+    }, [fetchJobs]);
+
+    const fetchConfirmations = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginConfirmations();
         try {
-            const rows = await AttendanceConfirmationService.getMyPendingConfirmations();
-            setPendingConfirmations(rows);
+            const rows = await AttendanceConfirmationService.getMyPendingConfirmationsChecked();
+            if (!claim()) return;
+            // O cartão já respondido nesta sessão continua na tela (some do servidor como pendente).
+            setPendingConfirmations((prev) => [
+                ...rows,
+                ...prev.filter((p) => answeredRef.current.has(p.id) && !rows.some((r) => r.id === p.id)),
+            ]);
+            setErroConfirmacoes(false);
         } catch (err) {
             logError('MyJobs.fetchConfirmations', err);
+            if (!silent && claim()) setErroConfirmacoes(true);
         } finally {
             setConfirmationsLoading(false);
         }
-    }, []);
+    }, [beginConfirmations]);
 
     useEffect(() => {
         fetchConfirmations();
@@ -432,6 +540,7 @@ export default function MyJobs() {
                         : 'Empresa avisada que você não vai poder ir.',
                     'success',
                 );
+                answeredRef.current.add(confirmation.id);
                 setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: confirmedOutcome }));
                 return;
             }
@@ -441,6 +550,7 @@ export default function MyJobs() {
             // de palpite.
             if (result.outcome === 'already_responded') {
                 addToast('Você já respondeu a este pedido.', 'info');
+                answeredRef.current.add(confirmation.id);
                 setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: 'already_responded' }));
                 return;
             }
@@ -460,73 +570,20 @@ export default function MyJobs() {
         }
     };
 
-    // Avaliação obrigatória pós-pagamento: assim que o turno é concluído/pago pela
+    // Pedido de avaliação pós-pagamento: assim que o turno é concluído/pago pela
     // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
-    // abrimos o modal automaticamente (1x por visita) para o freela avaliar a empresa.
+    // abrimos o modal (1x por sessão, dispensável). Convite pendente tem prazo: vem antes.
     useEffect(() => {
-        if (autoRatePrompted.current || loading) return;
+        if (autoRatePrompted.current || loading || invitesLoading || pendingInvites.length > 0) return;
+        if (readRatePrompted()) return;
         const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id));
         if (pending) {
             autoRatePrompted.current = true;
+            markRatePrompted();
             setSelectedJobToRate(pending);
             setRateModalOpen(true);
         }
-    }, [jobs.history, reviewedJobIds, loading]);
-
-    // `.select('id')` obrigatório (padrão `removeFromTeam`/patterns.md — DELETE/UPDATE sob
-    // RLS negado silenciosamente): sob RLS um UPDATE cuja linha não casa mais com a policy
-    // USING retorna 0 linhas sem erro (PostgREST 204). Sem checar `data`, a UI diria "check-in
-    // realizado" com o banco intocado.
-    const handleCheckin = async (appId: string) => {
-        setActionLoading(appId);
-        try {
-            const { data, error } = await supabase
-                .from('applications')
-                .update({
-                    worker_checkin_at: new Date().toISOString(),
-                    status: 'in_progress'
-                })
-                .eq('id', appId)
-                .select('id');
-
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                addToast('Não foi possível fazer check-in. Atualize a página e tente novamente.', 'error');
-                return;
-            }
-            addToast('Check-in realizado com sucesso!', 'success');
-            await fetchJobs();
-        } catch (err) {
-            logError('Error checking in:', err);
-            addToast('Erro ao fazer check-in. Tente novamente.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    const handleCheckout = async (appId: string) => {
-        setActionLoading(appId);
-        try {
-            const { data, error } = await supabase
-                .from('applications')
-                .update({ worker_checkout_at: new Date().toISOString() })
-                .eq('id', appId)
-                .select('id');
-
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                addToast('Não foi possível fazer check-out. Atualize a página e tente novamente.', 'error');
-                return;
-            }
-            addToast('Check-out registrado! A empresa confirma a saída.', 'success');
-            await fetchJobs();
-        } catch (err) {
-            logError('Error checking out:', err);
-            addToast('Erro ao fazer check-out. Tente novamente.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
+    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length]);
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
     // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
@@ -555,7 +612,7 @@ export default function MyJobs() {
             await fetchJobs();
         } catch (err) {
             logError('Error cancelling shift:', err);
-            addToast('Erro ao cancelar turno. Tente novamente.', 'error');
+            addToast(attendanceGuardMessage(err) ?? 'Erro ao cancelar turno. Tente novamente.', 'error');
         } finally {
             setCancelLoading(false);
         }
@@ -567,23 +624,7 @@ export default function MyJobs() {
     const handleChat = async (job: JobApplication) => {
         setChattingId(job.id);
         try {
-            const { data: existingConvs } = await supabase
-                .from('Conversation')
-                .select('id')
-                .eq('application_uuid', job.id)
-                .limit(1);
-
-            if (existingConvs && existingConvs.length > 0) {
-                navigate(`/messages?conversation=${existingConvs[0].id}`);
-            } else {
-                const newConvId = crypto.randomUUID();
-                const { error } = await supabase
-                    .from('Conversation')
-                    .insert({ id: newConvId, application_uuid: job.id, islocked: false });
-
-                if (error) throw error;
-                navigate(`/messages?conversation=${newConvId}`);
-            }
+            navigate(`/messages?conversation=${await openShiftConversation(job.id)}`);
         } catch (err) {
             logError('MyJobs: handleChat', err);
             addToast('Erro ao iniciar conversa.', 'error');
@@ -636,50 +677,102 @@ export default function MyJobs() {
         }
     };
 
+    // Turnos de hoje ficam no topo, com as ações; não se repetem nas abas.
+    const todayJobs = [...jobs.in_progress, ...jobs.scheduled].filter(isTodayJob).sort(byShiftDate);
+    const todayIds = new Set(todayJobs.map((j) => j.id));
+    const inProgressList = jobs.in_progress.filter((j) => !todayIds.has(j.id));
+    const scheduledList = jobs.scheduled.filter((j) => !todayIds.has(j.id));
+
+    const activeTab: ActiveTab = chosenTab ?? (
+        inProgressList.length > 0 ? 'in_progress'
+            : invitesLoading || invitesError || pendingInvites.length > 0 ? 'invites'
+                : scheduledList.length > 0 ? 'scheduled'
+                    : jobs.history.length > 0 ? 'history'
+                        : 'invites'
+    );
+
+    useLiveRefresh({
+        sources: userId ? workerShiftSources(userId) : [],
+        onRefresh: () => {
+            // A aba que a pessoa está vendo não muda sozinha porque chegou dado novo.
+            setActiveTab((prev) => prev ?? activeTab);
+            return Promise.all([
+                fetchJobs({ silent: true }),
+                fetchConfirmations({ silent: true }),
+                refreshInvites?.({ silent: true }),
+            ]);
+        },
+        paused: loading || invitesLoading || rateModalOpen || !!cancelJob || cancelLoading || !!detailJob
+            || !!respondingConfirmationId || !!respondingId || !!chattingId || busyCards > 0,
+    });
+
     if (erroCarga && !loading) return (
         <div className="pb-24 max-w-4xl mx-auto pt-6">
-            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); }} />
+            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); void refreshInvites?.(); fetchConfirmations(); }} />
         </div>
     );
 
     if (loading) return (
-        <div className="flex flex-col gap-6 pb-24 max-w-4xl mx-auto animate-pulse">
-            <div className="h-9 bg-gray-200 rounded-xl w-1/3" />
-            <div className="flex gap-2">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-11 bg-gray-200 rounded-xl w-24" />)}
-            </div>
-            <div className="space-y-4">
-                {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
-                ))}
-            </div>
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+            <SkeletonList count={4} itemClassName="h-28" />
         </div>
     );
 
-    const tabs: { id: ActiveTab; label: string; count: number; tone: 'brand' | 'dark' | 'neutral' }[] = [
-        { id: 'invites', label: 'Convites', count: pendingInvites.length, tone: 'brand' },
-        { id: 'in_progress', label: 'Em Andamento', count: jobs.in_progress.length, tone: 'dark' },
-        { id: 'scheduled', label: 'Agendados', count: jobs.scheduled.length, tone: 'neutral' },
-        { id: 'history', label: 'Histórico', count: jobs.history.length, tone: 'neutral' },
+    const abrirConvites = () => {
+        setActiveTab('invites');
+        document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'start' });
+    };
+
+    const tabs: { id: ActiveTab; label: string; count: number }[] = [
+        { id: 'invites', label: 'Convites', count: pendingInvites.length },
+        { id: 'in_progress', label: 'Em andamento', count: inProgressList.length },
+        { id: 'scheduled', label: 'Agendados', count: scheduledList.length },
+        { id: 'history', label: 'Histórico', count: jobs.history.length },
     ];
-    const TAB_COUNT_TONES = {
-        brand: 'bg-primary text-white',
-        dark: 'bg-black text-white',
-        neutral: 'bg-gray-200 text-gray-700',
-    } as const;
 
     return (
-        <div className="flex flex-col gap-6 pb-24 font-sans text-accent max-w-4xl mx-auto">
+        <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-4xl mx-auto">
             <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
 
-            <PageHeader title="Meus Turnos" className="!mb-0" />
+            <PageHeader title="Meus Turnos" className="mb-0" />
+
+            {/* Permissão de aviso só é oferecida quando há o que avisar. */}
+            {isAvisosEnabled() && pendingInvites.length > 0 && <PedidoDeAvisos />}
+
+            {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
+            {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (
+                <div className="flex items-center gap-3 rounded-2xl border border-status-warning-line bg-status-warning-bg px-4 py-2">
+                    <p className="min-w-0 flex-1 text-sm text-status-warning-fg">
+                        <span className="font-semibold">Convite esperando resposta.</span>{' '}
+                        Quem aceitar primeiro fica com a vaga.
+                    </p>
+                    <Button variant="secondary" size="sm" className="shrink-0" onClick={abrirConvites}>Ver convite</Button>
+                </div>
+            )}
+
+            {todayJobs.length > 0 && (
+                <section aria-label="Hoje" className="grid grid-cols-1 gap-3">
+                    {todayJobs.map((job) => (
+                        <TodayShiftCard
+                            key={job.id}
+                            heading="Hoje"
+                            onBusyChange={trackBusyCard}
+                            shift={toTodayShift(job)}
+                            steps={hasArrived(job) ? computeWorkerSteps(job) : undefined}
+                            onChanged={fetchJobs}
+                            onCheckedOut={() => setActiveTab('history')}
+                            onCancel={() => setCancelJob(job)}
+                        />
+                    ))}
+                </section>
+            )}
 
             {/* Confirmação de véspera (D-1) — card destacado, resposta em UM toque, sempre visível
                 no topo (fora das abas): o turno é amanhã, não pode depender do freela estar na aba certa.
                 Cruza `pendingConfirmations` (application_id) com os turnos já carregados (`in_progress`/
                 `scheduled`) para exibir empresa/data/horário/local sem uma query extra. */}
             {!confirmationsLoading && pendingConfirmations.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     {pendingConfirmations.map((confirmation) => {
                         const job = [...jobs.in_progress, ...jobs.scheduled].find(
                             (j) => j.id === confirmation.application_id,
@@ -691,123 +784,109 @@ export default function MyJobs() {
                         const localResponse = respondedConfirmations[confirmation.id];
 
                         return (
-                            <Card
+                            <div
                                 key={confirmation.id}
-                                className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
+                                className="flex flex-col gap-2 rounded-2xl border border-primary/40 bg-primary-light p-3"
                             >
-                                <div className="flex items-center gap-2 mb-3">
-                                    <CalendarClock size={18} className="text-primary" />
-                                    <span className="text-sm font-semibold text-primary">
+                                <div className="min-w-0">
+                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-primary-ink">
+                                        <CalendarClock size={16} aria-hidden="true" className="shrink-0" />
                                         Confirma seu turno {rotuloDeQuando(job.raw_date)}?
-                                    </span>
-                                </div>
-                                <h3 className="font-bold text-lg mb-0.5">{job.title}</h3>
-                                <p className="text-sm text-gray-600 mb-3">{job.company_name}</p>
-                                <div className="flex flex-wrap gap-2 mb-5">
-                                    <Chip>
-                                        <Clock size={14} /> {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
-                                    </Chip>
-                                    <Chip tone="info">
-                                        <LocalDoTurno location={job.location} />
-                                    </Chip>
+                                    </p>
+                                    <h3 className="text-sm font-bold truncate">{job.title}</h3>
+                                    <p className="text-xs text-gray-700 truncate">
+                                        {job.company_name} · {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
+                                    </p>
                                 </div>
                                 {localResponse === 'confirmed' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary rounded-xl font-bold text-sm">
-                                        <ThumbsUp size={18} /> Confirmado
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-white text-primary-ink rounded-xl font-semibold text-sm">
+                                        <ThumbsUp size={16} aria-hidden="true" /> Confirmado
                                     </span>
                                 ) : localResponse === 'cannot_attend' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-red-50 text-red-600 border-2 border-red-200 rounded-xl font-bold text-sm">
-                                        <ThumbsDown size={18} /> Avisou que não vai
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-red-50 text-red-700 border border-red-200 rounded-xl font-semibold text-sm">
+                                        <ThumbsDown size={16} aria-hidden="true" /> Avisou que não vai
                                     </span>
                                 ) : localResponse === 'already_responded' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm">
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-white text-gray-600 rounded-xl font-semibold text-sm">
                                         Você já respondeu
                                     </span>
                                 ) : (
-                                    <div className="flex gap-3">
+                                    // Lado a lado até 320px, sem ícone: os dois rótulos cabem em uma linha.
+                                    <div className="grid grid-cols-2 gap-2">
                                         <Button
-                                            variant="primary"
-                                            className="flex-1"
+                                            // Um primário por dobra: com turno hoje, o botão cheio é o de presença.
+                                            variant={todayJobs.length > 0 ? 'secondary' : 'primary'}
+                                            size="sm"
+                                            className="!px-2 whitespace-nowrap"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'confirmed')}
                                             disabled={isResponding}
                                             loading={isResponding}
-                                            iconLeft={<ThumbsUp size={18} />}
                                         >
                                             Sim, vou
                                         </Button>
                                         <Button
                                             variant="secondary"
-                                            className="flex-1"
+                                            size="sm"
+                                            className="!px-2 whitespace-nowrap"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'cannot_attend')}
                                             disabled={isResponding}
                                             loading={isResponding}
-                                            iconLeft={<ThumbsDown size={18} />}
                                         >
                                             Não vou poder
                                         </Button>
                                     </div>
                                 )}
-                            </Card>
+                            </div>
                         );
                     })}
                 </div>
             )}
 
-            {/* Tabs — Convites PRIMEIRO */}
-            <div
-                role="tablist"
-                aria-label="Seções dos seus turnos"
-                className="flex gap-1 border-b-2 border-gray-200 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        id={`meus-turnos-tab-${tab.id}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === tab.id}
-                        aria-controls="meus-turnos-painel"
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`
-                            min-h-11 px-4 -mb-0.5 border-b-2 text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-2
-                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black rounded-t-xl
-                            ${activeTab === tab.id
-                                ? 'border-black text-black'
-                                : 'border-transparent text-gray-500 hover:text-black hover:bg-gray-100'}
-                        `}
-                    >
-                        {tab.label}
-                        {tab.count > 0 && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${TAB_COUNT_TONES[tab.tone]}`}>
-                                {tab.count}
-                            </span>
-                        )}
-                    </button>
-                ))}
-            </div>
+            {erroConfirmacoes && (
+                <ErroDeCarga onRetry={() => { void fetchConfirmations(); }} mensagem="Não foi possível verificar pedidos de confirmação de presença." />
+            )}
+
+            <Tabs
+                label="Seções dos seus turnos"
+                tabs={tabs}
+                value={activeTab}
+                onChange={(id) => {
+                    setActiveTab(id);
+                    // Com os cartões do topo, o conteúdo da aba pode estar abaixo da dobra.
+                    requestAnimationFrame(() => document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'nearest' }));
+                }}
+                panelId="meus-turnos-painel"
+                // No celular a linha vai até a borda da tela (o esmaecimento fica na borda, não no
+                // meio de "Agendados"); do sm em diante volta à coluna.
+                className="-mx-4 pl-4 sm:mx-0 sm:pl-0"
+            />
 
             {/* Content */}
             <div
                 id="meus-turnos-painel"
                 role="tabpanel"
-                aria-labelledby={`meus-turnos-tab-${activeTab}`}
-                className="grid gap-4"
+                aria-label={tabs.find((t) => t.id === activeTab)?.label}
+                // `grid-cols-1` = minmax(0,1fr): sem isso a coluna cresce até o maior título (`truncate`
+                // não quebra linha) e o card do Histórico sai da tela a 320px.
+                className="grid grid-cols-1 gap-4"
             >
 
                 {/* ── ABA CONVITES ── */}
                 {activeTab === 'invites' && (
                     <>
                         {invitesLoading && (
-                            <div className="space-y-4 animate-pulse">
+                            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(2)].map((_, i) => (
                                     <div key={i} className="h-32 bg-gray-200 rounded-2xl" />
                                 ))}
                             </div>
                         )}
 
-                        {!invitesLoading && pendingInvites.length === 0 && (
+                        {!invitesLoading && invitesError && <ErroDeCarga onRetry={refreshInvites} />}
+
+                        {!invitesLoading && !invitesError && pendingInvites.length === 0 && (
                             <EmptyState
-                                icon={<Bell size={40} />}
+                                icon={Bell}
                                 title="Nenhum convite pendente."
                                 description="Quando uma empresa te convidar para um turno, aparecerá aqui."
                             />
@@ -820,7 +899,8 @@ export default function MyJobs() {
                             const companyLogo = companyInfo?.logo_url ?? null;
                             const companyId = companyInfo?.id;
                             const jobTitle = job?.title ?? 'Turno';
-                            const budget = job?.budget ?? 0;
+                            const budget = job?.budget && job.budget > 0 ? job.budget : null;
+                            const isSos = invite.origin === 'sos';
                             const startDate = job?.start_date
                                 ? new Date(job.start_date).toLocaleDateString('pt-BR')
                                 : 'Data a definir';
@@ -831,7 +911,7 @@ export default function MyJobs() {
                             // Spans (não divs): o mesmo conteúdo vai dentro de <button> quando a empresa tem perfil.
                             const cabecalhoEmpresa = (
                                 <>
-                                    <span className="block w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                    <span className="block w-10 h-10 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                         {companyLogo ? (
                                             <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
                                         ) : (
@@ -840,27 +920,33 @@ export default function MyJobs() {
                                             </span>
                                         )}
                                     </span>
-                                    <span className="block min-w-0">
+                                    <span className="block min-w-0 flex-1">
                                         <span className="block text-xs text-gray-600">Convite de</span>
-                                        <span className={`block font-bold truncate ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
+                                        {/* sem `block`: ele anularia o display do line-clamp */}
+                                        <span className={`font-bold line-clamp-2 [overflow-wrap:anywhere] ${companyId ? 'group-hover:text-primary transition-colors' : ''}`}>{companyName}</span>
                                     </span>
                                 </>
                             );
 
                             return (
-                                <Card key={invite.id} className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                                <Card key={invite.id} className={isSos ? 'border-status-warning-line' : undefined}>
+                                    {isSos && (
+                                        <Alert tone="warning" title="Urgência (SOS)" className="mb-4">
+                                            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+                                        </Alert>
+                                    )}
                                     {/* Empresa */}
-                                    <div className="flex items-center gap-3 mb-4">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
                                         {companyId ? (
                                             <button
                                                 type="button"
                                                 onClick={() => navigate(`/empresa/${companyId}`)}
-                                                className="group flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                                                className="group flex items-center gap-3 flex-1 basis-48 min-w-0 min-h-11 text-left cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                                             >
                                                 {cabecalhoEmpresa}
                                             </button>
                                         ) : (
-                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 flex-1 basis-48 min-w-0">
                                                 {cabecalhoEmpresa}
                                             </div>
                                         )}
@@ -868,11 +954,11 @@ export default function MyJobs() {
                                             de decidir. Esconder isso seria deixá-lo achar que tem o tempo todo do
                                             mundo e perder a vaga sem entender por quê. */}
                                         {invite.disputed ? (
-                                            <span className="ml-auto bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-pill border border-yellow-300 flex-shrink-0">
+                                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-pill border border-yellow-300 flex-shrink-0">
                                                 Quem aceitar primeiro
                                             </span>
                                         ) : (
-                                            <span className="ml-auto bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
+                                            <span className="bg-primary-light text-primary-dark text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200 flex-shrink-0">
                                                 Novo convite
                                             </span>
                                         )}
@@ -885,7 +971,7 @@ export default function MyJobs() {
                                             <Clock size={14} /> {startDate}{startTime ? ` · ${startTime}${endTime ? `–${endTime}` : ''}` : ''}
                                         </Chip>
                                         <Chip tone="brand">
-                                            <DollarSign size={14} /> {formatBRL(budget)}
+                                            <DollarSign size={14} /> {payLabel(budget)}
                                         </Chip>
                                         {location && (
                                             <Chip tone="info">
@@ -896,7 +982,7 @@ export default function MyJobs() {
 
                                     {/* Briefing */}
                                     {(job?.briefing || job?.description) && (
-                                        <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-4">
+                                        <div className="bg-gray-50 rounded-xl p-3 mb-4">
                                             <p className="text-xs font-semibold text-gray-600 mb-1">Briefing</p>
                                             <p className="text-sm text-gray-700 line-clamp-3">{job.briefing || job.description}</p>
                                         </div>
@@ -918,11 +1004,13 @@ export default function MyJobs() {
                                     )}
 
                                     {/* Ações — Aceitar é a ação primária; Recusar é secundária (e arma antes de confirmar) */}
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-col gap-3 min-[360px]:flex-row">
                                         <Button
                                             variant="primary"
                                             size="lg"
-                                            className="flex-1"
+                                            className="flex-1 min-w-0 !px-2 sm:!px-6"
+                                            data-copilot="freela.convite.aceitar"
+                                            data-copilot-risk="D"
                                             onClick={() => respond(invite.id, 'accepted')}
                                             disabled={isResponding}
                                             loading={isResponding}
@@ -933,7 +1021,9 @@ export default function MyJobs() {
                                         <Button
                                             variant={recusaArmada === invite.id ? 'danger' : 'secondary'}
                                             size="lg"
-                                            className="flex-1"
+                                            className="flex-1 min-w-0 !px-2 sm:!px-6"
+                                            data-copilot="freela.convite.recusar"
+                                            data-copilot-risk="D"
                                             onClick={() => armarOuRecusar(invite.id, () => respond(invite.id, 'declined'))}
                                             disabled={isResponding}
                                             iconLeft={<XCircle size={18} />}
@@ -951,252 +1041,144 @@ export default function MyJobs() {
                 )}
 
                 {/* ── ABA EM ANDAMENTO ── */}
-                {activeTab === 'in_progress' && jobs.in_progress.length === 0 && (
+                {activeTab === 'in_progress' && inProgressList.length === 0 && (
                     <EmptyState
-                        icon={<AlertCircle size={40} />}
+                        icon={AlertCircle}
                         title="Nenhum trabalho em andamento."
-                        description="Trabalhos agendados para hoje aparecerão aqui durante o horário de trabalho."
+                        description={todayJobs.length > 0
+                            ? 'O turno de hoje está no cartão no topo da tela.'
+                            : 'A chegada é liberada 2h antes do início do turno.'}
+                        action={scheduledList.length > 0
+                            ? <Button variant="secondary" onClick={() => setActiveTab('scheduled')}>Ver agendados</Button>
+                            : undefined}
                     />
                 )}
-                {activeTab === 'in_progress' && jobs.in_progress.map((job) => (
-                    <Card key={job.id} className="flex flex-col gap-4 shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
-                        <div>
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h3 className="font-bold text-lg">{job.title}</h3>
-                                    <p className="text-sm text-gray-600">{job.company_name}</p>
-                                </div>
-                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary-light border border-green-200 px-2.5 py-1 rounded-pill flex-shrink-0">
-                                    <span className="h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" /> Ao vivo
-                                </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                <Chip>
-                                    <Clock size={14} /> {job.time}{job.end_time ? ` - ${job.end_time}` : ''}
-                                </Chip>
-                                <Chip tone="brand">
-                                    <DollarSign size={14} /> {formatBRL(job.pay)}
-                                </Chip>
-                                <Chip tone="info">
-                                    <LocalDoTurno location={job.location} />
-                                </Chip>
-                            </div>
-                            {/* Dizia "Pagamento em garantia até confirmação da empresa" para TODO turno
-                                em andamento — promessa de escrow que o produto não cumpre. O piloto é
-                                100% modo A: o dinheiro nunca passa pelo Worki, não há nada em garantia.
-                                Este turno, conferido no banco, tem zero linhas em escrow_transactions.
-                                Prometer custódia de dinheiro que ninguém segura é a pior classe de copy
-                                errado: o freela decide confiar com base nela. */}
-                            {job.status === 'in_progress' && (
-                                <p className="text-xs text-gray-600 mt-3">
-                                    Pagamento combinado direto com a empresa — o Worki registra o recibo
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="border-t-2 border-gray-100 pt-4">
-                            <JobLifecycleStepper steps={computeWorkerSteps(job)} />
-                        </div>
-
-                        {/* A empresa pode registrar chegada/saída sem o freela tocar no app
-                            (turno sem sinal, freela não usa o celular na hora). `checkedIn`/
-                            `checkedOut` consideram os DOIS lados — senão o freela vê um CTA
-                            ativo para uma etapa que a empresa já fechou e, se tocar, sobrescreve
-                            o timestamp confirmado (o recibo prioriza `worker_checkin/checkout_at`
-                            quando presente, mesmo em turno já pago). */}
-                        <div className="flex flex-col gap-3">
-                            {!job.worker_checkin_at && !job.company_checkin_confirmed_at ? (
-                                <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
-                                    onClick={() => handleCheckin(job.id)}
-                                    loading={actionLoading === job.id}
-                                    iconLeft={<Play size={18} />}
-                                >
-                                    Check-in
-                                </Button>
-                            ) : job.worker_checkin_at ? (
-                                <StatusLine tone="success" icon={<CheckCircle2 size={16} />}>
-                                    Check-in: {formatDistanceToNow(new Date(job.worker_checkin_at), { addSuffix: true, locale: ptBR })}
-                                </StatusLine>
-                            ) : (
-                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                    Empresa registrou sua chegada
-                                </StatusLine>
-                            )}
-
-                            {job.worker_checkin_at && (
-                                job.company_checkin_confirmed_at ? (
-                                    <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                        Empresa confirmou chegada
-                                    </StatusLine>
-                                ) : (
-                                    <StatusLine tone="waiting" icon={<Clock size={16} />}>
-                                        Aguardando confirmação da empresa
-                                    </StatusLine>
-                                )
-                            )}
-
-                            {(job.worker_checkin_at || job.company_checkin_confirmed_at) && !job.worker_checkout_at && !job.company_checkout_confirmed_at && (
-                                <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
-                                    onClick={() => handleCheckout(job.id)}
-                                    loading={actionLoading === job.id}
-                                    iconLeft={<Square size={18} />}
-                                >
-                                    Check-out
-                                </Button>
-                            )}
-
-                            {job.worker_checkout_at && (
-                                <StatusLine tone="neutral" icon={<CheckCircle2 size={16} />}>
-                                    Check-out: {formatDistanceToNow(new Date(job.worker_checkout_at), { addSuffix: true, locale: ptBR })}
-                                </StatusLine>
-                            )}
-
-                            {!job.worker_checkout_at && job.company_checkout_confirmed_at && (
-                                <StatusLine tone="info" icon={<CheckCircle2 size={16} />}>
-                                    Empresa registrou sua saída
-                                </StatusLine>
-                            )}
-
-                            {/* "Vou atrasar 20 minutos" — sem isso não há canal se a empresa nunca abriu o chat. */}
-                            <Button
-                                variant="secondary"
-                                fullWidth
-                                onClick={() => handleChat(job)}
-                                loading={chattingId === job.id}
-                                iconLeft={<MessageCircle size={18} />}
-                            >
-                                Falar com a empresa
-                            </Button>
-                        </div>
-                    </Card>
+                {activeTab === 'in_progress' && inProgressList.map((job) => (
+                    <TodayShiftCard
+                        key={job.id}
+                        heading={job.date}
+                        shift={toTodayShift(job)}
+                        onChanged={fetchJobs}
+                        onCheckedOut={() => setActiveTab('history')}
+                    />
                 ))}
 
                 {/* ── ABA AGENDADOS ── */}
-                {activeTab === 'scheduled' && jobs.scheduled.length === 0 && (
-                    <EmptyState title="Nenhum turno agendado no momento." />
+                {activeTab === 'scheduled' && scheduledList.length === 0 && (
+                    <EmptyState
+                        icon={CalendarClock}
+                        title="Nenhum turno agendado no momento."
+                        description={todayJobs.length > 0 ? 'O turno de hoje está no cartão no topo da tela.' : undefined}
+                    />
                 )}
-                {activeTab === 'scheduled' && jobs.scheduled.map((job) => (
-                    <Card
-                        key={job.id}
-                        className="flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]"
-                    >
-                        <div className="flex gap-4 items-center min-w-0">
-                            <div className="bg-black text-white px-3 py-2 rounded-xl min-w-[64px] text-center flex-shrink-0">
-                                <span className="block text-xs font-semibold uppercase">{job.month}</span>
-                                <span className="block text-2xl font-bold">{job.day}</span>
-                            </div>
-                            <div className="min-w-0">
-                                <h3 className="font-bold text-lg mb-1.5">{job.title}</h3>
-                                <Chip>
-                                    <Clock size={14} /> {job.date} • {job.time}
-                                </Chip>
-                                <p className="text-sm text-gray-600 flex items-center gap-1 mt-2">
-                                    <LocalDoTurno location={job.location} />
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-4 border-t-2 border-gray-100 md:border-t-0 md:border-l-2 pt-4 md:pt-0 md:pl-6 w-full md:w-56 flex-shrink-0">
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <span className="block text-xs text-gray-600">Receber</span>
-                                    <span className="block text-2xl font-bold tabular-nums text-primary">{formatBRL(job.pay)}</span>
+                {activeTab === 'scheduled' && scheduledList.length > 0 && (
+                    <ul className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+                        {scheduledList.map((job) => (
+                            <li key={job.id} className="flex items-center gap-2 py-3 pl-4 pr-2">
+                                <div className="min-w-0 flex-1">
+                                    <p className="flex min-w-0 items-baseline gap-2">
+                                        <span className="shrink-0 text-sm font-bold tabular-nums">
+                                            {weekdayDate(job)} · {job.time}{job.end_time ? `–${job.end_time}` : ''}
+                                        </span>
+                                    </p>
+                                    <h3 className="text-sm font-semibold truncate" title={job.title}>{job.title}</h3>
+                                    <p className="text-xs text-gray-600 truncate">
+                                        <span className="font-semibold text-primary-ink tabular-nums">{payLabel(job.pay)}</span>
+                                        {' · '}<span>{job.company_name}</span>{job.location ? ` · ${job.location}` : ''}
+                                    </p>
                                 </div>
-                                <span className="bg-primary-light text-primary text-xs font-semibold px-2.5 py-1 rounded-pill border border-green-200">Contratado</span>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Button
-                                    variant="secondary"
-                                    fullWidth
+                                <IconButton
+                                    aria-label="Falar com a empresa"
+                                    data-copilot="freela.turno.falar-empresa"
                                     onClick={() => handleChat(job)}
-                                    loading={chattingId === job.id}
-                                    iconLeft={<MessageCircle size={16} />}
+                                    disabled={chattingId === job.id}
                                 >
-                                    Falar com a empresa
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    fullWidth
-                                    className="!text-red-600 enabled:hover:bg-red-50"
-                                    onClick={() => setCancelJob(job)}
-                                    iconLeft={<XCircle size={16} />}
-                                >
-                                    Cancelar turno
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-                ))}
+                                    <MessageCircle size={20} />
+                                </IconButton>
+                                <Menu
+                                    label={`Mais opções do turno ${job.title}`}
+                                    items={[{
+                                        label: 'Cancelar turno',
+                                        icon: XCircle,
+                                        danger: true,
+                                        onSelect: () => setCancelJob(job),
+                                        'data-copilot': 'freela.turnos.cancelar',
+                                        'data-copilot-risk': 'D',
+                                    }]}
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                )}
 
                 {/* ── ABA HISTÓRICO ── */}
                 {activeTab === 'history' && jobs.history.length === 0 && (
-                    <EmptyState title="Seu histórico está vazio." />
+                    <EmptyState icon={History} title="Seu histórico está vazio." />
                 )}
-                {activeTab === 'history' && jobs.history.map((job) => (
-                    <Card
-                        key={job.id}
-                        padding="sm"
-                        interactive
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setDetailJob(job)}
-                        onKeyDown={(e) => {
-                            // Só o próprio card abre o detalhe: Enter/Espaço em "Recibo"/"Avaliar" seguem a ação do botão.
-                            if (e.target !== e.currentTarget) return;
-                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailJob(job); }
-                        }}
-                        className="cursor-pointer !bg-gray-50 !border-gray-200 hover:!border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-                    >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <h3 className="font-semibold text-gray-800 truncate">{job.title}</h3>
-                                <p className="text-sm text-gray-600">{job.date} • {job.company_name}</p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                                <span className="font-bold tabular-nums text-gray-800">{formatBRL(job.pay)}</span>
-                                {job.status === 'completed' ? (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2.5 py-1 rounded-pill">
-                                        <CheckCircle2 size={12} /> Concluído
-                                    </span>
-                                ) : (
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2.5 py-1 rounded-pill">
-                                        <XCircle size={12} /> {job.status === 'declined' ? 'Recusado' : 'Cancelado'}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        {job.status === 'completed' && (
-                            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                                <Button
-                                    variant="secondary"
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
-                                    iconLeft={<Receipt size={14} />}
-                                >
-                                    Recibo
-                                </Button>
-                                {!reviewedJobIds.has(job.job_id) ? (
-                                    <Button
-                                        variant="primary"
-                                        onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                        iconLeft={<Star size={14} />}
+                {activeTab === 'history' && jobs.history.length > 0 && (
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        {jobs.history.map((job) => {
+                            const waiting = awaitingLabel(job);
+                            const dropped = !waiting && job.status !== 'completed';
+                            const avaliar = job.status === 'completed' && !reviewedJobIds.has(job.job_id);
+                            return (
+                                <li key={job.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDetailJob(job)}
+                                        className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
                                     >
-                                        Avaliar
-                                    </Button>
-                                ) : (
-                                    <span className="text-xs text-gray-600 flex items-center gap-1">
-                                        <Star size={12} fill="currentColor" /> Avaliado
-                                    </span>
-                                )}
-                            </div>
-                        )}
-                    </Card>
-                ))}
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-semibold text-gray-900 truncate" title={job.title}>{job.title}</span>
+                                            <span className="block text-xs text-gray-600 truncate">{job.date} · {job.company_name}</span>
+                                            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <HistoryStatus job={job} />
+                                                <span className={`text-sm font-bold tabular-nums ${dropped ? 'text-gray-600 line-through' : 'text-gray-900'}`}>
+                                                    {payLabel(job.pay)}
+                                                </span>
+                                            </span>
+                                        </span>
+                                        <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-gray-400" />
+                                    </button>
+                                    {/* Uma ação visível por linha; as demais estão no detalhe. */}
+                                    {waiting ? (
+                                        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+                                            <p className="text-xs text-gray-600">Falta a empresa fechar o turno.</p>
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => void handleChat(job)}
+                                                loading={chattingId === job.id}
+                                                iconLeft={<MessageCircle size={14} />}
+                                            >
+                                                Falar com a empresa
+                                            </Button>
+                                        </div>
+                                    ) : job.status === 'completed' && (
+                                        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                                            {avaliar ? (
+                                                <Button variant="secondary" size="sm" onClick={() => handleOpenRateModal(job)} iconLeft={<Star size={14} />}>
+                                                    Avaliar
+                                                </Button>
+                                            ) : (
+                                                <>
+                                                    <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(`/recibo/${job.job_id}`)} iconLeft={<Receipt size={14} />}>
+                                                        Recibo
+                                                    </Button>
+                                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                                        <Star size={12} fill="currentColor" aria-hidden="true" /> Avaliado
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </div>
+
 
             <RateModal
                 isOpen={rateModalOpen}
@@ -1210,19 +1192,14 @@ export default function MyJobs() {
 
             {/* Detalhe do turno no histórico */}
             {detailJob && (
-                <div
-                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-                    onClick={(e) => { if (e.target === e.currentTarget) setDetailJob(null); }}
+                <Dialog
+                    labelledBy="detalhe-turno-titulo"
+                    onClose={() => setDetailJob(null)}
+                    initialFocus="panel"
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="detalhe-turno-titulo"
-                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-                    >
                         <div className="flex items-start justify-between gap-3 mb-5">
                             <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                <div className="w-12 h-12 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                     {detailJob.company_logo ? (
                                         <img src={detailJob.company_logo} alt={detailJob.company_name} className="w-full h-full object-cover" />
                                     ) : (
@@ -1234,27 +1211,14 @@ export default function MyJobs() {
                                     <p className="text-sm text-gray-600 truncate">{detailJob.company_name}</p>
                                 </div>
                             </div>
-                            <Button
-                                variant="ghost"
-                                onClick={() => setDetailJob(null)}
-                                aria-label="Fechar"
-                                className="w-11 !px-0 flex-shrink-0"
-                            >
+                            <IconButton aria-label="Fechar" onClick={() => setDetailJob(null)} className="flex-shrink-0">
                                 <X size={20} />
-                            </Button>
+                            </IconButton>
                         </div>
 
                         {/* Status */}
                         <div className="mb-5">
-                            {detailJob.status === 'completed' ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-pill">
-                                    <CheckCircle2 size={14} /> Concluído
-                                </span>
-                            ) : (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-3 py-1.5 rounded-pill">
-                                    <XCircle size={14} /> {detailJob.status === 'declined' ? 'Recusado' : 'Cancelado'}
-                                </span>
-                            )}
+                            <HistoryStatus job={detailJob} />
                         </div>
 
                         {/* Grid de infos */}
@@ -1265,15 +1229,15 @@ export default function MyJobs() {
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1">Valor</p>
-                                <p className="font-bold text-sm tabular-nums text-primary">{formatBRL(detailJob.pay)}</p>
+                                <p className="font-bold text-sm tabular-nums text-primary-dark">{payLabel(detailJob.pay)}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogIn size={12} /> Chegada</p>
-                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkin_at)}</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkin_at ?? detailJob.company_checkin_confirmed_at)}</p>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3">
                                 <p className="text-xs text-gray-600 mb-1 flex items-center gap-1"><LogOut size={12} /> Saída</p>
-                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkout_at)}</p>
+                                <p className="font-semibold text-sm tabular-nums">{fmtTime(detailJob.worker_checkout_at ?? detailJob.company_checkout_confirmed_at)}</p>
                             </div>
                         </div>
 
@@ -1283,48 +1247,55 @@ export default function MyJobs() {
                             <Clock size={16} /> {detailJob.time}{detailJob.end_time ? ` - ${detailJob.end_time}` : ''}
                         </div>
 
-                        {/* Avaliação */}
-                        {detailJob.status === 'completed' && (
-                            reviewedJobIds.has(detailJob.job_id) ? (
-                                <div className="flex items-center gap-2 text-sm text-gray-600 border-t-2 border-gray-100 pt-4">
-                                    <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
-                                </div>
-                            ) : (
+                        {detailJob.status === 'completed' && reviewedJobIds.has(detailJob.job_id) && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600 border-t border-gray-200 pt-4">
+                                <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
+                            </div>
+                        )}
+
+                        <DialogActions stacked>
+                            <Button
+                                variant="secondary"
+                                onClick={() => handleChat(detailJob)}
+                                loading={chattingId === detailJob.id}
+                                iconLeft={<MessageCircle size={16} />}
+                            >
+                                Falar com a empresa
+                            </Button>
+                            {detailJob.status === 'completed' && !reviewedJobIds.has(detailJob.job_id) && (
                                 <Button
-                                    variant="primary"
-                                    size="lg"
-                                    fullWidth
+                                    variant="secondary"
                                     onClick={() => { const j = detailJob; setDetailJob(null); handleOpenRateModal(j); }}
                                     iconLeft={<Star size={16} />}
                                 >
                                     Avaliar esta empresa
                                 </Button>
-                            )
-                        )}
-                    </div>
-                </div>
+                            )}
+                            {detailJob.status === 'completed' && (
+                                <Button onClick={() => navigate(`/recibo/${detailJob.job_id}`)} iconLeft={<Receipt size={16} />}>
+                                    Ver recibo
+                                </Button>
+                            )}
+                        </DialogActions>
+                </Dialog>
             )}
 
             {/* Confirmação de cancelamento de turno agendado */}
             {cancelJob && (
-                <div
-                    className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-                    onClick={(e) => { if (e.target === e.currentTarget && !cancelLoading) setCancelJob(null); }}
+                <Dialog
+                    labelledBy="cancelar-turno-titulo"
+                    onClose={() => setCancelJob(null)}
+                    locked={cancelLoading}
+                    className="max-w-sm"
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="cancelar-turno-titulo"
-                        className="bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6"
-                    >
                         <div className="flex items-start gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-xl border-2 border-black bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
                                 <XCircle size={20} className="text-red-600" />
                             </div>
                             <div>
                                 <h3 id="cancelar-turno-titulo" className="text-lg font-bold tracking-tight">Cancelar este turno?</h3>
                                 <p className="text-sm text-gray-600 mt-1">
-                                    A empresa será avisada e o turno volta a ficar disponível.
+                                    A empresa será avisada e poderá chamar outra pessoa. Você não volta a este turno.
                                 </p>
                             </div>
                         </div>
@@ -1334,10 +1305,9 @@ export default function MyJobs() {
                             <p className="text-xs text-gray-600">{cancelJob.date} • {cancelJob.time}</p>
                         </div>
 
-                        <div className="flex gap-3">
+                        <DialogActions>
                             <Button
                                 variant="secondary"
-                                className="flex-1"
                                 onClick={() => setCancelJob(null)}
                                 disabled={cancelLoading}
                             >
@@ -1345,16 +1315,14 @@ export default function MyJobs() {
                             </Button>
                             <Button
                                 variant="danger"
-                                className="flex-1"
                                 onClick={handleCancelShift}
                                 loading={cancelLoading}
                                 iconLeft={<XCircle size={18} />}
                             >
                                 Cancelar turno
                             </Button>
-                        </div>
-                    </div>
-                </div>
+                        </DialogActions>
+                </Dialog>
             )}
 
         </div>

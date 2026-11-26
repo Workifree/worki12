@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Megaphone, Users, Search, AlertTriangle, CalendarCheck2, Award } from 'lucide-react';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import { TeamListService } from '../../services/teamListService';
@@ -17,7 +16,11 @@ import { DEFAULT_LINK_RISK_THRESHOLD } from '../company/seriesWeekRisk';
 import { getWeekdayIndex } from '../../lib/dateUtils';
 import { periodForTime, isWorkerAvailableFor } from '../../lib/availability';
 import { ModalShell } from './ModalShell';
-import { Button, Field } from '../ui';
+import { Alert, Button, Field, ButtonLink } from '../ui';
+import { useBusyWorkers } from '../../hooks/useBusyWorkers';
+import { buildShiftWindow } from '../../services/shiftOperationService';
+import { BusyWorkerBadge } from './BusyWorkerBadge';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // Modal "Chamar freelas" — o gesto central do F1.
@@ -66,6 +69,9 @@ import { Button, Field } from '../ui';
 
 export interface ShiftCallModalProps {
   job: Pick<Job, 'id' | 'title' | 'start_date' | 'work_start_time' | 'certification_requirement'> & {
+    work_end_time?: string | null;
+    /** Empresa DONA do turno (quem opera 2 unidades não pode depender da "corrente"). */
+    company_id?: string | null;
     slots?: number;
   };
   /** Freelas que já estão no turno (contratados ou já chamados) — não aparecem para seleção. */
@@ -84,14 +90,19 @@ export function ShiftCallModal({
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [lists, setLists] = useState<TeamListWithMembers[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
+  // Falha de leitura é diferente de elenco/listas vazios.
+  const [teamError, setTeamError] = useState(false);
+  const [listsError, setListsError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState<ShiftCallReason>('falta');
   // `null` = "até o início do turno"; número = horas.
   const [expiryHours, setExpiryHours] = useState<number | null>(DEFAULT_CALL_EXPIRY_HOURS);
   const [dispatching, setDispatching] = useState(false);
-    // ESC com a mesma guarda do clique no fundo: nunca fechar no meio de uma gravacao.
-    useModalDismiss(() => { if (!dispatching) onClose(); });
+  // Trava SÍNCRONA: dois cliques no mesmo instante passam antes de o React re-renderizar o botão
+  // desabilitado e criariam dois chamados.
+  const dispatchLock = useRef(false);
   // F5: config da guarda de vínculo (busca em paralelo, nunca em série — LM-9) e contagem por
   // freela (estado próprio, nunca segura a lista do elenco — LM-10).
   const [riskConfig, setRiskConfig] = useState<LinkRiskConfig | null>(null);
@@ -115,13 +126,15 @@ export function ShiftCallModal({
       setMembers(teamResult.status === 'fulfilled' ? teamResult.value : []);
       setLists(listsResult.status === 'fulfilled' ? listsResult.value : []);
       setRiskConfig(configResult.status === 'fulfilled' ? configResult.value : null);
+      setTeamError(teamResult.status === 'rejected');
+      setListsError(listsResult.status === 'rejected');
       setLoadingTeam(false);
     })();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadAttempt]);
 
   const excluded = useMemo(() => new Set(excludeWorkerIds), [excludeWorkerIds]);
 
@@ -179,6 +192,21 @@ export function ShiftCallModal({
         Number(matchingAvailabilityIds.has(a.worker.id)),
     );
   }, [available, matchingAvailabilityIds]);
+
+  // E5/R14 — aviso de conflito: quem já está em outro turno da empresa nesse horário (de qualquer
+  // responsável). Só AVISA, nunca bloqueia nem some da lista; erro da RPC = sem selo + log. Estado
+  // próprio (dentro do hook), nunca segura `loadingTeam`.
+  const busyWindows = useMemo(
+    () => [buildShiftWindow(job.start_date, job.work_start_time, job.work_end_time)],
+    [job.start_date, job.work_start_time, job.work_end_time],
+  );
+  const busyWorkerIds = useBusyWorkers({
+    windows: busyWindows,
+    workerIds: available.map((member) => member.worker.id),
+    excludeJobId: job.id,
+    companyId: job.company_id ?? null,
+    enabled: !loadingTeam,
+  });
 
   // F5 — LM-9/LM-10/LM-11: dispara SÓ depois que o elenco + a config chegaram (a lista já
   // renderizou nesse ponto; este efeito nunca segura `loadingTeam`), com `p_worker_ids` restrito
@@ -318,7 +346,8 @@ export function ShiftCallModal({
   };
 
   const handleDispatch = async () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || dispatchLock.current) return;
+    dispatchLock.current = true;
     setDispatching(true);
 
     const result = await ShiftCallService.createShiftCall(job.id, Array.from(selected), {
@@ -331,6 +360,7 @@ export function ShiftCallModal({
     setDispatching(false);
 
     if (result.error || !result.call) {
+      dispatchLock.current = false; // falhou: libera nova tentativa (no sucesso o modal fecha)
       addToast(result.error ?? 'Não foi possível abrir o chamado.', 'error');
       return;
     }
@@ -364,7 +394,7 @@ export function ShiftCallModal({
               devolução da decisão, nunca conclusão jurídica (R7). Nunca desabilita o disparo
               (A7) — mesma área do aviso de vagas incompletas, os dois podem coexistir. */}
           {riskyByCount.length > 0 && (
-            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50">
+            <div className="flex items-start gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50">
               <AlertTriangle size={16} className="text-yellow-700 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-yellow-800 space-y-1">
                 {riskyByCount.map(({ count, names }) => (
@@ -394,6 +424,7 @@ export function ShiftCallModal({
             variant="dark"
             size="lg"
             fullWidth
+            data-copilot="empresa.chamado.enviar"
             onClick={() => void handleDispatch()}
             disabled={selected.size === 0}
             loading={dispatching}
@@ -419,7 +450,7 @@ export function ShiftCallModal({
           declarado pela empresa. Uma linha, sem filtrar/desabilitar ninguém na lista abaixo —
           a decisão de quem chamar continua inteiramente da empresa. */}
       {job.certification_requirement && (
-        <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 mb-4">
+        <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
           <Award size={14} className="flex-shrink-0 mt-0.5" />
           <span>
             Este turno pede: {job.certification_requirement}. É só um aviso — não filtra nem
@@ -477,7 +508,7 @@ export function ShiftCallModal({
                 onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
                 disabled={dispatching || isEmpty}
                 aria-pressed={isActive}
-                className={`h-11 px-4 rounded-pill border-2 border-black font-semibold text-sm flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                className={`min-h-11 max-w-full py-1.5 px-4 rounded-pill border-ink border-black font-semibold text-sm text-left leading-tight flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                   isEmpty
                     ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-500'
                     : isActive
@@ -506,7 +537,7 @@ export function ShiftCallModal({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome ou função"
             disabled={dispatching}
-            className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+            className="w-full h-11 border-ink border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
           />
         </div>
         <Button
@@ -515,7 +546,7 @@ export function ShiftCallModal({
           disabled={dispatching || visible.length === 0}
           className="whitespace-nowrap"
         >
-          {allVisibleSelected ? 'Limpar' : 'Todos'}
+          {allVisibleSelected ? 'Limpar' : 'Selecionar todos'}
         </Button>
       </div>
 
@@ -529,20 +560,42 @@ export function ShiftCallModal({
 
       {/* Lista do elenco */}
       {loadingTeam && (
-        <div className="space-y-2 animate-pulse">
+        <div className="space-y-2 animate-pulse" role="status"><span className="sr-only">Carregando</span>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-14 bg-gray-200 rounded-xl" />
           ))}
         </div>
       )}
 
-      {!loadingTeam && available.length === 0 && (
-        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
+      {!loadingTeam && (teamError || listsError) && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-3"
+          action={
+            <Button variant="secondary" onClick={() => setLoadAttempt((n) => n + 1)}>
+              Tentar de novo
+            </Button>
+          }
+        >
+          {teamError ? 'Não conseguimos carregar o seu elenco.' : 'Não conseguimos carregar as listas do elenco.'}
+        </Alert>
+      )}
+
+      {!loadingTeam && !teamError && available.length === 0 && (
+        <div className="text-center py-8 px-4 border border-dashed border-gray-300 rounded-2xl text-gray-600">
           <Users size={32} className="mx-auto mb-2 text-gray-400" />
-          <p className="font-semibold text-sm">Ninguém disponível no elenco para este turno.</p>
-          <p className="text-xs mt-1">
-            Todos os seus freelas já estão neste turno ou já foram chamados.
+          <p className="font-semibold text-sm">
+            {members.length === 0 ? 'Nenhum freela apareceu no seu elenco.' : 'Ninguém disponível no elenco para este turno.'}
           </p>
+          <p className="text-xs mt-1">
+            {members.length === 0
+              ? 'Adicione freelas ao elenco. Se você já tem freelas, feche e abra esta janela de novo.'
+              : 'Todos os seus freelas já estão neste turno ou já foram chamados.'}
+          </p>
+          {members.length === 0 && (
+            <ButtonLink variant="secondary" className="mt-3" to="/company/team">Adicionar freela</ButtonLink>
+          )}
         </div>
       )}
 
@@ -573,7 +626,7 @@ export function ShiftCallModal({
           return (
             <label
               key={member.worker.id}
-              className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
+              className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-ink cursor-pointer transition-colors ${
                 isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
               }`}
             >
@@ -584,7 +637,7 @@ export function ShiftCallModal({
                 disabled={dispatching}
                 className="w-5 h-5 accent-black flex-shrink-0"
               />
-              <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                 {member.worker.avatar_url ? (
                   <img
                     src={member.worker.avatar_url}
@@ -600,6 +653,7 @@ export function ShiftCallModal({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <p className="font-bold text-sm truncate">{member.worker.full_name}</p>
+                  {busyWorkerIds.has(member.worker.id) && <BusyWorkerBadge />}
                   {showRiskBadge && (
                     <span className="inline-flex items-center gap-1 flex-shrink-0 text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-300 rounded-pill px-2 py-0.5">
                       <AlertTriangle size={10} /> Já {prospectiveCount}x esta semana com você
@@ -610,7 +664,7 @@ export function ShiftCallModal({
                   <div className="flex items-center gap-2 min-w-0">
                     {member.worker.primary_role && (
                       <p className="text-xs text-gray-600 truncate">
-                        {member.worker.primary_role}
+                        {roleLabel(member.worker.primary_role)}
                       </p>
                     )}
                     {/* F7 — contêiner de sinais da linha secundária: vazio quando não há
@@ -619,7 +673,7 @@ export function ShiftCallModal({
                     <span className="inline-flex items-center gap-1 flex-shrink-0">
                       {showAvailabilityBadge && (
                         <span
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary border border-primary rounded-pill px-2 py-0.5"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark border border-primary rounded-pill px-2 py-0.5"
                           title="Disponível para este dia e período, segundo a grade que este freela declarou"
                           aria-label="Freela declarou disponibilidade para este turno"
                         >

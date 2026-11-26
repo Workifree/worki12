@@ -17,7 +17,7 @@ Os selos aparecem em uma seção chamada **"Já trabalhou com"** no seu perfil.
 
 ### Seu Perfil (Você Gerencia)
 
-Na tela **Meu Perfil** (`/profile`), role para baixo até a seção **"Já trabalhou com"**.
+No seu **perfil** (`/profile`: no computador, **Ver meu perfil** no rodapé do menu; no celular, a sua foto no topo), role para baixo até a seção **"Já trabalhou com"**.
 
 Aqui você vê:
 - Todos os selos que tem (inclusive os que está escondendo)
@@ -49,7 +49,7 @@ Em seu perfil, cada selo tem um ícone de olho. Clique para alternar:
 
 ### 2. Chave-Mestra: Esconder Tudo
 
-No topo da seção (em "Meu Perfil"), há um switch grande chamado **"Não exibir onde já trabalhei"**.
+No topo da seção (no seu perfil), há um switch grande chamado **"Não exibir onde já trabalhei"**.
 
 - **Desligado** = empresas com vínculo ativo veem seus selos
 - **Ligado** = **ninguém** vê a seção inteira (desaparece do perfil delas)

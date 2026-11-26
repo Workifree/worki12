@@ -1,9 +1,11 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, PageHeader } from '../components/ui';
+import { CONTACT_PENDING_TEXT, getContactEmail } from '../lib/contact';
 
 export default function Terms() {
   const navigate = useNavigate();
+  const contactEmail = getContactEmail();
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 sm:py-10">
@@ -63,7 +65,7 @@ export default function Terms() {
           <p>Todo o conteúdo da Plataforma (marca, logotipo, interface, código-fonte) é propriedade da Worki. O uso não autorizado constitui violação de direitos autorais e de propriedade intelectual.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">10. Proteção de Dados (LGPD)</h2>
-          <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-primary font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
+          <p>O tratamento de dados pessoais pela Worki está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-primary-dark font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">11. Suspensão e Encerramento</h2>
           <p>A Worki pode suspender ou encerrar o acesso de usuários que: violem estes Termos, realizem atividades fraudulentas, apresentem comportamento abusivo, ou utilizem a Plataforma para fins ilegais.</p>
@@ -72,7 +74,11 @@ export default function Terms() {
           <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de São Paulo/SP para dirimir quaisquer controvérsias.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">13. Contato</h2>
-          <p>Para dúvidas sobre estes Termos: <a href="mailto:contato@worki.com.br" className="text-primary font-bold">contato@worki.com.br</a></p>
+          {contactEmail ? (
+            <p>Para dúvidas sobre estes Termos: <a href={`mailto:${contactEmail}`} className="text-primary-dark font-bold underline break-all">{contactEmail}</a></p>
+          ) : (
+            <p>{CONTACT_PENDING_TEXT}</p>
+          )}
         </Card>
       </div>
     </div>

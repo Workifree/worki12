@@ -14,7 +14,8 @@ import { logError } from '../../lib/logger';
 import { isCertificationExpired, formatDateOnly, todayLocalDate } from '../../lib/dateUtils';
 import { CertificationService } from '../../services/certificationService';
 import type { WorkerCertification, WorkerTraining } from '../../types';
-import { Button, Card, Field } from '../ui';
+import { Button, Card, ErrorState, Field } from '../ui';
+import { Dialog } from '../ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // F8 (empresa) — o que a empresa vê no perfil de um freela do seu elenco: as certificações
@@ -45,6 +46,8 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const [certifications, setCertifications] = useState<WorkerCertification[]>([]);
   const [certLoading, setCertLoading] = useState(true);
+  const [certError, setCertError] = useState(false);
+  const [trainingsError, setTrainingsError] = useState(false);
   const [verifierNames, setVerifierNames] = useState<Record<string, string>>({});
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [unverifyingId, setUnverifyingId] = useState<string | null>(null);
@@ -62,7 +65,16 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const loadCertifications = async () => {
     setCertLoading(true);
-    const list = await CertificationService.listWorkerCertifications(workerId);
+    let list: WorkerCertification[];
+    try {
+      list = await CertificationService.listWorkerCertifications(workerId);
+    } catch (error) {
+      logError('WorkerCertificationsPanel.loadCertifications', error);
+      setCertError(true);
+      setCertLoading(false);
+      return;
+    }
+    setCertError(false);
     setCertifications(list);
 
     const companyIds = [
@@ -91,8 +103,13 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
   const loadTrainings = async () => {
     setTrainingsLoading(true);
-    const list = await CertificationService.listCompanyTrainings(workerId);
-    setTrainings(list);
+    try {
+      setTrainings(await CertificationService.listCompanyTrainings(workerId));
+      setTrainingsError(false);
+    } catch (error) {
+      logError('WorkerCertificationsPanel.loadTrainings', error);
+      setTrainingsError(true);
+    }
     setTrainingsLoading(false);
   };
 
@@ -196,14 +213,18 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
         </h3>
 
         {certLoading && (
-          <div className="space-y-3 animate-pulse">
+          <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             {[...Array(2)].map((_, i) => (
               <div key={i} className="h-20 bg-gray-200 rounded-xl" />
             ))}
           </div>
         )}
 
-        {!certLoading && certifications.length === 0 && (
+        {!certLoading && certError && (
+          <ErrorState className="mb-3" title="Não conseguimos carregar as certificações." onRetry={() => void loadCertifications()} />
+        )}
+
+        {!certLoading && !certError && certifications.length === 0 && (
           <p className="text-gray-600 text-sm">
             Este freela ainda não cadastrou certificações.
           </p>
@@ -220,7 +241,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="font-bold text-sm">{cert.title}</h4>
                     {expired && (
-                      <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-[11px] font-bold">
+                      <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-xs font-bold">
                         Vencida
                       </span>
                     )}
@@ -290,14 +311,18 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
         </div>
 
         {trainingsLoading && (
-          <div className="space-y-3 animate-pulse">
+          <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             {[...Array(2)].map((_, i) => (
               <div key={i} className="h-16 bg-gray-200 rounded-xl" />
             ))}
           </div>
         )}
 
-        {!trainingsLoading && trainings.length === 0 && (
+        {!trainingsLoading && trainingsError && (
+          <ErrorState className="mb-3" title="Não conseguimos carregar os treinamentos." onRetry={() => void loadTrainings()} />
+        )}
+
+        {!trainingsLoading && !trainingsError && trainings.length === 0 && (
           <p className="text-gray-600 text-sm">
             Sua empresa ainda não registrou nenhum treinamento para este freela.
           </p>
@@ -316,7 +341,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-bold text-sm">{training.title}</h4>
                     {revoked && (
-                      <span className="bg-gray-100 text-gray-700 border border-gray-300 rounded-pill px-2 py-0.5 text-[11px] font-bold flex-shrink-0">
+                      <span className="bg-gray-100 text-gray-700 border border-gray-300 rounded-pill px-2 py-0.5 text-xs font-bold flex-shrink-0">
                         Revogado
                       </span>
                     )}
@@ -352,18 +377,11 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
 
       {/* Modal — registrar treinamento */}
       {trainingFormOpen && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !trainingSaving) setTrainingFormOpen(false);
-          }}
+        <Dialog
+            labelledBy="training-form-title"
+            onClose={() => setTrainingFormOpen(false)}
+            locked={trainingSaving}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="training-form-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-          >
             <div className="flex items-center justify-between mb-4">
               <h3 id="training-form-title" className="text-lg font-bold">Registrar Treinamento</h3>
               <button
@@ -408,28 +426,23 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   placeholder="Ex: treinamento presencial de 2h com o gerente da unidade"
                 />
               </Field>
-              <Button type="submit" variant="dark" size="lg" fullWidth loading={trainingSaving}>
-                {trainingSaving ? 'Salvando...' : 'Registrar'}
-              </Button>
+              <div className="worki-dialog-actions">
+                <Button type="submit" variant="dark" size="lg" fullWidth loading={trainingSaving}>
+                  {trainingSaving ? 'Salvando...' : 'Registrar'}
+                </Button>
+              </div>
             </form>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Modal — revogar treinamento */}
       {revokingId && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !revoking) setRevokingId(null);
-          }}
+        <Dialog
+            labelledBy="revoke-training-title"
+            onClose={() => setRevokingId(null)}
+            locked={revoking}
+            className="max-w-sm"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="revoke-training-title"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-5 sm:p-6 max-h-[90vh] overflow-y-auto"
-          >
             <h3 id="revoke-training-title" className="text-lg font-bold mb-2">Revogar Treinamento?</h3>
             <p className="text-sm text-gray-600 mb-4">
               Esta ação é definitiva — o registro fica marcado como revogado, nunca é apagado.
@@ -444,7 +457,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                 placeholder="Ex: registrado por engano, treinamento duplicado"
               />
             </Field>
-            <div className="flex gap-3">
+            <div className="worki-dialog-actions flex gap-3">
               <Button
                 variant="secondary"
                 className="flex-1"
@@ -463,8 +476,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                 Revogar
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

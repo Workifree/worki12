@@ -1,16 +1,15 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { levelProgress } from '../lib/gamification';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import { supabase } from '../lib/supabase';
-import { User, MapPin, ShieldCheck, Edit2, Award, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, CalendarClock, Star, Share2, HelpCircle } from 'lucide-react';
-import { Button, Card, Field } from '../components/ui';
+import { MapPin, ShieldCheck, Edit2, Save, X, Camera, Lock, QrCode, Copy, Check, LogOut, Link2, Settings, Receipt, ChevronRight, Star, HelpCircle } from 'lucide-react';
+import { DialogActions, ActionBar, Alert, Avatar, Button, Card, Field } from '../components/ui';
 import ProfileReviews from '../components/ProfileReviews';
 import MyCertificationsSection from '../components/MyCertificationsSection';
 import CompanyBadges from '../components/CompanyBadges';
 import ReferralOptOutSection from '../components/ReferralOptOutSection';
 import SosDiscoverySection from '../components/SosDiscoverySection';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getPasswordStrength, validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../lib/validation';
@@ -20,6 +19,15 @@ import { TeamConnectionService } from '../services/teamConnectionService';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../types';
 import { SHIFT_CATEGORIES } from '../components/company/shiftCategories';
+import { checkSession } from '../lib/authSession';
+import ErroDeCarga from '../components/ErroDeCarga';
+import { Dialog } from '../components/ui/Dialog';
+import { roleLabel } from '../lib/statusLabels';
+import { formatWorkedTime } from '../lib/currency';
+import { getMyWorkerProfile, setMyWorkerIdentity } from '../services/workerIdentityService';
+import { isAvisosEnabled } from '../lib/features';
+import { leaveDevice } from '../lib/leaveDevice';
+import PreferenciasDeAvisos from '../components/avisos/PreferenciasDeAvisos';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -116,14 +124,14 @@ interface FormData {
  * Turno concluido sem check-in ou sem check-out soma zero: nao ha o que medir, e estimar de novo
  * seria repetir o erro. Falha de leitura devolve 0 em vez de derrubar o perfil.
  */
-async function somarHorasRegistradas(workerId: string): Promise<number> {
+async function somarHorasRegistradas(workerId: string): Promise<number | null> {
     try {
         const { data, error } = await supabase
             .from('applications')
             .select('worker_checkin_at, worker_checkout_at')
             .eq('worker_id', workerId)
             .eq('status', 'completed');
-        if (error || !data) return 0;
+        if (error || !data) return null;
 
         const ms = data.reduce((total, row) => {
             if (!row.worker_checkin_at || !row.worker_checkout_at) return total;
@@ -133,18 +141,21 @@ async function somarHorasRegistradas(workerId: string): Promise<number> {
             return total + (saida - entrada);
         }, 0);
 
-        return Math.floor(ms / 3_600_000);
+        return ms / 3_600_000;
     } catch {
-        return 0;
+        return null;
     }
 }
 
 export default function Profile() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const campoPedido = searchParams.get('editar');
     const { signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [salvando, setSalvando] = useState(false);
     const [profile, setProfile] = useState<WorkerProfile | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
@@ -231,7 +242,7 @@ export default function Profile() {
     }, [isDirty, handleBeforeUnload]);
 
 
-    const [stats, setStats] = useState({
+    const [stats, setStats] = useState<{ completedJobs: number; totalEarnings: number; hoursWorked: number | null }>({
         completedJobs: 0,
         totalEarnings: 0,
         hoursWorked: 0
@@ -244,14 +255,6 @@ export default function Profile() {
 
     // QR de identidade + "meu link" (link transitivo)
     const [qrModalOpen, setQrModalOpen] = useState(false);
-    // Saida de emergencia do modal do QR (heuristica #3) — mesmo contrato dos demais modais.
-    const fecharExclusaoPeloFundo = useModalDismiss(() => {
-        if (deleteModalOpen) { setDeleteModalOpen(false); setDeleteConfirmText(''); }
-        else if (qrModalOpen) setQrModalOpen(false);
-    });
-    const fecharQrPeloFundo = (e: React.MouseEvent<HTMLElement>) => {
-        if (e.target === e.currentTarget) setQrModalOpen(false);
-    };
     const [workerId, setWorkerId] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
     const [idCopied, setIdCopied] = useState(false);
@@ -272,32 +275,34 @@ export default function Profile() {
         }
     }, [workerId, addToast]);
 
-    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar Freela → Worki ID".
+    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Worki ID".
     // Distinto de handleCopyMyLink (que copia a URL do convite).
     const handleCopyWorkiId = useCallback(async () => {
         if (!workerId) return;
         try {
             await navigator.clipboard.writeText(workerId);
             setIdCopied(true);
-            addToast('Worki ID copiado! Envie para a empresa te adicionar ao elenco.', 'success');
+            addToast('Código copiado! Envie para a empresa te adicionar ao elenco.', 'success');
             setTimeout(() => setIdCopied(false), 2500);
         } catch {
-            addToast('Não foi possível copiar o Worki ID.', 'error');
+            addToast('Não foi possível copiar o código.', 'error');
         }
     }, [workerId, addToast]);
 
     useEffect(() => {
         const fetchProfile = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return navigate('/login');
+            const session = await checkSession();
+            if (session.status === 'signed_out') return navigate('/login');
+            if (session.status === 'unavailable') {
+                logError('Profile.session', session.error);
+                setLoading(false); // sem `profile`: a tela mostra erro com "Tentar de novo"
+                return;
+            }
+            const user = session.user;
 
             setWorkerId(user.id);
 
-            const { data, error } = await supabase
-                .from('workers')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            const { data, error } = await getMyWorkerProfile(user.id);
 
             if (error) {
                 logError('Error fetching profile:', error);
@@ -329,7 +334,25 @@ export default function Profile() {
         };
 
         fetchProfile();
-    }, [navigate]);
+    }, [navigate, reloadKey]);
+
+    const [campoFoco, setCampoFoco] = useState<string | null>(null);
+    const abrirEdicao = (campo: string) => {
+        setIsEditing(true);
+        setCampoFoco(campo);
+    };
+
+    useEffect(() => {
+        if (!loading && (campoPedido === 'pix' || campoPedido === 'cpf')) abrirEdicao(campoPedido);
+    }, [loading, campoPedido]);
+
+    useEffect(() => {
+        if (!isEditing || !campoFoco) return;
+        const campo = document.getElementById(`perfil-campo-${campoFoco}`);
+        campo?.scrollIntoView?.({ block: 'center' });
+        campo?.focus();
+        setCampoFoco(null);
+    }, [isEditing, campoFoco]);
 
     // Best-effort: recomputa XP/nível/ganhos/turnos via RPC (recompute_my_aggregates,
     // SECURITY DEFINER, usa auth.uid()) e mescla o resultado no state do perfil, para a
@@ -354,7 +377,7 @@ export default function Profile() {
                     ...prev,
                     completedJobs: data.completed_jobs_count ?? prev.completedJobs,
                     totalEarnings: data.earnings_total ?? prev.totalEarnings,
-                    hoursWorked: horasReais
+                    hoursWorked: horasReais ?? prev.hoursWorked
                 }));
             }
         } catch (error) {
@@ -494,6 +517,32 @@ export default function Profile() {
             // Estado proprio: reusar o `loading` da pagina trocava o formulario inteiro pelo
             // skeleton durante o request — parecia recarga/perda do que foi digitado (N1).
             setSalvando(true);
+
+            // CPF vai pela RPC (a trava "só se vazio" é do servidor). Sem a RPC no banco, segue no
+            // UPDATE abaixo, como antes. Recusa interrompe o salvamento inteiro.
+            const cpfNovo = !cpfJaCadastrado && cpfValido ? cpfDigitado : null;
+            let cpfNoUpdate = false;
+            if (cpfNovo) {
+                const { outcome } = await setMyWorkerIdentity({ cpf: cpfNovo });
+                if (outcome === 'unavailable') {
+                    cpfNoUpdate = true;
+                } else if (outcome === 'cpf_locked') {
+                    addToast('Já existe um CPF no seu cadastro e ele não muda por aqui. Nada foi salvo.', 'error');
+                    setIsEditing(false);
+                    setLoading(true);
+                    setReloadKey((k) => k + 1);
+                    return;
+                } else if (outcome === 'invalid_cpf') {
+                    addToast('CPF inválido. Confira os números e salve de novo.', 'error');
+                    return;
+                } else if (outcome === 'anonymized') {
+                    addToast('Esta conta foi excluída e não aceita alterações.', 'error');
+                    return;
+                } else if (outcome !== 'saved' && outcome !== 'birth_date_locked') {
+                    throw new Error(`set_my_worker_identity: ${outcome}`);
+                }
+            }
+
             const rolesArray = formData.roles.split(',').map(r => r.trim()).filter(r => r.length > 0);
 
             // F7 — `normalizeAvailabilityGrade` poda dias sem período e devolve `null` (SQL NULL)
@@ -506,7 +555,7 @@ export default function Profile() {
                 bio: formData.bio,
                 pix_key: normalizePixKeyForStorage(pixKeyType, formData.pix_key),
                 // Só entra no payload quando ainda não havia CPF — nunca sobrescreve um já gravado.
-                ...(!cpfJaCadastrado && cpfValido ? { cpf: cpfDigitado } : {}),
+                ...(cpfNoUpdate && cpfNovo ? { cpf: cpfNovo } : {}),
                 primary_role: formData.primary_role,
                 roles: rolesArray,
                 availability_days: normalizeAvailabilityGrade(availabilityGrade),
@@ -526,7 +575,7 @@ export default function Profile() {
                 throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
             }
 
-            setProfile({ ...profile, ...updates });
+            setProfile({ ...profile, ...updates, ...(cpfNovo ? { cpf: cpfNovo } : {}) });
             initialFormDataRef.current = { ...formData };
             // F7 — a grade em edição vira o novo "baseline" (não o valor normalizado gravado:
             // `{}` local continua representando "nada marcado" na UI de edição; a poda para
@@ -580,6 +629,8 @@ export default function Profile() {
         if (loggingOut) return;
         setLoggingOut(true);
         try {
+            // Aparelho compartilhado não pode seguir recebendo avisos de quem saiu.
+            await leaveDevice();
             await signOut();
             navigate('/login');
         } catch (error) {
@@ -606,12 +657,13 @@ export default function Profile() {
             setDeleting(false);
             return;
         }
+        await leaveDevice();
         await supabase.auth.signOut();
         navigate('/login');
     };
 
     if (loading) return (
-        <div className="mx-auto max-w-3xl animate-pulse space-y-6 pb-12" aria-busy="true">
+        <div className="mx-auto max-w-3xl animate-pulse space-y-6 pb-12" aria-busy="true" role="status"><span className="sr-only">Carregando</span>
             <div className="h-28 rounded-2xl bg-gray-200" />
             <div className="space-y-4">
                 {[...Array(4)].map((_, i) => (
@@ -621,84 +673,32 @@ export default function Profile() {
         </div>
     );
 
-    if (!profile) return <div className="text-center p-8">Erro ao carregar perfil.</div>;
-
-    // Pares Cancelar/Salvar: UMA definição, renderizada no hero (desktop) e na barra fixa (mobile).
-    // CTA único de salvar — mesmo texto, mesma variante, mesmo estado de loading nos dois lugares.
-    const editActions = (
-        <>
-            <Button variant="secondary" onClick={handleCancelEdit} iconLeft={<X size={16} />}>
-                Cancelar
-            </Button>
-            <Button variant="primary" onClick={handleSave} loading={salvando} iconLeft={<Save size={16} />}>
-                Salvar
-            </Button>
-        </>
+    if (!profile) return (
+        <div className="mx-auto max-w-3xl pt-6 pb-12">
+            <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey((k) => k + 1); }} />
+        </div>
     );
 
-    const nivel = levelProgress(profile.xp || 0);
+    const nivel = levelProgress(profile.xp || 0, profile.level || 1);
     const gradeDeclarada = Object.keys(profile.availability_days ?? {}).length > 0;
 
     return (
         <>
         <div className="mx-auto max-w-3xl space-y-6 pb-12 font-sans text-accent">
-            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
-                do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
-            {!isEditing && (
-                <Card
-                    as="section"
-                    aria-label="Compartilhar meu perfil com empresas"
-                    className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]"
-                >
-                    <div className="flex items-start gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
-                            <Link2 size={20} />
-                        </span>
-                        <div className="min-w-0">
-                            <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
-                            <p className="mt-1 text-sm text-gray-600">
-                                Link: a empresa abre e te adiciona. Worki ID: ela digita no app.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <Button
-                            variant="primary"
-                            onClick={handleCopyMyLink}
-                            disabled={!workerId}
-                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                            className="w-full sm:w-auto"
-                        >
-                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={handleCopyWorkiId}
-                            disabled={!workerId}
-                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
-                            className="w-full sm:w-auto"
-                        >
-                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
-                        </Button>
-                    </div>
-                </Card>
-            )}
-
-            {/* Identidade: capa + avatar + nome. Em edicao, nome/cidade viram campos na secao "Dados". */}
+            {/* Identidade: faixa clara de 72px (ou a capa da pessoa) + avatar + nome. */}
             <Card as="section" padding="none" aria-label="Identidade" className="overflow-hidden">
-                <div className="relative h-28 bg-gray-900 sm:h-36">
-                    {profile.cover_url ? (
+                <div className="relative h-[72px] bg-primary-light">
+                    {profile.cover_url && (
                         <img src={profile.cover_url} alt="Foto de capa do perfil" className="h-full w-full object-cover" />
-                    ) : (
-                        <div className="h-full w-full bg-gradient-to-r from-gray-900 to-black" />
                     )}
-                    <div className="absolute right-3 top-3">
+                    <div className="absolute right-1 top-1">
                         <Button
-                            variant="secondary"
+                            variant="ghost"
                             onClick={() => coverInputRef.current?.click()}
                             disabled={uploading}
                             aria-label="Trocar foto de capa"
                             iconLeft={<Camera size={18} />}
+                            className="px-3"
                         />
                     </div>
                 </div>
@@ -712,22 +712,16 @@ export default function Profile() {
                     disabled={uploading}
                 />
 
-                <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-                    <div className="relative -mt-12 h-24 w-24 shrink-0 rounded-full border-2 border-black bg-white p-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:-mt-14 sm:h-28 sm:w-28">
-                        <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gray-200">
-                            {profile.avatar_url ? (
-                                <img src={profile.avatar_url} alt={profile.full_name} className="h-full w-full object-cover" />
-                            ) : (
-                                <User size={48} className="text-gray-400" />
-                            )}
-                        </div>
+                <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+                    <div className="relative -mt-10 h-20 w-20 shrink-0">
+                        <Avatar size="lg" name={profile.full_name} src={profile.avatar_url} className="ring-4 ring-white" />
                         {/* Um unico gatilho de troca de foto, sempre visivel (no touch nao existe hover). */}
                         <button
                             type="button"
                             aria-label="Trocar foto de perfil"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                            className="absolute -bottom-1 -right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                            className="absolute -bottom-2 -right-3 inline-flex h-11 w-11 items-center justify-center rounded-full border-ink border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Camera size={16} />
                         </button>
@@ -743,7 +737,7 @@ export default function Profile() {
                     </div>
 
                     <div className="mt-3 min-w-0">
-                        <h1 className="break-words text-2xl font-bold tracking-tight text-black sm:text-3xl">{profile.full_name}</h1>
+                        <h1 className="break-words text-2xl font-bold tracking-tight text-black">{profile.full_name}</h1>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-gray-600">
                             {profile.city && (
                                 <span className="inline-flex items-center gap-1">
@@ -754,7 +748,7 @@ export default function Profile() {
                             {profile.verified_identity && (
                                 <span
                                     title="Identidade Verificada"
-                                    className="inline-flex items-center gap-1 rounded-pill bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700"
+                                    className="inline-flex items-center gap-1 rounded-pill bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary-dark"
                                 >
                                     <ShieldCheck size={14} />
                                     Identidade verificada
@@ -763,11 +757,8 @@ export default function Profile() {
                         </div>
                     </div>
 
-                    <div className={isEditing ? 'mt-4 hidden gap-2 sm:flex' : 'mt-4 flex gap-2'}>
-                        {isEditing ? (
-                            editActions
-                        ) : (
-                            <>
+                    {!isEditing && (
+                    <div className="mt-4 flex gap-2">
                                 <Button
                                     variant="secondary"
                                     onClick={() => setIsEditing(true)}
@@ -784,72 +775,151 @@ export default function Profile() {
                                 >
                                     QR
                                 </Button>
-                            </>
-                        )}
                     </div>
+                    )}
                 </div>
             </Card>
 
-            {/* Resumo: nivel + numeros que importam + atalho dos recebimentos */}
-            <Card as="section" aria-label="Resumo">
-                <div className="flex items-center gap-4">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary">
-                        <Award size={24} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-3">
-                            <p className="text-lg font-bold">Nível {profile.level || 1}</p>
-                            <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
-                        </div>
-                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
+            {/* Pendências: o que impede de receber ou de ser chamado vem antes do resto. */}
+            {!isEditing && (!profile.pix_key || !cpfJaCadastrado || !profile.phone) && (
+                <section aria-label="Pendências do perfil" className="space-y-3">
+                    {!profile.pix_key && (
+                        <Alert
+                            tone="warning"
+                            title="Falta a chave PIX"
+                            action={(
+                                <Button variant="secondary" data-copilot="freela.perfil.cadastrar-pix" data-copilot-risk="D" onClick={() => abrirEdicao('pix')}>
+                                    Adicionar chave PIX
+                                </Button>
+                            )}
+                        >
+                            Sem ela a empresa não sabe para onde pagar.
+                        </Alert>
+                    )}
+                    {!cpfJaCadastrado && (
+                        <Alert
+                            tone="warning"
+                            title="Falta o CPF"
+                            action={(
+                                <Button variant="secondary" data-copilot="freela.perfil.cadastrar-cpf" data-copilot-risk="D" onClick={() => abrirEdicao('cpf')}>
+                                    Cadastrar CPF
+                                </Button>
+                            )}
+                        >
+                            Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
+                        </Alert>
+                    )}
+                    {!profile.phone && (
+                        <Alert
+                            tone="info"
+                            title="Falta o telefone"
+                            action={<Button variant="secondary" onClick={() => abrirEdicao('telefone')}>Adicionar telefone</Button>}
+                        >
+                            É por ele que a empresa fala com você fora do app.
+                        </Alert>
+                    )}
+                </section>
+            )}
+
+            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
+                do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
+            {!isEditing && (
+                <Card
+                    as="section"
+                    aria-label="Compartilhar meu perfil com empresas"
+                    padding="sm"
+                >
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+                            <Link2 size={20} />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold leading-tight">Me adicionar a uma empresa</h2>
+                            <p className="mt-1 text-sm text-gray-600">
+                                Link: a empresa abre e te adiciona. Código: ela digita no app.
+                            </p>
                         </div>
                     </div>
-                </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                            variant="secondary"
+                            data-copilot="freela.perfil.copiar-link"
+                            onClick={handleCopyMyLink}
+                            disabled={!workerId}
+                            iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleCopyWorkiId}
+                            disabled={!workerId}
+                            iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
+                            className="w-full sm:w-auto"
+                        >
+                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
+                        </Button>
+                    </div>
+                </Card>
+            )}
 
-                <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+            {/* Resumo: faixa de 3 métricas (sem caixa por número) + nível + atalho de recebimentos. */}
+            <section aria-label="Resumo" className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                <div className="px-4 pt-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <p className="text-base font-semibold">Nível {profile.level || 1}</p>
+                        <p className="text-xs text-gray-600 tabular-nums">{profile.xp || 0} XP no total</p>
+                    </div>
+                    {nivel && (
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${nivel.percent}%` }} />
+                        </div>
+                    )}
+                </div>
+                <dl className="mt-3 grid grid-cols-3 divide-x divide-gray-200 border-y border-gray-200 text-center">
+                    <div className="min-w-0 px-2 py-3">
                         <dd className="text-xl font-bold tabular-nums">{stats.completedJobs}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Turnos</dt>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
-                        <dd className="text-xl font-bold tabular-nums">{stats.hoursWorked}h</dd>
+                    <div className="min-w-0 px-2 py-3">
+                        <dd className="text-base font-bold leading-7 tabular-nums">{stats.hoursWorked === null ? 'Indisponível' : formatWorkedTime(stats.hoursWorked, 'Sem registro')}</dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Horas</dt>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-3">
+                    <div className="min-w-0 px-2 py-3">
                         <dd className="flex items-center justify-center gap-1 text-xl font-bold tabular-nums">
-                            <Star size={16} className="text-yellow-500" fill="currentColor" />
-                            {profile.rating_average || '-'}
+                            {profile.rating_average ? (
+                                <>
+                                    <Star size={16} className="text-yellow-500" fill="currentColor" />
+                                    {profile.rating_average}
+                                </>
+                            ) : (
+                                <span className="text-sm leading-7">Sem notas</span>
+                            )}
                         </dd>
                         <dt className="mt-0.5 text-xs text-gray-600">Avaliação</dt>
                     </div>
                 </dl>
+                {/* Atalho: Recebimentos — histórico de pagamentos registrados (shift_payments) */}
+                <Link
+                    to="/recebimentos"
+                    className="flex min-h-14 items-center gap-3 px-4 py-2 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
+                >
+                    <Receipt size={20} aria-hidden="true" className="shrink-0 text-gray-700" />
+                    <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">Recebimentos</span>
+                        <span className="block text-xs text-gray-600">Pagamentos registrados pelas empresas</span>
+                    </span>
+                    <ChevronRight size={18} aria-hidden="true" className="shrink-0" />
+                </Link>
+            </section>
 
-                {/* Atalho: Meus Recebimentos — histórico de pagamentos registrados (shift_payments) */}
-                <div className="mt-5 border-t-2 border-gray-100 pt-5">
-                    <Button
-                        variant="secondary"
-                        fullWidth
-                        onClick={() => navigate('/recebimentos')}
-                        iconLeft={<Receipt size={18} />}
-                        iconRight={<ChevronRight size={18} />}
-                    >
-                        Meus recebimentos
-                    </Button>
-                    <p className="mt-2 text-center text-xs text-gray-600">Pagamentos registrados pelas empresas</p>
-                </div>
-            </Card>
-
-            {/* DADOS — contato, documento, PIX e apresentação profissional num só bloco. */}
+            {isEditing ? (
+                <>
+            {/* DADOS — edição: a página é o formulário (regras de CPF/PIX inalteradas). */}
             <Card as="section" aria-labelledby="perfil-dados">
                 <h2 id="perfil-dados" className="text-lg font-bold">Dados</h2>
-                <p className="mt-1 text-sm text-gray-600">
-                    {isEditing
-                        ? 'Edite o que precisar e salve no fim.'
-                        : 'É o que as empresas veem quando você entra no elenco delas.'}
-                </p>
-
-                {isEditing ? (
+                <p className="mt-1 text-sm text-gray-600">Edite o que precisar e salve no fim.</p>
                     <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field label="Nome completo">
                             <input
@@ -869,6 +939,8 @@ export default function Profile() {
                         </Field>
                         <Field label="Telefone">
                             <input
+                                data-copilot-private
+                                id="perfil-campo-telefone"
                                 type="tel"
                                 value={formData.phone}
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -879,23 +951,25 @@ export default function Profile() {
 
                         {/* CPF — exigido pelo termo de prestação (F6). Editável só enquanto vazio. */}
                         {cpfJaCadastrado ? (
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5" data-copilot-private>
                                 <span className="text-sm font-bold text-black">CPF</span>
-                                <p className="flex h-11 items-center rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
+                                <p className="flex h-11 items-center rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
                                     {formatCpfCnpj(String(profile.cpf))}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                    Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
-                                    termos que já assinou.
+                                    O CPF identifica você nos termos assinados e não muda por aqui. Se estiver
+                                    errado, avise a empresa do turno antes de assinar um novo termo.
                                 </p>
                             </div>
                         ) : (
                             <Field
                                 label="CPF"
                                 error={formData.cpf.trim() && !cpfValido ? 'CPF inválido.' : undefined}
-                                hint="Necessário para assinar o termo de prestação e receber o recibo do turno. Depois de salvo, só o suporte consegue alterar."
+                                hint="Necessário para assinar o termo do turno. Confira bem: depois de salvo, não dá para alterar por aqui."
                             >
                                 <input
+                                    data-copilot-private
+                                    id="perfil-campo-cpf"
                                     type="text"
                                     inputMode="numeric"
                                     value={formData.cpf}
@@ -928,6 +1002,8 @@ export default function Profile() {
                             hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
                         >
                             <input
+                                data-copilot-private
+                                id="perfil-campo-pix"
                                 type="text"
                                 value={formData.pix_key}
                                 onChange={(e) => setFormData({ ...formData, pix_key: formatPixKey(pixKeyType, e.target.value) })}
@@ -959,7 +1035,7 @@ export default function Profile() {
                                 {formData.primary_role
                                     && !SHIFT_CATEGORIES.some(c => c.name === formData.primary_role) && (
                                     <option value={formData.primary_role}>
-                                        {formData.primary_role} (atual)
+                                        {roleLabel(formData.primary_role)} (atual)
                                     </option>
                                 )}
                             </select>
@@ -985,83 +1061,15 @@ export default function Profile() {
                             />
                         </Field>
                     </div>
-                ) : (
-                    <div className="mt-5 space-y-6">
-                        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                            <DataRow label="Telefone">{profile.phone || 'Não informado'}</DataRow>
-                            <DataRow label="Chave PIX">{profile.pix_key || 'Não informada'}</DataRow>
-                            <DataRow label="CPF">
-                                {cpfJaCadastrado ? (
-                                    <>
-                                        {formatCpfCnpj(String(profile.cpf))}
-                                        <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Já cadastrado. Para corrigir, fale com o suporte — o CPF identifica você nos
-                                            termos que já assinou.
-                                        </span>
-                                    </>
-                                ) : (
-                                    <>
-                                        Não informado
-                                        <span className="mt-1 block text-xs font-normal text-gray-600">
-                                            Sem CPF você não consegue assinar o termo do turno nem confirmar o recibo.
-                                        </span>
-                                        <Button
-                                            variant="secondary"
-                                            onClick={() => setIsEditing(true)}
-                                            className="mt-3"
-                                        >
-                                            Cadastrar CPF
-                                        </Button>
-                                    </>
-                                )}
-                            </DataRow>
-                            <DataRow label="Experiência">{profile.experience_years || 'Iniciante'}</DataRow>
-                            <DataRow label="Regime">
-                                <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
-                                    {Array.isArray(profile.availability) && profile.availability.length > 0 ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : (profile.availability || 'N/A')}
-                                </span>
-                            </DataRow>
-                        </dl>
-
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Especialidades</h3>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                                {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
-                                    <span key={i} className="inline-flex h-8 items-center rounded-pill border-2 border-black bg-white px-3 text-sm font-semibold">
-                                        {role}
-                                    </span>
-                                ))}
-                                {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
-                                    <span className="text-sm italic text-gray-600">Nenhuma especialidade listada.</span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Sobre</h3>
-                            <p className="mt-2 text-sm leading-relaxed text-gray-700 sm:text-base">
-                                {profile.bio || 'Este profissional ainda não adicionou uma biografia.'}
-                            </p>
-                        </div>
-                    </div>
-                )}
             </Card>
 
-            {/* DISPONIBILIDADE — F7: grade dia × período. É SINAL, NUNCA TRAVA
-                (DDL §1): só ordena quem a empresa vê primeiro no Chamado de Turno, nunca
-                filtra nem bloqueia ninguém. Distinta do campo legado "Regime" em Dados
-                (sem dia da semana, write-once do onboarding) — só esta grade
-                responde "disponível nesta terça de manhã?". */}
+            {/* DISPONIBILIDADE — F7: grade dia × período. É SINAL, NUNCA TRAVA (DDL §1). */}
             <Card as="section" aria-labelledby="perfil-disponibilidade">
-                <h2 id="perfil-disponibilidade" className="flex items-center gap-2 text-lg font-bold">
-                    <CalendarClock size={20} /> Disponibilidade da semana
-                </h2>
+                <h2 id="perfil-disponibilidade" className="text-lg font-bold">Disponibilidade da semana</h2>
                 <p className="mt-1 text-sm text-gray-600">
                     Marque os dias e períodos em que você topa trabalhar. As empresas do seu
                     elenco te veem primeiro nos chamados de turno que casam com sua grade.
                 </p>
-
-                {isEditing ? (
                     <div className="mt-5 space-y-2">
                         {AVAILABILITY_WEEKDAYS.map((day) => (
                             <div
@@ -1083,9 +1091,9 @@ export default function Profile() {
                                                 onClick={() => toggleAvailabilitySlot(day, period)}
                                                 aria-pressed={active}
                                                 aria-label={`${AVAILABILITY_WEEKDAY_LABELS[day]} — ${AVAILABILITY_PERIOD_LABELS[period]}`}
-                                                className={`h-11 flex-1 rounded-xl border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                                                className={`h-11 flex-1 rounded-xl border-ink text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                                                     active
-                                                        ? 'border-black bg-primary text-white'
+                                                        ? 'border-black bg-primary-dark text-white'
                                                         : 'border-gray-300 bg-white text-gray-700 hover:border-black'
                                                 }`}
                                             >
@@ -1101,12 +1109,88 @@ export default function Profile() {
                             diferente de "indisponível".
                         </p>
                     </div>
-                ) : gradeDeclarada ? (
+            </Card>
+                </>
+            ) : (
+            /* Visão: UM grupo de lista com seções recolhidas; a tela abre curta. */
+            <div className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                <ProfileSection title="Identidade" meta={cpfJaCadastrado ? 'Telefone, CPF e especialidades' : 'Falta o CPF'}>
+                    <div className="space-y-6">
+                        <dl data-copilot-private className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <DataRow label="Telefone">{profile.phone || 'Não informado'}</DataRow>
+                            <DataRow label="CPF">
+                                {cpfJaCadastrado ? (
+                                    <>
+                                        <DadoMascarado
+                                            rotulo="CPF"
+                                            valor={formatCpfCnpj(String(profile.cpf))}
+                                            mascarado={mascararCpf(formatCpfCnpj(String(profile.cpf)))}
+                                        />
+                                        <span className="mt-1 block text-xs font-normal text-gray-600">
+                                            Se estiver errado, <Link to="/messages" className="inline-flex min-h-11 items-center font-bold underline">fale com a empresa</Link> antes
+                                            de assinar um novo termo.
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        Não informado
+                                    </>
+                                )}
+                            </DataRow>
+                            {profile.experience_years && (
+                                <DataRow label="Experiência">{profile.experience_years}</DataRow>
+                            )}
+                            {!!profile.availability?.length && <DataRow label="Regime">
+                                <span title={Array.isArray(profile.availability) ? profile.availability.join(', ') : profile.availability || undefined}>
+                                    {Array.isArray(profile.availability) ? profile.availability[0] + (profile.availability.length > 1 ? ` +${profile.availability.length - 1}` : '') : profile.availability}
+                                </span>
+                            </DataRow>}
+                        </dl>
+
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-900">Especialidades</h3>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {profile.roles && (Array.isArray(profile.roles) ? profile.roles : [profile.primary_role]).map((role: string, i: number) => (
+                                    <span key={i} className="inline-flex h-8 items-center rounded-pill border border-gray-300 bg-white px-3 text-sm font-semibold">
+                                        {roleLabel(role)}
+                                    </span>
+                                ))}
+                                {(!profile.roles || profile.roles.length === 0) && !profile.primary_role && (
+                                    <Button variant="secondary" onClick={() => setIsEditing(true)}>Adicionar especialidades</Button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-900">Sobre</h3>
+                            {profile.bio ? (
+                                <p className="mt-2 text-sm leading-relaxed text-gray-700 [overflow-wrap:anywhere] sm:text-base">{profile.bio}</p>
+                            ) : (
+                                <Button variant="secondary" className="mt-2" onClick={() => setIsEditing(true)}>Contar sobre você</Button>
+                            )}
+                        </div>
+                    </div>
+                </ProfileSection>
+
+                <ProfileSection title="Pagamento" meta={profile.pix_key ? 'Chave PIX cadastrada' : 'Falta a chave PIX'}>
+                    <dl data-copilot-private>
+                        <DataRow label="Chave PIX">
+                            {profile.pix_key ? (
+                                <DadoMascarado rotulo="chave PIX" valor={profile.pix_key} mascarado={mascararPix(profile.pix_key)} />
+                            ) : 'Não informada'}
+                        </DataRow>
+                    </dl>
+                    <p className="mt-2 text-xs text-gray-600">É assim que as empresas te pagam por fora do Worki (PIX).</p>
+                </ProfileSection>
+
+                {/* DISPONIBILIDADE — F7: sinal, nunca trava. Distinta do campo legado "Regime". */}
+                <ProfileSection title="Disponibilidade da semana" meta={gradeDeclarada ? 'Declarada' : 'Não declarada'}>
+                {gradeDeclarada ? (
                     <div className="mt-5 flex flex-wrap gap-2">
                         {AVAILABILITY_WEEKDAYS.filter((day) => (profile.availability_days?.[day]?.length ?? 0) > 0).map((day) => (
                             <span
                                 key={day}
-                                className="inline-flex h-8 items-center rounded-pill bg-primary-light px-3 text-sm font-semibold text-primary"
+                                className="inline-flex h-8 items-center rounded-pill bg-primary-light px-3 text-sm font-semibold text-primary-dark"
                             >
                                 {AVAILABILITY_WEEKDAY_LABELS[day]}: {(profile.availability_days?.[day] ?? [])
                                     .map((p) => AVAILABILITY_PERIOD_LABELS[p])
@@ -1115,7 +1199,7 @@ export default function Profile() {
                         ))}
                     </div>
                 ) : (
-                    <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4">
+                    <div className="mt-5 flex flex-col items-start gap-3 rounded-xl bg-gray-100 p-4">
                         <p className="text-sm text-gray-700">
                             Você ainda não declarou sua disponibilidade. Declare para aparecer
                             primeiro nos chamados de turno do seu elenco.
@@ -1125,43 +1209,36 @@ export default function Profile() {
                         </Button>
                     </div>
                 )}
-            </Card>
+                </ProfileSection>
 
-            {/* CERTIFICAÇÕES — F8: o freela cadastra/edita/remove a própria certificação externa.
-                v1 SEM ARQUIVO (ADR-20260821) — só metadado + número de registro. */}
-            <MyCertificationsSection />
+                <ProfileSection title="Certificações e cursos">
+                    <MyCertificationsSection />
+                </ProfileSection>
 
-            {/* Avaliações recebidas de empresas */}
-            {workerId && <ProfileReviews reviewedId={workerId} reviewerRole="company" />}
+                {workerId && (
+                    <ProfileSection title="Avaliações das empresas">
+                        <ProfileReviews reviewedId={workerId} reviewerRole="company" />
+                    </ProfileSection>
+                )}
 
-            {/* PREFERÊNCIAS — como você aparece e como pode ser encontrado. Cada bloco é um
-                opt-in/opt-out independente (F10 indicação, F11 SOS, F12 selos). */}
-            <section aria-labelledby="perfil-preferencias" className="space-y-6">
-                <div className="mt-2">
-                    <h2 id="perfil-preferencias" className="text-lg font-bold">Preferências</h2>
-                    <p className="mt-1 text-sm text-gray-600">
-                        Você decide como aparece para as empresas e quando pode ser chamado.
-                    </p>
-                </div>
+                {/* PREFERÊNCIAS — cada bloco é um opt-in/opt-out independente (F10, F11, F12). */}
+                <ProfileSection title="Preferências e privacidade">
+                    <div className="space-y-6">
+                        <ReferralOptOutSection />
+                        <SosDiscoverySection />
+                        {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
+                    </div>
+                </ProfileSection>
+            </div>
+            )}
 
-                {/* F10 — opt-out de indicação entre empresas (workers.accepts_referrals). */}
-                <ReferralOptOutSection />
-
-                {/* F11 — opt-in de descoberta em urgência (workers.discoverable_for_sos).
-                    Adjacente à Disponibilidade (F7): só aparece com availability_days
-                    declarado — ver ddl-aprovado.md §5. */}
-                <SosDiscoverySection />
-
-                {/* F12 — selos das empresas onde já trabalhou (o dono gerencia visibilidade). */}
-                {workerId && <CompanyBadges workerId={workerId} mode="manage" />}
-            </section>
+            {isAvisosEnabled() && <PreferenciasDeAvisos />}
 
             {/* ATALHOS — paridade de navegacao mobile (R6): destinos que o BottomNav nao comporta. */}
             <nav aria-labelledby="perfil-atalhos" className="border-t-2 border-gray-200 pt-6">
-                <h2 id="perfil-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h2>
-                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
+                <h2 id="perfil-atalhos" className="text-base font-semibold">Atalhos</h2>
+                <ul className="mt-2 divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
                     {[
-                        { to: '/indicacoes', label: 'Quem te indicou', icon: <Share2 size={18} /> },
                         { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} /> },
                     ].map(item => (
                         <li key={item.to}>
@@ -1285,31 +1362,31 @@ export default function Profile() {
                 )}
             </section>
 
-        </div>
 
-        {isEditing && (
-            /* Barra de acao fixa no mobile: os campos editaveis longos (especialidades, bio,
-               grade de disponibilidade) ficam muito abaixo do par Salvar/Cancelar do hero —
-               no celular a pessoa terminava a edicao e nao tinha como salvar dali (KLM/Fitts).
-               z-[60] fica ACIMA do BottomNav (z-50); com z-40 a barra nascia escondida atras dele.
-               So mobile: no desktop o par do hero ja fica visivel. */
-            <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[60] flex gap-3 border-t-2 border-black bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] [&>*]:flex-1">
-                {editActions}
-            </div>
-        )}
+            {isEditing && (
+                <ActionBar
+                    secondary={(
+                        <Button variant="secondary" onClick={handleCancelEdit} iconLeft={<X size={16} />}>
+                            Cancelar
+                        </Button>
+                    )}
+                    primary={(
+                        <Button variant="primary" size="lg" onClick={handleSave} loading={salvando} iconLeft={<Save size={16} />}>
+                            Salvar
+                        </Button>
+                    )}
+                />
+            )}
+        </div>
 
         {/* Modal QR de identidade */}
         {qrModalOpen && workerId && (
-            <div
-                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
-                onClick={fecharQrPeloFundo}
+            <Dialog
+                labelledBy="perfil-qr-titulo"
+                onClose={() => setQrModalOpen(false)}
+                initialFocus="panel"
+                className="max-w-sm"
             >
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="perfil-qr-titulo"
-                    className="w-full max-w-sm rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-                >
                     <div className="mb-2 flex items-center justify-between gap-3">
                         <h2 id="perfil-qr-titulo" className="text-lg font-bold">Meu QR de identidade</h2>
                         <button
@@ -1321,10 +1398,10 @@ export default function Profile() {
                         </button>
                     </div>
                     <p className="mb-5 text-sm text-gray-600">
-                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu Worki ID.
+                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu código.
                     </p>
-                    <div className="mb-5 flex justify-center">
-                        <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="mb-5 flex justify-center" data-copilot-private>
+                        <div className="rounded-2xl border border-gray-200 bg-white p-4">
                             <QRCodeSVG
                                 value={workerId}
                                 size={200}
@@ -1333,8 +1410,8 @@ export default function Profile() {
                             />
                         </div>
                     </div>
-                    <div className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Worki ID</p>
+                    <div data-copilot-private className="rounded-xl bg-gray-100 p-3 text-center">
+                        <p className="mb-1 text-xs font-semibold text-gray-600">Seu código</p>
                         <p className="break-all font-mono text-xs font-bold text-gray-700">{workerId}</p>
                     </div>
                     <div className="mt-4 flex flex-col gap-2">
@@ -1344,7 +1421,7 @@ export default function Profile() {
                             onClick={handleCopyWorkiId}
                             iconLeft={idCopied ? <Check size={18} /> : <Copy size={18} />}
                         >
-                            {idCopied ? 'Worki ID copiado!' : 'Copiar Worki ID'}
+                            {idCopied ? 'Código copiado!' : 'Copiar meu código'}
                         </Button>
                         <Button
                             variant="secondary"
@@ -1356,24 +1433,18 @@ export default function Profile() {
                         </Button>
                     </div>
                     <p className="mt-3 text-center text-xs text-gray-600">
-                        Cole o <span className="font-bold">Worki ID</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
+                        Envie o <span className="font-bold">código</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
                     </p>
-                </div>
-            </div>
+            </Dialog>
         )}
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div
-                className="fixed inset-0 z-[70] flex animate-in fade-in items-center justify-center bg-black/50 p-4 backdrop-blur-sm duration-200"
-                onClick={fecharExclusaoPeloFundo}
+            <Dialog
+                labelledBy="perfil-exclusao-titulo"
+                onClose={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
+                locked={deleting}
             >
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="perfil-exclusao-titulo"
-                    className="w-full max-w-md rounded-2xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-                >
                     <h2 id="perfil-exclusao-titulo" className="mb-4 text-lg font-bold text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="mb-6 space-y-2 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
@@ -1394,25 +1465,73 @@ export default function Profile() {
                             autoComplete="off"
                         />
                     </Field>
-                    <div className="mt-6 flex gap-3 [&>*]:flex-1">
+                    <DialogActions>
                         <Button
                             variant="secondary"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
                         >
-                            Cancelar
+                            Voltar
                         </Button>
                         <Button
                             variant="danger"
                             onClick={handleDeleteAccount}
                             disabled={deleteConfirmText !== 'EXCLUIR' || deleting}
                         >
-                            {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                            {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
                         </Button>
-                    </div>
-                </div>
-            </div>
+                    </DialogActions>
+            </Dialog>
         )}
         </>
+    );
+}
+
+/** Seção recolhível do perfil (`<details>` nativo: teclado e leitor de tela de graça). */
+/** Seção recolhida dentro do grupo de lista do perfil (sem caixa própria). */
+function ProfileSection({ title, meta, children }: { title: string; meta?: string; children: React.ReactNode }) {
+    return (
+        <details className="group bg-white">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0">
+                    <span className="block text-base font-semibold">{title}</span>
+                    {meta && <span className="block truncate text-xs text-gray-600">{meta}</span>}
+                </span>
+                <ChevronRight size={18} aria-hidden="true" className="shrink-0 group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-gray-200 p-4">{children}</div>
+        </details>
+    );
+}
+
+/** CPF formatado: mantém só o miolo ("•••.456.789-••"). */
+function mascararCpf(formatado: string): string {
+    const m = formatado.match(/^(\d{3})\.(\d{3})\.(\d{3})-(\d{2})$/);
+    return m ? `•••.${m[2]}.${m[3]}-••` : formatado.replace(/\d(?=.{4})/g, '•');
+}
+
+/** Chave PIX: mostra só os 4 últimos caracteres. */
+function mascararPix(chave: string): string {
+    const k = chave.trim();
+    if (k.length <= 4) return '••••';
+    return `${'•'.repeat(Math.min(k.length - 4, 8))}${k.slice(-4)}`;
+}
+
+/** Dado sensível mascarado por padrão, com "Mostrar"/"Ocultar" (alvo de 44px). */
+function DadoMascarado({ rotulo, valor, mascarado }: { rotulo: string; valor: string; mascarado: string }) {
+    const [visivel, setVisivel] = useState(false);
+    return (
+        <span className="flex min-w-0 items-center justify-between gap-2">
+            <span className="min-w-0 break-all tabular-nums">{visivel ? valor : mascarado}</span>
+            <button
+                type="button"
+                onClick={() => setVisivel((v) => !v)}
+                aria-pressed={visivel}
+                aria-label={visivel ? `Ocultar ${rotulo}` : `Mostrar ${rotulo}`}
+                className="-my-2 inline-flex min-h-11 shrink-0 items-center rounded-xl px-3 text-sm font-semibold text-gray-900 underline underline-offset-2 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+            >
+                {visivel ? 'Ocultar' : 'Mostrar'}
+            </button>
+        </span>
     );
 }
 
@@ -1420,7 +1539,7 @@ export default function Profile() {
 function DataRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="min-w-0">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</dt>
+            <dt className="text-xs font-semibold text-gray-600">{label}</dt>
             <dd className="mt-1 break-words text-sm font-medium text-black">{children}</dd>
         </div>
     );

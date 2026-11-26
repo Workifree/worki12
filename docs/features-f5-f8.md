@@ -12,7 +12,7 @@ A Worki avisa quando você está convocando o mesmo freela muitas vezes na mesma
 
 #### Como configurar
 
-1. Vá para seu **Perfil** (empresa) → **Configurações da Empresa**
+1. Vá para **Gestão → Dados da empresa**
 2. Procure o campo **"Limite semanal de convites para o mesmo freela"**
 3. Escolha de **1 a 7** quantas vezes você quer ser avisada (padrão: 2)
 4. Salve
@@ -283,7 +283,4 @@ R: Não. Treinamentos internos são visíveis só para você e para a empresa qu
 
 ## Contato e suporte
 
-Dúvidas sobre estas features? Entre em contato:
-- **Chat do Worki** (no app)
-- **Email:** suporte@worki.com.br (quando disponível)
-
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

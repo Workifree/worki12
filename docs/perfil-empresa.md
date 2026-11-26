@@ -60,8 +60,4 @@ Isso ajuda você a ter confiança antes de aceitar.
 
 ## Suporte
 
-Se tiver dúvidas sobre uma empresa específica ou se o perfil não carrega corretamente:
-
-- **Chat no app** — converse com o time Worki
-- **E-mail:** suporte@worki.com.br
-- **Horário:** Segunda a sexta, 9h–18h (horário de Brasília)
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

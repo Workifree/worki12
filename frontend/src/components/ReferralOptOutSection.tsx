@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import ErroDeCarga from './ErroDeCarga';
-import { Button, Card } from './ui';
+import { Card } from './ui';
+import WorkerSwitch from './WorkerSwitch';
 import { Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { useToast } from '../contexts/ToastContext';
 import { ReferralService } from '../services/referralService';
+import { checkSession } from '../lib/authSession';
 
 // ---------------------------------------------------------------------------
 // "Indicação entre empresas" (F10) — seção de opt-out no perfil do freela.
@@ -29,10 +31,13 @@ export default function ReferralOptOutSection() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      const session = await checkSession();
+      if (session.status !== 'ok') {
+        // Sem leitura, o interruptor mostraria o padrão como se fosse a escolha da pessoa.
+        if (active) { setErroCarga(true); setLoading(false); }
+        return;
+      }
+      const user = session.user;
 
       const { data, error } = await supabase
         .from('workers')
@@ -87,7 +92,7 @@ export default function ReferralOptOutSection() {
   }
 
   if (loading) {
-    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" />;
+    return <div className="h-20 bg-gray-200 rounded-2xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>;
   }
 
   return (
@@ -99,21 +104,14 @@ export default function ReferralOptOutSection() {
         Empresas do seu elenco podem indicar você a outras empresas que confiam nelas. Você
         sempre decide: a empresa que recebe a indicação só te conhece se você aceitar.
       </p>
-      <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-black rounded-xl p-4">
-        <span className="font-bold text-sm">
-          {accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
-        </span>
-        <Button
-          role="switch"
-          aria-checked={accepts}
-          aria-label="Aceitar indicações de empresas do meu elenco"
-          variant={accepts ? 'primary' : 'secondary'}
-          onClick={handleToggle}
-          loading={saving}
-        >
-          {accepts ? 'Ativado' : 'Desativado'}
-        </Button>
-      </div>
+      <WorkerSwitch
+        checked={accepts}
+        label="Aceitar indicações de empresas do meu elenco"
+        text={accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
+        data-copilot="freela.perfil.indicacoes"
+        onToggle={() => void handleToggle()}
+        disabled={saving}
+      />
     </Card>
   );
 }

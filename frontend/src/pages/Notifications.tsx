@@ -1,11 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { logError } from '../lib/logger';
 import { useNavigate } from 'react-router-dom';
-import { Bell, MessageSquare, CreditCard, Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle2, XCircle, Bell, MessageSquare, CreditCard, Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
+import type { Notification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Button, PageHeader } from '../components/ui';
+import { Button, EmptyState, ErrorState, FilterChip, PageHeader } from '../components/ui';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 type FilterType = 'all' | 'message' | 'payment' | 'status_change' | 'system';
 
@@ -19,14 +23,71 @@ const FILTERS: { id: FilterType; label: string }[] = [
 
 const PAGE_SIZE = 20;
 
-function getIcon(type: string) {
+function getIcon(type: string, title: string) {
+    // O tipo "status_change" cobre aceite e cancelamento: o título decide o ícone.
+    if (/cancel|estorn|recus|dispens/i.test(title)) return <XCircle size={20} aria-hidden="true" className="text-red-700" />;
+    if (/preenchida|aceit|confirm/i.test(title) && type !== 'payment') return <CheckCircle2 size={20} aria-hidden="true" className="text-primary-ink" />;
     switch (type) {
-        case 'message': return <MessageSquare size={20} className="text-blue-500" />;
-        case 'payment': return <CreditCard size={20} className="text-green-500" />;
-        case 'status_change': return <Info size={20} className="text-yellow-500" />;
-        case 'system': return <AlertCircle size={20} className="text-gray-500" />;
-        default: return <Bell size={20} className="text-gray-500" />;
+        case 'message': return <MessageSquare size={20} aria-hidden="true" className="text-gray-700" />;
+        case 'payment': return <CreditCard size={20} aria-hidden="true" className="text-primary-ink" />;
+        case 'status_change': return <Info size={20} aria-hidden="true" className="text-status-warning-fg" />;
+        case 'system': return <AlertCircle size={20} aria-hidden="true" className="text-gray-600" />;
+        default: return <Bell size={20} aria-hidden="true" className="text-gray-600" />;
     }
+}
+
+/** O turno só é conhecido quando o próprio link do aviso aponta para ele. */
+const JOB_LINK_RE = /\/(?:jobs|recibo)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+const jobIdFromLink = (link?: string): string | null => link?.match(JOB_LINK_RE)?.[1] ?? null;
+
+interface NotificationGroup {
+    key: string;
+    latest: Notification;
+    items: Notification[];
+}
+
+/** Junta avisos idênticos (mesmo tipo, texto e destino). A lista já vem do mais novo ao mais antigo. */
+function groupNotifications(list: Notification[]): NotificationGroup[] {
+    const groups = new Map<string, NotificationGroup>();
+    for (const n of list) {
+        const key = JSON.stringify([n.type, n.title, n.message, n.link ?? '']);
+        const group = groups.get(key);
+        if (group) group.items.push(n);
+        else groups.set(key, { key, latest: n, items: [n] });
+    }
+    return [...groups.values()];
+}
+
+function shiftLabel(title: string, startDate: string | null): string {
+    const m = startDate?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${title} · ${m[3]}/${m[2]}` : title;
+}
+
+/** Nome e data dos turnos citados nos links. Falhou: os avisos continuam, só sem essa linha. */
+function useShiftLabels(notifications: Notification[]): Record<string, string> {
+    const [labels, setLabels] = useState<Record<string, string>>({});
+    const ids = [...new Set(notifications.map((n) => jobIdFromLink(n.link)).filter((id): id is string => !!id))]
+        .sort()
+        .join(',');
+
+    useEffect(() => {
+        if (!ids) return;
+        let active = true;
+        void (async () => {
+            const { data, error } = await supabase.from('jobs').select('id, title, start_date').in('id', ids.split(','));
+            if (error) {
+                logError('Notifications.shiftLabels', error);
+                return;
+            }
+            if (!active) return;
+            const rows = (data ?? []) as Array<{ id: string; title: string; start_date: string | null }>;
+            setLabels(Object.fromEntries(rows.map((j) => [j.id, shiftLabel(j.title, j.start_date)])));
+        })();
+        return () => { active = false; };
+    }, [ids]);
+
+    return labels;
 }
 
 export default function Notifications() {
@@ -43,11 +104,14 @@ export default function Notifications() {
         [notifications, filterType]
     );
 
-    const totalPages = Math.ceil(filteredNotifications.length / PAGE_SIZE);
+    const groups = useMemo(() => groupNotifications(filteredNotifications), [filteredNotifications]);
+    const shiftLabels = useShiftLabels(notifications);
 
-    const paginatedNotifications = useMemo(
-        () => filteredNotifications.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-        [filteredNotifications, page]
+    const totalPages = Math.ceil(groups.length / PAGE_SIZE);
+
+    const paginatedGroups = useMemo(
+        () => groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+        [groups, page]
     );
 
     const handleFilterChange = (type: FilterType) => {
@@ -55,10 +119,14 @@ export default function Notifications() {
         setPage(1);
     };
 
-    const handleNotificationClick = async (id: string, link?: string) => {
-        await markAsRead(id);
-        if (link) {
-            navigate(link);
+    const handleGroupClick = async (group: NotificationGroup) => {
+        const link = group.latest.link;
+        const unread = group.items.filter((n) => !n.read_at);
+        await Promise.all((unread.length ? unread : [group.latest]).map((n) => markAsRead(n.id)));
+        // O link vem do banco: só navega para caminho interno.
+        const destino = safeInternalPath(link);
+        if (destino) {
+            navigate(destino);
         }
     };
 
@@ -71,114 +139,96 @@ export default function Notifications() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 pb-24">
-            <PageHeader
-                title="Notificações"
-                action={unreadCount > 0 ? (
-                    <Button variant="secondary" onClick={() => markAllAsRead()}>
-                        Marcar todas como lidas
-                    </Button>
-                ) : undefined}
-            />
+        <div className="max-w-2xl mx-auto pb-4 flex flex-col gap-4">
+            <PageHeader className="mb-0" title="Notificações" />
 
-            {/* Filter Tabs */}
-            <div role="group" aria-label="Filtrar notificações" className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-6">
+            {/* Filtros numa linha só, com rolagem lateral (borda esmaecida): nunca 2 ou 3 linhas. */}
+            <div
+                role="group"
+                aria-label="Filtrar notificações"
+                className="-mx-4 flex gap-2 overflow-x-auto px-4 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,#000_16px,#000_calc(100%-24px),transparent)] sm:mx-0 sm:px-0 sm:[mask-image:none] [&>*]:shrink-0"
+            >
                 {FILTERS.map((f) => (
-                    <button
-                        key={f.id}
-                        type="button"
-                        aria-pressed={filterType === f.id}
-                        onClick={() => handleFilterChange(f.id)}
-                        className={`min-h-11 whitespace-nowrap px-4 rounded-full border-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                            filterType === f.id
-                                ? 'bg-black text-white border-black'
-                                : 'bg-white text-gray-700 border-transparent hover:border-black'
-                        }`}
-                    >
+                    <FilterChip key={f.id} pressed={filterType === f.id} onClick={() => handleFilterChange(f.id)}>
                         {f.label}
-                    </button>
+                    </FilterChip>
                 ))}
             </div>
 
+            {unreadCount > 0 && (
+                <div className="-my-2 flex justify-end">
+                    <Button variant="ghost" size="sm" className="-mr-2 !px-2" onClick={() => markAllAsRead()} data-copilot={userType === 'hire' ? 'empresa.notificacoes.marcar-todas' : 'freela.notificacoes.marcar-todas'}>
+                        Marcar todas como lidas
+                    </Button>
+                </div>
+            )}
+
             {/* Content */}
             {carregando && notifications.length === 0 ? (
-                <div className="space-y-3 py-4">
+                <div className="space-y-3 py-4" role="status" aria-label="Carregando">
                     {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
                 </div>
             ) : erroCarga && notifications.length === 0 ? (
-                <div role="alert" className="text-center py-16">
-                    <Bell size={40} className="mx-auto mb-4 text-red-300" />
-                    <p className="text-red-600 text-lg font-bold">Não foi possível carregar</p>
-                    <p className="text-gray-600 text-sm mt-2">Verifique sua conexão e recarregue a página.</p>
-                </div>
+                <ErrorState onRetry={() => window.location.reload()} />
             ) : filteredNotifications.length === 0 ? (
-                <div className="text-center py-16">
-                    <Bell size={40} className="mx-auto mb-4 text-gray-300" />
-                    <p className="text-gray-900 text-lg font-bold">Nenhuma notificação por aqui ainda.</p>
-                    <p className="text-gray-600 text-sm mt-2 mb-6">
-                        {filterType !== 'all'
-                            ? 'Tente selecionar outro filtro ou voltar para "Todas".'
-                            : 'Suas notificações aparecerão aqui assim que chegarem.'}
-                    </p>
-                    <Button
-                        variant={userType === 'hire' ? 'dark' : 'primary'}
-                        size="lg"
-                        onClick={handleGoToDashboard}
-                    >
-                        Ir para o Dashboard
-                    </Button>
-                </div>
+                <EmptyState
+                    icon={Bell}
+                    size="page"
+                    title="Nenhuma notificação por aqui ainda."
+                    description={filterType !== 'all'
+                        ? 'Tente selecionar outro filtro ou voltar para "Todas".'
+                        : 'Suas notificações aparecerão aqui assim que chegarem.'}
+                    action={
+                        <Button variant={userType === 'hire' ? 'dark' : 'primary'} onClick={handleGoToDashboard}>
+                            Ir para o Início
+                        </Button>
+                    }
+                />
             ) : (
                 <>
-                    <div className="space-y-3">
-                        {paginatedNotifications.map((n) => (
-                            <div
-                                key={n.id}
-                                onClick={() => handleNotificationClick(n.id, n.link)}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        handleNotificationClick(n.id, n.link);
-                                    }
-                                }}
-                                className={`border-2 border-black rounded-2xl p-4 cursor-pointer flex gap-3 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
-                                    !n.read_at ? 'bg-blue-50' : 'bg-white'
-                                }`}
-                            >
-                                {/* Icon */}
-                                <div className={`h-9 w-9 rounded-full border-2 border-black flex items-center justify-center flex-shrink-0 ${!n.read_at ? 'bg-white' : 'bg-gray-100'}`}>
-                                    {getIcon(n.type)}
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-sm ${!n.read_at ? 'font-bold text-black' : 'font-semibold text-gray-700'}`}>
-                                        {n.title}
-                                    </p>
-                                    <p className="text-sm text-gray-600 mt-0.5">
-                                        {n.message}
-                                    </p>
-                                    <p className="text-xs text-gray-600 mt-1">
-                                        {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
-                                    </p>
-                                </div>
-
-                                {!n.read_at && (
-                                    <span
-                                        role="img"
-                                        aria-label="Não lida"
-                                        className="h-2.5 w-2.5 rounded-full bg-primary flex-shrink-0 mt-1.5"
-                                    />
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        {paginatedGroups.map((group) => {
+                            const n = group.latest;
+                            const unread = group.items.some((item) => !item.read_at);
+                            const jobId = jobIdFromLink(n.link);
+                            const shift = jobId ? shiftLabels[jobId] : undefined;
+                            return (
+                                <li key={group.key}>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleGroupClick(group)}
+                                        className={`flex w-full gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-gray-50' : 'bg-white'}`}
+                                    >
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                                            {getIcon(n.type, n.title)}
+                                        </span>
+                                        <span className="min-w-0 flex-1 break-words">
+                                            <span className={`block text-sm ${unread ? 'font-bold text-black' : 'font-semibold text-gray-700'}`}>
+                                                {n.title}
+                                            </span>
+                                            {shift && <span className="mt-0.5 block text-xs font-semibold text-gray-900">Turno: {shift}</span>}
+                                            <span className="mt-0.5 block text-sm text-gray-600">{n.message}</span>
+                                            <span className="mt-1 block text-xs text-gray-600">
+                                                {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
+                                                {group.items.length > 1 ? ` · ${group.items.length} avisos iguais` : ''}
+                                            </span>
+                                        </span>
+                                        {unread && (
+                                            <span
+                                                role="img"
+                                                aria-label="Não lida"
+                                                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${userType === 'hire' ? 'bg-black' : 'bg-primary'}`}
+                                            />
+                                        )}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6">
+                        <div className="flex items-center justify-between gap-2 mt-2">
                             <Button
                                 variant="secondary"
                                 onClick={() => setPage(p => p - 1)}
@@ -187,7 +237,7 @@ export default function Notifications() {
                             >
                                 Página anterior
                             </Button>
-                            <span className="text-sm font-bold text-gray-600 tabular-nums">
+                            <span className="text-sm font-semibold text-gray-600 tabular-nums">
                                 {page} / {totalPages}
                             </span>
                             <Button

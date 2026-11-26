@@ -39,8 +39,13 @@ vi.mock('../lib/supabase', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function routeFrom(handlers: Record<string, any>) {
+  // `jobs` tem handler padrao: o servico le jobs.company_id (empresa DONA DO TURNO) antes do INSERT.
+  const all: Record<string, unknown> = {
+    jobs: makeChain({ data: { company_id: 'company-1' }, error: null }),
+    ...handlers,
+  }
   mockFrom.mockImplementation((table: string) => {
-    const handler = handlers[table]
+    const handler = all[table]
     if (!handler) throw new Error(`Tabela não mockada: ${table}`)
     return handler
   })
@@ -312,9 +317,77 @@ describe('PaymentRecordService.recordExternalPayment', () => {
     expect(result.payment).toEqual(SHIFT_PAYMENT_ROW)
     expect(mockFrom).toHaveBeenCalledWith('shift_payments')
     expect(mockFrom).toHaveBeenCalledWith('applications')
-    // `companies` saiu: a empresa da sessao vem do seam (getAuthenticatedCompanyId), unico
-    // ponto que conhece dono direto, dono via owner_id E gerente de unidade.
+    // `companies` saiu: a empresa do pagamento e a DONA DO TURNO (jobs.company_id).
     expect(mockFrom).not.toHaveBeenCalledWith('companies')
+    expect(mockFrom).toHaveBeenCalledWith('jobs')
+  })
+
+  it('grava company_id = jobs.company_id (empresa do turno), mesmo quando difere da empresa da sessao', async () => {
+    const shiftPayments = makeChain({ data: SHIFT_PAYMENT_ROW, error: null })
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      jobs: makeChain({ data: { company_id: 'company-do-turno' }, error: null }),
+      shift_payments: shiftPayments,
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.recordExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'external_pix',
+      amount: 150,
+    })
+
+    expect(result.success).toBe(true)
+    // o mock de companyScopeService devolve 'company-1': o INSERT NAO pode usar essa empresa.
+    expect(shiftPayments.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ job_id: 'job-1', company_id: 'company-do-turno' }),
+    )
+  })
+
+  it('recusa sem INSERT quando a empresa do turno nao pode ser resolvida', async () => {
+    const shiftPayments = makeChain({ data: SHIFT_PAYMENT_ROW, error: null })
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      jobs: makeChain({ data: null, error: null }),
+      shift_payments: shiftPayments,
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    const result = await PaymentRecordService.recordExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'external_pix',
+      amount: 150,
+    })
+
+    expect(result.success).toBe(false)
+    expect(shiftPayments.insert).not.toHaveBeenCalled()
+  })
+
+  it('scheduleExternalPayment tambem grava company_id do turno', async () => {
+    const shiftPayments = makeChain({ data: SCHEDULED_PAYMENT_ROW, error: null })
+    routeFrom({
+      applications: makeChain({ data: APPLICATION_COMPLETED, error: null }),
+      jobs: makeChain({ data: { company_id: 'company-do-turno' }, error: null }),
+      shift_payments: shiftPayments,
+    })
+
+    const { PaymentRecordService } = await import('./paymentRecordService')
+    await PaymentRecordService.scheduleExternalPayment({
+      jobId: 'job-1',
+      workerId: 'worker-1',
+      applicationId: 'app-1',
+      source: 'external_pix',
+      amount: 150,
+      scheduledFor: '2026-07-20',
+    })
+
+    expect(shiftPayments.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ company_id: 'company-do-turno' }),
+    )
   })
 
   it('trata violação do UNIQUE parcial (23505) como alreadyRecorded, sem crashar', async () => {
@@ -631,15 +704,14 @@ describe('PaymentRecordService.listActivePaymentsByJob', () => {
     expect(byWorker['worker-2'].application_id).toBe('app-2')
   })
 
-  it('retorna [] em erro de query (não propaga exceção)', async () => {
+  it('lança em erro de query: leitura falha não é "ninguém foi pago"', async () => {
     routeFrom({
       shift_payments: makeChain({ data: null, error: { message: 'db error' } }),
     })
 
     const { PaymentRecordService } = await import('./paymentRecordService')
-    const result = await PaymentRecordService.listActivePaymentsByJob('job-1')
 
-    expect(result).toEqual([])
+    await expect(PaymentRecordService.listActivePaymentsByJob('job-1')).rejects.toMatchObject({ message: 'db error' })
   })
 })
 

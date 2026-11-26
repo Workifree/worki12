@@ -5,21 +5,14 @@
 @layer base {
   html {
     font-family: 'Inter', sans-serif;
-    background-color: #F5F7F5;
-    /* Gentle professional background */
-    background-image:
-      radial-gradient(at 0% 0%, rgba(0, 166, 81, 0.03) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(33, 150, 243, 0.03) 0px, transparent 50%);
-    background-attachment: fixed;
+    background-color: #F4F4F0; /* token canvas */
   }
-}
 
-/* Glassmorphism Utilities if needed globally */
-.glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  /* Anel de foco único. :where() tem especificidade zero: o primitivo pode especializar. */
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
+  }
 }
 
 @keyframes slideIn {
@@ -50,4 +43,347 @@
 body {
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Casca única de modal (components/ui/Dialog). Fora de @layer: vence o estilo padrão do <dialog>.
+   Sem `display` no seletor base — o fallback sem showModal usa o atributo open. */
+dialog.worki-dialog {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 70;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px))
+    max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgb(0 0 0 / 0.55);
+  color: inherit;
+}
+dialog.worki-dialog:not([open]) { display: none; }
+dialog.worki-dialog[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+dialog.worki-dialog::backdrop { background: transparent; }
+html:has(dialog.worki-dialog[open]) { overflow: hidden; }
+
+.worki-dialog-panel {
+  --dialog-pad: 1.25rem;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-bottom: 5.5rem;
+}
+@media (min-width: 640px) {
+  .worki-dialog-panel { --dialog-pad: 1.5rem; }
+}
+
+/* Rodapé de ações sempre visível: gruda no fim do cartão enquanto o corpo rola. */
+.worki-dialog-panel .worki-dialog-actions {
+  position: sticky;
+  bottom: calc(-1 * var(--dialog-pad));
+  z-index: 1;
+  margin: 0 calc(-1 * var(--dialog-pad)) calc(-1 * var(--dialog-pad));
+  padding: 0.75rem var(--dialog-pad) var(--dialog-pad);
+  background: #fff;
+}
+
+/* Controles nativos no verde AA e sempre em esquema claro (o app não tem tema escuro). */
+:root {
+  color-scheme: light;
+  accent-color: #008840;
+}
+
+/* ── Casca (layouts, Sidebar, BottomNav, PwaPrompts) ─────────────────────────────────────────
+   Medidas da casca em UM lugar. Quem posiciona algo fixo (aviso, botão flutuante do copiloto,
+   barra de ação) lê estas variáveis em vez de chutar valores.
+   --worki-side-w   largura da lateral no desktop (recolhida em ícones até 1099px).
+   --worki-header-h altura do cabeçalho do celular (inclui a safe-area do topo).
+   --worki-nav-h    altura da barra inferior (celular; inclui borda e safe-area de baixo).
+   --worki-fab-bottom / --worki-fab-right: SLOT do botão flutuante do copiloto (HelpButton).
+     No celular, `bottom` = acima da barra inferior; no desktop, canto inferior direito.
+     Use `bottom: var(--worki-fab-bottom); right: var(--worki-fab-right)`; o aviso PWA nunca
+     usa o canto direito (fica à esquerda/centro), então os dois não colidem. */
+:root {
+  --worki-side-w: 4.5rem;
+  --worki-fab-right: 0.75rem;
+  --worki-fab-bottom: 1rem;
+}
+@media (min-width: 1100px) {
+  :root { --worki-side-w: 15rem; }
+}
+
+/* Celular: o que rola até ficar visível (foco, âncora, scrollIntoView) não para embaixo do
+   cabeçalho, da barra inferior nem do botão flutuante. */
+@media (max-width: 767px) {
+  html {
+    scroll-padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+  html:has(.worki-action-bar) {
+    scroll-padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* Altura ocupada pela barra inferior: a ActionBar gruda logo acima dela. */
+  .worki-layout {
+    --worki-nav-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
+    --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
+  }
+  :root {
+    --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
+    --worki-fab-bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+}
+
+/* Rolagem sem "pulo": o fundo atrás do rebote é o canvas (não branco) e, no app instalado,
+   o puxar-para-atualizar do navegador não desloca as barras fixas. */
+html { -webkit-tap-highlight-color: transparent; }
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: none; }
+}
+@media (pointer: coarse) {
+  a, button, summary, [role='button'] { touch-action: manipulation; }
+}
+
+/* Entrada de tela: fade curto com 4px de subida (150ms). Só ao trocar de rota (o layout troca a
+   `key`); movimento reduzido não anima. O estado final não tem transform: sticky e fixed
+   dos filhos seguem normais. */
+@media (prefers-reduced-motion: no-preference) {
+  .worki-page-enter { animation: worki-page-enter 150ms cubic-bezier(0, 0, 0, 1) backwards; }
+}
+@keyframes worki-page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* Avisos PWA (instalar, atualizar, sem internet): pilha FIXA que nunca entra no fluxo, então
+   nada é empurrado nem redimensionado. Celular: acima da barra inferior (e da ActionBar, se
+   houver), centralizada, respeitando a safe-area. Desktop: canto inferior esquerdo da área de
+   conteúdo (ao lado da lateral). z-index 55: acima de barra e lateral (50), abaixo de menu (60),
+   dialog (70) e toast (80). */
+.worki-pwa-stack {
+  position: fixed;
+  z-index: 55;
+  left: 0;
+  right: 0;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding-inline: max(0.75rem, env(safe-area-inset-left, 0px)) max(0.75rem, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.worki-pwa-stack > * { pointer-events: auto; }
+@media (max-width: 767px) {
+  body:has([data-bottom-nav]) .worki-pwa-stack {
+    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+  /* Tela com ActionBar: o convite de instalar espera (não cobre o botão principal); os avisos
+     críticos sobem acima dela. */
+  body:has(.worki-action-bar) .worki-pwa-stack {
+    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 7rem);
+  }
+  body:has(.worki-action-bar) .worki-pwa-install { display: none; }
+}
+/* Espaço reservado: a pilha publica a própria altura em --worki-pwa-h (PwaPrompts) e o conteúdo
+   ganha esse respiro no fim, então nada fica preso atrás dela ao rolar até o fim. */
+/* Chat: a pilha sobe para o topo do conteúdo e o chat encolhe a mesma altura (--chat-chrome soma
+   --worki-pwa-h), então nem o cabeçalho da conversa nem o campo "Mensagem" ficam cobertos. O
+   convite de instalar não aparece durante a conversa. */
+body:has(.worki-chat) .worki-pwa-stack {
+  top: calc(var(--worki-header-h, 0px) + 0.75rem);
+  bottom: auto;
+}
+body:has(.worki-chat) .worki-pwa-install { display: none; }
+html .worki-layout main:has(.worki-chat) { padding-top: calc(1rem + var(--worki-pwa-h, 0px)); }
+@media (min-width: 640px) {
+  html .worki-layout main:has(.worki-chat) { padding-top: calc(1.5rem + var(--worki-pwa-h, 0px)); }
+}
+@media (min-width: 768px) {
+  html .worki-layout main:has(.worki-chat) { padding-top: calc(2rem + var(--worki-pwa-h, 0px)); }
+}
+html .worki-layout main {
+  padding-bottom: calc(var(--worki-nav-h, 0px) + 1.5rem + var(--worki-pwa-h, 0px));
+}
+@media (min-width: 768px) {
+  html .worki-layout main { padding-bottom: calc(2rem + var(--worki-pwa-h, 0px)); }
+}
+@media (min-width: 768px) {
+  .worki-pwa-stack {
+    right: auto;
+    left: 1rem;
+    bottom: 1rem;
+    width: min(26rem, calc(100vw - 2rem));
+    padding-inline: 0;
+  }
+  body:has(aside[aria-label='Menu lateral']) .worki-pwa-stack {
+    left: calc(max(0px, (100vw - 80rem) / 2) + var(--worki-side-w) + 3rem);
+    width: min(26rem, calc(100vw - var(--worki-side-w) - 4rem));
+  }
+}
+
+/* iOS dá zoom ao focar controle com fonte menor que 16px. Quem já usa fonte grande fica como está. */
+@media (max-width: 767px), (pointer: coarse) {
+  input:not([class*='text-lg'], [class*='text-xl'], [class*='text-2xl'], [class*='text-3xl']),
+  select:not([class*='text-lg'], [class*='text-xl']),
+  textarea:not([class*='text-lg'], [class*='text-xl']) {
+    font-size: 1rem !important;
+  }
+}
+
+/* Chat: ocupa exatamente o que sobra da tela, para o campo e o Enviar ficarem sempre visíveis.
+   Celular: cabeçalho (3.5rem + safe-area do topo) + respiro do topo + barra inferior (4rem +
+   borda + safe-area) + folga de 0.5rem + a altura da pilha de avisos PWA (--worki-pwa-h). */
+.worki-chat {
+  --chat-top: 1rem;
+  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 1px + env(safe-area-inset-bottom, 0px) + var(--worki-pwa-h, 0px));
+  height: calc(100vh - var(--chat-chrome));
+  height: calc(100dvh - var(--chat-chrome));
+  min-height: 14rem;
+}
+@media (min-width: 640px) {
+  .worki-chat { --chat-top: 1.5rem; }
+}
+@media (max-width: 767px) {
+  main:has(.worki-chat) {
+    padding-bottom: calc(4.5rem + 1px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+@media (min-width: 768px) {
+  .worki-chat { --chat-chrome: calc(4rem + var(--worki-pwa-h, 0px)); }
+}
+.worki-layout:has(.worki-chat) { min-height: 0; }
+
+/* O h1 recebe foco por código ao trocar de tela (RouteFocus): não é um controle, sem anel. */
+h1[tabindex='-1']:focus { outline: none; }
+
+/* ── Movimento ─────────────────────────────────────────────────────────────────────────────
+   Tokens: press 80ms · fast 150ms (hover/foco) · base 200ms (entrada) · exit 150ms.
+   Sem mola, sem bounce em ação operacional, sem animação de entrada de página. */
+
+/* Dialog: só entrada (a saída exigiria adiar o desmonte). Sem @starting-style, abre seco. */
+dialog.worki-dialog {
+  opacity: 0;
+  transition: opacity 150ms cubic-bezier(0.3, 0, 1, 1), display 150ms, overlay 150ms;
+  transition-behavior: allow-discrete;
+}
+dialog.worki-dialog[open] {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+@starting-style {
+  dialog.worki-dialog[open] { opacity: 0; }
+}
+
+/* Toast: entra de cima no celular e de baixo no desktop; sai ao receber data-closing. */
+.worki-toast {
+  opacity: 1;
+  transition: opacity 200ms cubic-bezier(0, 0, 0, 1), translate 200ms cubic-bezier(0, 0, 0, 1);
+}
+.worki-toast[data-closing] {
+  opacity: 0;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.3, 0, 1, 1);
+}
+@starting-style {
+  .worki-toast { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .worki-dialog-panel {
+    translate: 0 0;
+    transition: translate 200ms cubic-bezier(0, 0, 0, 1);
+  }
+  @starting-style {
+    dialog.worki-dialog[open] .worki-dialog-panel { translate: 0 12px; }
+  }
+  .worki-toast { translate: 0 0; }
+  .worki-toast[data-closing] { translate: 0 -8px; }
+  @starting-style {
+    .worki-toast { translate: 0 -8px; }
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 768px) {
+  .worki-toast[data-closing] { translate: 0 8px; }
+  @starting-style {
+    .worki-toast { translate: 0 8px; }
+  }
+}
+
+/* Letreiro da entrada: pausável (botão) e parado para quem pede menos movimento. */
+@keyframes worki-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: worki-marquee 20s linear infinite; }
+.animate-marquee[data-paused='true'] { animation-play-state: paused; }
+
+/* Movimento reduzido, caso a caso (sem reset global): fade fica curto, giro desacelera,
+   pulso, quique e deslocamento desligam; o estado final continua visível. */
+@media (prefers-reduced-motion: reduce) {
+  dialog.worki-dialog,
+  dialog.worki-dialog[open],
+  .worki-toast,
+  .worki-toast[data-closing] { transition-duration: 100ms; }
+  .animate-spin { animation-duration: 6s; }
+  .animate-pulse,
+  .animate-bounce,
+  .animate-marquee { animation: none; }
+  .animate-slide-in { animation: none; opacity: 1; }
+}
+
+/* <progress> do ProgressBar */
+.worki-progress {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: #e5e7eb;
+  color: #00a651;
+}
+.worki-progress::-webkit-progress-bar { background: #e5e7eb; }
+.worki-progress::-webkit-progress-value { background: currentColor; border-radius: 999px; }
+.worki-progress::-moz-progress-bar { background: currentColor; border-radius: 999px; }
+
+/* Coluna lateral (2/3 + 1/3) só quando ela tem conteúdo; vazia, a lista usa a largura toda. */
+@media (min-width: 1024px) {
+  .worki-side-grid:has(> [data-side] > *) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 1.5rem;
+  }
+  .worki-side-grid:has(> [data-side] > *) > [data-main] { grid-column: span 2 / span 2; }
+}
+
+/* Linha única que rola na horizontal (abas e chips): nunca quebra; esmaece os últimos 24px à
+   direita para sinalizar que há mais, e o respiro final garante que o último item fica nítido. */
+.worki-scroll-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-inline-end: 24px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.worki-scroll-row::-webkit-scrollbar { display: none; }
+
+/* <select> do sistema (Field): sem a aparência nativa, com seta própria à direita. */
+select.worki-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 20px 20px;
 }

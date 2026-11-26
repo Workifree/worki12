@@ -1,12 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
-import { useModalDismiss } from '../../hooks/useModalDismiss';
-import { Link2, Phone, QrCode, UserPlus } from 'lucide-react';
+import { useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { Link2, KeyRound, QrCode, UserPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { QrScannerPane } from './QrScannerPane';
 import { UUID_RE, extractInviteToken } from './utils';
 import { ModalShell } from './ModalShell';
 import { Button, Field } from '../ui';
+
+// A biblioteca de leitura de QR é pesada: só baixa quando a pessoa abre a aba QR.
+const QrScannerPane = lazy(() => import('./QrScannerPane').then((m) => ({ default: m.QrScannerPane })));
 
 // ---------------------------------------------------------------------------
 // Subcomponent: modal "Adicionar freela"
@@ -21,10 +22,9 @@ export interface AddWorkerModalProps {
 }
 
 export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalProps) {
-  // G1: default é 'phone' (Worki ID) — NÃO monta a câmera (nem pede
-  // permissão) ao abrir o modal. QR fica como tab opt-in, só monta o
-  // scanner quando o usuário clica na aba QR.
-  const [method, setMethod] = useState<AddMethod>('phone');
+  // G1: abre em "Link" (o caminho mais fácil) — NÃO monta a câmera (nem pede permissão) ao
+  // abrir o modal. QR é opt-in: o scanner só monta quando a pessoa toca na aba.
+  const [method, setMethod] = useState<AddMethod>('link');
   const [workerId, setWorkerId] = useState('');
   const [linkInput, setLinkInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -63,7 +63,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
       if (resolved) {
         target = resolved;
       } else {
-        addToast('Worki ID inválido. Cole o Worki ID do freela (Perfil → "Meu QR de Identidade" → "Copiar Worki ID") ou use a aba Link.', 'error');
+        addToast('Código inválido. Cole o código do freela (Perfil → "Meu QR de Identidade" → "Copiar meu código") ou use a aba Link.', 'error');
         return;
       }
     }
@@ -104,21 +104,20 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
     [addWorker, addToast, onAdded, onClose],
   );
 
-  useModalDismiss(onClose); // so o ESC — o backdrop deles ja fechava
 
 
   return (
     <ModalShell
       title="Adicionar freela"
-      subtitle="Adicione um freela pelo QR, Worki ID ou pelo link de perfil que ele te enviou."
+      subtitle="Adicione um freela pelo QR, pelo código ou pelo link de perfil que ele te enviou."
       onClose={onClose}
     >
       {/* Tabs */}
       <div role="group" aria-label="Como adicionar" className="flex gap-5 mb-5 border-b-2 border-gray-200">
         {([
-          { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
-          { id: 'phone' as AddMethod, icon: Phone, label: 'Worki ID' },
           { id: 'link' as AddMethod, icon: Link2, label: 'Link' },
+          { id: 'qr' as AddMethod, icon: QrCode, label: 'QR' },
+          { id: 'phone' as AddMethod, icon: KeyRound, label: 'Código' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -146,6 +145,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
           <Field label="Link de perfil do freela">
             <input
               id="worker-link-input"
+              data-copilot-private
               type="text"
               value={linkInput}
               onChange={(e) => setLinkInput(e.target.value)}
@@ -174,7 +174,15 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
             Aponte a câmera para o <span className="font-bold text-black">QR de Identidade</span> do freela
             (ele encontra em Perfil → "Meu QR de Identidade").
           </p>
-          <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
+          <Suspense
+            fallback={
+              <div role="status" className="flex aspect-square w-full items-center justify-center rounded-xl bg-gray-100 text-sm font-semibold text-gray-600">
+                Carregando a câmera...
+              </div>
+            }
+          >
+            <QrScannerPane onDecoded={handleQrDecoded} processing={qrProcessing} />
+          </Suspense>
           <p className="text-xs text-gray-600 text-center">
             O freela aparecerá em "Aguardando" até aceitar o convite.
           </p>
@@ -184,16 +192,17 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
       {method === 'phone' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Digite o <span className="font-bold text-black">ID do worker</span> (Worki ID) para adicionar diretamente.
-            Peça o Worki ID ao freela (Perfil dele → "Meu QR de Identidade" → "Copiar Worki ID").
+            Cole o <span className="font-bold text-black">código do freela</span> para adicionar direto.
+            Ele encontra em Perfil → "Meu QR de Identidade" → "Copiar meu código".
           </p>
-          <Field label="Worki ID do freela">
+          <Field label="Código do freela">
             <input
               id="phone-input"
+              data-copilot-private
               type="text"
               value={workerId}
               onChange={(e) => setWorkerId(e.target.value)}
-              placeholder="Cole o ID do freela aqui"
+              placeholder="Cole o código do freela aqui"
             />
           </Field>
           <Button
@@ -207,7 +216,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
             {loading ? 'Enviando...' : 'Enviar Convite'}
           </Button>
           <p className="text-xs text-gray-600">
-            Ainda não é possível buscar por CPF ou telefone — peça o Worki ID ao freela.
+            Ainda não é possível buscar por CPF ou telefone. Peça o código ao freela.
           </p>
         </div>
       )}

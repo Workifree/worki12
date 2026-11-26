@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { ShiftCallModal } from './ShiftCallModal'
 import type { TeamMember, TeamListWithMembers, Job } from '../../types'
 
@@ -61,6 +61,13 @@ vi.mock('../../services/linkRiskService', () => ({
 mockGetConfig.mockResolvedValue({ enabled: true, threshold: 2 })
 mockCountForShift.mockResolvedValue(new Map())
 mockCountForRange.mockResolvedValue(new Map())
+
+// E5/R14 — aviso de conflito. O hook é o limite de rede (get_busy_workers); aqui só importa que o
+// selo aparece, não diz qual turno e nunca bloqueia. Default: ninguém ocupado.
+const mockBusyIds = vi.fn<(params: unknown) => ReadonlySet<string>>(() => new Set<string>())
+vi.mock('../../hooks/useBusyWorkers', () => ({
+  useBusyWorkers: (params: unknown) => mockBusyIds(params),
+}))
 
 function worker(id: string, fullName: string, role = 'Cozinheiro'): TeamMember {
   return {
@@ -575,5 +582,78 @@ describe('ShiftCallModal — F8 (certificação exigida do turno é ADVISORY, R1
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Enviar convite' })).not.toBeDisabled()
     })
+  })
+})
+
+describe('ShiftCallModal — aviso de freela ocupado (E5/R14)', () => {
+  it('mostra o selo só em quem está ocupado, sem dizer qual turno, e não bloqueia a seleção', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana'), worker('w2', 'Beto')])
+    mockListLists.mockResolvedValue([])
+    mockBusyIds.mockReturnValue(new Set(['w1']))
+
+    renderModal()
+
+    await screen.findByText('Ana')
+    const selos = screen.getAllByText('Já está em outro turno nesse horário')
+    expect(selos).toHaveLength(1)
+    expect(screen.getByText('Ana').closest('label')).toContainElement(selos[0])
+    expect(screen.getByText('Beto').closest('label')).not.toHaveTextContent('outro turno')
+
+    const checkbox = screen.getByText('Ana').closest('label')!.querySelector('input[type="checkbox"]')!
+    expect(checkbox).not.toBeDisabled()
+    fireEvent.click(checkbox)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Enviar convite' })).not.toBeDisabled()
+    })
+  })
+
+  it('pede a janela do turno e exclui o próprio turno da checagem', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana')])
+    mockListLists.mockResolvedValue([])
+    mockBusyIds.mockReturnValue(new Set())
+
+    renderModal()
+    await screen.findByText('Ana')
+
+    const last = mockBusyIds.mock.calls.at(-1)?.[0] as { windows: Array<{ start: string } | null>; excludeJobId: string; workerIds: string[] }
+    expect(last.excludeJobId).toBe('job-1')
+    expect(last.workerIds).toEqual(['w1'])
+    expect(last.windows[0]?.start).toBe('2026-08-21T18:00:00-03:00')
+  })
+})
+
+describe('ShiftCallModal — trava contra duplo disparo', () => {
+  it('dois cliques no mesmo instante criam UM chamado', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana')])
+    mockListLists.mockResolvedValue([])
+    mockCreateShiftCall.mockReturnValue(new Promise(() => undefined))
+
+    renderModal()
+    await screen.findByText('Ana')
+    fireEvent.click(screen.getByText('Ana').closest('label')!.querySelector('input[type="checkbox"]')!)
+    const botao = screen.getByRole('button', { name: 'Enviar convite' })
+
+    // sem re-render entre os dois: dentro do mesmo act
+    act(() => {
+      botao.click()
+      botao.click()
+    })
+
+    expect(mockCreateShiftCall).toHaveBeenCalledTimes(1)
+  })
+
+  it('depois de uma falha a trava é liberada para tentar de novo', async () => {
+    mockListTeamMembers.mockResolvedValue([worker('w1', 'Ana')])
+    mockListLists.mockResolvedValue([])
+    mockCreateShiftCall.mockResolvedValue({ error: 'falhou', invited: 0 })
+
+    renderModal()
+    await screen.findByText('Ana')
+    fireEvent.click(screen.getByText('Ana').closest('label')!.querySelector('input[type="checkbox"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar convite' })).not.toBeDisabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }))
+
+    await waitFor(() => expect(mockCreateShiftCall).toHaveBeenCalledTimes(2))
   })
 })

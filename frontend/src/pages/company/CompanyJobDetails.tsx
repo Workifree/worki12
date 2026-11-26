@@ -1,19 +1,33 @@
 import { useEffect, useState } from 'react';
-import ErroDeCarga from '../../components/ErroDeCarga';
+
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Clock, Calendar, Users, MoreHorizontal, Edit2, PauseCircle, PlayCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle, Megaphone } from 'lucide-react';
+import { occupancy, shiftStep, shiftWhen, type ApplicationStepInput } from '../../lib/nextAction';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { WalletService } from '../../services/walletService';
 import { useToast } from '../../contexts/ToastContext';
+import { formatBRL } from '../../lib/currency';
 import { logError } from '../../lib/logger';
-import { formatDateOnly } from '../../lib/dateUtils';
-import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
-import { Button, Card } from '../../components/ui';
+import SemAcesso from '../../components/SemAcesso';
+import { getJobScope, canSeeJob } from '../../services/jobScopeService';
+import { deleteShift } from '../../services/deleteShiftService';
+import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
+import { toBrazilDateOnly } from '../../lib/dateUtils';
+import { getAuthenticatedCompanyId, isGestor, hasTeamNav } from '../../services/companyScopeService';
+import { jobHasStarted } from '../../lib/todayView';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
+import CancelJobModal from '../../components/company/CancelJobModal';
+import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
+import { getSessionUserOrThrow } from '../../lib/authSession';
+import { ActionBar, Button, ButtonLink, Card, DialogActions, DialogHeader, ErrorState, ListRow, Menu, SkeletonList, StatusBadge } from '../../components/ui';
+import { Dialog } from '../../components/ui/Dialog';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { jobSources } from '../../lib/realtime/liveSources';
 
-const MENU_ITEM = 'flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-gray-50';
 
 export default function CompanyJobDetails() {
     const { id } = useParams();
@@ -36,26 +50,33 @@ export default function CompanyJobDetails() {
         work_start_time?: string;
         work_end_time?: string;
         has_lunch?: boolean;
-        candidates_count?: number;
+        slots?: number;
     }
 
     const [job, setJob] = useState<JobDetails | null>(null);
     const [loading, setLoading] = useState(true);
-    const [openMenu, setOpenMenu] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [activeWorkersCount, setActiveWorkersCount] = useState(0);
+    const [showCancelJob, setShowCancelJob] = useState(false);
+    const currentCompany = useCurrentCompany();
+    // Dono único não ganha a ação (R23); sem a RPC no ambiente, o item também não aparece.
+    const cancelamentoDisponivel = useCancelJobAvailable(hasTeamNav(currentCompany));
+    // null = ainda não lido; falha vira aviso com "Tentar de novo", nunca "0 freelas".
+    const [apps, setApps] = useState<ApplicationStepInput[] | null>(null);
+    const [erroFreelas, setErroFreelas] = useState(false);
     const [erroCarga, setErroCarga] = useState(false);
+    const [semAcesso, setSemAcesso] = useState(false);
     const { addToast } = useToast();
 
+    const beginDetails = useLatestResponse();
+    const beginApplications = useLatestResponse();
+    const dialogOpen = useAnyDialogOpen();
+    useLiveRefresh({
+        sources: id ? jobSources(id) : [],
+        onRefresh: () => Promise.all([fetchJobDetails({ silent: true }), fetchApplications({ silent: true })]),
+        paused: loading || dialogOpen || showDeleteConfirm || showCancelJob,
+    });
+
     // Esc fecha o menu de ações (o clique fora é a camada transparente z-10 abaixo do menu).
-    useEffect(() => {
-        if (!openMenu) return;
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpenMenu(false);
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [openMenu]);
 
     useEffect(() => {
         if (id) fetchJobDetails();
@@ -63,29 +84,36 @@ export default function CompanyJobDetails() {
     }, [id]);
 
     useEffect(() => {
-        if (!id) return;
-        const fetchActiveWorkers = async () => {
-            const { count, error } = await supabase
-                .from('applications')
-                .select('id', { count: 'exact', head: true })
-                .eq('job_id', id)
-                .in('status', ['hired', 'in_progress']);
-            if (error) {
-                logError('Error fetching active workers', error);
-                return;
-            }
-            setActiveWorkersCount(count ?? 0);
-        };
-        fetchActiveWorkers();
+        if (id) void fetchApplications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só re-executa quando id muda
     }, [id]);
 
-    const fetchJobDetails = async () => {
+    const fetchApplications = async ({ silent = false }: { silent?: boolean } = {}) => {
+        if (!id) return;
+        const claim = beginApplications();
+        if (!silent) setErroFreelas(false);
+        const { data, error } = await supabase
+            .from('applications')
+            .select('status, company_checkin_confirmed_at, company_checkout_confirmed_at')
+            .eq('job_id', id);
+        if (error) {
+            logError('CompanyJobDetails.fetchApplications', error);
+            if (!silent && claim()) setErroFreelas(true);
+            return;
+        }
+        if (!claim()) return;
+        setErroFreelas(false);
+        setApps((data ?? []) as ApplicationStepInput[]);
+    };
+
+    const fetchJobDetails = async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginDetails();
         // G3: guarda de id falsy — evita `jobs?id=eq.null`/`applications?job_id=eq.null`
         // mesmo se essa função for chamada de outro lugar além do useEffect que já checa `if (id)`.
         if (!id) { navigate('/company/jobs'); return; }
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { navigate('/login'); return; }
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
+            if (!user) { if (!silent) navigate('/login'); return; }
 
             const { data, error } = await supabase
                 .from('jobs')
@@ -95,21 +123,17 @@ export default function CompanyJobDetails() {
                 .single();
 
             if (error) throw error;
+            if (!canSeeJob(await getJobScope(), data)) { if (!silent) setSemAcesso(true); return; }
 
-            // Fetch candidate count manually
-            const { count } = await supabase
-                .from('applications')
-                .select('id', { count: 'exact', head: true })
-                .eq('job_id', id);
-
-            setJob({ ...data, candidates_count: count || 0 });
+            if (!claim()) return;
+            setJob(data);
         } catch (error) {
             // Falha de rede/RLS nao pode se disfarcar de "turno nao existe" mandando pra lista
             // em silencio — a pessoa perde o contexto sem saber por que (Nielsen #1).
             logError('Error fetching job:', error);
-            setErroCarga(true);
+            if (!silent && claim()) setErroCarga(true);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -126,49 +150,32 @@ export default function CompanyJobDetails() {
         } else {
             fetchJobDetails();
         }
-        setOpenMenu(false);
     };
 
     const handleDelete = async () => {
         if (!id) return;
 
-        // 1. Cancel hired workers' applications — efeito colateral em LOTE: 0 linhas é
-        // legítimo (turno sem ninguém contratado), não é erro. Usa o retorno só para
-        // informar quantos freelas foram de fato notificados.
-        const { data: cancelledApps, error: cancelError } = await supabase
-            .from('applications')
-            .update({ status: 'cancelled' })
-            .eq('job_id', id)
-            .in('status', ['hired', 'in_progress'])
-            .select('id');
-        if (cancelError) {
-            logError('CompanyJobDetails.handleDelete.cancelApplications', cancelError);
-        }
-        const cancelledCount = cancelledApps?.length ?? 0;
-
-        // 2. First refund any pending escrow back to the company wallet
-        await WalletService.refundEscrow(id, 'Dinheiro retornado do escrow - turno deletado');
-
-        // 3. Then mark the job as deleted — gesto explícito com toast de sucesso: precisa
-        // de `.select('id')` para não afirmar "excluído" quando a RLS negou em silêncio.
-        const { data: deletedJob, error } = await supabase.from('jobs').update({ status: 'deleted' }).eq('id', id).select('id');
-        if (!error && deletedJob && deletedJob.length > 0) {
-            addToast(
-                cancelledCount > 0
-                    ? `Turno excluído com sucesso. ${cancelledCount} freela${cancelledCount > 1 ? 's' : ''} notificado${cancelledCount > 1 ? 's' : ''}.`
-                    : 'Turno excluído com sucesso.',
-                'success'
-            );
+        // `cancel_job` encerra convites, candidaturas e chamados junto com o turno.
+        const result = await deleteShift(id);
+        if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
+            addToast(deleteShiftToast(result), 'success');
             navigate('/company/jobs');
         } else {
-            if (error) logError('CompanyJobDetails.handleDelete.deleteJob', error);
-            addToast('Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.', 'error');
+            addToast(cancelJobMessage(result, isGestor(currentCompany) ? 'gestor' : 'encarregado'), 'error');
         }
         setShowDeleteConfirm(false);
     };
 
+    // "Cancelar turno" (RPC cancel_job) é ação de quem opera em equipe (R23): dono único não ganha
+    // ação nova. Encarregado só cancela antes de o turno começar (depois, o banco recusa).
+    const souGestor = isGestor(currentCompany);
+    const turnoIniciado = job?.start_date
+        ? jobHasStarted(toBrazilDateOnly(job.start_date), job.work_start_time?.slice(0, 5) ?? null)
+        : false;
+    const podeCancelarTurno = cancelamentoDisponivel && hasTeamNav(currentCompany) && (souGestor || !turnoIniciado);
+
     if (loading) return (
-        <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-6">
+        <div className="p-8 max-w-4xl mx-auto animate-pulse space-y-6" role="status"><span className="sr-only">Carregando</span>
             <div className="h-10 bg-gray-200 rounded w-1/2" />
             <div className="h-4 bg-gray-200 rounded w-1/3" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -176,6 +183,9 @@ export default function CompanyJobDetails() {
             </div>
             <div className="h-40 bg-gray-200 rounded-xl" />
         </div>
+    );
+    if (semAcesso) return (
+        <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />
     );
     if (erroCarga && !job) return (
         <div className="max-w-4xl mx-auto p-4 sm:p-8">
@@ -187,14 +197,27 @@ export default function CompanyJobDetails() {
             >
                 Voltar aos turnos
             </Button>
-            <ErroDeCarga onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
+            <ErrorState onRetry={() => { setErroCarga(false); setLoading(true); fetchJobDetails(); }} />
         </div>
     );
 
     if (!job) return null;
 
     const unidadePreco = job.budget_type === 'hourly' ? '/ hora' : job.budget_type === 'daily' ? '/ dia' : 'total';
-    const statusLabel = job.status === 'open' ? 'Turno ativo' : job.status === 'paused' ? 'Pausado' : 'Fechado';
+
+    const slots = job.slots ?? 1;
+    const filled = apps === null ? null : apps.filter((a) => ['hired', 'in_progress', 'completed'].includes(a.status)).length;
+    const state = occupancy(slots, filled);
+    const nextStep = apps === null ? null : shiftStep(slots, apps);
+    // Antes de o turno começar não há presença para marcar: com vaga aberta, o principal é chamar.
+    const step = nextStep?.kind === 'checkin' && state.needsPeople && !turnoIniciado
+        ? { kind: 'call' as const, label: 'Chamar freelas' }
+        : nextStep;
+    const presenca = `/company/jobs/${id}/candidates`;
+    const temGente = (filled ?? 0) > 0 || (apps ?? []).some((a) => a.status === 'invited');
+    // Um só gesto de encerrar: turno com gente em equipe usa "Cancelar turno"; o resto, "Excluir".
+    const usaCancelar = podeCancelarTurno && temGente;
+    const encerrado = (job.status !== 'open' && job.status !== 'paused') || (filled !== null && filled >= slots && (apps ?? []).filter((a) => a.status === 'completed').length >= slots);
 
     return (
         <>
@@ -202,24 +225,37 @@ export default function CompanyJobDetails() {
           title={job ? job.title : 'Detalhes do Turno'}
           description={job ? (job.description?.slice(0, 160) ?? undefined) : undefined}
         />
-        {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                <Card
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="excluir-turno-titulo"
-                    className="w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                >
-                    <h2 id="excluir-turno-titulo" className="mb-2 text-xl font-bold">Excluir turno</h2>
-                    <p className="mb-6 text-sm text-gray-600">Tem certeza? O turno será cancelado e os freelas contratados serão notificados.</p>
-                    <div className="flex gap-3">
-                        <Button variant="secondary" fullWidth onClick={() => setShowDeleteConfirm(false)}>Cancelar</Button>
-                        <Button variant="danger" fullWidth onClick={handleDelete}>Excluir</Button>
-                    </div>
-                </Card>
-            </div>
+        {showCancelJob && id && (
+            <CancelJobModal
+                job={{ id, title: job.title }}
+                role={isGestor(currentCompany) || currentCompany === null ? 'gestor' : 'encarregado'}
+                onClose={() => setShowCancelJob(false)}
+                onCancelled={(result) => {
+                    setShowCancelJob(false);
+                    if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
+                        addToast('Turno cancelado.', 'success');
+                        navigate('/company/jobs');
+                    }
+                }}
+            />
         )}
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        {showDeleteConfirm && (
+            <Dialog
+                labelledBy="excluir-turno-titulo"
+                onClose={() => setShowDeleteConfirm(false)}
+                className="max-w-sm"
+            >
+                    <DialogHeader titleId="excluir-turno-titulo" title={temGente ? 'Cancelar este turno?' : 'Excluir turno?'} subtitle={job.title} />
+                    <p className="text-sm text-gray-600">
+                        O turno sai da agenda. Convites e contratações dele são encerrados e quem já foi contratado é avisado. Não dá para desfazer.
+                    </p>
+                    <DialogActions>
+                        <Button variant="secondary" data-autofocus onClick={() => setShowDeleteConfirm(false)}>Voltar</Button>
+                        <Button variant="danger" data-copilot="empresa.turno.excluir-confirmar" data-copilot-risk="D" onClick={handleDelete}>{temGente ? 'Cancelar turno' : 'Excluir'}</Button>
+                    </DialogActions>
+            </Dialog>
+        )}
+        <div className="mx-auto max-w-4xl lg:max-w-5xl">
             {/* Barra superior: voltar + menu de ações do turno */}
             <div className="mb-4 flex items-center justify-between">
                 <Button
@@ -231,137 +267,102 @@ export default function CompanyJobDetails() {
                     Voltar
                 </Button>
 
-                <div className="relative">
-                    <Button
-                        variant="ghost"
-                        onClick={() => setOpenMenu(!openMenu)}
-                        aria-label="Mais opções do turno"
-                        aria-haspopup="menu"
-                        aria-expanded={openMenu}
-                        className="w-11 !px-0"
-                    >
-                        <MoreHorizontal size={20} />
-                    </Button>
-                    {openMenu && (
-                        <>
-                        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(false)} aria-hidden="true" />
-                        <div role="menu" aria-label="Ações do turno" className="absolute right-0 top-full z-20 mt-2 w-52 divide-y divide-gray-100 overflow-hidden rounded-xl border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                            <button
-                                role="menuitem"
-                                onClick={() => navigate(`/company/jobs/${id}/edit`)}
-                                className={MENU_ITEM}
-                            >
-                                <Edit2 size={16} /> Editar
-                            </button>
-                            <button
-                                role="menuitem"
-                                onClick={() => handleStatusChange(job.status === 'open' ? 'paused' : 'open')}
-                                className={MENU_ITEM}
-                            >
-                                {job.status === 'open' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-                                {job.status === 'open' ? 'Pausar' : 'Reativar'}
-                            </button>
-                            <button
-                                role="menuitem"
-                                onClick={() => { setOpenMenu(false); setShowDeleteConfirm(true); }}
-                                className={`${MENU_ITEM} text-red-600 hover:bg-red-50`}
-                            >
-                                <Trash2 size={16} /> Excluir
-                            </button>
-                        </div>
-                        </>
-                    )}
-                </div>
+                <Menu
+                    label="Mais opções do turno"
+                    menuLabel="Ações do turno"
+                    items={[
+                        !encerrado && { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${id}/edit`) },
+                        !encerrado && {
+                            label: job.status === 'open' ? 'Pausar' : 'Reativar',
+                            icon: job.status === 'open' ? PauseCircle : PlayCircle,
+                            onSelect: () => handleStatusChange(job.status === 'open' ? 'paused' : 'open'),
+                        },
+                        usaCancelar
+                            ? { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setShowCancelJob(true) }
+                            : { label: temGente ? 'Cancelar turno' : 'Excluir', icon: Trash2, danger: true, onSelect: () => setShowDeleteConfirm(true) },
+                    ]}
+                />
             </div>
 
             <Card padding="lg">
-                {/* Cabeçalho do turno: status, título, meta e valor */}
+                {/* Cabeçalho do turno: o que decide (quando e onde) vem antes do resto. */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                        <span className={`mb-3 inline-block rounded-full border border-black px-3 py-1 text-xs font-semibold ${job.status === 'open' ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-700'}`}>
-                            {statusLabel}
-                        </span>
-                        <h1 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                            <span className="flex items-center gap-1.5"><MapPin size={16} /> {job.location || 'Local a combinar'}</span>
-                            <span className="flex items-center gap-1.5 font-semibold capitalize text-black">
-                                <Calendar size={16} /> {job.start_date ? formatDateOnly(job.start_date, "EEEE, dd/MM") : 'Data a definir'}
-                            </span>
-                            <span className="flex items-center gap-1.5"><Clock size={16} /> Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</span>
+                        <div className="mb-3 flex flex-wrap gap-2">
+                            <StatusBadge domain="job" status={job.status} />
+                            {filled !== null && !encerrado && <StatusBadge tone={state.tone}>{state.label}</StatusBadge>}
                         </div>
+                        <h1 className="mb-2 break-words text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
+                        <p className="flex items-center gap-1.5 text-base font-bold">
+                            <Calendar size={16} aria-hidden="true" /> {shiftWhen(job.start_date, job.work_start_time, job.work_end_time)}
+                            {job.has_lunch && <span className="text-sm font-normal text-gray-600">(1h de intervalo)</span>}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
+                            <MapPin size={16} aria-hidden="true" /> {job.location || 'Local a combinar'}
+                        </p>
                     </div>
                     <div className="shrink-0 sm:text-right">
-                        <div className="text-2xl font-bold tabular-nums">R$ {job.budget}</div>
-                        <div className="text-xs text-gray-600">{unidadePreco}</div>
+                        <span className="text-2xl font-bold tabular-nums">{formatBRL(job.budget)}</span>
+                        <span className="ml-1 text-xs text-gray-600">{unidadePreco}</span>
                     </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 gap-8 border-t-2 border-gray-100 pt-6 md:grid-cols-3">
-                    <div className="space-y-6 md:col-span-2">
+                <div className="mt-6 grid grid-cols-1 gap-6 border-t-2 border-gray-100 pt-6 lg:grid-cols-3">
+                    <aside className="h-fit rounded-xl border border-gray-200 bg-gray-50 p-2 lg:order-2">
+                        {erroFreelas ? (
+                            <ErrorState title="Não conseguimos conferir os freelas deste turno." onRetry={() => { void fetchApplications(); }} />
+                        ) : filled === null ? (
+                            <SkeletonList count={1} itemClassName="h-16" />
+                        ) : (
+                            <ListRow
+                                leading={<Users size={20} aria-hidden="true" />}
+                                title={`Freelas · ${filled} de ${slots} ${slots === 1 ? 'vaga' : 'vagas'}`}
+                                meta={filled === 0 ? 'Ninguém neste turno ainda.' : 'Presença, pagamento e recibos'}
+                                to={presenca}
+                            />
+                        )}
+                    </aside>
+                    <div className="space-y-6 lg:order-1 lg:col-span-2">
                         {job.description && (
                             <section>
                                 <h2 className="mb-2 text-lg font-bold">Descrição</h2>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.description}</p>
+                                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700">{job.description}</p>
                             </section>
                         )}
 
                         {job.requirements && (
                             <section>
                                 <h2 className="mb-2 text-lg font-bold">Requisitos</h2>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 sm:text-base">{job.requirements}</p>
+                                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700">{job.requirements}</p>
                             </section>
                         )}
-
-                        {(job.work_start_time || job.work_end_time) && (
-                            <section>
-                                <h2 className="mb-2 text-lg font-bold">Horário</h2>
-                                <p className="inline-block rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold tabular-nums">
-                                    {job.work_start_time?.slice(0, 5)} - {job.work_end_time?.slice(0, 5)}
-                                    {job.has_lunch && <span className="ml-2 font-normal text-gray-600">(1h almoço)</span>}
-                                </p>
-                            </section>
-                        )}
+                        <p className="text-xs text-gray-600">Criado {formatDistanceToNow(new Date(job.created_at), { addSuffix: true, locale: ptBR })}</p>
                     </div>
-
-                    {/* Resumo + a ação principal do turno */}
-                    <aside className="h-fit rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
-                        <h2 className="mb-3 text-lg font-bold">Resumo do turno</h2>
-                        <div className="space-y-2">
-                            {(job.candidates_count || 0) > 0 ? (
-                                <button
-                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
-                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
-                                >
-                                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
-                                    <span className="text-xl font-bold tabular-nums">{job.candidates_count}</span>
-                                </button>
-                            ) : (
-                                <div>
-                                    <span className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-700"><Users size={16} /> Candidatos</span>
-                                    <p className="mb-3 text-sm text-gray-600">Ninguém convidado para este turno ainda.</p>
-                                    <Button variant="dark" fullWidth onClick={() => navigate('/company/team')}>
-                                        Convidar freelas do elenco
-                                    </Button>
-                                </div>
-                            )}
-                            {activeWorkersCount > 0 ? (
-                                <button
-                                    onClick={() => navigate(`/company/jobs/${id}/candidates`)}
-                                    className="-mx-2 flex min-h-11 w-[calc(100%+1rem)] items-center justify-between rounded-xl px-2 text-left transition-colors hover:bg-white"
-                                >
-                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
-                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
-                                </button>
-                            ) : (
-                                <div className="flex min-h-11 items-center justify-between">
-                                    <span className="text-sm font-semibold text-gray-700">Em andamento</span>
-                                    <span className="font-bold tabular-nums">{activeWorkersCount}</span>
-                                </div>
-                            )}
-                        </div>
-                    </aside>
                 </div>
             </Card>
+
+            {/* A ação principal do turno segue o estado; chamar mantém o contexto DESTE turno. */}
+            {step && (
+                <ActionBar
+                    primary={
+                        step.kind === 'call' && !encerrado ? (
+                            <Button
+                                variant="dark"
+                                size="lg"
+                                iconLeft={<Megaphone size={18} />}
+                                data-copilot="empresa.turno.chamar-freelas"
+                                onClick={() => navigate(`${presenca}?chamar=1`)}
+                            >
+                                Chamar freelas
+                            </Button>
+                        ) : (
+                            <ButtonLink variant="dark" size="lg" to={presenca} data-copilot="empresa.turno.abrir-presenca">
+                                {step.kind === 'view' || step.kind === 'call' ? 'Presença e pagamento' : step.label}
+                            </ButtonLink>
+                        )
+                    }
+                />
+            )}
         </div>
         </>
     );

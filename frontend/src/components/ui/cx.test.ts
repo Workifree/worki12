@@ -24,4 +24,11 @@ describe('cx', () => {
     expect(cx('p-5', 'sm:p-6')).toBe('p-5 sm:p-6')
     expect(cx('shadow-sm', 'hover:shadow-md')).toBe('shadow-sm hover:shadow-md')
   })
+
+  it('border-ink é LARGURA (não apaga a cor) e conflita com border-2', () => {
+    expect(cx('border-ink', 'border-black')).toBe('border-ink border-black')
+    expect(cx('border-ink', 'border-2')).toBe('border-2')
+    expect(cx('border-b-ink', 'border-b-0')).toBe('border-b-0')
+    expect(cx('shadow-brutal-xs', 'shadow-none')).toBe('shadow-none')
+  })
 })

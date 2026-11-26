@@ -176,8 +176,8 @@ function setupMocksWithApps(apps: unknown[], jobData: Record<string, unknown> = 
   })
 
   // Por padrão, simula um turno com escrow prepago reservado (fluxo pull legado) —
-  // é o que faz renderCompletionAction() mostrar "Confirmar Entrega" em vez de cair
-  // no branch modo A ("Registrar Pagamento"). Testes específicos de modo A sobrescrevem.
+  // é o que faz renderCompletionAction() mostrar "Confirmar entrega" em vez de cair
+  // no branch modo A ("Registrar pagamento"). Testes específicos de modo A sobrescrevem.
   // Nota: o fetch real é `.select(...).eq('job_id', id)` sem `.order()` — o mock
   // precisa resolver direto no `eq()`, não em `order()`.
   const escrowChain = buildChain({
@@ -215,23 +215,52 @@ beforeEach(() => {
 // deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([]),
+  pickCurrentCompany: () => null,
+  subscribeCompanyScope: () => () => undefined,
+  isGestor: () => true,
 }))
 
 describe('CompanyJobCandidates — renderiza candidatos com status in_progress', () => {
+  it('D-14: contratado sem chegada aparece como "Contratado", não "Em Andamento"', async () => {
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({
+      ...a, status: 'hired', worker_checkin_at: null, worker_checkout_at: null, company_checkin_confirmed_at: null, company_checkout_confirmed_at: null,
+    })))
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('João Silva')).toBeInTheDocument()
+    })
+    expect(screen.getAllByText('Contratado').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Em andamento')).not.toBeInTheDocument()
+  })
+
+  it('D-14: com a saída confirmada mostra "Saída confirmada"', async () => {
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({
+      ...a,
+      company_checkin_confirmed_at: '2026-03-10T09:00:00.000Z',
+      company_checkout_confirmed_at: '2026-03-10T17:00:00.000Z',
+    })))
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('Saída confirmada')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Em andamento')).not.toBeInTheDocument()
+  })
+
   it('exibe candidato com status Em Andamento', async () => {
-    setupMocksWithApps(APP_IN_PROGRESS)
+    setupMocksWithApps(APP_IN_PROGRESS.map((a) => ({ ...a, worker_checkout_at: null, company_checkout_confirmed_at: null })))
     renderComponent()
 
     await waitFor(() => {
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Em Andamento')).toBeInTheDocument()
+    expect(screen.getByText('Em andamento')).toBeInTheDocument()
   })
 })
 
 describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
-  it('modal de confirmação abre ao clicar botão Confirmar Entrega', async () => {
+  it('modal de confirmação abre ao clicar botão Confirmar entrega', async () => {
     setupMocksWithApps(APP_IN_PROGRESS)
     renderComponent()
 
@@ -239,10 +268,10 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar Entrega'))
+    fireEvent.click(screen.getByText('Confirmar entrega'))
 
-    expect(screen.getByRole('heading', { name: /Confirmar Entrega/i })).toBeInTheDocument()
-    expect(screen.getByText(/O pagamento será liberado imediatamente ao profissional/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Confirmar entrega/i })).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
   })
 
   it('modal fecha ao clicar Cancelar sem chamar releaseEscrow', async () => {
@@ -253,14 +282,14 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar Entrega'))
+    fireEvent.click(screen.getByText('Confirmar entrega'))
 
-    expect(screen.getByText(/O pagamento será liberado imediatamente ao profissional/)).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Cancelar'))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
-      expect(screen.queryByText(/O pagamento será liberado imediatamente ao profissional/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/O pagamento pelo Worki está pausado/)).not.toBeInTheDocument()
     })
 
     expect(WalletService.releaseOrCaptureEscrow).not.toHaveBeenCalled()
@@ -276,10 +305,10 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar Entrega'))
+    fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento será liberado imediatamente ao profissional/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
     })
 
     // Get "Confirmar" button inside modal (not the list button)
@@ -290,7 +319,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Entrega confirmada! Pagamento liberado ao profissional.',
+        'Entrega confirmada. O pagamento é feito por fora do Worki.',
         'success'
       )
     })
@@ -306,10 +335,10 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
       expect(screen.getByText('João Silva')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar Entrega'))
+    fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento será liberado imediatamente ao profissional/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
     })
 
     const buttons = screen.getAllByRole('button')
@@ -326,7 +355,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
   })
 })
 
-// Application status='invited' com telefone cadastrado — botão WhatsApp + Cancelar Convite.
+// Application status='invited' com telefone cadastrado — botão WhatsApp + Cancelar convite.
 const APP_INVITED_WITH_PHONE = [
   {
     id: 'app-invited-1',
@@ -391,8 +420,8 @@ const APP_HIRED = [
   },
 ]
 
-describe('CompanyJobCandidates — Cancelar Convite (invited sem resposta)', () => {
-  it('mostra o botão "Cancelar Convite" para convite aguardando resposta', async () => {
+describe('CompanyJobCandidates — Cancelar convite (invited sem resposta)', () => {
+  it('mostra o botão "Cancelar convite" para convite aguardando resposta', async () => {
     setupMocksWithApps(APP_INVITED_WITH_PHONE)
     renderComponent()
 
@@ -400,10 +429,10 @@ describe('CompanyJobCandidates — Cancelar Convite (invited sem resposta)', () 
       expect(screen.getByText('Maria Souza')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Cancelar Convite')).toBeInTheDocument()
+    expect(screen.getByText('Cancelar convite')).toBeInTheDocument()
   })
 
-  it('chama update de applications para status cancelled ao clicar em Cancelar Convite', async () => {
+  it('chama update de applications para status cancelled ao clicar em Cancelar convite', async () => {
     const { mockAddToast, appChain } = setupMocksWithApps(APP_INVITED_WITH_PHONE)
     // O service busca a application atual via .select().eq().maybeSingle() antes de atualizar.
     appChain.maybeSingle = vi.fn().mockResolvedValue({
@@ -420,7 +449,7 @@ describe('CompanyJobCandidates — Cancelar Convite (invited sem resposta)', () 
       expect(screen.getByText('Maria Souza')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Cancelar Convite'))
+    fireEvent.click(screen.getByText('Cancelar convite'))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
@@ -503,7 +532,7 @@ describe('CompanyJobCandidates — Dispensar deste turno', () => {
     fireEvent.click(screen.getByText('Dispensar'))
     expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Cancelar'))
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: /Dispensar Freela/i })).not.toBeInTheDocument()
@@ -521,7 +550,7 @@ describe('CompanyJobCandidates — Dispensar deste turno', () => {
       data: { id: 'app-hired-1', status: 'hired', job_id: 'job-123' },
       error: null,
     })
-    // `.select('id')` no fim do UPDATE (mesma razão da guarda de Cancelar Convite acima).
+    // `.select('id')` no fim do UPDATE (mesma razão da guarda de Cancelar convite acima).
     appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: [{ id: 'app-hired-1' }], error: null }))
 
     renderComponent()
@@ -535,7 +564,7 @@ describe('CompanyJobCandidates — Dispensar deste turno', () => {
       expect(screen.getByRole('heading', { name: /Dispensar Freela/i })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar Dispensa'))
+    fireEvent.click(screen.getByText('Confirmar dispensa'))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Freela dispensado deste turno.', 'success')
@@ -631,6 +660,9 @@ describe('CompanyJobCandidates — modal de avaliação (review)', () => {
     })
 
     // Submit the review
+    // Sem nota o envio fica desabilitado (as estrelas começam vazias).
+    expect(screen.getByRole('button', { name: /Enviar Avaliação/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Nota 4 de 5' }))
     fireEvent.click(screen.getByText('Enviar Avaliação'))
 
     await waitFor(() => {
@@ -691,7 +723,7 @@ const APP_CHECKED_OUT_BY_WORKER = [
   },
 ]
 
-describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BLOQUEADOR 1)', () => {
+describe('CompanyJobCandidates — Confirmar saída sem marcação do freela (BLOQUEADOR 1)', () => {
   it('permite a empresa registrar a saída mesmo quando o freela nunca marcou check-out no app', async () => {
     const { appChain, mockAddToast } = setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
     // handleConfirmCheckout faz `.update({...}).eq('id', appId).select('id')` — `.select('id')`
@@ -707,8 +739,8 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
 
     // O card inteiro também tem role="button" (clique abre o perfil) — escopar a busca a
     // ele evita casar com o nome acessível agregado do card (que inclui todo texto interno).
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
-    const checkoutButton = within(card).getByRole('button', { name: /Registrar Saída/i })
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
+    const checkoutButton = within(card).getByRole('button', { name: /Registrar saída/i })
     expect(checkoutButton).toBeInTheDocument()
 
     fireEvent.click(checkoutButton)
@@ -716,7 +748,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
     // Freela não marcou saída — a empresa precisa informar o horário real (não é mais um
     // clique direto que grava `now()`): abre o modal de horário manual.
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar saída/i })).toBeInTheDocument()
     })
     fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
 
@@ -729,7 +761,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
     // (o recibo distingue "freela marcou" de "empresa confirmou manualmente").
     const updatePayload = (appChain.update as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]
     expect(updatePayload).not.toHaveProperty('worker_checkout_at')
-    // Confirmação visível — este gesto destrava "Registrar Pagamento", não pode ser silencioso.
+    // Confirmação visível — este gesto destrava "Registrar pagamento", não pode ser silencioso.
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Saída confirmada!', 'success')
     })
@@ -745,11 +777,11 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
       expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar saída/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar saída/i })).toBeInTheDocument()
     })
     fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
 
@@ -758,7 +790,7 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
     })
   })
 
-  it('rotula a saída como "Confirmar Saída" (não "Registrar Saída") quando o freela já marcou check-out', async () => {
+  it('rotula a saída como "Confirmar saída" (não "Registrar saída") quando o freela já marcou check-out', async () => {
     setupMocksWithApps(APP_CHECKED_OUT_BY_WORKER)
     renderComponent()
 
@@ -766,8 +798,8 @@ describe('CompanyJobCandidates — Confirmar Saída sem marcação do freela (BL
       expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
-    expect(within(card).getByRole('button', { name: /Confirmar Saída/i })).toBeInTheDocument()
+    const card = screen.getByText('Bruno Marcou Saída').closest('[data-testid="freela-card"]') as HTMLElement
+    expect(within(card).getByRole('button', { name: /Confirmar saída/i })).toBeInTheDocument()
   })
 })
 
@@ -823,11 +855,11 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar saída/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar saída/i })).toBeInTheDocument()
     })
     const timeInput = screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement
     // work_end_time do turno é 02:00 — nunca a hora do clique do gerente.
@@ -844,11 +876,11 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar saída/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar saída/i })).toBeInTheDocument()
     })
     fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
 
@@ -886,10 +918,10 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Bruno Marcou Saída')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Bruno Marcou Saída').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /Confirmar Saída/i }))
+    const card = screen.getByText('Bruno Marcou Saída').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Confirmar saída/i }))
 
-    expect(screen.queryByRole('heading', { name: /Registrar Saída/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Registrar saída/i })).not.toBeInTheDocument()
     await waitFor(() => {
       expect(appChain.update).toHaveBeenCalledWith(
         expect.objectContaining({ company_checkout_confirmed_at: expect.any(String) })
@@ -915,7 +947,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Lia Confirmada Pela Empresa')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Lia Confirmada Pela Empresa').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Lia Confirmada Pela Empresa').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByText('Chegada registrada pela empresa')).toBeInTheDocument()
     expect(within(card).queryByText('Chegada OK')).not.toBeInTheDocument()
   })
@@ -929,11 +961,11 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByRole('button', { name: /Registrar Saída/i }))
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar saída/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Saída/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar saída/i })).toBeInTheDocument()
     })
     const timeInput = screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement
     // Sem `work_end_time` no job, não inventa um horário — o campo fica vazio.
@@ -953,7 +985,7 @@ describe('CompanyJobCandidates — horário manual de chegada/saída não pode m
       expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Zeca Fechou o Bar').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
     expect(within(card).getByText('Chegada OK')).toBeInTheDocument()
     expect(within(card).queryByText('Chegada registrada pela empresa')).not.toBeInTheDocument()
   })
@@ -1041,8 +1073,27 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       return buildChain() as unknown as ReturnType<typeof supabase.from>
     })
 
-    return { mockNavigate }
+    return { mockNavigate, shiftPaymentsChain, paymentA }
   }
+
+  it('leitura de pagamentos falha: nenhuma ação de pagar até "Tentar de novo" confirmar', async () => {
+    const { shiftPaymentsChain, paymentA } = setupTwoFreelasMocks()
+    const order = shiftPaymentsChain.order as ReturnType<typeof vi.fn>
+    order.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } })
+    renderComponent()
+
+    await waitFor(() => expect(screen.getAllByText('Não conseguimos conferir os pagamentos')).toHaveLength(2))
+    for (const acao of ['Registrar pagamento', 'Agendar pagamento', 'Marcar como pago', 'Ver recibo']) {
+      expect(screen.queryByText(acao)).not.toBeInTheDocument()
+    }
+
+    order.mockResolvedValue({ data: [paymentA], error: null })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tentar de novo' })[0])
+
+    expect(await screen.findByText('Ver recibo')).toBeInTheDocument()
+    expect(screen.getAllByText('Registrar pagamento')).toHaveLength(1)
+    expect(screen.queryByText('Não conseguimos conferir os pagamentos')).not.toBeInTheDocument()
+  })
 
   it('cada freela mostra o próprio estado de pagamento — A tem recibo, B ainda pode registrar', async () => {
     setupTwoFreelasMocks()
@@ -1053,19 +1104,19 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       expect(screen.getByText('Freela B')).toBeInTheDocument()
     })
 
-    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
-    const cardB = screen.getByText('Freela B').closest('[role="button"]') as HTMLElement
+    const cardA = screen.getByText('Freela A').closest('[data-testid="freela-card"]') as HTMLElement
+    const cardB = screen.getByText('Freela B').closest('[data-testid="freela-card"]') as HTMLElement
 
-    // Freela A já tem marcador 'recorded' — card mostra "Ver Recibo".
-    expect(within(cardA).getByText('Ver Recibo')).toBeInTheDocument()
-    expect(within(cardA).queryByText('Registrar Pagamento')).not.toBeInTheDocument()
+    // Freela A já tem marcador 'recorded' — card mostra "Ver recibo".
+    expect(within(cardA).getByText('Ver recibo')).toBeInTheDocument()
+    expect(within(cardA).queryByText('Registrar pagamento')).not.toBeInTheDocument()
 
-    // Freela B não tem NENHUM marcador — nunca herda o "Ver Recibo" de A.
-    expect(within(cardB).getByText('Registrar Pagamento')).toBeInTheDocument()
-    expect(within(cardB).queryByText('Ver Recibo')).not.toBeInTheDocument()
+    // Freela B não tem NENHUM marcador — nunca herda o "Ver recibo" de A.
+    expect(within(cardB).getByText('Registrar pagamento')).toBeInTheDocument()
+    expect(within(cardB).queryByText('Ver recibo')).not.toBeInTheDocument()
   })
 
-  it('"Ver Recibo" do freela A navega com ?worker=worker-a — endereça o freela certo', async () => {
+  it('"Ver recibo" do freela A navega com ?worker=worker-a — endereça o freela certo', async () => {
     const { mockNavigate } = setupTwoFreelasMocks()
     renderComponent()
 
@@ -1073,8 +1124,8 @@ describe('CompanyJobCandidates — pagamento por freela (ADR-20260816, turno com
       expect(screen.getByText('Freela A')).toBeInTheDocument()
     })
 
-    const cardA = screen.getByText('Freela A').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(cardA).getByText('Ver Recibo'))
+    const cardA = screen.getByText('Freela A').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(cardA).getByText('Ver recibo'))
 
     expect(mockNavigate).toHaveBeenCalledWith('/recibo/job-123?worker=worker-a')
   })
@@ -1108,7 +1159,7 @@ const APP_NOTHING_CONFIRMED = [
 ]
 
 describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré-piloto)', () => {
-  it('esconde "Registrar Saída" e mostra estado neutro quando a chegada AINDA não foi confirmada', async () => {
+  it('esconde "Registrar saída" e mostra estado neutro quando a chegada AINDA não foi confirmada', async () => {
     setupMocksWithApps(APP_NOTHING_CONFIRMED)
     renderComponent()
 
@@ -1116,16 +1167,16 @@ describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré
       expect(screen.getByText('Igor Sem Chegada')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Igor Sem Chegada').closest('[role="button"]') as HTMLElement
+    const card = screen.getByText('Igor Sem Chegada').closest('[data-testid="freela-card"]') as HTMLElement
     // Chegada ainda pendente — botão de presença disponível.
-    expect(within(card).getByRole('button', { name: /Confirmar Presença/i })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: /Registrar chegada/i })).toBeInTheDocument()
     // Saída NUNCA disponível antes da chegada confirmada — nem "Registrar" nem "Confirmar".
-    expect(within(card).queryByRole('button', { name: /Registrar Saída/i })).not.toBeInTheDocument()
-    expect(within(card).queryByRole('button', { name: /Confirmar Saída/i })).not.toBeInTheDocument()
-    expect(within(card).getByText('Confirme a chegada primeiro')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /Registrar saída/i })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /Confirmar saída/i })).not.toBeInTheDocument()
+    expect(within(card).queryByText('Confirme a chegada primeiro')).not.toBeInTheDocument()
   })
 
-  it('libera "Registrar Saída" assim que a chegada é confirmada', async () => {
+  it('libera "Registrar saída" assim que a chegada é confirmada', async () => {
     setupMocksWithApps(APP_CHECKED_IN_NO_CHECKOUT_MARK)
     renderComponent()
 
@@ -1133,8 +1184,8 @@ describe('CompanyJobCandidates — ordem chegada→saída exigida (revisão pré
       expect(screen.getByText('Ana Trabalhou')).toBeInTheDocument()
     })
 
-    const card = screen.getByText('Ana Trabalhou').closest('[role="button"]') as HTMLElement
-    expect(within(card).getByRole('button', { name: /Registrar Saída/i })).toBeInTheDocument()
+    const card = screen.getByText('Ana Trabalhou').closest('[data-testid="freela-card"]') as HTMLElement
+    expect(within(card).getByRole('button', { name: /Registrar saída/i })).toBeInTheDocument()
     expect(within(card).queryByText('Confirme a chegada primeiro')).not.toBeInTheDocument()
   })
 })
@@ -1162,7 +1213,7 @@ describe('CompanyJobCandidates — Dispensar pós-turno (BLOQUEADOR 2)', () => {
 
   // Regressão (QA final, rodada seguinte): a guarda anterior só olhava worker_checkin_at e
   // company_checkout_confirmed_at — "Dispensar" continuava disponível logo depois de
-  // "Confirmar Presença" (que grava company_checkin_confirmed_at) quando o freela nunca abriu
+  // "Confirmar presença" (que grava company_checkin_confirmed_at) quando o freela nunca abriu
   // o app, exatamente o caminho canônico do modo A.
   it('esconde "Dispensar" quando só a empresa confirmou a CHEGADA (company_checkin_confirmed_at, sem checkin do freela)', async () => {
     const appCheckinConfirmedByCompany = [
@@ -1255,7 +1306,11 @@ describe('CompanyJobCandidates — handleRecordPayment: status → completed ap�
       error: null,
     } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
 
-    const jobChain = buildChain({ single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }) })
+    // `getJobCompanyId` (paymentRecordService) lê jobs.company_id via maybeSingle.
+    const jobChain = buildChain({
+      single: vi.fn().mockResolvedValue({ data: JOB_DATA, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { company_id: 'company-1' }, error: null }),
+    })
     const appChain = buildChain({
       order: vi.fn().mockResolvedValue({ data: APP_READY_FOR_PAYMENT, error: null }),
       // PaymentRecordService.recordExternalPayment valida o turno via
@@ -1306,11 +1361,11 @@ describe('CompanyJobCandidates — handleRecordPayment: status → completed ap�
     await waitFor(() => {
       expect(screen.getByText('Rita Paga')).toBeInTheDocument()
     })
-    const card = screen.getByText('Rita Paga').closest('[role="button"]') as HTMLElement
-    fireEvent.click(within(card).getByText('Registrar Pagamento'))
+    const card = screen.getByText('Rita Paga').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByText('Registrar pagamento'))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Registrar Pagamento/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Registrar pagamento/i })).toBeInTheDocument()
     })
     fireEvent.change(screen.getByLabelText(/Valor pago/i), { target: { value: '100' } })
     fireEvent.click(screen.getByRole('button', { name: /Confirmar Registro/i }))
@@ -1471,7 +1526,7 @@ describe('CompanyJobCandidates — Dispensar e chamar substituto (F4, blocker 3)
       expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar e Chamar Substituto'))
+    fireEvent.click(screen.getByText('Confirmar e chamar substituto'))
 
     await waitFor(() => {
       expect(dismissSpy).toHaveBeenCalledWith('app-hired-1')
@@ -1536,7 +1591,7 @@ describe('CompanyJobCandidates — Dispensar e chamar substituto (F4, blocker 3)
       expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Confirmar e Chamar Substituto'))
+    fireEvent.click(screen.getByText('Confirmar e chamar substituto'))
 
     await waitFor(() => {
       expect(dismissSpy).toHaveBeenCalledWith('app-hired-1')
@@ -1555,5 +1610,48 @@ describe('CompanyJobCandidates — Dispensar e chamar substituto (F4, blocker 3)
     expect(screen.getByRole('heading', { name: /Dispensar e Chamar Substituto/i })).toBeInTheDocument()
 
     dismissSpy.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Recusas do guard de applications (migration 20261125000200): nunca o texto cru do banco.
+// ---------------------------------------------------------------------------
+describe('CompanyJobCandidates — recusas do banco ao registrar presença', () => {
+  async function abrirSaida(jobData?: Record<string, unknown>) {
+    const mocks = setupMocksWithApps(APP_OVERNIGHT_NO_CHECKOUT_MARK, jobData)
+    renderComponent()
+    await waitFor(() => {
+      expect(screen.getByText('Zeca Fechou o Bar')).toBeInTheDocument()
+    })
+    const card = screen.getByText('Zeca Fechou o Bar').closest('[data-testid="freela-card"]') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /Registrar saída/i }))
+    await screen.findByRole('heading', { name: /Registrar saída/i })
+    return mocks
+  }
+
+  it.each([
+    ['applications_update_guard: horario de presenca no futuro.', 'O horário não pode ser no futuro.'],
+    ['applications_update_guard: este turno foi cancelado.', 'Este turno foi cancelado.'],
+    [
+      'applications_update_guard: ainda nao e possivel registrar a chegada neste turno.',
+      // turno 05/03 sem work_start_time: 00:00 de São Paulo menos 12h = 04/03 às 12:00
+      'Só dá para registrar a chegada a partir de 04/03 às 12:00.',
+    ],
+    ['applications_update_guard: coluna nao editavel foi alterada.', 'Não foi possível fazer isso agora. Atualize a página e tente novamente.'],
+  ])('traduz "%s"', async (raw, esperado) => {
+    const { appChain, mockAddToast } = await abrirSaida({
+      title: 'Turno', start_date: '2026-03-05T15:00:00+00:00',
+    })
+    appChain.update = vi.fn().mockReturnValue(chainableResolve({ data: null, error: { message: raw, code: '42501' } }))
+    fireEvent.change(screen.getByLabelText(/Horário real de saída/i), { target: { value: '02:00' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/i }))
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(esperado, 'error'))
+    expect(mockAddToast).not.toHaveBeenCalledWith(expect.stringContaining('applications_update_guard'), 'error')
+  })
+
+  it('não preenche como padrão um horário previsto que ainda está no futuro', async () => {
+    await abrirSaida({ title: 'Turno futuro', start_date: '2099-03-05T15:00:00+00:00', work_end_time: '23:00:00' })
+    expect((screen.getByLabelText(/Horário real de saída/i) as HTMLInputElement).value).toBe('')
+    expect(screen.getByRole('button', { name: /^Confirmar$/i })).toBeDisabled()
   })
 })

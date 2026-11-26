@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
+import { focusFirstInvalid } from '../../lib/formErrors';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -7,7 +9,10 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megaphone } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
-import { todayLocalDate, formatDateOnly, localDateToTimestamp } from '../../lib/dateUtils';
+import { jobDraftKey } from '../../lib/jobDraft';
+import SemAcesso from '../../components/SemAcesso';
+import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
+import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
 import { generateOccurrenceDates, MAX_SERIES_OCCURRENCES } from '../../lib/recurrence';
 import { JobSeriesService } from '../../services/jobSeriesService';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
@@ -15,27 +20,40 @@ import { useCompanyInvites } from '../../hooks/useShiftInvites';
 import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
+import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services/shiftOperationService';
+import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { Alert, Button, Field, FilterChip, PageHeader, ActionBar } from '../../components/ui';
+import ErroDeCarga from '../../components/ErroDeCarga';
+import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
+import { Dialog } from '../../components/ui/Dialog';
+import { roleLabel } from '../../lib/statusLabels';
+import { formatBRL } from '../../lib/currency';
+import { isPresencaEnabled } from '../../lib/features';
+import { PresencePolicyFields } from '../../components/presence/PresencePolicyFields';
+import { usePresenceSetup } from '../../components/company/usePresenceSetup';
+import { toPolicy } from '../../components/company/presenceDefaults';
+import { listPresenceChecks } from '../../services/presenceService';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-// Secao do formulario: card + titulo + campos com ritmo fixo (gap-4).
+// Grupo do formulario: a pagina E o formulario (sem cartao dentro de cartao). Titulo 16 + campos com gap-4.
+const GROUP_CLASS = 'border-t border-gray-200 pt-6 first:border-t-0 first:pt-0';
 function FormSection({ title, children }: { title: string; children: ReactNode }) {
     return (
-        <Card as="section" aria-label={title}>
-            <h2 className="text-lg font-bold">{title}</h2>
+        <section aria-label={title} className={GROUP_CLASS}>
+            <h2 className="text-base font-semibold">{title}</h2>
             <div className="mt-4 flex flex-col gap-4">{children}</div>
-        </Card>
+        </section>
     );
 }
 
-// Chips de dia da semana (toggle). Nao sao botoes de acao: so o estado muda.
-const CHIP_BASE = 'h-11 rounded-xl border-2 border-black text-sm font-bold transition-colors';
-const CHIP_ON = 'bg-black text-white';
-const CHIP_OFF = 'bg-white text-black hover:bg-gray-100';
+
+type CampoDoTurno =
+    | 'title' | 'category' | 'description' | 'start_date' | 'work_start_time' | 'work_end_time'
+    | 'weekdays' | 'rangeEnd' | 'budget' | 'site';
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -63,6 +81,37 @@ export default function CompanyCreateJob() {
 
     const startDateRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(false);
+    const [tentouEnviar, setTentouEnviar] = useState(false);
+
+    // Etiqueta (E5/R20, R26): opcional e só com equipe (divulgação progressiva). Não vale para série
+    // (cada ocorrência é um turno; a etiqueta se aplica turno a turno depois).
+    const currentCompany = useCurrentCompany();
+    const tagsEnabled = currentCompany?.team_enabled === true || currentCompany?.role === 'encarregado';
+    const [tagOptions, setTagOptions] = useState<CompanyTag[]>([]);
+    const [tagId, setTagId] = useState('');
+    const [initialTagId, setInitialTagId] = useState('');
+    useEffect(() => {
+        if (!tagsEnabled || !currentCompany) return;
+        let active = true;
+        void (async () => {
+            const list = await listTags(currentCompany.company_id, true);
+            if (active) setTagOptions(list);
+        })();
+        return () => { active = false; };
+    }, [tagsEnabled, currentCompany]);
+    // Presença verificada: desligada, nada é consultado nem gravado.
+    const presencaLigada = isPresencaEnabled();
+    const presenca = usePresenceSetup(presencaLigada ? currentCompany?.company_id ?? null : null, !isEditing);
+    const setPresenca = presenca.setPolicy;
+    /** Já há registro no turno: forma e local não mudam (o banco recusa). */
+    const [presencaCongelada, setPresencaCongelada] = useState(false);
+    useEffect(() => {
+        if (!presencaLigada || !id) return;
+        let ativo = true;
+        void listPresenceChecks({ jobId: id }).then((checks) => { if (ativo && checks) setPresencaCongelada(checks.length > 0); });
+        return () => { ativo = false; };
+    }, [presencaLigada, id]);
+
     const [createdJobId, setCreatedJobId] = useState<string | null>(null);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
 
@@ -96,8 +145,10 @@ export default function CompanyCreateJob() {
     });
 
     // Hooks de equipe e convites — carregados após criação do job
-    const { teamMembers, loading: teamLoading } = useCompanyTeam();
-    const { invite, invitingWorkerId, invites: sentInvites } = useCompanyInvites(createdJobId ?? '');
+    const { teamMembers, loading: teamLoading, erroCarga: teamError, refresh: refreshTeam } = useCompanyTeam();
+    const {
+        invite, invitingWorkerId, invitedWorkerIds, loadError: invitesError, refresh: refreshInvites,
+    } = useCompanyInvites(createdJobId ?? '');
 
     // Etapa 2 — divulgacao progressiva (NN/g): dos quatro campos da tela, so a DESCRICAO e
     // obrigatoria, mas os quatro apareciam com o mesmo peso visual — e o botao desabilitado nao
@@ -118,15 +169,16 @@ export default function CompanyCreateJob() {
         let ativo = true;
         void (async () => {
             try {
-                const companyId = await getAuthenticatedCompanyId();
-                const { data } = await supabase
+                const scope = await getJobScope();
+                let query = supabase
                     .from('jobs')
-                    .select('id, title, budget, work_start_time, work_end_time, created_at')
-                    .eq('company_id', companyId)
-                    .neq('status', 'deleted')
-                    .order('created_at', { ascending: false })
-                    .limit(30);
-                if (!ativo || !data) return;
+                    .select('id, title, budget, work_start_time, work_end_time, created_at, responsible_id, start_date')
+                    .eq('company_id', scope.companyId)
+                    .neq('status', 'deleted');
+                if (scope.restricted) query = query.in('responsible_id', scopeResponsibleIds(scope));
+                const { data: rows } = await query.order('created_at', { ascending: false }).limit(30);
+                if (!ativo || !rows) return;
+                const data = rows.filter((j) => canSeeJob(scope, j));
                 // dedupe por titulo normalizado: a serie de 10 "Garcom sabado" vira UM cartao (o mais recente)
                 const vistos = new Set<string>();
                 const unicos: ModeloDeTurno[] = [];
@@ -151,38 +203,59 @@ export default function CompanyCreateJob() {
     // session: aba morta e justamente o caso), 24h de validade, e o rascunho so existe se ha
     // conteudo digitado — campo vazio nunca vira rascunho. Criou o turno? Rascunho morre.
     // Edicao e ?repetir= ficam de fora: intencao explicita vence rascunho.
-    const RASCUNHO_KEY = 'worki_rascunho_turno';
+    // Chave por usuário + empresa (lib/jobDraft); enquanto não resolve, não lê nem grava.
+    const [rascunhoKey, setRascunhoKey] = useState<string | null>(null);
+    useEffect(() => {
+        let ativo = true;
+        void (async () => {
+            try {
+                const [{ data }, companyId] = await Promise.all([supabase.auth.getSession(), getAuthenticatedCompanyId()]);
+                const userId = data.session?.user.id;
+                if (ativo && userId && companyId) setRascunhoKey(jobDraftKey(userId, companyId));
+            } catch {
+                /* sem sessão/empresa legível: segue sem rascunho */
+            }
+        })();
+        return () => { ativo = false; };
+    }, []);
     const rascunhoRestaurado = useRef(false);
     useEffect(() => {
-        if (isEditing || repetirId || rascunhoRestaurado.current) return;
+        if (!rascunhoKey || isEditing || repetirId || rascunhoRestaurado.current) return;
         rascunhoRestaurado.current = true;
         try {
-            const bruto = localStorage.getItem(RASCUNHO_KEY);
+            const bruto = localStorage.getItem(rascunhoKey);
             if (!bruto) return;
             const r = JSON.parse(bruto) as { em?: number; formData?: typeof formData };
             if (!r?.formData || Date.now() - (r.em ?? 0) > 24 * 60 * 60 * 1000) {
-                localStorage.removeItem(RASCUNHO_KEY);
+                localStorage.removeItem(rascunhoKey);
                 return;
             }
+            // O que já foi digitado enquanto a chave resolvia vence o rascunho.
+            if (formData.title || formData.description || formData.budget) return;
             setFormData((prev) => ({ ...prev, ...r.formData }));
             addToast('Rascunho recuperado — continue de onde parou.', 'info');
         } catch {
             /* rascunho ilegivel: ignora e segue com o formulario limpo */
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- restauracao unica no mount
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restauracao unica, quando a chave resolve
+    }, [rascunhoKey]);
 
     useEffect(() => {
-        if (isEditing || showInvitePanel) return;   // editar nao gera rascunho; criado = rascunho morto
+        if (!rascunhoKey || isEditing || showInvitePanel) return;   // editar nao gera rascunho; criado = rascunho morto
         const t = setTimeout(() => {
             try {
                 const temAlgo = formData.title.trim() || formData.description.trim() || formData.budget;
-                if (!temAlgo) { localStorage.removeItem(RASCUNHO_KEY); return; }
-                localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ em: Date.now(), formData }));
+                if (!temAlgo) { localStorage.removeItem(rascunhoKey); return; }
+                localStorage.setItem(rascunhoKey, JSON.stringify({ em: Date.now(), formData }));
             } catch { /* storage indisponivel: rascunho e conveniencia */ }
         }, 600);
         return () => clearTimeout(t);
-    }, [formData, isEditing, showInvitePanel]);
+    }, [formData, isEditing, showInvitePanel, rascunhoKey]);
+
+    // Falha ao carregar o turno (editar/repetir): aviso na própria tela, sem desmontar o formulário.
+    const [erroCarga, setErroCarga] = useState<{ jobId: string; modo: 'editar' | 'repetir' } | null>(null);
+
+    const [semAcesso, setSemAcesso] = useState(false);
 
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
@@ -214,10 +287,13 @@ export default function CompanyCreateJob() {
         void (async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
+            // Briefing da empresa OPERADA (gerente/encarregado não são a linha de `companies`).
+            const empresaOperada = await getAuthenticatedCompanyId().catch(() => null);
+            if (!empresaOperada) return;
             const { data } = await supabase
                 .from('companies')
                 .select('default_briefing')
-                .eq('id', user.id)
+                .eq('id', empresaOperada)
                 .maybeSingle();
             if (!active || !data?.default_briefing) return;
             setFormData(prev => (prev.briefing ? prev : { ...prev, briefing: data.default_briefing as string }));
@@ -227,7 +303,7 @@ export default function CompanyCreateJob() {
 
     const fetchJobData = async (jobId: string, modo: 'editar' | 'repetir' = 'editar') => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
             if (!user) { navigate('/login'); return; }
 
             const { data, error } = await supabase
@@ -238,7 +314,14 @@ export default function CompanyCreateJob() {
                 .single();
 
             if (error) throw error;
+            setErroCarga(null);
+            if (data && !canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
             if (data) {
+                if (modo === 'editar') {
+                    setTagId(data.tag_id ?? '');
+                    setInitialTagId(data.tag_id ?? '');
+                    if (presencaLigada) setPresenca(toPolicy(data));
+                }
                 setFormData({
                     title: data.title,
                     category: data.category,
@@ -265,23 +348,10 @@ export default function CompanyCreateJob() {
             }
         } catch (error) {
             logError('Error fetching job:', error);
-            navigate('/company/jobs');
+            // PGRST116 = turno inexistente/sem acesso. O resto é falha de carga: fica na tela.
+            if ((error as { code?: string } | null)?.code === 'PGRST116') navigate('/company/jobs');
+            else setErroCarga({ jobId, modo });
         }
-    };
-
-    const calculateHours = (start: string, end: string, lunch: boolean = false) => {
-        if (!start || !end) return { total: 0, work: 0 };
-        const [startH, startM] = start.split(':').map(Number);
-        const [endH, endM] = end.split(':').map(Number);
-
-        let total = (endH + endM / 60) - (startH + startM / 60);
-        if (total < 0) total += 24; // Handle overnight
-
-        const work = lunch ? Math.max(0, total - 1) : total;
-        return {
-            total: total.toFixed(1).replace('.0', ''),
-            work: work.toFixed(1).replace('.0', '')
-        };
     };
 
     const toggleWeekday = (day: number) => {
@@ -332,33 +402,56 @@ export default function CompanyCreateJob() {
     // inconsistencia interna (Nielsen #1, visibilidade do estado, e #4, consistencia) num
     // formulario que a empresa preenche toda semana. E tambem a unica fonte de validade:
     // `canProceed` e "nao falta nada".
-    const oQueFalta = (): string[] => {
-        const falta: string[] = [];
-        if (!formData.title.trim()) falta.push('o título do turno');
-        if (!formData.category) falta.push('a função');
-        if (!formData.description.trim()) falta.push('a descrição');
-        if (!(parseFloat(formData.budget) > 0)) falta.push('o valor');
-        if (!formData.start_date) falta.push('a data');
-        else if (formData.start_date < todayLocalDate()) falta.push('uma data que ainda não passou');
-        if (!formData.work_start_time) falta.push('o horário de entrada');
-        if (!formData.work_end_time) falta.push('o horário de saída');
+    const errosDoTurno = (): Partial<Record<CampoDoTurno, { falta: string; erro: string }>> => {
+        const erros: Partial<Record<CampoDoTurno, { falta: string; erro: string }>> = {};
+        const marcar = (campo: CampoDoTurno, falta: string, erro: string) => { erros[campo] = { falta, erro }; };
+        if (!formData.title.trim()) marcar('title', 'o título do turno', 'Informe o título do turno.');
+        if (!formData.category) marcar('category', 'a função', 'Escolha a função.');
+        if (!formData.description.trim()) marcar('description', 'a descrição', 'Escreva a descrição.');
+        if (!formData.start_date) marcar('start_date', 'a data', 'Escolha a data.');
+        else if (formData.start_date < todayLocalDate()) marcar('start_date', 'uma data que ainda não passou', 'Escolha uma data que ainda não passou.');
+        if (!formData.work_start_time) marcar('work_start_time', 'o horário de entrada', 'Informe a entrada.');
+        if (!formData.work_end_time) marcar('work_end_time', 'o horário de saída', 'Informe a saída.');
         if (!isEditing && isRecurring) {
-            if (recurrenceType === 'weekly' && weekdays.length === 0) falta.push('os dias da semana');
-            if (!rangeEndDate || rangeEndDate < formData.start_date) falta.push('a data final da série');
-            else if (occurrenceDates.length === 0) falta.push('ao menos uma data na série');
-            else if (overCap) falta.push(`um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`);
+            if (recurrenceType === 'weekly' && weekdays.length === 0) marcar('weekdays', 'os dias da semana', 'Marque pelo menos um dia da semana.');
+            if (!rangeEndDate || rangeEndDate < formData.start_date) marcar('rangeEnd', 'a data final da série', 'Defina uma data final válida.');
+            else if (occurrenceDates.length === 0) marcar('rangeEnd', 'ao menos uma data na série', 'Nenhum turno seria criado com esse período.');
+            else if (overCap) marcar('rangeEnd', `um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`, `A série passaria de ${MAX_SERIES_OCCURRENCES} turnos. Encurte o período.`);
         }
-        return falta;
+        if (!(parseFloat(formData.budget) > 0)) marcar('budget', 'o valor', 'Informe um valor maior que zero.');
+        if (presencaLigada && presenca.siteError) marcar('site', 'o local da presença', presenca.siteError);
+        return erros;
     };
 
-    const faltas = oQueFalta();
+    const erros = errosDoTurno();
+    const faltas = Object.values(erros).map((e) => e.falta);
     const podeEnviar = faltas.length === 0;
+    const erroDe = (campo: CampoDoTurno) => (tentouEnviar ? erros[campo]?.erro : undefined);
+
+    // O botão nunca fica morto por validação: ao enviar incompleto, marca os campos e leva ao primeiro.
+    const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (loading || erroCarga?.modo === 'editar') return;
+        if (!podeEnviar) {
+            const form = e.currentTarget;
+            flushSync(() => setTentouEnviar(true));
+            focusFirstInvalid(form);
+            return;
+        }
+        void handleSubmit();
+    };
 
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Usuário não autenticado");
+            const session = await checkSession();
+            if (session.status === 'unavailable') {
+                addToast('Sem conexão. O que você digitou continua aqui. Tente de novo.', 'error');
+                setLoading(false);
+                return;
+            }
+            // O rascunho fica salvo no aparelho, então ir ao login não perde o que foi digitado.
+            if (session.status === 'signed_out') { navigate('/login'); return; }
 
             const budgetAmount = parseFloat(formData.budget) || 0;
 
@@ -417,6 +510,7 @@ export default function CompanyCreateJob() {
                         work_end_time: formData.work_end_time,
                         has_lunch: formData.has_lunch,
                         slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
+                        ...(presencaLigada ? presenca.policy : {}),
                     },
                 });
 
@@ -458,6 +552,7 @@ export default function CompanyCreateJob() {
                 // CHECK (slots >= 1) no banco — o clamp aqui evita que um campo limpo pela
                 // pessoa (string vazia → NaN) vire erro de constraint na cara dela.
                 slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
+                ...(presencaLigada ? presenca.policy : {}),
                 // `status` NÃO entra aqui de propósito — ver o insert e o update abaixo.
                 // Este payload é compartilhado pelos dois caminhos, e enquanto ele carregava
                 // `status: 'open'` fixo, EDITAR um turno reescrevia o status: um turno `paused`
@@ -477,6 +572,10 @@ export default function CompanyCreateJob() {
                 }
                 // Invalida o cache do React Query (staleTime 5min) para o dashboard não
                 // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
+                if (tagsEnabled && tagId !== initialTagId) {
+                    const tagResult = await setJobTag(id as string, tagId || null);
+                    if (tagResult.outcome !== 'ok') addToast(tagMessage(tagResult.outcome, 'assign'), 'info');
+                }
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
                 await queryClient.invalidateQueries({ queryKey: ['companyApplications'] });
                 addToast('Turno atualizado com sucesso!', 'success');
@@ -488,33 +587,47 @@ export default function CompanyCreateJob() {
                 const { data: newJob, error } = await supabase.from('jobs').insert({ ...payload, status: 'open' }).select().single();
                 if (error) throw error;
 
+                if (tagsEnabled && tagId) {
+                    const tagResult = await setJobTag(newJob.id, tagId);
+                    if (tagResult.outcome !== 'ok') addToast(`O turno foi criado, mas a etiqueta não foi aplicada. ${tagMessage(tagResult.outcome, 'assign')}`, 'info');
+                }
+
                 // Novo turno deve aparecer imediatamente no dashboard (invalida cache).
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
                 addToast('Turno criado! Convide um freela do seu elenco.', 'success');
                 setCreatedJobId(newJob.id);
                 setShowInvitePanel(true);
-                try { localStorage.removeItem('worki_rascunho_turno'); } catch { /* ok */ }
+                try { if (rascunhoKey) localStorage.removeItem(rascunhoKey); } catch { /* ok */ }
             }
         } catch (error: unknown) {
             logError('Error saving job:', error);
-            addToast(error instanceof Error ? error.message : 'Erro ao salvar turno. Verifique os dados.', 'error');
+            if (presencaLigada && (error as { message?: string } | null)?.message?.includes('jobs_presence_policy')) {
+                addToast('O banco recusou a mudança na presença. Se já há registro neste turno, a forma e o local não mudam.', 'error');
+            } else {
+                addToast(error instanceof Error ? error.message : 'Erro ao salvar turno. Verifique os dados.', 'error');
+            }
         } finally {
             setLoading(false);
         }
     };
 
     const unidadeValor = formData.budget_type === 'hourly' ? 'por hora' : formData.budget_type === 'daily' ? 'por dia' : 'total do projeto';
-    const horasTotais = formData.work_start_time && formData.work_end_time
-        ? calculateHours(formData.work_start_time, formData.work_end_time)
+    const temHorario = Boolean(formData.work_start_time && formData.work_end_time);
+    const duracaoTurno = temHorario
+        ? formatShiftDuration(shiftMinutes(formData.work_start_time, formData.work_end_time))
         : null;
-    const horasTrabalho = formData.work_start_time && formData.work_end_time
-        ? calculateHours(formData.work_start_time, formData.work_end_time, formData.has_lunch)
+    const duracaoTrabalho = temHorario
+        ? formatShiftDuration(shiftMinutes(formData.work_start_time, formData.work_end_time, formData.has_lunch ? 60 : 0))
         : null;
 
     const rotuloEnviar = isEditing ? 'Salvar alterações' : (isRecurring ? 'Criar série de turnos' : 'Criar turno');
 
+    if (semAcesso) {
+        return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
+    }
+
     return (
-        <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-3xl mx-auto">
             <Button
                 variant="ghost"
                 onClick={() => navigate(-1)}
@@ -524,27 +637,35 @@ export default function CompanyCreateJob() {
                 Voltar
             </Button>
             <PageHeader
-                title={isEditing ? 'Editar turno' : 'Novo turno'}
-                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto — o Worki registra e emite o recibo.'}
+                title={isEditing ? 'Editar turno' : 'Criar turno'}
+                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Worki registra e emite o recibo.'}
             />
 
-            <div className="flex flex-col gap-6">
+            {erroCarga && (
+                <div className="mb-6">
+                    <ErroDeCarga onRetry={() => { void fetchJobData(erroCarga.jobId, erroCarga.modo); }} />
+                </div>
+            )}
+
+            <form className="flex flex-col gap-6" noValidate onSubmit={handleFormSubmit}>
                 {/* Modelos: o turno real que a empresa ja fez vira um toque. Historico vazio = some. */}
                 {!isEditing && !repetirId && modelos.length > 0 && (
                     <section aria-label="Comece de um turno anterior">
                         <h2 className="text-sm font-bold">Comece de um turno anterior</h2>
                         <p className="mt-0.5 mb-3 text-xs text-gray-600">Preenche tudo pra você — só escolha a nova data.</p>
                         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0">
-                            {modelos.map((mo) => (
+                            {modelos.map((mo, indice) => (
                                 <button
                                     key={mo.id}
                                     type="button"
                                     onClick={() => { void fetchJobData(mo.id, 'repetir'); }}
-                                    className="min-h-11 w-56 shrink-0 rounded-xl border-2 border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto"
+                                    data-copilot="empresa.turno-criar.usar-modelo"
+                                    // No desktop, no máximo duas linhas curtas antes do formulário.
+                                    className={`min-h-11 w-56 shrink-0 rounded-xl border-ink border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto ${indice > 3 ? 'sm:hidden' : ''}`}
                                 >
                                     <span className="block truncate text-sm font-bold">{mo.title}</span>
                                     <span className="block truncate text-xs text-gray-600">
-                                        {mo.budget ? `R$ ${mo.budget}` : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
+                                        {mo.budget ? formatBRL(Number(mo.budget)) : ''}{mo.work_start_time ? ` · ${mo.work_start_time}–${mo.work_end_time ?? ''}` : ''}
                                         {/* recencia = confianca de que e o turno certo ("e o do sabado passado mesmo") */}
                                         {mo.created_at ? ` · ${formatDistanceToNow(new Date(mo.created_at), { addSuffix: true, locale: ptBR })}` : ''}
                                     </span>
@@ -555,7 +676,7 @@ export default function CompanyCreateJob() {
                 )}
 
                 <FormSection title="O turno">
-                    <Field label="Título do turno" required>
+                    <Field label="Título do turno" error={erroDe('title')} required>
                         <input
                             type="text"
                             aria-label="Título do Turno"
@@ -566,7 +687,7 @@ export default function CompanyCreateJob() {
                     </Field>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Field label="Função" required>
+                        <Field label="Função" error={erroDe('category')} required>
                             <select
                                 aria-label="Função"
                                 value={formData.category}
@@ -593,7 +714,7 @@ export default function CompanyCreateJob() {
                         </Field>
                     </div>
 
-                    <Field label="Descrição" required>
+                    <Field label="Descrição" error={erroDe('description')} required>
                         <textarea
                             aria-label="Descrição Completa"
                             className="!h-auto min-h-28 resize-y py-3"
@@ -602,11 +723,23 @@ export default function CompanyCreateJob() {
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         />
                     </Field>
+
+                    {tagsEnabled && !(!isEditing && isRecurring) && (tagOptions.length > 0 || tagId) && (
+                        <Field label="Etiqueta (opcional)" hint="Agrupa turnos para filtrar na tela Hoje.">
+                            <select aria-label="Etiqueta" value={tagId} onChange={(e) => setTagId(e.target.value)}>
+                                <option value="">Sem etiqueta</option>
+                                {/* Arquivada some do seletor de turnos novos; fica só se já for a deste turno. */}
+                                {tagOptions.filter((t) => !t.archivedAt || t.id === tagId).map((t) => (
+                                    <option key={t.id} value={t.id}>{t.archivedAt ? `${t.name} (arquivada)` : t.name}</option>
+                                ))}
+                            </select>
+                        </Field>
+                    )}
                 </FormSection>
 
                 <FormSection title="Quando e onde">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Field label="Data de início" required hint={!isEditing && isRecurring ? 'Primeira data da série.' : undefined}>
+                        <Field label="Data de início" error={erroDe('start_date')} required hint={!isEditing && isRecurring ? 'Primeira data da série.' : undefined}>
                             <input
                                 ref={startDateRef}
                                 type="date"
@@ -616,7 +749,7 @@ export default function CompanyCreateJob() {
                                 onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                             />
                         </Field>
-                        <Field label="Entrada" required>
+                        <Field label="Entrada" error={erroDe('work_start_time')} required>
                             <input
                                 type="time"
                                 aria-label="Horário de entrada"
@@ -624,7 +757,7 @@ export default function CompanyCreateJob() {
                                 onChange={(e) => setFormData({ ...formData, work_start_time: e.target.value })}
                             />
                         </Field>
-                        <Field label="Saída" required>
+                        <Field label="Saída" error={erroDe('work_end_time')} required>
                             <input
                                 type="time"
                                 aria-label="Horário de saída"
@@ -643,11 +776,11 @@ export default function CompanyCreateJob() {
                                 checked={formData.has_lunch}
                                 onChange={(e) => setFormData({ ...formData, has_lunch: e.target.checked })}
                             />
-                            Intervalo de almoço (1h)
+                            Intervalo (1h)
                         </label>
-                        {horasTotais && horasTrabalho && (
+                        {duracaoTurno && (
                             <p className="text-xs text-gray-600">
-                                {horasTotais.total}h de turno{formData.has_lunch ? ` · ${horasTrabalho.work}h de trabalho` : ''}
+                                {duracaoTurno} de turno{formData.has_lunch ? ` · ${duracaoTrabalho} de trabalho` : ''}
                             </p>
                         )}
                     </div>
@@ -665,7 +798,7 @@ export default function CompanyCreateJob() {
                     {/* Escala Recorrente (F3) — so na criacao; edicao de ocorrencia isolada nao vira serie.
                         Recolhido por padrao: a maioria dos turnos e unico. */}
                     {!isEditing && (
-                        <div className="rounded-xl border-2 border-dashed border-gray-300 p-4">
+                        <div className="rounded-xl border border-dashed border-gray-300 p-4">
                             <label htmlFor="job-repeat" className="flex min-h-11 cursor-pointer select-none items-start gap-3">
                                 <input
                                     type="checkbox"
@@ -710,24 +843,33 @@ export default function CompanyCreateJob() {
                                     {recurrenceType === 'weekly' && (
                                         <div className="flex flex-col gap-1.5">
                                             <span id="job-weekdays-label" className="text-sm font-bold">Dias da semana</span>
-                                            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="job-weekdays-label">
+                                            <div
+                                                className="flex flex-wrap gap-2"
+                                                role="group"
+                                                aria-labelledby="job-weekdays-label"
+                                                aria-describedby={erroDe('weekdays') ? 'job-weekdays-error' : undefined}
+                                                data-invalid={erroDe('weekdays') ? 'true' : undefined}
+                                                tabIndex={-1}
+                                            >
                                                 {WEEKDAY_LABELS.map((label, day) => (
-                                                    <button
+                                                    <FilterChip
                                                         key={day}
-                                                        type="button"
                                                         onClick={() => toggleWeekday(day)}
-                                                        aria-pressed={weekdays.includes(day)}
+                                                        pressed={weekdays.includes(day)}
                                                         aria-label={WEEKDAY_FULL_LABELS[day]}
-                                                        className={`w-11 ${CHIP_BASE} ${weekdays.includes(day) ? CHIP_ON : CHIP_OFF}`}
+                                                        className="w-12 !px-0"
                                                     >
                                                         {label}
-                                                    </button>
+                                                    </FilterChip>
                                                 ))}
                                             </div>
+                                            {erroDe('weekdays') && (
+                                                <p id="job-weekdays-error" role="alert" className="text-xs font-bold text-red-600">{erroDe('weekdays')}</p>
+                                            )}
                                         </div>
                                     )}
 
-                                    <Field label="Repetir até" required>
+                                    <Field label="Repetir até" error={erroDe('rangeEnd')} required>
                                         <input
                                             type="date"
                                             aria-label="Repetir até"
@@ -740,7 +882,7 @@ export default function CompanyCreateJob() {
                                     {/* Pre-visualizacao ao vivo (R8) */}
                                     <p
                                         role="status"
-                                        className={`rounded-xl border-2 p-3 text-sm ${overCap ? 'border-red-300 bg-red-50 font-bold text-red-700' : 'border-black bg-white font-medium'}`}
+                                        className={`rounded-xl border p-3 text-sm ${overCap ? 'border-red-300 bg-red-50 font-bold text-red-700' : 'border-black bg-white font-medium'}`}
                                     >
                                         {occurrenceDates.length === 0 ? (
                                             <span className="text-gray-600">Defina os dias e o período para ver quantos turnos serão criados.</span>
@@ -758,6 +900,18 @@ export default function CompanyCreateJob() {
                     )}
                 </FormSection>
 
+                {presencaLigada && (
+                    <section aria-label="Presença" className={GROUP_CLASS}>
+                        <PresencePolicyFields
+                            value={presenca.policy}
+                            onChange={presenca.setPolicy}
+                            sites={presenca.sites}
+                            frozen={presencaCongelada}
+                            siteError={tentouEnviar ? presenca.siteError : undefined}
+                        />
+                    </section>
+                )}
+
                 <FormSection title="Valor">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field label="Tipo de pagamento">
@@ -773,6 +927,7 @@ export default function CompanyCreateJob() {
                         </Field>
                         <Field
                             label="Valor"
+                            error={erroDe('budget')}
                             required
                             hint={isEditing ? 'O valor não pode ser alterado após a criação.' : `Em reais, ${unidadeValor}.`}
                         >
@@ -806,7 +961,7 @@ export default function CompanyCreateJob() {
                     </Button>
 
                     {mostrarOpcionais && (
-                        <Card id="job-opcionais" className="mt-4">
+                        <div id="job-opcionais" className="mt-4">
                             <div className="flex flex-col gap-4">
                                 <Field label="Requisitos (opcional)">
                                     <textarea
@@ -820,7 +975,7 @@ export default function CompanyCreateJob() {
 
                                 <Field
                                     label="Briefing do turno (opcional)"
-                                    hint="Regras da casa, cardápio, dress code — o freela vê isso no convite."
+                                    hint="Regras da casa, cardápio e roupa. O freela vê isso no convite."
                                 >
                                     <textarea
                                         id="briefing"
@@ -836,7 +991,7 @@ export default function CompanyCreateJob() {
                                     nunca filtra nem desabilita a selecao de ninguem. */}
                                 <Field
                                     label="Certificação exigida (opcional)"
-                                    hint="Ex.: CREF válido, curso de manipulação de alimentos. É só um aviso — não filtra nem bloqueia freelas."
+                                    hint="Ex.: CREF válido, curso de manipulação de alimentos. É só um aviso: não filtra nem bloqueia freelas."
                                 >
                                     <input
                                         id="certification-requirement"
@@ -849,41 +1004,48 @@ export default function CompanyCreateJob() {
                                     />
                                 </Field>
                             </div>
-                        </Card>
+                        </div>
                     )}
                 </section>
 
-                {/* CTA unico. Diz o que falta, em vez de so desabilitar o botao. */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-gray-600">
-                        {!podeEnviar ? `Falta preencher: ${faltas.join(', ')}.` : ''}
-                    </p>
-                    <Button
-                        variant="dark"
-                        size="lg"
-                        onClick={handleSubmit}
-                        loading={loading}
-                        disabled={!podeEnviar}
-                        title={podeEnviar ? undefined : 'Falta preencher: ' + faltas.join(', ')}
-                        iconRight={!loading ? <Check size={18} /> : undefined}
-                        className="w-full sm:w-auto"
-                    >
-                        {loading ? 'Salvando...' : rotuloEnviar}
-                    </Button>
-                </div>
-            </div>
+                {/* CTA unico, sempre à mão acima da barra inferior. Enviar incompleto marca os campos e
+                    leva ao primeiro (handleFormSubmit). */}
+                <ActionBar
+                    summary={
+                        <p role="status">
+                            {!podeEnviar
+                                ? `Falta preencher: ${faltas.slice(0, 3).join(', ')}${faltas.length > 3 ? ` e mais ${faltas.length - 3}` : ''}.`
+                                : [duracaoTrabalho, formData.budget ? formatBRL(Number(formData.budget)) : null].filter(Boolean).join(' · ')}
+                        </p>
+                    }
+                    secondary={isEditing ? <Button variant="secondary" onClick={() => navigate(-1)}>Voltar</Button> : undefined}
+                    primary={
+                        <Button
+                            variant="dark"
+                            size="lg"
+                            type="submit"
+                            data-copilot="empresa.turno-criar.enviar"
+                            loading={loading}
+                            disabled={erroCarga?.modo === 'editar'}
+                            iconRight={!loading ? <Check size={18} /> : undefined}
+                            className="whitespace-nowrap"
+                        >
+                            {rotuloEnviar}
+                        </Button>
+                    }
+                />
+            </form>
 
             {/* Resumo pós-criação de série (R9) — NÃO abre o painel de convite (que assume 1
                 job); convidar continua sendo o fluxo por-ocorrência já existente na agenda. */}
             {createdSeriesSummary && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <Card
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="serie-criada-titulo"
-                        className="w-full max-w-md text-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-black bg-primary-light">
+                <Dialog
+                    labelledBy="serie-criada-titulo"
+                    onClose={() => navigate('/company/jobs')}
+                    dismissable={false}
+                    className="text-center"
+                >
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gray-200 bg-primary-light">
                             <Repeat size={24} className="text-primary" />
                         </div>
                         <h2 id="serie-criada-titulo" className="mb-2 text-2xl font-bold tracking-tight">Série criada!</h2>
@@ -894,19 +1056,17 @@ export default function CompanyCreateJob() {
                         <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/company/jobs')}>
                             Ir para Meus Turnos
                         </Button>
-                    </Card>
-                </div>
+                </Dialog>
             )}
 
             {/* Painel de convite pós-criação */}
             {showInvitePanel && createdJobId && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <Card
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="convidar-freela-titulo"
-                        className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-                    >
+                <Dialog
+                    labelledBy="convidar-freela-titulo"
+                    onClose={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
+                    dismissable={false}
+                    initialFocus="panel"
+                >
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <h2 id="convidar-freela-titulo" className="text-xl font-bold tracking-tight">Convidar freela</h2>
                             <Button
@@ -920,21 +1080,35 @@ export default function CompanyCreateJob() {
                         </div>
 
                         <p className="mb-5 text-sm text-gray-600">
-                            Turno criado! Para confirmar, convide pelo menos um freela do seu elenco — sem convite,
+                            Turno criado! Para confirmar, convide pelo menos um freela do seu elenco. Sem convite,
                             o turno fica parado esperando.
                         </p>
 
                         {teamLoading && (
-                            <div className="space-y-3 animate-pulse">
+                            <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                                 {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-xl" />)}
                             </div>
                         )}
 
-                        {!teamLoading && teamMembers.length === 0 && (
-                            <div className="rounded-2xl border-2 border-dashed border-gray-300 py-8 text-center text-gray-600">
+                        {!teamLoading && (teamError || invitesError) && (
+                            <Alert
+                                tone="warning"
+                                role="alert"
+                                action={
+                                    <Button variant="secondary" onClick={() => { refreshTeam(); refreshInvites(); }}>
+                                        Tentar de novo
+                                    </Button>
+                                }
+                            >
+                                {teamError ? 'Não conseguimos carregar o seu elenco.' : 'Não conseguimos conferir quem já foi convidado.'}
+                            </Alert>
+                        )}
+
+                        {!teamLoading && !teamError && teamMembers.length === 0 && (
+                            <div className="rounded-2xl border border-dashed border-gray-300 py-8 text-center text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-40" />
                                 <p className="text-sm font-bold">Seu elenco está vazio.</p>
-                                <p className="mt-1 text-xs">Adicione freelas em <strong>Meu Elenco</strong> antes de criar turnos.</p>
+                                <p className="mt-1 text-xs">O turno já foi criado. Adicione freelas em <strong>Meu Elenco</strong> para poder chamar.</p>
                                 <Button variant="dark" onClick={() => navigate('/company/team')} className="mt-4">
                                     Ir para Meu Elenco
                                 </Button>
@@ -954,7 +1128,7 @@ export default function CompanyCreateJob() {
                                 iconLeft={<Megaphone size={18} />}
                                 className="mb-4"
                             >
-                                Chamar vários de uma vez — 1º que aceitar fica
+                                Chamar vários: o 1º que aceitar fica
                             </Button>
                             <p className="mb-3 text-center text-xs text-gray-600">ou convide um a um</p>
 
@@ -963,8 +1137,8 @@ export default function CompanyCreateJob() {
                                     const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
                                     const isInviting = invitingWorkerId === member.worker.id;
                                     return (
-                                        <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border-2 border-gray-200 p-3">
-                                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
+                                        <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
+                                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
                                                 {avatarUrl ? (
                                                     <img src={avatarUrl} alt={member.worker.full_name} className="h-full w-full object-cover" />
                                                 ) : (
@@ -976,11 +1150,11 @@ export default function CompanyCreateJob() {
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-sm font-bold">{member.worker.full_name}</p>
                                                 {member.worker.primary_role && (
-                                                    <p className="truncate text-xs text-gray-600">{member.worker.primary_role}</p>
+                                                    <p className="truncate text-xs text-gray-600">{roleLabel(member.worker.primary_role)}</p>
                                                 )}
                                             </div>
-                                            {sentInvites.some((inv) => inv.worker_id === member.worker.id) ? (
-                                                <span className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary-light px-4 text-xs font-bold text-primary">
+                                            {invitedWorkerIds.includes(member.worker.id) ? (
+                                                <span className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary-light px-4 text-xs font-bold text-primary-dark">
                                                     <Check size={14} /> Convidado
                                                 </span>
                                             ) : (
@@ -999,7 +1173,7 @@ export default function CompanyCreateJob() {
                                 })}
                             </div>
 
-                            {sentInvites.length > 0 ? (
+                            {invitedWorkerIds.length > 0 ? (
                                 <Button
                                     variant="secondary"
                                     size="lg"
@@ -1007,7 +1181,7 @@ export default function CompanyCreateJob() {
                                     onClick={() => { setShowInvitePanel(false); navigate('/company/dashboard'); }}
                                     className="mt-5"
                                 >
-                                    Concluir — {sentInvites.length} convite{sentInvites.length > 1 ? 's' : ''} enviado{sentInvites.length > 1 ? 's' : ''}
+                                    Concluir: {invitedWorkerIds.length} convite{invitedWorkerIds.length > 1 ? 's' : ''} enviado{invitedWorkerIds.length > 1 ? 's' : ''}
                                 </Button>
                             ) : (
                                 <p className="mt-5 text-center text-xs text-gray-600">
@@ -1016,8 +1190,7 @@ export default function CompanyCreateJob() {
                             )}
                             </>
                         )}
-                    </Card>
-                </div>
+                </Dialog>
             )}
         </div>
     );

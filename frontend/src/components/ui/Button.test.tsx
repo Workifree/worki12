@@ -25,25 +25,37 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveClass(cls)
   })
 
-  it('variantes com moldura mantêm borda preta 2px e sombra offset (Article 13)', () => {
+  it('primário (dark/primary) tem borda 1,5px preta e a ÚNICA sombra (brutal-xs)', () => {
     render(<Button variant="dark">Ok</Button>)
     const btn = screen.getByRole('button')
-    expect(btn).toHaveClass('border-2', 'border-black', 'rounded-xl', 'font-bold')
-    expect(btn.className).toContain('shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]')
+    expect(btn).toHaveClass('border-ink', 'border-black', 'rounded-xl', 'font-semibold', 'shadow-brutal-xs')
+    expect(btn.className).not.toContain('border-2')
   })
 
-  it('tamanho md (padrão) tem h-11 = alvo de toque 44px', () => {
+  it.each(['secondary', 'ghost', 'danger', 'dangerOutline'] as const)('%s é plano (sem sombra)', (variant) => {
+    render(<Button variant={variant}>Ok</Button>)
+    const btn = screen.getByRole('button')
+    expect(btn).toHaveClass('border-ink')
+    expect(btn.className).not.toMatch(/shadow-brutal/)
+  })
+
+  it('tamanho md (padrão) tem min-h-11 = alvo de toque 44px', () => {
     render(<Button>Ok</Button>)
-    expect(screen.getByRole('button')).toHaveClass('h-11')
+    expect(screen.getByRole('button')).toHaveClass('min-h-11')
   })
 
   it.each([
-    ['sm', 'h-9'],
-    ['md', 'h-11'],
-    ['lg', 'h-12'],
+    ['sm', 'min-h-9'],
+    ['md', 'min-h-11'],
+    ['lg', 'min-h-12'],
   ] as const)('tamanho %s aplica %s', (size, cls) => {
     render(<Button size={size}>Ok</Button>)
     expect(screen.getByRole('button')).toHaveClass(cls)
+  })
+
+  it('sm cresce para 44px em tela de toque', () => {
+    render(<Button size="sm">Ok</Button>)
+    expect(screen.getByRole('button')).toHaveClass('[@media(pointer:coarse)]:min-h-11')
   })
 
   it('não usa caixa-alta por padrão; uppercase é opt-in', () => {
@@ -145,7 +157,6 @@ describe('Button — contraste e movimento', () => {
     render(<Button className="h-14 px-0">Ok</Button>)
     const btn = screen.getByRole('button')
     expect(btn).toHaveClass('h-14', 'px-0')
-    expect(btn).not.toHaveClass('h-11')
     expect(btn).not.toHaveClass('px-5')
   })
 })

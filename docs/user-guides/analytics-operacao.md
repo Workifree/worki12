@@ -10,7 +10,7 @@ O painel **Analytics de Operação** (`/company/operacao`) traz os números que 
 
 ## Acessando
 
-No menu lateral da empresa, clique em **Operação** (ícone de gráfico de barras).
+No menu lateral da empresa, clique em **Relatórios** e escolha a aba **Operação**. No celular: **Gestão → Relatórios → Operação**.
 
 ---
 

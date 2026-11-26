@@ -1,0 +1,8 @@
+{
+  "name": "worki-galeria-telas",
+  "private": true,
+  "type": "module",
+  "description": "Galeria de estados do Worki: fotografa as telas com Supabase falso, sem tocar o banco real.",
+  "scripts": { "galeria": "node run.mjs" },
+  "devDependencies": { "playwright-core": "1.55.0" }
+}

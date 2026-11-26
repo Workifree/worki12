@@ -10,8 +10,8 @@ Novo sistema de gerenciamento de conexões bilaterais no Worki — você constr�
 
 ### Acessar "Meu Elenco"
 
-1. Vá para o menu **"Empresa"**
-2. Clique em **"Meu Elenco"** (ou **Team** em inglês)
+1. No menu, clique em **"Elenco"**
+2. A aba **"Meu Elenco"** já vem aberta (a outra é **"Indicações"**)
 3. Você vê sua lista atual
 
 ### Adicionar Freelancer ao Elenco
@@ -163,7 +163,7 @@ Empresas te adicionam de 3 formas (mencionadas acima). Quando um convite chega:
 
 **Seu código QR único** identifica você no Worki:
 
-1. Vá para **"Meu Perfil"**
+1. Abra o seu **perfil** (**Ver meu perfil** no rodapé do menu; no celular, a sua foto no topo)
 2. Clique no ícone **QR** (canto superior)
 3. **Compartilhe** — é seguro (não expõe dados, só sua identidade no Worki)
 4. Empresas podem:
@@ -246,7 +246,4 @@ R: Sim, é **seguro**! O QR só identifica seu perfil no Worki — não expõe C
 
 ## Suporte
 
-Dúvidas?
-- **Chat no app** — fale com o time Worki
-- **E-mail:** [suporte@worki.com]
-- **Horário:** Segunda a sexta, 9h–18h (horário de Brasília)
+O canal de atendimento do Worki ainda será publicado. Enquanto isso, consulte a tela **Ajuda** do app.

@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../lib/logger';
 import { Card } from './ui';
+import ErroDeCarga from './ErroDeCarga';
 
 interface ReviewRow {
     id: string;
@@ -54,6 +55,8 @@ export default function ProfileReviews({
 }) {
     const [reviews, setReviews] = useState<ReviewRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let active = true;
@@ -62,6 +65,7 @@ export default function ProfileReviews({
         void (async () => {
             if (!reviewedId) { setLoading(false); return; }
             setLoading(true);
+            setFailed(false);
             try {
                 const { data, error } = await supabase.rpc('get_profile_reviews', {
                     p_reviewed_id: reviewedId,
@@ -89,12 +93,13 @@ export default function ProfileReviews({
                 })));
             } catch (error) {
                 logError('ProfileReviews', error);
+                if (active) setFailed(true);
             } finally {
                 if (active) setLoading(false);
             }
         })();
         return () => { active = false; };
-    }, [reviewedId, reviewerRole]);
+    }, [reviewedId, reviewerRole, reloadKey]);
 
     return (
         <Card as="section" className="mt-6">
@@ -103,17 +108,19 @@ export default function ProfileReviews({
             </h3>
 
             {loading ? (
-                <div className="space-y-3 animate-pulse">
+                <div className="space-y-3 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                     {[...Array(2)].map((_, i) => <div key={i} className="h-20 bg-gray-200 rounded-xl" />)}
                 </div>
+            ) : failed ? (
+                <ErroDeCarga onRetry={() => setReloadKey((k) => k + 1)} mensagem="Não foi possível carregar as avaliações." />
             ) : reviews.length === 0 ? (
-                <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+                <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
                     Ainda sem avaliações. Elas aparecem aqui após turnos concluídos.
                 </p>
             ) : (
                 <div className="space-y-3">
                     {reviews.map((r) => (
-                        <div key={r.id} className="border-2 border-gray-200 rounded-xl p-4">
+                        <div key={r.id} className="border border-gray-200 rounded-xl p-4">
                             <div className="flex items-center justify-between gap-3 mb-1">
                                 <span className="font-bold text-sm truncate">{r.reviewer_name}</span>
                                 <div className="flex items-center gap-0.5 flex-shrink-0">

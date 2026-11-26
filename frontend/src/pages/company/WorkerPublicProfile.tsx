@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Star, Briefcase, Award, Zap, MessageSquare, Phone, Wallet, Copy, Check, Send } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -12,10 +12,14 @@ import WorkerCertificationsPanel from '../../components/company/WorkerCertificat
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
-import { Button, Card } from '../../components/ui';
+import { Avatar, Button, Card, ErrorState } from '../../components/ui';
+import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
+import type { TeamMember } from '../../types';
+import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
 
 export default function WorkerPublicProfile() {
     const { id } = useParams();
+    const podeUsarChat = useCanUseCompanyChat();
     const navigate = useNavigate();
     const { addToast } = useToast();
     interface WorkerProfileData {
@@ -59,6 +63,11 @@ export default function WorkerPublicProfile() {
     const [reviews, setReviews] = useState<ReviewData[]>([]);
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    // Avaliações ou histórico que não carregaram não podem virar "não tem".
+    const [reviewsError, setReviewsError] = useState(false);
+    const [historyError, setHistoryError] = useState(false);
+    const [inviting, setInviting] = useState(false);
     // R1.2: application entre ESTA empresa e este freela — habilita o botão "Mensagem"
     // (a Conversation é amarrada a um application_uuid; sem application, não há para onde criar).
     const [applicationId, setApplicationId] = useState<string | null>(null);
@@ -85,7 +94,13 @@ export default function WorkerPublicProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProfile usa state setters estaveis, so precisa re-executar quando id muda
     }, [id]);
 
+    const retryProfile = () => {
+        setLoading(true);
+        void fetchProfile();
+    };
+
     const fetchProfile = async () => {
+        setLoadError(false);
         try {
             // Fetch Profile — .maybeSingle() (não .single()): desde a migration
             // 20260816120000_workers_select_by_relationship.sql a policy de SELECT em `workers`
@@ -121,11 +136,14 @@ export default function WorkerPublicProfile() {
             setProfile(mappedProfile);
 
             // Fetch Reviews
-            const { data: reviewsData } = await supabase
+            const { data: reviewsData, error: reviewsFailure } = await supabase
                 .from('reviews')
                 .select('*')
                 .eq('reviewed_id', id)
                 .order('created_at', { ascending: false });
+
+            if (reviewsFailure) logError('WorkerPublicProfile.reviews', reviewsFailure);
+            setReviewsError(!!reviewsFailure);
 
             if (reviewsData && reviewsData.length > 0) {
                 // Manually fetch company names (as per existing logic)
@@ -148,12 +166,14 @@ export default function WorkerPublicProfile() {
             }
 
             // Fetch History (Completed Jobs)
-            const { data: historyData } = await supabase
+            const { data: historyData, error: historyFailure } = await supabase
                 .from('applications')
                 .select('*, job:jobs(title, company:companies(name))')
                 .eq('worker_id', id)
                 .in('status', ['hired', 'completed'])
                 .limit(5);
+            if (historyFailure) logError('WorkerPublicProfile.history', historyFailure);
+            setHistoryError(!!historyFailure);
             setHistory(historyData || []);
 
             // R1.2/R10: application entre a empresa autenticada e este freela — sem isso o
@@ -182,6 +202,7 @@ export default function WorkerPublicProfile() {
 
         } catch (error) {
             logError('Erro ao carregar perfil do worker:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -236,7 +257,7 @@ export default function WorkerPublicProfile() {
     };
 
     if (loading) return (
-        <div className="max-w-4xl mx-auto p-8 animate-pulse">
+        <div className="max-w-4xl mx-auto p-8 animate-pulse" role="status"><span className="sr-only">Carregando</span>
             <div className="flex items-center gap-6 mb-8">
                 <div className="w-20 h-20 bg-gray-200 rounded-full" />
                 <div className="flex-1 space-y-3">
@@ -249,12 +270,20 @@ export default function WorkerPublicProfile() {
             </div>
         </div>
     );
+    if (!profile && loadError) return (
+        <div className="max-w-4xl mx-auto p-4 sm:p-8">
+            <Button variant="ghost" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4">
+                Voltar
+            </Button>
+            <ErrorState title="Não foi possível abrir este perfil agora." onRetry={retryProfile} />
+        </div>
+    );
     if (!profile) return (
         <div className="max-w-4xl mx-auto p-8">
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
                 Voltar
             </Button>
-            <div className="text-center text-gray-700 font-semibold border-2 border-dashed border-gray-300 rounded-2xl py-16 px-4">
+            <div className="text-center text-gray-700 font-semibold border border-dashed border-gray-300 rounded-2xl py-16 px-4">
                 Não foi possível abrir este perfil agora.<br />
                 <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
             </div>
@@ -262,7 +291,7 @@ export default function WorkerPublicProfile() {
     );
 
     return (
-        <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div className="max-w-4xl mx-auto pb-20">
             <PageMeta
               title={profile ? profile.full_name : 'Perfil do Profissional'}
               description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Worki.` : undefined}
@@ -281,55 +310,66 @@ export default function WorkerPublicProfile() {
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8 relative">
                     {/* Avatar */}
                     <div className="absolute -top-14 left-5 sm:-top-16 sm:left-8">
-                        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex items-center justify-center">
-                            {profile.photo_url ? (
-                                <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="text-4xl text-white font-bold">{profile.full_name?.[0]}</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end pt-4">
-                        <div className="flex flex-col items-end gap-1">
-                            <Button
-                                variant="secondary"
-                                onClick={() => void handleChat()}
-                                disabled={!applicationId}
-                                loading={chatLoading}
-                                iconLeft={<MessageSquare size={18} />}
-                            >
-                                Mensagem
-                            </Button>
-                            {!applicationId && (
-                                <span className="text-xs text-gray-600 max-w-[200px] text-right">Disponível após o primeiro turno com este freela.</span>
-                            )}
-                        </div>
+                        <Avatar size="lg" name={profile.full_name} src={profile.photo_url} className="h-28 w-28 text-4xl ring-4 ring-white sm:h-32 sm:w-32" />
                     </div>
 
                     {/* Basic Info */}
-                    <div className="mt-4">
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{profile.full_name}</h1>
+                    {/* pt = metade do avatar que invade o corpo do cartão */}
+                    <div className="pt-16 sm:pt-20">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight [overflow-wrap:anywhere]">{profile.full_name}</h1>
+                        {(hasTeamConnection || podeUsarChat) && (
+                            <div className="mt-3 mb-2">
+                                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:flex">
+                                    {hasTeamConnection && (
+                                        <Button
+                                            variant="dark"
+                                            className="!px-3"
+                                            onClick={() => setInviting(true)}
+                                            iconLeft={<Send size={16} />}
+                                            data-copilot="empresa.freela.convidar-turno"
+                                        >
+                                            Convidar para turno
+                                        </Button>
+                                    )}
+                                    {podeUsarChat && (
+                                        <Button
+                                            variant="secondary"
+                                            className="!px-3"
+                                            onClick={() => void handleChat()}
+                                            disabled={!applicationId}
+                                            loading={chatLoading}
+                                            iconLeft={<MessageSquare size={18} />}
+                                        >
+                                            Mensagem
+                                        </Button>
+                                    )}
+                                </div>
+                                {podeUsarChat && !applicationId && (
+                                    <p className="mt-1 text-xs text-gray-600">Mensagem: disponível após o primeiro turno com este freela.</p>
+                                )}
+                            </div>
+                        )}
                         <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Worki'}</p>
 
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
                             <span className="flex items-center gap-2"><MapPin size={18} /> {profile.location || 'Localização não definida'}</span>
-                            <span className="flex items-center gap-2"><Calendar size={18} /> Desde {profile.joined_at ? format(new Date(profile.joined_at), 'MMMM yyyy', { locale: ptBR }) : 'N/A'}</span>
+                            {profile.joined_at && (
+                                <span className="flex items-center gap-2"><Calendar size={18} /> Desde {format(new Date(profile.joined_at), 'MMMM yyyy', { locale: ptBR })}</span>
+                            )}
                         </div>
                     </div>
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Zap size={14} /> Nível</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.level}</div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Briefcase size={14} /> Turnos</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.completed_jobs} <span className="text-xs font-normal text-gray-600">concluídos</span></div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Star size={14} /> Avaliação</div>
                             <div className="text-2xl font-bold tabular-nums text-yellow-500">
                                 {(profile.reviews_count ?? 0) > 0 && (profile.rating_average ?? 0) > 0
@@ -338,8 +378,8 @@ export default function WorkerPublicProfile() {
                             </div>
                             <p className="text-xs text-gray-600">({profile.reviews_count === 1 ? '1 avaliação' : `${profile.reviews_count ?? 0} avaliações`})</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
-                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP Total</div>
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-2 text-gray-600 font-semibold mb-1 text-xs"><Award size={14} /> XP total</div>
                             <div className="text-2xl font-bold tabular-nums">{profile.xp}</div>
                         </div>
                     </div>
@@ -360,11 +400,11 @@ export default function WorkerPublicProfile() {
                         registrado no Worki), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
-                    <div className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                    <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
                         <h3 className="font-bold text-gray-800 text-sm mb-3">Contato e pagamento</h3>
                         {hasTeamConnection ? (
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
                                         <Phone size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.phone || 'Telefone não informado'}</span>
@@ -380,7 +420,7 @@ export default function WorkerPublicProfile() {
                                         </Button>
                                     )}
                                 </div>
-                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border-2 border-gray-200">
+                                <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-gray-200">
                                     <span className="flex items-center gap-2 text-sm font-bold text-gray-700 min-w-0">
                                         <Wallet size={16} className="flex-shrink-0 text-gray-500" />
                                         <span className="truncate">{profile.pix_key || 'Chave PIX não informada'}</span>
@@ -398,7 +438,7 @@ export default function WorkerPublicProfile() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-sm text-gray-700 bg-white p-3 rounded-xl border-2 border-gray-200 flex flex-col items-start gap-2">
+                            <div className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-200 flex flex-col items-start gap-2">
                                 <p>
                                     {connectionStatus === 'pending'
                                         ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
@@ -418,10 +458,10 @@ export default function WorkerPublicProfile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* History */}
                 <div>
-                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico Recente</h3>
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Briefcase size={20} /> Histórico recente</h3>
                     <div className="space-y-3">
-                        {history.length > 0 ? history.map((h) => (
-                            <div key={h.id} className="p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
+                        {historyError ? <ErrorState title="Não foi possível carregar o histórico." onRetry={retryProfile} /> : history.length > 0 ? history.map((h) => (
+                            <div key={h.id} className="p-4 rounded-xl border border-gray-200 flex justify-between items-center gap-3 bg-gray-50/50">
                                 <div className="min-w-0">
                                     <h4 className="font-bold text-sm">{h.job?.title}</h4>
                                     <p className="text-xs text-gray-600">{h.job?.company?.name || 'Empresa'}</p>
@@ -438,8 +478,8 @@ export default function WorkerPublicProfile() {
                 <div>
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare size={20} /> Comentários</h3>
                     <div className="space-y-3">
-                        {reviews.length > 0 ? reviews.map((r) => (
-                            <div key={r.id} className="bg-white p-4 rounded-xl border-2 border-gray-200">
+                        {reviewsError ? <ErrorState title="Não foi possível carregar os comentários." onRetry={retryProfile} /> : reviews.length > 0 ? reviews.map((r) => (
+                            <div key={r.id} className="bg-white p-4 rounded-xl border border-gray-200">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="font-bold text-sm">{r.company?.name || 'Empresa'}</span>
                                     <div className="flex text-yellow-400">
@@ -467,6 +507,14 @@ export default function WorkerPublicProfile() {
             {/* F8 — certificações auto-declaradas do freela + treinamentos internos registrados
                 pela empresa. `id` é garantido aqui: `!profile` já retornou acima. */}
             {id && <WorkerCertificationsPanel workerId={id} />}
+
+            {inviting && (
+                <InviteToShiftModal
+                    member={{ worker: { id: profile.id, full_name: profile.full_name } } as TeamMember}
+                    onClose={() => setInviting(false)}
+                    onInvited={retryProfile}
+                />
+            )}
 
         </div>
     );

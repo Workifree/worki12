@@ -1,15 +1,18 @@
-import { useState, type MouseEvent } from 'react';
+import { useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { useModalDismiss } from '../hooks/useModalDismiss';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Star, MapPin, CheckCircle2, XCircle, Loader2, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
+import { Star, MapPin, CheckCircle2, XCircle, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
-import { Button, Card, PageHeader } from '../components/ui';
+import { Avatar, Button, Card, Menu, PageHeader } from '../components/ui';
+import SectionTabs from '../components/SectionTabs';
 import { useWorkerStores } from '../hooks/useTeamConnections';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { workerTeamSources } from '../lib/realtime/liveSources';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { TeamConnectionService } from '../services/teamConnectionService';
 import type { MyStore, TeamConnection } from '../types';
+import { Dialog } from '../components/ui/Dialog';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de empresa aceita
@@ -30,8 +33,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
 
   // Link transitivo: já sou conectado a essa empresa → posso repassar o link
   // dela pra outro freela se conectar, sem precisar pedir à empresa.
-  const handleShareLink = async (e: MouseEvent) => {
-    e.stopPropagation();
+  const handleShareLink = async () => {
     // `connection.company_id` é a FK garantida (não-nula); `company.id` no
     // embed é opcional no tipo (CompanyProfile.id?), então preferimos a FK.
     const gerado = await TeamConnectionService.generateInviteToken(connection.company_id);
@@ -68,15 +70,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
       className="flex items-center gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       {/* Logo */}
-      <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-        {company.logo_url ? (
-          <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-xl">
-            {name[0]?.toUpperCase() ?? '?'}
-          </div>
-        )}
-      </div>
+      <Avatar kind="company" size="md" name={name} src={company.logo_url} />
 
       {/* Info */}
       <div className="flex-1 min-w-0">
@@ -98,34 +92,22 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
             </span>
           )}
           {company.address && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-pill max-w-full">
+            <span className="inline-flex items-center gap-1 text-xs text-gray-600 max-w-full">
               <MapPin size={12} className="flex-shrink-0" /> <span className="truncate">{company.address}</span>
             </span>
           )}
         </div>
       </div>
 
-      {/* Ações: repassar link / sair-bloquear */}
-      <div className="flex flex-col gap-1 flex-shrink-0">
-        <button
-          type="button"
-          onClick={handleShareLink}
-          aria-label={`Repassar link da empresa ${name}`}
-          title="Repassar link desta empresa para outro freela"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-primary hover:bg-primary-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-        >
-          {linkCopied ? <Check size={20} /> : <Share2 size={20} />}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onLeave(connection.id); }}
-          disabled={leaving}
-          aria-label={`Sair da empresa ${name}`}
-          title="Sair / bloquear empresa"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-        >
-          {leaving ? <Loader2 className="animate-spin" size={20} /> : <LogOut size={20} />}
-        </button>
+      {/* Ações: a destrutiva fica no menu, nunca exposta no cartão. */}
+      <div className="flex-shrink-0">
+        <Menu
+          label={`Mais opções de ${name}`}
+          items={[
+            { label: 'Compartilhar link da empresa', icon: linkCopied ? Check : Share2, onSelect: () => void handleShareLink() },
+            { label: 'Sair da empresa', icon: LogOut, onSelect: () => onLeave(connection.id), danger: true, disabled: leaving },
+          ]}
+        />
       </div>
     </Card>
   );
@@ -148,22 +130,14 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
   const isResponding = respondingId === connection.id;
 
   return (
-    <Card as="article" padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+    <Card as="article" padding="sm" tone="highlight">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
-          {company?.logo_url ? (
-            <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Building2 size={20} className="text-gray-600" />
-            </div>
-          )}
-        </div>
+        <Avatar kind="company" name={name} src={company?.logo_url} />
         <div className="min-w-0">
           <p className="text-xs text-gray-600">Convite de</p>
           <p className="font-bold truncate">{name}</p>
         </div>
-        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary text-xs font-bold px-2.5 py-1 rounded-pill">
+        <span className="ml-auto flex-shrink-0 bg-primary-light text-primary-dark text-xs font-bold px-2.5 py-1 rounded-pill">
           Novo
         </span>
       </div>
@@ -204,7 +178,12 @@ export default function CarteiraClientes() {
   const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
-  const fecharPeloFundo = useModalDismiss(() => { if (confirmLeaveId) setConfirmLeaveId(null); });
+
+  useLiveRefresh({
+    sources: user ? workerTeamSources(user.id) : [],
+    onRefresh: () => refresh({ silent: true }),
+    paused: loading || !!respondingId || !!confirmLeaveId,
+  });
 
   const handleAccept = async (connectionId: string) => {
     setRespondingId(connectionId);
@@ -255,7 +234,7 @@ export default function CarteiraClientes() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-24">
+      <div className="max-w-4xl mx-auto space-y-6 animate-pulse pb-24" role="status"><span className="sr-only">Carregando</span>
         <div className="h-9 bg-gray-200 rounded-xl w-56" />
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -269,14 +248,15 @@ export default function CarteiraClientes() {
   const isEmpty = myStores.length === 0 && pendingConnections.length === 0;
 
   return (
-    <div className="max-w-4xl mx-auto pb-24 font-sans text-accent animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-4xl mx-auto pb-24 font-sans text-accent">
       <PageMeta
-        title="Minhas Empresas"
+        title="Minhas empresas"
         description="Acompanhe as empresas que têm você no elenco e responda a convites de novas empresas."
       />
 
+      <SectionTabs section="empresas" role="worker" />
       <PageHeader
-        title="Minhas Empresas"
+        title="Minhas empresas"
         subtitle={
           `${myStores.length} empresa${myStores.length !== 1 ? 's' : ''}` +
           (pendingConnections.length > 0
@@ -318,11 +298,11 @@ export default function CarteiraClientes() {
       {/* Empresas aceitas */}
       {myStores.length > 0 && (
         <section className="mb-8">
-          {/* A página já se chama "Minhas Empresas": o título da seção só entra quando há
+          {/* A página já se chama "Minhas empresas": o título da seção só entra quando há
               convites pendentes acima, para separar os dois grupos. */}
           {pendingConnections.length > 0 && (
             <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <Users size={18} /> Minhas Empresas
+              <Users size={18} /> No elenco delas
             </h2>
           )}
           <div className="grid grid-cols-1 gap-4">
@@ -340,7 +320,7 @@ export default function CarteiraClientes() {
 
       {/* Empty state */}
       {isEmpty && (
-        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+        <div className="text-center py-16 px-4 rounded-2xl bg-gray-100">
           <Users size={40} className="mx-auto mb-4 text-gray-400" />
           <h3 className="text-lg font-bold mb-2">Você ainda não tem empresas</h3>
           <p className="text-sm text-gray-600 max-w-sm mx-auto">
@@ -354,27 +334,27 @@ export default function CarteiraClientes() {
 
       {/* Modal de confirmação: sair/bloquear */}
       {confirmLeaveId && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={fecharPeloFundo}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sair-empresa-titulo"
-            className="bg-white rounded-2xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm p-6"
-          >
-            <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2">Sair desta empresa?</h3>
+        <Dialog
+            labelledBy="sair-empresa-titulo"
+            onClose={() => setConfirmLeaveId(null)}
+            className="max-w-sm"
+        >
+            <h3 id="sair-empresa-titulo" className="text-lg font-bold mb-2 [overflow-wrap:anywhere]">
+              Sair de {myStores.find((s) => s.connection.id === confirmLeaveId)?.company.name ?? 'esta empresa'}?
+            </h3>
             <p className="text-sm text-gray-600 mb-6">
-              Você não fará mais parte do elenco dessa empresa. Esta ação não pode ser desfeita.
+              Você deixa o elenco e não recebe novos convites dela. Seus recibos continuam em Recebimentos.
+              Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setConfirmLeaveId(null)}>
                 Voltar
               </Button>
               <Button variant="danger" className="flex-1" onClick={handleConfirmLeave}>
-                Sair
+                Sair da empresa
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

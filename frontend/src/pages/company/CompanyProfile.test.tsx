@@ -130,10 +130,10 @@ async function renderAndEnterEditMode() {
     expect(screen.getAllByText('Divino Fogão').length).toBeGreaterThan(0)
   })
 
-  fireEvent.click(screen.getByRole('button', { name: /Editar Perfil/i }))
+  fireEvent.click(screen.getByRole('button', { name: /Editar perfil/i }))
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: 'Salvar Alterações' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Salvar alterações' })).toBeInTheDocument()
   })
 
   return mocks
@@ -148,7 +148,7 @@ describe('CompanyProfile — cascata de fallback do LM-5 (guarda de vínculo)', 
     const { mockUpdate } = await renderAndEnterEditMode()
     mockUpdate.mockReturnValueOnce(updateChain({ data: [{ id: 'company-user-1' }], error: null }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Perfil atualizado com sucesso!', 'success')
@@ -178,7 +178,7 @@ describe('CompanyProfile — cascata de fallback do LM-5 (guarda de vínculo)', 
       )
       .mockReturnValueOnce(updateChain({ data: [{ id: 'company-user-1' }], error: null }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Perfil atualizado com sucesso!', 'success')
@@ -217,7 +217,7 @@ describe('CompanyProfile — cascata de fallback do LM-5 (guarda de vínculo)', 
       )
       .mockReturnValueOnce(updateChain({ data: [{ id: 'company-user-1' }], error: null }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Perfil atualizado com sucesso!', 'success')

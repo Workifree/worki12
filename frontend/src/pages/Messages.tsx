@@ -1,14 +1,23 @@
 
 import { useEffect, useState, useRef } from 'react';
+import ChatComposerField from '../components/ChatComposerField';
 import { supabase } from '../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, Briefcase, Check, CheckCheck } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MessageSquare, Send, ArrowLeft, Check, CheckCheck } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import type { MessagesLocationState } from '../lib/shiftChat';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
-import { Button, FIELD_CONTROL_CLASS, PageHeader } from '../components/ui'
+import { Avatar, Button, EmptyState, PageHeader } from '../components/ui'
+import { checkSession } from '../lib/authSession';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { conversationListSources } from '../lib/realtime/liveSources';
+import { mergeMessages } from '../lib/mergeMessages';
+import { activeShiftLabel, type ShiftAttendanceLike } from '../lib/shiftProgress'
+import { TONE_CLASS, getStatus, statusLabel } from '../lib/statusLabels';
 
 interface ConversationItem {
     id: string;
@@ -21,6 +30,7 @@ interface ConversationItem {
     last_message_at?: string;
     unread_count: number;
     status: string;
+    attendance?: ShiftAttendanceLike;
 }
 
 interface Message {
@@ -40,18 +50,27 @@ export default function Messages() {
 
     const [loading, setLoading] = useState(true);
     const [erroCarga, setErroCarga] = useState(false);
+    // Falha ao contar não lidas não pode parecer "nenhuma mensagem nova".
+    const [erroNaoLidas, setErroNaoLidas] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
+    // De qual conversa o histórico já chegou: antes disso é "carregando", não "vazio".
+    const [messagesFor, setMessagesFor] = useState<string | null>(null);
     const [erroMensagens, setErroMensagens] = useState(false);
     const [reloadMensagens, setReloadMensagens] = useState(0);
     const [currentUser, setCurrentUser] = useState<string | null>(null);
     const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
-    const [newMessage, setNewMessage] = useState('');
+    // Texto pronto vindo de outra tela (ex.: "Não recebi" no recibo): só preenche, quem envia é a pessoa.
+    const draft = (useLocation().state as MessagesLocationState | null)?.draft ?? '';
+    const [newMessage, setNewMessage] = useState(draft);
     const [sending, setSending] = useState(false);
+    // Trava do envio por ref: o campo NÃO é desabilitado (desabilitar fecha o teclado no celular).
+    const sendingRef = useRef(false);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const { addToast } = useToast();
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const logRef = useRef<HTMLDivElement>(null);
     const presenceChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -95,16 +114,38 @@ export default function Messages() {
         }
     };
 
+    // Quem subiu para ler o histórico não é puxado para o fim quando chega algo.
+    const stickToEndRef = useRef(true);
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const log = logRef.current;
+        if (log && (stickToEndRef.current || messages[messages.length - 1]?.is_mine)) log.scrollTop = log.scrollHeight;
     }, [messages]);
 
-    // Load conversations and unread counts
+    const openId = selectedConversation?.id ?? null;
+    // Conversa aberta agora: leitura atrasada não pode cair em outra conversa.
+    const openConversationRef = useRef<string | null>(null);
+    openConversationRef.current = openId;
     useEffect(() => {
-        const loadData = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return navigate('/login');
+        stickToEndRef.current = true;
+    }, [openId]);
+
+    const beginList = useLatestResponse();
+
+    // Load conversations and unread counts. `silent` = recarga ao vivo: falha mantém a tela e a
+    // conversa aberta não é reescolhida pela URL.
+    const loadData = async (silent = false) => {
+            const claim = beginList();
+            const session = await checkSession();
+            if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
+            if (session.status === 'unavailable') {
+                logError('Messages.session', session.error);
+                if (silent) return;
+                setErroCarga(true);
+                setLoading(false);
+                return;
+            }
+            const user = session.user;
             setCurrentUser(user.id);
 
             // Fetch conversations with job and company info
@@ -118,6 +159,9 @@ export default function Messages() {
                     application:applications!application_uuid (
                         id,
                         status,
+                        worker_checkin_at,
+                        company_checkin_confirmed_at,
+                        company_checkout_confirmed_at,
                         worker_id,
                         job:jobs (
                             title,
@@ -133,6 +177,7 @@ export default function Messages() {
 
             if (error) {
                 logError('Error fetching conversations:', error);
+                if (silent) return;
                 setErroCarga(true);
                 setLoading(false);
                 return;
@@ -148,6 +193,9 @@ export default function Messages() {
                 application: {
                     id: string;
                     status: string;
+                    worker_checkin_at?: string | null;
+                    company_checkin_confirmed_at?: string | null;
+                    company_checkout_confirmed_at?: string | null;
                     worker_id: string;
                     job: {
                         title: string;
@@ -170,12 +218,18 @@ export default function Messages() {
             let unreadCounts: Record<string, number> = {};
 
             if (conversationIds.length > 0) {
-                const { data: unreadData } = await supabase
+                const { data: unreadData, error: unreadError } = await supabase
                     .from('Message')
                     .select('conversationid')
                     .in('conversationid', conversationIds)
                     .neq('senderid', user.id) // Messages sent by OTHERS
                     .is('read_at', null);     // That are NOT read
+
+                if (unreadError) {
+                    logError('Messages.unread', unreadError);
+                    if (silent) return;
+                }
+                setErroNaoLidas(!!unreadError);
 
                 if (unreadData) {
                     unreadCounts = unreadData.reduce((acc: Record<string, number>, curr: { conversationid: string }) => {
@@ -194,10 +248,20 @@ export default function Messages() {
                 company_name: c.application?.job?.company?.name || 'Empresa',
                 company_logo: c.application?.job?.company?.logo_url ?? undefined,
                 status: c.application?.status || 'pending',
+                attendance: c.application ?? undefined,
                 last_message: undefined,
                 last_message_at: c.createdat,
                 unread_count: unreadCounts[c.id] || 0
             }));
+
+            if (!claim()) return;
+
+            if (silent) {
+                const open = openConversationRef.current;
+                setConversations(convList.map(c => (c.id === open ? { ...c, unread_count: 0 } : c)));
+                setSelectedConversation(prev => (prev ? convList.find(c => c.id === prev.id) ?? prev : prev));
+                return;
+            }
 
             setConversations(convList);
 
@@ -211,20 +275,48 @@ export default function Messages() {
             }
 
             setLoading(false);
-        };
+    };
 
-        loadData();
+    useEffect(() => {
+        void loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData usa setters estáveis; as deps são os gatilhos de recarga
     }, [navigate, selectedConversationId, reloadKey]);
+
+    // Recupera o que o canal da conversa aberta possa ter perdido, mesclando por id.
+    const recoverMessages = async () => {
+        if (!openId || !currentUser || messagesFor !== openId) return;
+        const { data, error } = await supabase
+            .from('Message')
+            .select('*')
+            .eq('conversationid', openId)
+            .order('createdat', { ascending: true });
+        if (error) {
+            logError('Messages.recover', error);
+            return;
+        }
+        if (openConversationRef.current !== openId) return;
+        const rows = ((data || []) as Omit<Message, 'is_mine'>[]).map(m => ({ ...m, is_mine: m.senderid === currentUser }));
+        setMessages(prev => mergeMessages(prev, rows));
+        if (rows.some(m => !m.is_mine && !m.read_at)) void markAsRead(openId, currentUser);
+    };
+
+    useLiveRefresh({
+        sources: conversationListSources(),
+        onRefresh: () => Promise.all([loadData(true), recoverMessages()]),
+        paused: loading,
+    });
 
     // Load messages when conversation is selected
     useEffect(() => {
-        if (!selectedConversation || !currentUser) return;
+        if (!openId || !currentUser) return;
+
+        setErroMensagens(false);
 
         const loadMessages = async () => {
             const { data, error } = await supabase
                 .from('Message')
                 .select('*')
-                .eq('conversationid', selectedConversation.id)
+                .eq('conversationid', openId)
                 .order('createdat', { ascending: true });
 
             if (error) {
@@ -238,21 +330,22 @@ export default function Messages() {
                 ...m,
                 is_mine: m.senderid === currentUser
             })));
+            setMessagesFor(openId);
 
             // Mark as read when opening
-            markAsRead(selectedConversation.id, currentUser);
+            markAsRead(openId, currentUser);
         };
 
         loadMessages();
 
         // Subscribe to realtime updates
         const channel = supabase
-            .channel(`messages:${selectedConversation.id}`)
+            .channel(`messages:${openId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'Message',
-                filter: `conversationid=eq.${selectedConversation.id}`
+                filter: `conversationid=eq.${openId}`
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
@@ -263,13 +356,13 @@ export default function Messages() {
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine) {
-                    markAsRead(selectedConversation.id, currentUser);
+                    markAsRead(openId, currentUser);
                 }
             })
             .subscribe();
 
         // Presence channel for typing indicator
-        const pChannel = supabase.channel(`typing:${selectedConversation.id}`)
+        const pChannel = supabase.channel(`typing:${openId}`)
         pChannel
             .on('presence', { event: 'sync' }, () => {
                 const state = pChannel.presenceState();
@@ -289,11 +382,13 @@ export default function Messages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser, reloadMensagens]);
+        // Pelo id: reler a lista troca o objeto da conversa sem recarregar (nem piscar) o histórico.
+    }, [openId, currentUser, reloadMensagens]);
 
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !selectedConversation || !currentUser) return;
+        if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
 
+        sendingRef.current = true;
         setSending(true);
         const messageContent = newMessage.trim();
         setNewMessage('');
@@ -324,57 +419,32 @@ export default function Messages() {
 
         if (error) {
             logError('Error sending message:', error);
-            setNewMessage(messageContent); // Restore message on error
+            // Devolve o texto sem apagar o que foi digitado enquanto enviava.
+            setNewMessage((atual) => (atual ? `${messageContent} ${atual}` : messageContent));
             addToast('Erro ao enviar mensagem. Tente novamente.', 'error');
         }
 
+        sendingRef.current = false;
         setSending(false);
     };
 
     const handleSelectConversation = (conv: ConversationItem) => {
+        // O texto pronto fala de UM turno: não pode ir junto para outra conversa.
+        if (draft) setNewMessage((atual) => (atual === draft ? '' : atual));
         setSelectedConversation(conv);
         navigate(`/messages?conversation=${conv.id}`, { replace: true });
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'approved':
-            case 'scheduled':
-            case 'hired':
-            case 'in_progress':
-                return 'bg-green-100 text-green-700';
-            case 'declined':
-            case 'cancelled':
-                return 'bg-red-100 text-red-700';
-            case 'rejected':
-                return 'bg-red-100 text-red-700';
-            case 'completed':
-                return 'bg-blue-100 text-blue-700';
-            default:
-                return 'bg-yellow-100 text-yellow-700';
-        }
-    };
+    const getStatusColor = (status: string) => TONE_CLASS[getStatus('application', status).tone];
 
-    const getStatusLabel = (status: string) => {
-        switch (status) {
-            case 'invited': return 'Convite';
-            case 'hired': return 'Contratado';
-            case 'in_progress': return 'Em Andamento';
-            case 'declined':
-            case 'rejected': return 'Recusado';
-            case 'completed': return 'Concluído';
-            case 'pending': return 'Pendente';
-            case 'cancelled': return 'Cancelado';
-            // status interno desconhecido nunca vira badge cru em ingles (N2)
-            default: return 'Turno';
-        }
-    };
+    const getStatusLabel = (status: string, attendance?: ShiftAttendanceLike) =>
+        (attendance ? activeShiftLabel(attendance) : null) ?? statusLabel('application', status);
 
     if (loading) {
         return (
-            <div className="flex flex-col h-[calc(100vh-140px)] max-w-6xl mx-auto animate-pulse">
+            <div className="worki-chat flex flex-col max-w-6xl mx-auto animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-10 bg-gray-200 rounded-xl w-1/4 mb-4" />
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
+                <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
                     <div className="space-y-3">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="h-16 bg-gray-200 rounded-xl" />
@@ -387,126 +457,155 @@ export default function Messages() {
     }
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] font-sans text-accent max-w-6xl mx-auto">
+        <div className="worki-chat flex flex-col font-sans text-accent max-w-6xl mx-auto">
             <PageHeader
                 title="Mensagens"
                 subtitle="Converse com empresas sobre seus turnos."
-                className="!mb-4"
+                className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
-            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            {/* Celular: lista de borda a borda (sem moldura); a partir de md, painel com borda fina. */}
+            <div className="flex-1 flex min-h-0 bg-white -mx-4 sm:-mx-6 md:mx-0 border-y border-gray-200 md:border md:rounded-2xl overflow-hidden">
 
                 {/* Conversations List */}
-                <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Conversas ({conversations.length})</h3>
+                <div className={`w-full md:w-80 md:border-r border-gray-200 flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-sm font-semibold text-gray-900">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto">
+                    {erroNaoLidas && (
+                        <p role="status" className="px-4 py-2 text-xs text-status-warning-fg bg-status-warning-bg">
+                            Não foi possível verificar as mensagens não lidas.
+                        </p>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto" data-copilot-private>
                         {erroCarga ? (
                             <div className="p-4">
                                 <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
                             </div>
                         ) : conversations.length === 0 ? (
-                            <div className="p-6 text-center text-gray-600">
-                                <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
-                                <p className="font-bold">Nenhuma conversa ainda.</p>
-                                <p className="text-sm mt-2">Aceite um convite de turno para iniciar uma conversa.</p>
-                            </div>
+                            <EmptyState
+                                icon={MessageSquare}
+                                title="Nenhuma conversa ainda."
+                                description="Aceite um convite de turno para iniciar uma conversa."
+                            />
                         ) : (
-                            conversations.map(conv => (
-                                <button
-                                    key={conv.id}
-                                    onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-primary' : ''}`}
-                                >
-                                    <div className="flex gap-3 items-start">
-                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            {conv.company_logo ? (
-                                                <img src={conv.company_logo} alt={conv.company_name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <Briefcase size={20} className="text-gray-400" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <h4 className="font-bold text-sm truncate">{conv.company_name}</h4>
-                                                {conv.unread_count > 0 ? (
-                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white tabular-nums">
-                                                        {conv.unread_count}
+                            <ul className="divide-y divide-gray-200">
+                                {conversations.map(conv => {
+                                    const selecionada = selectedConversation?.id === conv.id;
+                                    const quando = conv.last_message_at ? new Date(conv.last_message_at) : null;
+                                    return (
+                                        <li key={conv.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSelectConversation(conv)}
+                                                aria-current={selecionada ? 'true' : undefined}
+                                                className={`flex w-full min-h-16 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selecionada ? 'bg-primary-light' : ''}`}
+                                            >
+                                                <Avatar kind="company" name={conv.company_name} src={conv.company_logo} />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-baseline justify-between gap-2">
+                                                        <span className={`truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'font-semibold text-gray-900'}`}>{conv.company_name}</span>
+                                                        {quando && !isNaN(quando.getTime()) && (
+                                                            <span className="shrink-0 text-xs text-gray-600 tabular-nums">
+                                                                {format(quando, quando.toDateString() === new Date().toDateString() ? 'HH:mm' : 'dd/MM', { locale: ptBR })}
+                                                            </span>
+                                                        )}
                                                     </span>
-                                                ) : (
-                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status)}
+                                                    <span className="mt-0.5 flex items-center justify-between gap-2">
+                                                        <span className={`truncate text-xs ${conv.unread_count > 0 ? 'font-semibold text-black' : 'text-gray-600'}`}>{conv.job_title}</span>
+                                                        {conv.unread_count > 0 ? (
+                                                            <span className="shrink-0 rounded-pill bg-red-600 px-2 py-0.5 text-xs font-bold text-white tabular-nums" aria-label={`${conv.unread_count} não lidas`}>
+                                                                {conv.unread_count}
+                                                            </span>
+                                                        ) : (
+                                                            <span className={`shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold ${getStatusColor(conv.status)}`}>
+                                                                {getStatusLabel(conv.status, conv.attendance)}
+                                                            </span>
+                                                        )}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <p className={`text-xs truncate mt-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>{conv.job_title}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))
+                                                </span>
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                         )}
                     </div>
                 </div>
 
                 {/* Chat Area */}
-                <div className={`flex-1 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                {/* min-w-0: sem ele a coluna não encolhe abaixo do conteúdo e, a 320px, o botão Enviar e o
+                    selo de status saíam do cartão (overflow hidden). */}
+                <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 border-b-2 border-black flex items-center gap-3">
+                            <div className="px-3 py-2 sm:p-4 border-b border-gray-200 flex items-center gap-2 sm:gap-3">
                                 <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
                                     className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                                    {selectedConversation.company_logo ? (
-                                        <img src={selectedConversation.company_logo} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <Briefcase size={20} className="text-gray-400" />
-                                    )}
+                                <Avatar kind="company" name={selectedConversation.company_name} src={selectedConversation.company_logo} />
+                                {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
+                                    ("Saída confirmada") esmagava o nome e o título do turno. */}
+                                <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+                                        {selectedConversation.company_id ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
+                                                // `truncate` só corta em caixa de bloco com largura limitada; botão é inline-block.
+                                                className="block w-full max-w-full min-h-11 font-bold hover:text-primary transition-colors truncate text-left"
+                                                aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
+                                            >
+                                                {selectedConversation.company_name}
+                                            </button>
+                                        ) : (
+                                            <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
+                                        )}
+                                        <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
+                                    </div>
+                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 self-start sm:self-auto ${getStatusColor(selectedConversation.status)}`}>
+                                        {getStatusLabel(selectedConversation.status, selectedConversation.attendance)}
+                                    </span>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    {selectedConversation.company_id ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => navigate(`/empresa/${selectedConversation.company_id}`)}
-                                            className="font-bold hover:text-primary transition-colors truncate text-left"
-                                            aria-label={`Ver perfil da empresa ${selectedConversation.company_name}`}
-                                        >
-                                            {selectedConversation.company_name}
-                                        </button>
-                                    ) : (
-                                        <h4 className="font-bold truncate">{selectedConversation.company_name}</h4>
-                                    )}
-                                    <p className="text-xs text-gray-600 truncate">{selectedConversation.job_title}</p>
-                                </div>
-                                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${getStatusColor(selectedConversation.status)}`}>
-                                    {getStatusLabel(selectedConversation.status)}
-                                </span>
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                            <div
+                                data-copilot-private
+                                ref={logRef}
+                                onScroll={(e) => {
+                                    const log = e.currentTarget;
+                                    stickToEndRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+                                }}
+                                role="log"
+                                aria-label="Mensagens da conversa"
+                                tabIndex={0}
+                                className="flex-1 min-h-0 overflow-y-auto overscroll-contain motion-safe:scroll-smooth p-4 space-y-4 bg-gray-50"
+                            >
                                 {erroMensagens ? (
                             <div className="p-4">
                                 <ErroDeCarga onRetry={() => setReloadMensagens(k => k + 1)} mensagem="O histórico não sumiu — a carga falhou. Tente de novo." />
                             </div>
-                        ) : messages.length === 0 ? (
-                                    <div className="text-center py-12 text-gray-600">
-                                        <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
-                                        <p className="font-bold">Nenhuma mensagem ainda.</p>
-                                        <p className="text-sm mt-2">Inicie a conversa enviando uma mensagem.</p>
-                                    </div>
+                        ) : messagesFor !== selectedConversation.id ? (
+                                    <p role="status" className="py-12 text-center text-sm font-semibold text-gray-600">Carregando mensagens...</p>
+                                ) : messages.length === 0 ? (
+                                    <EmptyState
+                                        icon={MessageSquare}
+                                        title="Nenhuma mensagem ainda."
+                                        description="Inicie a conversa enviando uma mensagem."
+                                    />
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-primary text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl ${msg.is_mine ? 'bg-primary-dark text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
+                                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
                                                         relógio ao lado de uma mensagem significa "pendente" em qualquer app de
                                                         conversa — aqui não significava nada, e nunca sumia.
@@ -530,7 +629,6 @@ export default function Messages() {
                                         </div>
                                     ))
                                 )}
-                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Typing Indicator */}
@@ -544,14 +642,20 @@ export default function Messages() {
                             )}
 
                             {/* Message Input */}
-                            <div className="p-4 border-t-2 border-black bg-white">
-                                <div className="flex gap-2 sm:gap-3">
-                                    <input
-                                        type="text"
-                                        aria-label="Mensagem"
+                            <div className="shrink-0 p-2 sm:p-4 border-t border-gray-200 bg-white">
+                                <form
+                                    className="flex items-end gap-2 sm:gap-3"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        void handleSendMessage();
+                                        inputRef.current?.focus();
+                                    }}
+                                >
+                                    <ChatComposerField
+                                        inputRef={inputRef}
                                         value={newMessage}
-                                        onChange={(e) => {
-                                            setNewMessage(e.target.value);
+                                        onChange={(value) => {
+                                            setNewMessage(value);
                                             if (selectedConversation && currentUser) {
                                                 presenceChannel.current?.track({ typing: true, userId: currentUser });
                                                 if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -560,31 +664,28 @@ export default function Messages() {
                                                 }, 3000);
                                             }
                                         }}
-                                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                                        placeholder="Digite sua mensagem..."
-                                        className={`${FIELD_CONTROL_CLASS} flex-1 min-w-0`}
-                                        disabled={sending}
                                     />
                                     <Button
                                         variant="primary"
-                                        onClick={handleSendMessage}
+                                        type="submit"
                                         disabled={!newMessage.trim()}
                                         loading={sending}
                                         aria-label="Enviar mensagem"
+                                        data-copilot="freela.mensagens.enviar"
                                         iconLeft={<Send size={18} />}
                                     >
                                         <span className="hidden sm:inline">Enviar</span>
                                     </Button>
-                                </div>
+                                </form>
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-600">
-                            <div className="text-center">
-                                <MessageSquare size={48} className="mx-auto mb-4 opacity-30" />
-                                <p className="font-bold text-lg text-black">Selecione uma conversa</p>
-                                <p className="text-sm mt-2">Escolha uma conversa à esquerda para ver as mensagens.</p>
-                            </div>
+                        <div className="flex-1 flex items-center justify-center">
+                            <EmptyState
+                                icon={MessageSquare}
+                                title="Selecione uma conversa"
+                                description="Escolha uma conversa à esquerda para ver as mensagens."
+                            />
                         </div>
                     )}
                 </div>

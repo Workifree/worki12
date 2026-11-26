@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Inbox, Send, Star, X, Building2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
+import { checkSession } from '../../lib/authSession';
 import { useToast } from '../../contexts/ToastContext';
 import { useCompanyTeam } from '../../hooks/useTeamConnections';
 import { ReferralService } from '../../services/referralService';
 import type { WorkerReferral, WorkerReferralCard } from '../../types';
 import CreateReferralModal from '../../components/company/CreateReferralModal';
-import { Button, Card, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, EmptyState, ErrorState, IconButton, PageHeader } from '../../components/ui';
+import SectionTabs from '../../components/SectionTabs';
+import { roleLabel } from '../../lib/statusLabels';
 
 // ---------------------------------------------------------------------------
 // "Indicações" (F10) — lado da empresa. Duas caixas:
@@ -63,7 +66,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
     <Card as="article" className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
+          <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center">
             {item.card.avatar_url ? (
               <img src={item.card.avatar_url} alt={item.card.full_name} className="w-full h-full object-cover" />
             ) : (
@@ -74,7 +77,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
             <p className="font-bold text-base">{item.card.full_name}</p>
             {item.card.primary_role && (
               <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-pill text-xs font-semibold inline-block mt-1">
-                {item.card.primary_role}
+                {roleLabel(item.card.primary_role)}
               </span>
             )}
             {typeof item.card.rating_average === 'number' && (
@@ -92,7 +95,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
         <p className="text-sm text-gray-600">
           Indicado por <span className="font-bold text-black">{item.referring_company.name}</span>
         </p>
-        {item.message && <p className="text-sm text-gray-600 italic">"{item.message}"</p>}
+        {item.message && <p className="text-sm text-gray-600 italic [overflow-wrap:anywhere]">"{item.message}"</p>}
         {item.status === 'awaiting_worker' && (
           <p className="text-xs text-gray-600">
             Aguardando o freela decidir. Você será avisado se ele aceitar.
@@ -106,7 +109,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
 export default function CompanyReferrals() {
   const navigate = useNavigate();
   const { addToast } = useToast();
-  const { teamMembers, companyId } = useCompanyTeam();
+  const { teamMembers, companyId, erroCarga: erroElenco, refresh: recarregarElenco } = useCompanyTeam();
 
   const [tab, setTab] = useState<Tab>('received');
   const [received, setReceived] = useState<WorkerReferralCard[]>([]);
@@ -114,16 +117,25 @@ export default function CompanyReferrals() {
   const [sent, setSent] = useState<SentReferralRow[]>([]);
   const [loadingSent, setLoadingSent] = useState(true);
   const [erroSent, setErroSent] = useState(false);
+  const [erroReceived, setErroReceived] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const loadReceived = useCallback(async () => {
     setLoadingReceived(true);
+    setErroReceived(false);
     const result = await ReferralService.listReceivedCards();
     if (result.outcome === 'unauthenticated') {
-      navigate('/login');
+      if ((await checkSession()).status === 'signed_out') {
+        navigate('/login');
+        return;
+      }
+      setErroReceived(true);
+      setLoadingReceived(false);
       return;
     }
+    // Qualquer resultado diferente de "ok" é falha: lista vazia aqui não é "nenhuma indicação".
+    if (result.outcome !== 'ok') setErroReceived(true);
     setReceived(result.items);
     setLoadingReceived(false);
   }, [navigate]);
@@ -132,7 +144,15 @@ export default function CompanyReferrals() {
     if (!companyId) return;
     setLoadingSent(true);
     setErroSent(false);
-    const rows = await ReferralService.listMyReferrals(companyId);
+    let rows: Awaited<ReturnType<typeof ReferralService.listMyReferrals>>;
+    try {
+      rows = await ReferralService.listMyReferrals(companyId);
+    } catch (error) {
+      logError('CompanyReferrals.loadSent', error);
+      setErroSent(true);
+      setLoadingSent(false);
+      return;
+    }
 
     const companyIds = Array.from(new Set(rows.map((r) => r.requesting_company_id)));
     let names: Record<string, string> = {};
@@ -178,16 +198,28 @@ export default function CompanyReferrals() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-400">
+    <div className="max-w-4xl mx-auto pb-20">
+      <SectionTabs section="elenco" />
       <PageHeader
         title="Indicações"
         subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."
         action={
-          <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)}>
-            Indicar Freela
+          <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)} data-copilot="empresa.indicacoes.indicar">
+            Indicar freela
           </Button>
         }
       />
+
+      {erroElenco && (
+        <Alert
+          tone="warning"
+          role="alert"
+          className="mb-4"
+          action={<Button variant="secondary" onClick={() => { void recarregarElenco(); }}>Tentar de novo</Button>}
+        >
+          Não conseguimos carregar o seu elenco.
+        </Alert>
+      )}
 
       <div className="flex gap-6 mb-6 border-b-2 border-black">
         {([
@@ -211,16 +243,20 @@ export default function CompanyReferrals() {
       {tab === 'received' && (
         <section aria-label="Indicações recebidas">
           {loadingReceived && (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
               {[...Array(2)].map((_, i) => (
                 <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
               ))}
             </div>
           )}
-          {!loadingReceived && received.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
-              <p className="text-sm font-semibold text-gray-600">Nenhuma indicação recebida ainda.</p>
-            </div>
+          {!loadingReceived && erroReceived && (
+            <ErrorState title="Não foi possível carregar as indicações." onRetry={() => void loadReceived()} />
+          )}
+          {!loadingReceived && !erroReceived && received.length === 0 && (
+            <EmptyState
+              title="Nenhuma indicação recebida ainda."
+              description="Quando outra empresa indicar um freela para você, ele aparece aqui."
+            />
           )}
           <div className="grid grid-cols-1 gap-4">
             {received.map((item) => (
@@ -233,50 +269,43 @@ export default function CompanyReferrals() {
       {tab === 'sent' && (
         <section aria-label="Indicações enviadas">
           {loadingSent && (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4 animate-pulse" role="status"><span className="sr-only">Carregando</span>
               {[...Array(2)].map((_, i) => (
                 <div key={i} className="h-24 bg-gray-200 rounded-2xl" />
               ))}
             </div>
           )}
           {!loadingSent && erroSent && (
-            <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
-              <p className="text-sm font-semibold text-red-600 mb-3">Não foi possível carregar suas indicações.</p>
-              <Button variant="dark" onClick={() => void loadSent()}>
-                Tentar de novo
-              </Button>
-            </div>
+            <ErrorState title="Não foi possível carregar suas indicações." onRetry={() => void loadSent()} />
           )}
           {!loadingSent && !erroSent && sent.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+            <div className="p-8 text-center">
               <p className="text-sm font-semibold text-gray-600">Você ainda não indicou nenhum freela.</p>
             </div>
           )}
           <div className="grid grid-cols-1 gap-4">
             {sent.map((r) => (
-              <Card key={r.id} as="article" className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-0">
+              <Card key={r.id} as="article" className="flex items-start justify-between gap-4 flex-wrap [overflow-wrap:anywhere]">
+                <div className="min-w-0 max-w-full">
                   <p className="font-bold flex items-center gap-2 flex-wrap">
                     <span>{r.workerName ?? 'Freela'}</span>
-                    <span className="text-gray-400 font-normal">→</span>
+                    <span className="text-gray-600 font-normal">→</span>
                     <Building2 size={16} />
                     <span>{r.requestingCompanyName ?? 'Empresa'}</span>
                   </p>
-                  {r.message && <p className="text-sm text-gray-600 mt-2 italic">"{r.message}"</p>}
+                  {r.message && <p className="text-sm text-gray-600 mt-2 italic [overflow-wrap:anywhere]">"{r.message}"</p>}
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={r.status} />
                   {r.status === 'awaiting_worker' && (
-                    <Button
+                    <IconButton
                       variant="secondary"
                       aria-label="Cancelar indicação"
                       onClick={() => void handleCancel(r.id)}
                       disabled={cancellingId === r.id}
-                      loading={cancellingId === r.id}
-                      className="w-11 !px-0"
                     >
-                      {cancellingId !== r.id && <X size={16} />}
-                    </Button>
+                      <X size={16} />
+                    </IconButton>
                   )}
                 </div>
               </Card>

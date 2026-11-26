@@ -1,14 +1,21 @@
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { supabase } from './lib/supabase';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
+import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, ToastRouteDismiss } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
+import RouteFocus from './components/RouteFocus';
+import PageMeta from './components/PageMeta';
+import { GuideProvider } from './components/guide/GuideProvider';
+import CopilotRoot from './components/copilot/CopilotRoot';
+import { guia } from './lib/guide/api';
+import { isLoteEnabled, isPresencaEnabled } from './lib/features';
 
 import { Suspense, lazy } from 'react';
+import type { ReactNode } from 'react';
 
 // Lazy Load Layouts
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -17,7 +24,6 @@ const CompanyLayout = lazy(() => import('./layouts/CompanyLayout'));
 // Lazy Load Pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
-const Onboarding = lazy(() => import('./pages/Onboarding'));
 const CompanyOnboarding = lazy(() => import('./pages/company/CompanyOnboarding'));
 const WorkerOnboarding = lazy(() => import('./pages/worker/WorkerOnboarding'));
 const CompanyDashboard = lazy(() => import('./pages/company/CompanyDashboard'));
@@ -31,6 +37,10 @@ const QuemTeIndicou = lazy(() => import('./pages/QuemTeIndicou'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
+const CompanyCreateBatch = lazy(() => import('./pages/company/CompanyCreateBatch'));
+const CompanySites = lazy(() => import('./pages/company/CompanySites'));
+const CompanySiteQr = lazy(() => import('./pages/company/CompanySiteQr'));
+const CompanyShiftQr = lazy(() => import('./pages/company/CompanyShiftQr'));
 const CompanyJobs = lazy(() => import('./pages/company/CompanyJobs'));
 const CompanyProfile = lazy(() => import('./pages/company/CompanyProfile'));
 const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails'));
@@ -42,9 +52,16 @@ const CompanyOperationAnalytics = lazy(() => import('./pages/company/CompanyOper
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
 const Organization = lazy(() => import('./pages/company/Organization'));
+const CompanyTeamMembers = lazy(() => import('./pages/company/CompanyTeamMembers'));
+const CompanyToday = lazy(() => import('./pages/company/CompanyToday'));
+const BonusTrail = lazy(() => import('./pages/company/BonusTrail'));
+const CompanyGestao = lazy(() => import('./pages/company/CompanyGestao'));
+const AcceptTeamInvite = lazy(() => import('./pages/AcceptTeamInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
+const BonusRules = lazy(() => import('./pages/BonusRules'));
+const Licenses = lazy(() => import('./pages/Licenses'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Admin = lazy(() => import('./pages/Admin'));
@@ -57,7 +74,8 @@ const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
 const PageLoader = () => (
-  <div className="h-screen w-full bg-[#F4F4F0] animate-pulse">
+  <div className="h-screen w-full bg-canvas animate-pulse" role="status">
+    <span className="sr-only">Carregando</span>
     <div className="flex flex-col md:flex-row max-w-7xl mx-auto min-h-screen">
       <div className="hidden md:block w-64 p-6 space-y-4">
         <div className="h-8 w-24 bg-gray-200 rounded-lg" />
@@ -78,30 +96,6 @@ const PageLoader = () => (
   </div>
 );
 
-// Componente para redirecionar usuários logados da raiz
-function HomeRedirect() {
-  const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const userType = user.user_metadata?.user_type;
-        if (userType === 'hire') {
-          navigate('/company/dashboard');
-        } else {
-          navigate('/dashboard');
-        }
-      }
-      setChecking(false);
-    });
-  }, [navigate]);
-
-  if (checking) return <div className="h-screen flex items-center justify-center bg-[#F4F4F0] animate-pulse"><div className="h-12 w-32 bg-gray-200 rounded-xl" /></div>;
-
-  return <Onboarding />;
-}
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Create a client
@@ -115,6 +109,14 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Título da aba para as telas que não declaram o próprio <PageMeta>. */
+const titled = (title: string, page: ReactNode) => (
+  <>
+    <PageMeta title={title} />
+    {page}
+  </>
+);
+
 function App() {
   return (
     <ErrorBoundary>
@@ -123,17 +125,23 @@ function App() {
         <NotificationProvider>
           <ToastProvider>
             <BrowserRouter>
+              <GuideProvider>
               <PwaPrompts />
+              <CopilotRoot showLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
+              <RouteFocus />
+              <ToastRouteDismiss />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public Routes */}
                   <Route path="/" element={<HomeRedirect />} />
                   <Route path="/login" element={<Login />} />
-                  <Route path="/termos" element={<Terms />} />
-                  <Route path="/privacidade" element={<Privacy />} />
-                  <Route path="/esqueci-senha" element={<ForgotPassword />} />
-                  <Route path="/redefinir-senha" element={<ResetPassword />} />
-                  <Route path="/ajuda" element={<Help />} />
+                  <Route path="/termos" element={titled('Termos de Uso', <Terms />)} />
+                  <Route path="/privacidade" element={titled('Política de Privacidade', <Privacy />)} />
+                  <Route path="/licencas" element={titled('Licenças de código aberto', <Licenses />)} />
+                  <Route path="/regulamento-trilha" element={titled('Regulamento da trilha', <BonusRules />)} />
+                  <Route path="/esqueci-senha" element={titled('Recuperar senha', <ForgotPassword />)} />
+                  <Route path="/redefinir-senha" element={titled('Nova senha', <ResetPassword />)} />
+                  <Route path="/ajuda" element={titled('Ajuda', <Help />)} />
                   <Route path="/sobre" element={<LandingPage />} />
 
                   {/*
@@ -153,11 +161,17 @@ function App() {
                   */}
                   <Route path="/convite-gerente/:token" element={<AcceptManagerInvite />} />
 
+                  {/*
+                    Convite de EQUIPE (Encarregado) — rota PÚBLICA pelo mesmo motivo: o convidado ainda
+                    não tem sessão (entra por código de e-mail, sem senha, dentro da própria página).
+                  */}
+                  <Route path="/convite-equipe/:token" element={<AcceptTeamInvite />} />
+
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
 
                     {/* Admin Route - protected, Admin.tsx checks email authorization */}
-                    <Route path="/admin" element={<Admin />} />
+                    <Route path="/admin" element={titled('Administração', <Admin />)} />
 
                     {/* Onboarding Routes - still protected as they need user session but not full layout yet if incomplete */}
                     <Route path="/company/onboarding" element={<CompanyOnboarding />} />
@@ -173,39 +187,53 @@ function App() {
                       <Route path="carteira" element={<CarteiraClientes />} />
                       <Route path="recebimentos" element={<MeusRecebimentos />} />
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
-                      <Route path="indicacoes" element={<QuemTeIndicou />} />
-                      <Route path="profile" element={<Profile />} />
-                      <Route path="messages" element={<Messages />} />
-                      <Route path="notifications" element={<Notifications />} />
+                      <Route path="indicacoes" element={titled('Quem te indicou', <QuemTeIndicou />)} />
+                      <Route path="profile" element={titled('Meu perfil', <Profile />)} />
+                      <Route path="messages" element={titled('Mensagens', <Messages />)} />
+                      <Route path="notifications" element={titled('Notificações', <Notifications />)} />
                     </Route>
 
                     {/* Company Layout Routes */}
                     <Route path="/company" element={<CompanyLayout />}>
                       <Route path="dashboard" element={<CompanyDashboard />} />
-                      <Route path="create" element={<CompanyCreateJob />} />
+                      <Route path="create" element={titled('Criar turno', isLoteEnabled() ? <CompanyCreateBatch /> : <CompanyCreateJob />)} />
+                      {isPresencaEnabled() && (
+                        <>
+                          <Route path="locais" element={titled('Locais', <CompanySites />)} />
+                          <Route path="locais/:id/qr" element={titled('Cartaz do QR', <CompanySiteQr />)} />
+                          <Route path="jobs/:id/qr" element={titled('QR do turno', <CompanyShiftQr />)} />
+                        </>
+                      )}
                       <Route path="jobs" element={<CompanyJobs />} />
                       <Route path="jobs/:id" element={<CompanyJobDetails />} />
-                      <Route path="jobs/:id/edit" element={<CompanyCreateJob />} />
-                      <Route path="jobs/:id/candidates" element={<CompanyJobCandidates />} />
+                      <Route path="jobs/:id/edit" element={titled('Editar turno', <CompanyCreateJob />)} />
+                      <Route path="jobs/:id/candidates" element={titled('Presença e pagamento', <CompanyJobCandidates />)} />
                       <Route path="worker/:id" element={<WorkerPublicProfile />} />
                       {/* DS11 (badges-empresas/ddl-aprovado.md §2.1): rota-espelho de /empresa/:id
                           para o mesmo CompanyPublicProfile, sob CompanyLayout. mode='view' do
                           CompanyBadges navega para cá — nunca para /empresa/:id (worker-only). */}
                       <Route path="empresa/:id" element={<CompanyPublicProfile />} />
-                      <Route path="profile" element={<CompanyProfile />} />
-                      <Route path="messages" element={<CompanyMessages />} />
-                      <Route path="team" element={<CompanyTeam />} />
-                      <Route path="indicacoes" element={<CompanyReferrals />} />
+                      <Route path="gestao" element={<CompanyGestao />} />
+                      <Route path="profile" element={titled('Dados da empresa', <CompanyProfile />)} />
+                      <Route path="messages" element={titled('Mensagens', <CompanyMessages />)} />
+                      <Route path="team" element={titled('Meu Elenco', <CompanyTeam />)} />
+                      <Route path="indicacoes" element={titled('Indicações', <CompanyReferrals />)} />
                       <Route path="organization" element={<Organization />} />
+                      <Route path="configuracoes/equipe" element={<CompanyTeamMembers />} />
+                      {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As
+                          notificações de passar/cobrir apontam para cá. */}
+                      <Route path="hoje" element={<CompanyToday />} />
+                      <Route path="trilha" element={<BonusTrail />} />
                       <Route path="relatorio" element={<CompanyOrdersReport />} />
                       <Route path="operacao" element={<CompanyOperationAnalytics />} />
-                      <Route path="notifications" element={<Notifications />} />
+                      <Route path="notifications" element={titled('Notificações', <Notifications />)} />
                     </Route>
 
                   </Route>
-                  <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={titled('Página não encontrada', <NotFound />)} />
                 </Routes>
               </Suspense>
+              </GuideProvider>
             </BrowserRouter>
           </ToastProvider>
         </NotificationProvider>

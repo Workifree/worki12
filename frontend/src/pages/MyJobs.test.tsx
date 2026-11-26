@@ -39,6 +39,7 @@ vi.mock('react-router-dom', async () => {
 // completo com lista vazia: a aba "Convites" não é o alvo deste teste, e o card de confirmação
 // de véspera fica FORA das abas (sempre visível), então não depende deste hook.
 vi.mock('../hooks/useShiftInvites', () => ({
+  EVENTO_CONVITES: 'worki:convites-mudaram',
   useWorkerInvites: () => ({
     pendingInvites: [],
     loading: false,
@@ -53,7 +54,7 @@ const mockGetMyPendingConfirmations = vi.fn()
 const mockRespondConfirmation = vi.fn()
 vi.mock('../services/attendanceConfirmationService', () => ({
   AttendanceConfirmationService: {
-    getMyPendingConfirmations: (...args: unknown[]) => mockGetMyPendingConfirmations(...args),
+    getMyPendingConfirmationsChecked: (...args: unknown[]) => mockGetMyPendingConfirmations(...args),
     respondConfirmation: (...args: unknown[]) => mockRespondConfirmation(...args),
     requestConfirmation: vi.fn(),
     getConfirmationsForJob: vi.fn().mockResolvedValue([]),
@@ -216,8 +217,9 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
       expect(screen.getByText('Confirma seu turno de amanhã?')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Garçom para Evento')).toBeInTheDocument()
-    expect(screen.getByText('Divino Fogão')).toBeInTheDocument()
+    // O mesmo turno também aparece na lista de agendados.
+    expect(screen.getAllByText('Garçom para Evento').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Divino Fogão').length).toBeGreaterThan(0)
     expect(screen.getByText('Sim, vou')).toBeInTheDocument()
     expect(screen.getByText('Não vou poder')).toBeInTheDocument()
   })
@@ -302,5 +304,40 @@ describe('MyJobs — Confirmação de véspera (D-1, F4)', () => {
       expect(screen.getByText('Você já respondeu')).toBeInTheDocument()
     })
     expect(screen.queryByText('Sim, vou')).not.toBeInTheDocument()
+  })
+})
+
+describe('MyJobs — recusas do banco no check-in', () => {
+  it.each([
+    [
+      'applications_update_guard: ainda nao e possivel registrar a chegada neste turno.',
+      // 12/08 às 18:00 (São Paulo) menos 2h
+      'Só dá para registrar a chegada a partir de 12/08 às 16:00.',
+    ],
+    ['applications_update_guard: este turno foi cancelado.', 'Este turno foi cancelado.'],
+  ])('traduz "%s" sem mostrar o erro cru', async (raw, esperado) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-08-12T18:30:00-03:00'))
+    const { mockAddToast } = setupMocks('2026-08-12T15:00:00+00:00')
+    const row = {
+      ...APPLICATION_ROW,
+      status: 'in_progress',
+      job: { ...APPLICATION_ROW.job, start_date: '2026-08-12T15:00:00+00:00' },
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table !== 'applications') {
+        return thenableChain({ data: [], error: null }) as unknown as ReturnType<typeof supabase.from>
+      }
+      const chain = thenableChain({ data: [row], error: null })
+      chain.update = vi.fn(() => thenableChain({ data: null, error: { message: raw, code: '42501' } }))
+      return chain as unknown as ReturnType<typeof supabase.from>
+    })
+    mockGetMyPendingConfirmations.mockResolvedValue([])
+    renderComponent()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Registrar chegada' }))
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(esperado, 'error'))
+    vi.useRealTimers()
   })
 })

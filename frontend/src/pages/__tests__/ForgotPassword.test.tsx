@@ -54,6 +54,6 @@ describe('ForgotPassword', () => {
     renderForgotPassword()
 
     expect(screen.getByText('Esqueci a Senha')).toBeInTheDocument()
-    expect(screen.getByText('Enviaremos um link para seu email')).toBeInTheDocument()
+    expect(screen.getByText('Enviaremos um link para seu e-mail')).toBeInTheDocument()
   })
 })

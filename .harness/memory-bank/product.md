@@ -22,6 +22,15 @@ no roteamento (`ProtectedRoute`) e no banco (RLS).
 3. **Admin** — Painel administrativo (`pages/Admin.tsx`) + edge function `admin-data` com auth própria.
    Visão de moderação/operação da plataforma.
 
+### Papéis dentro da empresa (Equipe e encarregados — E0 a E5, pendente de aplicação)
+
+- **Gestor** — vê tudo da company, convida Encarregado, configura, transfere turnos, relatórios.
+- **Encarregado** — opera só os próprios turnos (e os que cobre por data). Traz freelas para o Elenco único da company.
+  Só opera depois de confirmado pelo Gestor ("é ele?").
+- **Consulta** — leitura, fase posterior (sem papel no banco ainda).
+- **Cliente âncora: Momma Doces** — uma company, 2+ operadores (eventos, encarregado de lojas, gestor geral). Dono único
+  continua com zero cerimônia: Equipe, tags e "Passar para..." só aparecem depois de convidar a primeira pessoa.
+
 ## Jobs principais
 
 1. **Descoberta & candidatura** — Feed de vagas (`Jobs`, `JobCard`), match score, candidatura
@@ -47,6 +56,8 @@ no roteamento (`ProtectedRoute`) e no banco (RLS).
 - NÃO expõe `service_role` no frontend — toda operação privilegiada passa por Edge Function.
 - NÃO é multi-gateway — **Asaas é o único** provedor de pagamento (Stripe foi 100% removido).
 - Modo A (pagamento externo registrado, default piloto) não move saldo — é auditoria/recibo. Escrow (modo B/C) é caminho opt-in.
+- NÃO é programa de cashback, crédito, saldo ou assinatura. O bônus de operador (trilha, especificado) é obrigação do Worki
+  paga por PIX manual, fora do razão; nunca aparece como carteira nem saldo.
 
 ## ⏸️ PAGAMENTO PAUSADO (22/08/2026 — decisão do owner)
 
@@ -96,6 +107,27 @@ Recibo do modo A exibe: chegada (check-in), saída (check-out), horas, valor, st
 
 Freela consegue **iniciar conversa** com empresa (`/messages` já suporta). Além disso, passa a receber **notificações de pagamento** (agendamento → registro → efetivação/estorno)
 — o loop bilateral do modo A agora avisa. Recibo centralizado em `/recebimentos` (antes `/wallet`) exibe histórico de pagamentos com status e ações (confirmar, verificar comprovante).
+
+### Trilha de bônus do operador (especificada, NÃO implementada)
+
+Spec: `.harness/spec/trilha-bonus-operador/spec.md`. Depende de `equipe-encarregados` estar em produção (identidade
+individual de cada operador). Até lá, o flag `bonus_program_settings.enabled` fica desligado e nenhuma inscrição real é ativada.
+
+- **Objetivo:** hábito de uso do app pela equipe da company. Métrica: turnos nas semanas 13 a 16, com o bônus já encerrado.
+  Hipótese declarada, não promessa.
+- **Teto:** R$300 por operador, em até 12 semanas. Bônus de velocidade sai do mesmo teto. O que não for conquistado fica com o Worki.
+- **Marcos:** 20 em grupos A a D (o grupo E, coleção completa, é prêmio-meta fora dos 20). Marcos conferíveis por evento do sistema.
+  Sem clawback: o já pago não é cobrado de volta, e quebrar a sequência não pune.
+- **Pagamento:** PIX manual pelo dono, toda segunda-feira, mínimo R$25 (saque final sem mínimo). Vem do caixa do Worki, fora
+  do razão; não passa por Asaas e não toca `wallets`. Isso não reabre o pagamento de turno pelo Worki, que segue pausado
+  (decisão de 22/08/2026).
+- **Veto (anti-autopagamento):** freelas que sejam sócios ou donos do Worki, ou que tenham a mesma chave PIX ou vínculo do
+  operador, não contam para nenhum marco.
+- **Trilha de lojas:** nasce `calibrating` e não aceita inscrição até o dono medir um fim de semana e definir os limiares.
+- **Regulamento:** uma página, versionada, pública em `/regulamento-trilha`. Diz que o programa pode ser encerrado. Não há
+  cláusula de estorno de valor já pago.
+- **Status:** só a spec existe. Gates pendentes: architect (ADR de bônus pago do caixa, fora do razão) e security-reviewer
+  (`admin-data`, PIX do operador). Nenhuma migration da trilha existe no repositório.
 
 ## Restrições estratégicas
 

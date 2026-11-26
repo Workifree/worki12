@@ -600,7 +600,7 @@ describe('ShiftInviteService.dismissFromShift', () => {
 
   // Regressão (QA final, rodada seguinte): a guarda anterior só olhava worker_checkin_at
   // e company_checkout_confirmed_at — deixava "Dispensar" disponível depois de
-  // "Confirmar Presença" (company_checkin_confirmed_at) sem o freela ter batido check-in no
+  // "Confirmar presença" (company_checkin_confirmed_at) sem o freela ter batido check-in no
   // app, que é o caminho CANÔNICO do modo A (freela que não usa o app).
   it('bloqueia o dispensar quando só a empresa confirmou a CHEGADA (company_checkin_confirmed_at, sem checkin do freela)', async () => {
     const fetchChain = makeChain({

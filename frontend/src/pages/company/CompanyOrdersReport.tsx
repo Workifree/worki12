@@ -13,15 +13,18 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { PainelNumerosTabs } from '../../components/company/PainelNumerosTabs';
-import { FileText, Printer, Download, Loader2, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import SectionTabs from '../../components/SectionTabs';
+import { FileText, Printer, Download, Loader2 } from 'lucide-react';
 import { OrderReportService, toCSV } from '../../services/orderReportService';
 import type { OrderReport, OrderRow, OrderStatus } from '../../services/orderReportService';
 import { ORDER_STATUS_LABELS, PAYMENT_SOURCE_LABELS } from '../../services/orderReportService';
 import { logError } from '../../lib/logger';
 import { useToast } from '../../contexts/ToastContext';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { Button, Card, EmptyState, ErrorState, Field, PageHeader } from '../../components/ui';
+import { roleLabel } from '../../lib/statusLabels';
+import { formatBRL } from '../../lib/currency';
 
 // ---------------------------------------------------------------------------
 // Helpers de data/format
@@ -55,17 +58,13 @@ function formatDDMMYYYY(value: string): string {
   return dt.toLocaleDateString('pt-BR');
 }
 
-function formatBRL(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 type PresetKey = 'hoje' | 'semana' | 'mes' | 'custom';
 
 const STATUS_OPTIONS: Array<{ key: OrderStatus | 'todas'; label: string }> = [
   { key: 'todas', label: 'Todas' },
   { key: 'aberta', label: 'Abertas' },
   { key: 'paga', label: 'Pagas' },
-  { key: 'conciliada', label: 'Conciliadas' },
+  { key: 'conciliada', label: 'Confirmadas pelo freela' },
 ];
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
@@ -158,7 +157,7 @@ export default function CompanyOrdersReport() {
 
       {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
       <div className="print:hidden">
-        <PainelNumerosTabs />
+        <SectionTabs section="relatorios" />
         {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
             (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
         <PageHeader
@@ -235,6 +234,7 @@ export default function CompanyOrdersReport() {
             onClick={handleExportCSV}
             disabled={loading || rows.length === 0}
             iconLeft={<Download size={16} />}
+            data-copilot="empresa.relatorio.exportar-csv"
           >
             Exportar CSV
           </Button>
@@ -250,41 +250,29 @@ export default function CompanyOrdersReport() {
       </Card>
 
       {/* Resumo */}
-      {summary && (
+      {summary && !loading && !error && (
         // `summary.total` conta ORDENS (pares turno+freela), não turnos distintos — um
         // turno com 2 freelas soma 2 aqui. Rótulo "Ordens" em vez de "Total" pra não
         // sugerir contagem de turnos (orderReportService.ts — JSDoc do topo).
         // Valor pago (realizado) e valor previsto (passivo em aberto, estimado) são
         // números de natureza diferente — nunca somados num "Valor Total" só, que
         // mentiria misturando dinheiro que já saiu com estimativa do que falta pagar.
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 print:grid-cols-6">
-          <SummaryCard label="Ordens" value={String(summary.total)} />
-          <SummaryCard label="Abertas" value={String(summary.abertas)} className="text-yellow-700" />
-          <SummaryCard label="Pagas" value={String(summary.pagas)} className="text-blue-700" />
-          <SummaryCard label="Conciliadas" value={String(summary.conciliadas)} className="text-primary-dark" />
-          <SummaryCard label="Valor Pago" value={formatBRL(summary.valorPago)} />
-          <SummaryCard label="Valor Previsto" value={formatBRL(summary.valorPrevisto)} className="text-yellow-700" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
+          <SummaryCard label="A pagar (previsto)" value={formatBRL(summary.valorPrevisto)} detail={`${summary.abertas} em aberto`} className="text-yellow-700" />
+          <SummaryCard label="Pago" value={formatBRL(summary.valorPago)} detail={`${summary.pagas + summary.conciliadas} de ${summary.total} no período`} />
+          <SummaryCard label="Confirmadas pelo freela" value={String(summary.conciliadas)} detail={`${summary.pagas} aguardando confirmação`} />
         </div>
       )}
 
       {/* Conteúdo */}
       {loading ? (
         <div className="flex items-center justify-center py-16 print:hidden">
-          <Loader2 size={28} className="animate-spin text-gray-400" />
+          <span role="status"><span className="sr-only">Carregando</span><Loader2 size={28} aria-hidden="true" className="animate-spin text-gray-600" /></span>
         </div>
       ) : error ? (
-        <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center print:hidden">
-          <AlertTriangle size={28} className="mx-auto mb-2 text-red-500" />
-          <p className="font-semibold text-red-600 text-sm mb-4">{error}</p>
-          <Button variant="secondary" onClick={fetchReport}>
-            Tentar novamente
-          </Button>
-        </div>
+        <ErrorState title={error} onRetry={() => void fetchReport()} className="print:hidden" />
       ) : rows.length === 0 ? (
-        <Card padding="lg" className="text-center">
-          <FileText size={40} className="mx-auto mb-4 text-gray-300" />
-          <p className="font-semibold text-gray-600 text-sm">Nenhum pagamento no período.</p>
-        </Card>
+        <EmptyState icon={FileText} title="Nenhum pagamento no período." description="Troque o período ou o status para ver outras ordens." />
       ) : (
         <>
           {/* Mobile: cards */}
@@ -312,7 +300,7 @@ export default function CompanyOrdersReport() {
                 {rows.map((row) => (
                   <tr key={`${row.jobId}:${row.workerId ?? 'none'}`} className="border-b border-gray-200 last:border-0">
                     <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
-                    <td className="px-4 py-3 font-medium">{row.category ?? row.title}</td>
+                    <td className="px-4 py-3 font-medium">{roleLabel(row.category) || row.title}</td>
                     <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>
                     <td className="px-4 py-3 font-bold tabular-nums text-right whitespace-nowrap">{formatBRL(row.amount)}</td>
                     <td className="px-4 py-3">{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</td>
@@ -335,11 +323,12 @@ export default function CompanyOrdersReport() {
 // Subcomponentes
 // ---------------------------------------------------------------------------
 
-function SummaryCard({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+function SummaryCard({ label, value, detail, className = '' }: { label: string; value: string; detail: string; className?: string }) {
   return (
     <Card padding="sm">
       <p className="text-xs font-semibold text-gray-600 mb-1">{label}</p>
-      <p className={`text-xl font-bold tabular-nums truncate ${className}`}>{value}</p>
+      <p className={`text-2xl font-bold tabular-nums whitespace-nowrap ${className}`}>{value}</p>
+      <p className="text-xs text-gray-600">{detail}</p>
     </Card>
   );
 }
@@ -353,23 +342,24 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 function OrderCard({ row }: { row: OrderRow }) {
+  const context = [roleLabel(row.category), row.title, row.date ? formatDDMMYYYY(row.date) : null].filter(Boolean).join(' · ');
   return (
     <Card padding="sm" className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-sm truncate">{row.category ?? row.title}</p>
-          <p className="text-xs text-gray-600">{row.date ? formatDDMMYYYY(row.date) : '—'}</p>
+          <p className="font-bold text-sm break-words">{row.workerName ?? 'Sem freela'}</p>
+          <p className="text-xs text-gray-600 break-words">{context}</p>
         </div>
+        <span className="shrink-0 font-bold tabular-nums">{formatBRL(row.amount)}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
         <StatusBadge status={row.status} />
+        {row.source && <span>{PAYMENT_SOURCE_LABELS[row.source] ?? row.source}</span>}
+        {row.paidAt && <span>Pago em {formatDDMMYYYY(row.paidAt)}</span>}
       </div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-gray-600 truncate">{row.workerName ?? '—'}</span>
-        <span className="font-bold tabular-nums">{formatBRL(row.amount)}</span>
-      </div>
-      <div className="flex items-center justify-between text-xs text-gray-600">
-        <span>{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</span>
-        <span>{row.paidAt ? `Pago em ${formatDDMMYYYY(row.paidAt)}` : ''}</span>
-      </div>
+      <Link to={`/company/jobs/${row.jobId}/candidates`} className="inline-flex min-h-11 items-center self-start text-sm font-bold underline">
+        {row.status === 'aberta' && row.workerName ? 'Registrar pagamento' : 'Abrir turno'}
+      </Link>
     </Card>
   );
 }

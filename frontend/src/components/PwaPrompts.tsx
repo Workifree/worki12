@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { HTMLAttributes, ReactNode, RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Download, RefreshCw, Share, SquarePlus, WifiOff, X } from 'lucide-react'
+import { Download, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
 import { Button, Card } from './ui'
+import { cx } from './ui/cx'
 import {
   applyPwaUpdate,
   getPwaState,
@@ -32,6 +33,33 @@ function subscribeOnline(onChange: () => void): () => void {
   }
 }
 
+/** Variável CSS com a altura da pilha: o `main` soma ao próprio `padding-bottom` (index.css). */
+export const PWA_HEIGHT_VAR = '--worki-pwa-h'
+
+/** Publica a altura da pilha enquanto ela existe; some (0) quando desmonta. */
+function usePublishStackHeight(ref: RefObject<HTMLDivElement | null>, active: boolean) {
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const node = ref.current
+    if (!active || !node) {
+      root.style.removeProperty(PWA_HEIGHT_VAR)
+      return
+    }
+    const publish = () => {
+      const h = Math.ceil(node.getBoundingClientRect().height)
+      root.style.setProperty(PWA_HEIGHT_VAR, `${h > 0 ? h + 12 : 0}px`)
+    }
+    publish()
+    const RO = typeof window !== 'undefined' ? window.ResizeObserver : undefined
+    const observer = RO ? new RO(publish) : null
+    observer?.observe(node)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(PWA_HEIGHT_VAR)
+    }
+  }, [ref, active])
+}
+
 const getOnline = () => navigator.onLine
 const getOnlineOnServer = () => true
 
@@ -39,15 +67,50 @@ function IconBadge({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary-ink"
     >
       {children}
     </span>
   )
 }
 
+/** Casca única dos cartões flutuantes: ícone, texto curto e ações na mesma linha quando cabe. */
+function FloatingCard({
+  icon,
+  title,
+  children,
+  actions,
+  className,
+  ...rest
+}: {
+  icon: ReactNode
+  title: string
+  children?: ReactNode
+  actions: ReactNode
+} & HTMLAttributes<HTMLElement>) {
+  return (
+    <Card
+      as="aside"
+      padding="none"
+      tone="highlight"
+      className={cx('px-3 py-3 shadow-overlay motion-safe:animate-slide-in', className)}
+      {...rest}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <IconBadge>{icon}</IconBadge>
+        <div className="min-w-0 flex-1 basis-40">
+          <p className="text-sm font-bold leading-tight text-black">{title}</p>
+          {children && <p className="mt-0.5 text-xs leading-snug text-gray-600">{children}</p>}
+        </div>
+        <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">{actions}</div>
+      </div>
+    </Card>
+  )
+}
+
 /**
- * Camada PWA da interface: aviso de nova versão, convite de instalação e faixa de "sem internet".
+ * Camada PWA da interface: aviso de nova versão, convite de instalação e aviso de "sem internet",
+ * todos como cartões flutuantes numa pilha fixa (nunca empurram o layout).
  * Montada uma única vez dentro do <BrowserRouter> (App.tsx). Toda a lógica de navegador vive em
  * `lib/pwa.ts`; aqui só há apresentação e a decisão de QUANDO mostrar.
  */
@@ -69,6 +132,8 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
   }, [installDelayMs])
 
   const showUpdate = pwa.updateAvailable && !updateDismissed
+  // Telas de dinheiro: o convite de instalação não disputa com o recibo.
+  const telaDeDinheiro = pathname.startsWith('/recibo') || pathname.startsWith('/recebimentos')
 
   // Atualização tem prioridade: nunca empilha dois cartões. O convite de instalação não aparece em
   // login/convites/onboarding (fluxos com foco), nem quando o app já está instalado.
@@ -79,6 +144,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     !pwa.installed &&
     !standalone &&
     !isInstallPromptExcludedRoute(pathname) &&
+    !telaDeDinheiro &&
     (pwa.installAvailable || ios)
 
   const dismissInstall = () => {
@@ -91,109 +157,91 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     if (outcome === 'dismissed') dismissInstall()
   }
 
+  const visible = !online || showUpdate || showInstall
+  const stackRef = useRef<HTMLDivElement>(null)
+  usePublishStackHeight(stackRef, visible)
+
+  if (!visible) return null
+
   return (
-    <>
+    // Pilha FIXA (`.worki-pwa-stack`, index.css), mas que RESERVA o próprio espaço: a altura vai
+    // para `--worki-pwa-h` e o `main` soma ao padding de baixo, então o fim da tela nunca fica
+    // escondido atrás dela. No chat ela sobe para o topo (não cobre o campo de mensagem).
+    <div ref={stackRef} className="worki-pwa-stack">
       {!online && (
         <div
           role="status"
-          className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-black px-4 py-2 text-center text-xs font-bold text-white"
+          className="flex items-center gap-2 self-center rounded-xl bg-gray-900 px-3 py-2 text-xs font-semibold text-white shadow-overlay md:self-start"
         >
           <WifiOff aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span>Você está sem internet. Algumas telas podem não carregar.</span>
         </div>
       )}
 
-      {(showUpdate || showInstall) && (
-        <div className="fixed inset-x-3 bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))] z-40 md:inset-x-auto md:bottom-6 md:right-6 md:w-96">
-          {showUpdate && (
-            <Card
-              padding="sm"
-              role="status"
-              aria-live="polite"
-              className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-slide-in"
-            >
-              <div className="flex items-start gap-3">
-                <IconBadge>
-                  <RefreshCw className="h-5 w-5" />
-                </IconBadge>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-black">Nova versão disponível</p>
-                  <p className="mt-0.5 text-sm text-gray-600">Atualize para ter as últimas melhorias do Worki.</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button size="md" onClick={applyPwaUpdate}>
-                      Atualizar
-                    </Button>
-                    <Button size="md" variant="ghost" onClick={() => setUpdateDismissed(true)}>
-                      Depois
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {showInstall && (
-            <Card
-              as="aside"
-              padding="sm"
-              aria-label="Instalar o Worki"
-              className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-slide-in"
-            >
-              <div className="flex items-start gap-3">
-                <IconBadge>
-                  <Download className="h-5 w-5" />
-                </IconBadge>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-black">
-                    {pwa.installAvailable ? 'Instale o Worki' : 'Instale o Worki no iPhone'}
-                  </p>
-                  {pwa.installAvailable ? (
-                    <>
-                      <p className="mt-0.5 text-sm text-gray-600">
-                        Abra seus turnos direto da tela inicial, como um aplicativo.
-                      </p>
-                      <div className="mt-3">
-                        <Button size="md" iconLeft={<Download aria-hidden="true" className="h-4 w-4" />} onClick={handleInstall}>
-                          Instalar
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-0.5 text-sm text-gray-600">
-                        Toque em{' '}
-                        <span className="inline-flex items-center gap-1 font-bold text-black">
-                          Compartilhar
-                          <Share aria-hidden="true" className="h-4 w-4" />
-                        </span>{' '}
-                        e depois em{' '}
-                        <span className="inline-flex items-center gap-1 font-bold text-black">
-                          Adicionar à Tela de Início
-                          <SquarePlus aria-hidden="true" className="h-4 w-4" />
-                        </span>
-                        .
-                      </p>
-                      <div className="mt-3">
-                        <Button size="md" variant="secondary" onClick={dismissInstall}>
-                          Entendi
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={dismissInstall}
-                  aria-label="Dispensar convite de instalação"
-                  className="-mr-1 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
-                >
-                  <X aria-hidden="true" className="h-4 w-4" />
-                </button>
-              </div>
-            </Card>
-          )}
-        </div>
+      {showUpdate && (
+        <FloatingCard
+          role="status"
+          aria-live="polite"
+          icon={<RefreshCw className="h-5 w-5" />}
+          title="Nova versão disponível"
+          actions={
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setUpdateDismissed(true)}>
+                Depois
+              </Button>
+              <Button size="sm" variant="secondary" onClick={applyPwaUpdate}>
+                Atualizar
+              </Button>
+            </>
+          }
+        >
+          Atualize para ter as últimas melhorias.
+        </FloatingCard>
       )}
-    </>
+
+      {showInstall && (
+        <FloatingCard
+          aria-label="Instalar o Worki"
+          data-page-agent-ignore="true"
+          className="worki-pwa-install"
+          icon={<Download className="h-5 w-5" />}
+          title={pwa.installAvailable ? 'Instale o Worki' : 'Instale o Worki no iPhone'}
+          actions={
+            pwa.installAvailable ? (
+              <>
+                <Button size="sm" variant="ghost" onClick={dismissInstall}>
+                  Agora não
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleInstall}>
+                  Instalar
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={dismissInstall}>
+                Entendi
+              </Button>
+            )
+          }
+        >
+          {pwa.installAvailable ? (
+            'Abra seus turnos direto da tela inicial.'
+          ) : (
+            <>
+              Toque em{' '}
+              <span className="inline-flex items-center gap-1 font-bold text-black">
+                Compartilhar
+                <Share aria-hidden="true" className="h-3.5 w-3.5" />
+              </span>{' '}
+              e depois em{' '}
+              <span className="inline-flex items-center gap-1 font-bold text-black">
+                Adicionar à Tela de Início
+                <SquarePlus aria-hidden="true" className="h-3.5 w-3.5" />
+              </span>
+              .
+            </>
+          )}
+        </FloatingCard>
+      )}
+    </div>
   )
 }

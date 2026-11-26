@@ -13,6 +13,7 @@ vi.mock('../../services/walletService', () => ({
 
 vi.mock('../../lib/supabase', () => ({
   supabase: {
+    rpc: vi.fn(),
     auth: { getUser: vi.fn() },
     from: vi.fn(),
   },
@@ -38,6 +39,10 @@ import { useToast } from '../../contexts/ToastContext'
 // deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
+  getMyCompanies: vi.fn().mockResolvedValue([]),
+  pickCurrentCompany: () => null,
+  subscribeCompanyScope: () => () => undefined,
+  isGestor: () => true,
 }))
 
 const JOB_DATA = {
@@ -101,10 +106,20 @@ function setupMocks() {
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
     if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+    // Chamados abertos do turno: a leitura é obrigatória (falha vira erro de carga).
+    if (table === 'shift_calls') return { select: () => ({ in: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) }) } as unknown as ReturnType<typeof supabase.from>
     return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis() } as unknown as ReturnType<typeof supabase.from>
   })
 
   return { mockAddToast, jobsChain, applicationsChain }
+}
+
+/** Resposta da RPC `cancel_job` (a exclusão passa por ela). */
+function mockCancelJob(outcome: string, cancelledApplications = 0) {
+  vi.mocked(supabase.rpc).mockResolvedValue({
+    data: { outcome, cancelled_applications: cancelledApplications, cancelled_calls: 0, closed_candidates: 0 },
+    error: null,
+  } as never)
 }
 
 function renderComponent() {
@@ -117,6 +132,7 @@ function renderComponent() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockCancelJob('cancelled')
 })
 
 describe('CompanyJobs — pausar/reativar (alto risco)', () => {
@@ -165,7 +181,7 @@ describe('CompanyJobs — pausar/reativar (alto risco)', () => {
 })
 
 describe('CompanyJobs — excluir turno (alto risco)', () => {
-  it('mostra sucesso quando o UPDATE de exclusão afeta 1 linha', async () => {
+  it('exclui pela RPC cancel_job e mostra sucesso', async () => {
     const { mockAddToast } = setupMocks()
     renderComponent()
 
@@ -189,10 +205,11 @@ describe('CompanyJobs — excluir turno (alto risco)', () => {
     })
   })
 
-  it('mostra erro visível (não sucesso mentiroso) quando o UPDATE de exclusão afeta 0 linhas (RLS negou em silêncio)', async () => {
+  it('mostra o motivo (não sucesso mentiroso) quando cancel_job recusa', async () => {
     const { mockAddToast, jobsChain } = setupMocks()
     jobsChain.update = vi.fn().mockReturnValue(jobsUpdateChain({ data: [], error: null }))
 
+    mockCancelJob('forbidden')
     renderComponent()
 
     await waitFor(() => {
@@ -212,7 +229,7 @@ describe('CompanyJobs — excluir turno (alto risco)', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Não foi possível excluir o turno. Verifique se você ainda tem permissão sobre ele.',
+        expect.any(String),
         'error'
       )
     })
@@ -251,6 +268,7 @@ describe('CompanyJobs — cancelar candidaturas ao excluir (lote — 0 linhas é
       applicationsUpdateChain({ data: [{ id: 'app-1' }, { id: 'app-2' }], error: null })
     )
 
+    mockCancelJob('cancelled', 2)
     renderComponent()
 
     await waitFor(() => {
@@ -271,7 +289,9 @@ describe('CompanyJobs — cancelar candidaturas ao excluir (lote — 0 linhas é
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso. 2 freelas notificados.', 'success')
     })
-    expect(WalletService.refundEscrow).toHaveBeenCalled()
+    // sem escrow reservado: nada de estorno
+    expect(WalletService.refundEscrow).not.toHaveBeenCalled()
+    expect(supabase.rpc).toHaveBeenCalledWith('cancel_job', { p_job_id: 'job-1', p_reason: null })
   })
 })
 
@@ -382,5 +402,36 @@ describe('groupJobsByDay — agenda por dia (CompanyJobs)', () => {
     ]
     const buckets = groupJobsByDay(jobs, TODAY)
     expect(buckets.map((b) => b.key)).toEqual(['today', 'tomorrow', 'week', 'later', 'no_date', 'past'])
+  })
+})
+
+describe('CompanyJobs — convite por chamado pendente (D-5)', () => {
+  it('turno com convite sem resposta mostra "Aguardando resposta", nunca "Sem freela"', async () => {
+    const { jobsChain, applicationsChain } = setupMocks()
+    const callsResult = {
+      data: [
+        {
+          job_id: 'job-1',
+          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          targets: [{ worker_id: 'worker-1', response: null, worker: { full_name: 'Worker E2E', avatar_url: null } }],
+        },
+      ],
+      error: null,
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
+      if (table === 'applications') return applicationsChain as unknown as ReturnType<typeof supabase.from>
+      return {
+        select: vi.fn().mockReturnValue({
+          in: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue(callsResult) }),
+        }),
+      } as unknown as ReturnType<typeof supabase.from>
+    })
+    renderComponent()
+
+    expect(await screen.findByText('Aguardando resposta')).toBeInTheDocument()
+    expect(screen.getByText('Worker E2E')).toBeInTheDocument()
+    expect(screen.queryByText('Sem freela')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /convidar freela/i })).not.toBeInTheDocument()
   })
 })

@@ -157,7 +157,7 @@ export async function listCompanyManagers(companyId: string): Promise<CompanyMem
 
   if (error) {
     logError('organizationService.listCompanyManagers', error);
-    return [];
+    throw error;
   }
   return (data ?? []) as CompanyMember[];
 }

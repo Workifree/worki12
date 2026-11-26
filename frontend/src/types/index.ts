@@ -14,6 +14,17 @@ export type AvailabilityPeriod = 'manha' | 'tarde' | 'noite';
 export type AvailabilityWeekday = '0' | '1' | '2' | '3' | '4' | '5' | '6';
 export type AvailabilityDays = Partial<Record<AvailabilityWeekday, AvailabilityPeriod[]>>;
 
+// Avisos multicanal (migration 20261201000100): `notice_preferences`.
+export type NoticeChannel = 'push' | 'email' | 'whatsapp';
+export interface NoticePreferences {
+  push: boolean;
+  email: boolean;
+  whatsapp: boolean;
+  quiet_start: string; // 'HH:MM'
+  quiet_end: string;
+  tz: string;
+}
+
 export interface WorkerProfile {
   id: string;
   full_name: string;
@@ -156,6 +167,10 @@ export interface CompanyProfile {
    */
   link_risk_alert_enabled?: boolean;
   link_risk_alert_threshold?: number;
+  /** Padrão de presença da empresa (presença verificada): ausentes sem as migrations. */
+  default_presence_mode?: PresenceMode;
+  default_site_id?: string | null;
+  default_qr_mode?: PresenceQrMode;
 }
 
 // =============================================
@@ -165,7 +180,7 @@ export interface CompanyProfile {
 // operationAnalyticsService.resolveCompanyScope() consomem esta RPC — nunca
 // `.eq('id', authUser.id).single()`).
 // =============================================
-export type CompanyRole = 'owner' | 'operator' | 'manager';
+export type CompanyRole = 'owner' | 'operator' | 'manager' | 'encarregado';
 
 export interface MyCompany {
   company_id: string;
@@ -175,6 +190,13 @@ export interface MyCompany {
   organization_name: string | null;
   onboarding_completed: boolean;
   accepted_tos: boolean;
+  /**
+   * Equipe e encarregados (E4): `false` só para Encarregado ainda não confirmado pelo Gestor (R22).
+   * Ausente (RPC antiga) = confirmado.
+   */
+  confirmed?: boolean;
+  /** R23: a empresa tem ao menos uma pessoa não removida na equipe (divulgação progressiva). */
+  team_enabled?: boolean;
 }
 
 /**
@@ -198,6 +220,155 @@ export interface CompanyMember {
   accepted_at: string | null;
   expires_at: string;
 }
+
+// =============================================
+// EQUIPE E ENCARREGADOS (E4) — supabase/migrations/20261123000500_equipe_e4_convites_e_papel.sql
+// "Equipe" = pessoas que operam a empresa; "Elenco" = freelas (nunca misturar rótulos).
+// =============================================
+/** Papel de uma pessoa da equipe. Gestor-por-link não existe (H1): só 'encarregado' é convidado aqui. */
+export type TeamMemberRole = 'manager' | 'encarregado';
+
+/** Estado derivado por `list_company_members` (nunca recomputar no client). */
+export type TeamMemberState =
+  | 'invited'
+  | 'invite_expired'
+  | 'awaiting_confirmation'
+  | 'pending_expired'
+  | 'active'
+  | 'removed';
+
+export interface TeamMemberItem {
+  memberId: string;
+  userId: string | null;
+  displayName: string | null;
+  role: TeamMemberRole;
+  status: CompanyMemberStatus;
+  state: TeamMemberState;
+  confirmed: boolean;
+  /** E-mail verificado no aceite — só o Gestor vê (R22: "Fulano entrou, é ele?"). */
+  acceptedEmail: string | null;
+  invitedAt: string | null;
+  expiresAt: string | null;
+  acceptedAt: string | null;
+  confirmedAt: string | null;
+  removedAt: string | null;
+  /** Prazo (72h) para o Gestor confirmar; só para Encarregado aceito e não confirmado. */
+  confirmationExpiresAt?: string | null;
+}
+
+/** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
+export type InvitePreviewOutcome = 'ok' | 'expired' | 'not_found' | 'error';
+export interface InvitePreviewResult {
+  outcome: InvitePreviewOutcome;
+  companyName?: string;
+  role?: TeamMemberRole;
+}
+
+export type InviteMemberOutcome =
+  | 'invited'
+  | 'reinvited'
+  | 'already_invited'
+  | 'invalid_input'
+  | 'not_found'
+  | 'forbidden'
+  | 'unauthenticated'
+  | 'error';
+
+export type ResendInviteOutcome =
+  | 'resent'
+  | 'not_pending'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RevokeInviteOutcome =
+  | 'revoked'
+  | 'last_manager'
+  | 'not_pending'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+/** Resultado de convidar/reenviar: o token só sai daqui, para quem convidou. */
+export interface InviteTokenResult<O extends string> {
+  outcome: O;
+  memberId?: string;
+  inviteToken?: string;
+  expiresAt?: string;
+}
+
+export type AcceptMemberInviteOutcome =
+  | 'accepted'
+  | 'already_accepted'
+  | 'already_operator'
+  | 'token_already_used'
+  | 'revoked'
+  | 'expired'
+  | 'not_found'
+  | 'use_manager_invite'
+  | 'tos_required'
+  | 'worker_cannot_be_manager'
+  | 'email_not_verified'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export interface AcceptMemberInviteResult {
+  outcome: AcceptMemberInviteOutcome;
+  companyId?: string;
+  memberId?: string;
+  role?: TeamMemberRole;
+  confirmed?: boolean;
+}
+
+export type ConfirmMemberOutcome =
+  | 'confirmed'
+  | 'already_confirmed'
+  | 'expired'
+  | 'name_mismatch'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RejectMemberOutcome =
+  | 'rejected'
+  | 'not_pending_confirmation'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export type RemoveMemberOutcome =
+  | 'removed'
+  | 'would_remove'
+  | 'last_manager'
+  | 'cannot_remove_self'
+  | 'not_found'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
+
+export interface RemoveMemberResult {
+  outcome: RemoveMemberOutcome;
+  memberId?: string;
+  displayName?: string | null;
+  role?: TeamMemberRole;
+  /** Turnos abertos e futuros dele que ficam com o Gestor (informativo; nunca bloqueia). */
+  openJobs: number;
+  /** A pessoa era Gestor ou confirmada: aconselha rotacionar o link do Elenco. */
+  elencoLinkRotationAdvised: boolean;
+  alreadyRemoved: boolean;
+}
+
+export type ListMembersOutcome = 'ok' | 'forbidden' | 'unauthenticated' | 'error';
 
 // =============================================
 // JOB
@@ -244,6 +415,13 @@ export interface Job {
   certification_requirement?: string | null;
   candidates_count?: number;
   views?: number;
+  /** Criação em lote (migration 20261128000100): ausente enquanto não aplicada. */
+  creation_batch_id?: string | null;
+  creation_row?: number | null;
+  /** Presença verificada (migrations 20261127000100-000400): ausentes enquanto não aplicadas. */
+  presence_mode?: PresenceMode;
+  site_id?: string | null;
+  qr_mode?: PresenceQrMode;
   company_id?: string;
   company?: {
     id?: string;
@@ -460,6 +638,8 @@ export interface PendingInvite {
   slots: number;
   reason?: ShiftCallReason;
   message?: string | null;
+  /** 'sos' = chamado de urgência fora do Elenco (só em source='call'). */
+  origin?: ShiftCallOrigin;
   job?: Partial<Job>;
 }
 
@@ -1401,3 +1581,16 @@ export interface OperationAnalytics {
   performanceByWorker: WorkerPerformanceBlock;
   attendanceConfirmations: AttendanceConfirmationsBlock;
 }
+
+// =============================================
+// PRESENÇA VERIFICADA e CRIAÇÃO EM LOTE: os tipos moram nas libs puras; aqui só reexporta.
+// =============================================
+export type {
+  PresenceMode, PresenceQrMode, PresenceKind, PresencePolicy, CompanySite,
+  PresenceExceptionReason, PresenceResult, PresenceCheck, PresenceSeal, PresenceSummary,
+} from '../lib/presence';
+export type {
+  ShiftDraftSource, ShiftBudgetType, AttendanceMode, ShiftDraftTemplate, ShiftDraftOverrides,
+  ShiftDraftRow, ShiftDraftCall, ShiftDraftSeries, ShiftDraftBatch, ShiftDraftIssueKind, ShiftDraftIssue,
+} from '../lib/shiftDrafts';
+import type { PresenceMode, PresenceQrMode } from '../lib/presence';

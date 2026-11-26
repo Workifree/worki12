@@ -13,6 +13,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@page-agent/core": "1.12.4",
+    "@page-agent/llms": "1.12.4",
+    "@page-agent/page-controller": "1.12.4",
     "@sentry/react": "^10.42.0",
     "@supabase/supabase-js": "^2.91.0",
     "@tanstack/react-query": "^5.90.20",
@@ -25,7 +28,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zod": "4.3.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

@@ -19,6 +19,7 @@
  *   `analytics-operacao`, que consome `get_my_companies()` por conta própria.
  */
 
+import { isJobConcluded } from '../../lib/shiftProgress';
 import { useCallback, useEffect, useState } from 'react';
 import { Users, Briefcase, Mail, UserMinus, Send, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -28,7 +29,8 @@ import { getMyCompanies } from '../../services/companyScopeService';
 import { inviteManager, listCompanyManagers, revokeManager } from '../../services/organizationService';
 import type { MyCompany, CompanyMember } from '../../types';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
+import BackToGestao from '../../components/company/BackToGestao';
+import { Button, Card, ErrorState, PageHeader, FIELD_CONTROL_CLASS } from '../../components/ui';
 
 interface UnitSummary {
   company: MyCompany;
@@ -48,10 +50,30 @@ async function countRows(table: string, companyId: string, extraEq?: [string, st
   return count ?? 0;
 }
 
+/**
+ * Turnos abertos DE VERDADE: `jobs.status` continua `open` depois que o turno é concluído (a
+ * conclusão muda a candidatura), então um turno com todas as vagas concluídas não conta.
+ */
+async function countOpenJobs(companyId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('slots, applications(status)')
+    .eq('company_id', companyId)
+    .eq('status', 'open');
+  if (error) {
+    logError('Organization.countOpenJobs', error);
+    return null;
+  }
+  return ((data ?? []) as Array<{ slots: number | null; applications: Array<{ status: string }> | null }>)
+    .filter((job) => !isJobConcluded(job.slots, job.applications))
+    .length;
+}
+
 export default function Organization() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<UnitSummary[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [inviteEmail, setInviteEmail] = useState<Record<string, string>>({});
   const [invitingFor, setInvitingFor] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -64,7 +86,7 @@ export default function Organization() {
       const summaries = await Promise.all(
         companies.map(async (company): Promise<UnitSummary> => {
           const [openJobs, teamSize, managers] = await Promise.all([
-            countRows('jobs', company.company_id, ['status', 'open']),
+            countOpenJobs(company.company_id),
             countRows('team_connections', company.company_id, ['status', 'accepted']),
             listCompanyManagers(company.company_id),
           ]);
@@ -72,13 +94,14 @@ export default function Organization() {
         }),
       );
       setUnits(summaries);
+      setLoadError(false);
     } catch (error) {
       logError('Organization.loadUnits', error);
-      addToast('Erro ao carregar as unidades da organização.', 'error');
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, []);
 
   useEffect(() => {
     loadUnits();
@@ -147,7 +170,7 @@ export default function Organization() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse space-y-6" role="status"><span className="sr-only">Carregando</span>
         <div className="h-10 bg-gray-200 rounded-xl w-1/3" />
         {[...Array(2)].map((_, i) => (
           <div key={i} className="h-40 bg-gray-200 rounded-2xl" />
@@ -157,22 +180,25 @@ export default function Organization() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <PageMeta title="Organização" description="Unidades da sua organização no Worki." />
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8">
+      <PageMeta title="Unidades" description="Unidades da sua organização no Worki." />
+      <BackToGestao />
 
       <PageHeader
-        title="Organização"
+        title="Unidades"
         subtitle="Visão das unidades da sua rede — turnos abertos, elenco e gerentes de cada loja."
       />
 
-      {units.length === 0 && (
+      {loadError && <ErrorState onRetry={() => void loadUnits()} />}
+
+      {!loadError && units.length === 0 && (
         <Card padding="lg" className="text-center text-sm text-gray-600">
           Nenhuma unidade encontrada.
         </Card>
       )}
 
       <div className="space-y-4">
-        {units.map(({ company, openJobs, teamSize, managers }) => (
+        {!loadError && units.map(({ company, openJobs, teamSize, managers }) => (
           <Card as="section" key={company.company_id}>
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
@@ -210,10 +236,11 @@ export default function Organization() {
                 {managers.map((m) => (
                   <li
                     key={m.id}
+                    data-copilot-private
                     className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2"
                   >
                     <div>
-                      <span className="font-bold text-gray-900 text-sm">{m.invited_email}</span>
+                      <span className="break-all font-bold text-gray-900 text-sm">{m.invited_email}</span>
                       <span
                         className={`ml-2 px-2 py-0.5 rounded-pill text-xs font-semibold ${
                           m.status === 'active' ? 'bg-primary-light text-primary' : 'bg-yellow-50 text-yellow-700'
@@ -250,22 +277,25 @@ export default function Organization() {
                 ))}
               </ul>
 
+              <label htmlFor={`invite-email-${company.company_id}`} className="mb-1.5 block text-sm font-bold">
+                E-mail do gerente
+              </label>
               <div className="flex flex-col sm:flex-row gap-2">
-                <label htmlFor={`invite-email-${company.company_id}`} className="sr-only">
-                  E-mail do gerente
-                </label>
                 <input
                   id={`invite-email-${company.company_id}`}
+                  data-copilot-private
                   type="email"
                   value={inviteEmail[company.company_id] || ''}
                   onChange={(e) => setInviteEmail((prev) => ({ ...prev, [company.company_id]: e.target.value }))}
                   placeholder="email@gerente.com"
-                  className={`${FIELD_CONTROL_CLASS} flex-1`}
+                  className={`${FIELD_CONTROL_CLASS} min-h-11 shrink-0 sm:min-w-0 sm:flex-1`}
                 />
                 <Button
                   variant="dark"
                   onClick={() => handleInvite(company.company_id)}
                   loading={invitingFor === company.company_id}
+                  data-copilot="empresa.unidades.convidar-gerente"
+                  data-copilot-risk="D"
                   iconLeft={<Send size={18} />}
                 >
                   Convidar

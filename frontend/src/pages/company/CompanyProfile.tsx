@@ -1,16 +1,23 @@
+import { clearJobDrafts } from '../../lib/jobDraft';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert, Share2, Network, HelpCircle, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { leaveDevice } from '../../lib/leaveDevice';
+import { isAvisosEnabled } from '../../lib/features';
+import PreferenciasDeAvisos from '../../components/avisos/PreferenciasDeAvisos';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
+import { toSafeWebsiteHref } from '../../lib/websiteUrl';
 import { TeamConnectionService } from '../../services/teamConnectionService';
-import { getMyCompanies, pickCurrentCompany, canSeeOrganization } from '../../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
-import { Button, Card, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import { ActionBar, DialogActions, Button, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import BackToGestao from '../../components/company/BackToGestao';
+import { Dialog } from '../../components/ui/Dialog';
 
 /** Linha de leitura (modo visualização): rótulo discreto + valor. */
 function ReadField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -46,11 +53,11 @@ export default function CompanyProfile() {
     const { signOut } = useAuth();
     const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [companyId, setCompanyId] = useState<string | null>(null);
-    // R16: mesma regra do Sidebar (canSeeOrganization) — só sócio/operador vê Organização.
-    const [showOrganizationShortcut, setShowOrganizationShortcut] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -120,13 +127,15 @@ export default function CompanyProfile() {
                     return;
                 }
                 setCompanyId(current.company_id);
-                setShowOrganizationShortcut(canSeeOrganization(current));
 
-                const { data } = await supabase
+                const { data, error } = await supabase
                     .from('companies')
                     .select('*')
                     .eq('id', current.company_id)
                     .single();
+
+                if (error) throw error;
+                setLoadError(false);
 
                 if (data) {
                     setCompany(data);
@@ -134,14 +143,14 @@ export default function CompanyProfile() {
                 }
             } catch (error: unknown) {
                 logError('Error loading profile:', error);
-                addToast('Erro ao carregar perfil.', 'error');
+                setLoadError(true);
             } finally {
                 setLoading(false);
             }
         };
 
         getProfile();
-    }, [addToast]);
+    }, [addToast, loadAttempt]);
 
     const handleSave = async () => {
         if (!companyId) return;
@@ -353,13 +362,15 @@ export default function CompanyProfile() {
             setDeleting(false);
             return;
         }
+        await leaveDevice();
         await supabase.auth.signOut();
+        clearJobDrafts();
         navigate('/login');
     };
 
     if (loading) {
         return (
-            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-pulse">
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-pulse" role="status"><span className="sr-only">Carregando</span>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div className="h-10 bg-gray-200 rounded w-1/3" />
                     <div className="h-10 bg-gray-200 rounded w-32" />
@@ -379,17 +390,27 @@ export default function CompanyProfile() {
         );
     }
 
+    if (loadError) {
+        return (
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+                <BackToGestao />
+                <ErrorState onRetry={() => { setLoading(true); setLoadAttempt((n) => n + 1); }} />
+            </div>
+        );
+    }
+
     return (
         <>
-        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Page Header — a única ação primária da tela é "Editar Perfil" */}
+        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+            {/* Page Header — a única ação primária da tela é "Editar perfil" */}
+            <BackToGestao />
             <PageHeader
-                title="Perfil da Empresa"
+                title="Dados da empresa"
                 subtitle="Gerencie as informações públicas da sua organização."
                 action={
                     !isEditing ? (
-                        <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />}>
-                            Editar Perfil
+                        <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />} data-copilot="empresa.dados.editar">
+                            Editar perfil
                         </Button>
                     ) : undefined
                 }
@@ -414,9 +435,9 @@ export default function CompanyProfile() {
                             />
                             <label
                                 htmlFor="cover-upload"
-                                className="absolute bottom-3 right-3 bg-white border-2 border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
+                                className="absolute bottom-3 right-3 bg-white border-ink border-black h-11 px-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
                             >
-                                <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar Capa'}
+                                <Camera size={14} /> {uploading === 'cover' ? 'Enviando...' : 'Alterar capa'}
                             </label>
                         </>
                     )}
@@ -427,7 +448,7 @@ export default function CompanyProfile() {
                     <div className="flex flex-col md:flex-row gap-4 md:gap-6 -mt-12 mb-6 items-start">
                         {/* Logo Container */}
                         <div className="relative shrink-0">
-                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center relative group overflow-hidden z-10">
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border border-gray-200 flex items-center justify-center relative group overflow-hidden z-10">
                                 {company.logo_url ? (
                                     <img src={company.logo_url} alt="Logo" className="w-full h-full object-cover" />
                                 ) : (
@@ -448,7 +469,7 @@ export default function CompanyProfile() {
                                         <label
                                             htmlFor="logo-upload"
                                             title="Trocar logo"
-                                            className="absolute bottom-1 right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary sm:h-9 sm:w-9"
+                                            className="absolute bottom-1 right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-ink border-black bg-white text-black transition-colors hover:bg-gray-100 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary"
                                         >
                                             {uploading === 'logo' ? (
                                                 <Loader2 className="animate-spin" size={16} />
@@ -475,7 +496,7 @@ export default function CompanyProfile() {
                                 </div>
 
                                 {/* Review Stats Badge */}
-                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-xl border-2 border-yellow-200">
+                                <div className="flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-xl border border-yellow-200">
                                     {/* `|| 5.0` mostrava nota cheia para empresa sem nenhuma avaliação --
                                         e este selo e a prova social que o freela le antes de aceitar convite. */}
                                     <div className="flex items-center gap-1">
@@ -491,41 +512,18 @@ export default function CompanyProfile() {
                         </div>
                     </div>
 
-                    {/* Barra de edição: só Cancelar (secundário) e Salvar (primário) */}
-                    {isEditing && (
-                        <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-3 mb-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 animate-in fade-in slide-in-from-top-2">
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    setIsEditing(false);
-                                    // Ideally revert changes here by refetching or keeping previous state
-                                }}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                variant="dark"
-                                onClick={handleSave}
-                                loading={saving}
-                                iconLeft={<Save size={16} />}
-                            >
-                                {saving ? 'Salvando...' : 'Salvar Alterações'}
-                            </Button>
-                        </div>
-                    )}
-
                     {/* Content Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
                         {/* Left Column */}
                         <div className="space-y-5">
-                            <div className="border-b-2 border-gray-200 pb-3">
-                                <h3 className="text-lg font-bold text-gray-900">Sobre a Empresa</h3>
+                            <div className="border-b border-gray-200 pb-3">
+                                <h3 className="text-lg font-bold text-gray-900">Sobre a empresa</h3>
                                 <p className="text-sm text-gray-600">Informações principais</p>
                             </div>
 
                             {isEditing ? (
                                 <div className="space-y-5">
-                                    <Field label="Razão Social / Fantasia">
+                                    <Field label="Razão social / nome fantasia">
                                         <input
                                             name="name"
                                             value={company.name || ''}
@@ -553,7 +551,7 @@ export default function CompanyProfile() {
                                 </div>
                             ) : (
                                 <div className="space-y-5">
-                                    <ReadField label="Razão Social / Fantasia">
+                                    <ReadField label="Razão social / nome fantasia">
                                         <p className="text-lg font-bold text-gray-900">{company.name || '—'}</p>
                                     </ReadField>
                                     <ReadField label="Setor">
@@ -567,9 +565,9 @@ export default function CompanyProfile() {
                         </div>
 
                         {/* Right Column */}
-                        <div className="space-y-5">
-                            <div className="border-b-2 border-gray-200 pb-3">
-                                <h3 className="text-lg font-bold text-gray-900">Contato & Endereço</h3>
+                        <div className="min-w-0 space-y-5">
+                            <div className="border-b border-gray-200 pb-3">
+                                <h3 className="text-lg font-bold text-gray-900">Contato e endereço</h3>
                                 <p className="text-sm text-gray-600">Canais de comunicação</p>
                             </div>
 
@@ -583,7 +581,8 @@ export default function CompanyProfile() {
                                             placeholder="https://..."
                                         />
                                     </Field>
-                                    <Field label="Email Corporativo">
+                                    <div data-copilot-private>
+                                    <Field label="E-mail corporativo">
                                         <input
                                             name="email"
                                             value={company.email || ''}
@@ -591,6 +590,7 @@ export default function CompanyProfile() {
                                             placeholder="email@empresa.com"
                                         />
                                     </Field>
+                                    </div>
                                     <Field label="Localização">
                                         <input
                                             name="address"
@@ -603,19 +603,21 @@ export default function CompanyProfile() {
                             ) : (
                                 <div className="space-y-5">
                                     <ReadField label="Website">
-                                        {company.website ? (
-                                            <a href={company.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">
-                                                <Globe size={16} /> {company.website.replace(/^https?:\/\//, '')}
+                                        {toSafeWebsiteHref(company.website) ? (
+                                            <a href={toSafeWebsiteHref(company.website) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:underline">
+                                                <Globe size={16} /> {company.website?.replace(/^https?:\/\//i, '')}
                                             </a>
-                                        ) : <p className="text-gray-600">—</p>}
+                                        ) : <p className="text-gray-600">{company.website || '—'}</p>}
                                     </ReadField>
-                                    <ReadField label="Email Corporativo">
+                                    <div data-copilot-private>
+                                    <ReadField label="E-mail corporativo">
                                         {company.email ? (
-                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
-                                                <Mail size={16} className="text-gray-500" /> {company.email}
+                                            <a href={`mailto:${company.email}`} className="min-h-11 inline-flex max-w-full items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
+                                                <Mail size={16} className="shrink-0 text-gray-500" /> <span className="min-w-0 break-all">{company.email}</span>
                                             </a>
                                         ) : <p className="text-gray-600">—</p>}
                                     </ReadField>
+                                    </div>
                                     <ReadField label="Localização">
                                         <div className="flex items-start gap-2">
                                             <MapPin size={18} className="text-gray-500 mt-0.5 shrink-0" />
@@ -632,7 +634,7 @@ export default function CompanyProfile() {
             {/* Briefing padrão do negócio — pré-preenchido ao criar um turno */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
-                    <ClipboardList size={20} /> Briefing Padrão
+                    <ClipboardList size={20} /> Briefing padrão
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Regras da casa, dress code e apresentação — vem pré-preenchido ao criar um turno, e você ajusta por turno.
@@ -647,19 +649,19 @@ export default function CompanyProfile() {
                             className={`${FIELD_CONTROL_CLASS} min-h-[120px] py-3 leading-relaxed resize-none`}
                             placeholder="Ex: Calça jeans, camisa branca, cabelo amarrado, barba feita, boa apresentação. Chegar 10 min antes."
                         />
-                        <p className="text-xs font-semibold text-yellow-800 bg-yellow-50 border-2 border-yellow-200 rounded-xl px-3 py-2 mt-2">
+                        <p className="text-xs font-semibold text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mt-2">
                             Visível para qualquer freela que abrir o perfil da sua empresa — não inclua senhas nem dados internos.
                         </p>
                     </>
                 ) : (
-                    <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
+                    <p className="text-sm sm:text-base leading-relaxed text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-xl p-4">
                         {company.default_briefing || 'Nenhum briefing padrão definido ainda.'}
                     </p>
                 )}
             </Card>
 
             {/* F5 — Guarda de risco de vínculo trabalhista: aviso configurável, nunca bloqueia
-                (decisão do owner). Mesmo padrão de tela/card do Briefing Padrão acima. */}
+                (decisão do owner). Mesmo padrão de tela/card do Briefing padrão acima. */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-1">
                     <ShieldAlert size={20} /> Preferências
@@ -694,12 +696,12 @@ export default function CompanyProfile() {
                                 />
                                 <span
                                     aria-hidden="true"
-                                    className={`inline-flex items-center h-7 w-12 rounded-pill border-2 border-black transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
+                                    className={`inline-flex items-center h-7 w-12 rounded-pill border-ink border-black transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
                                         company.link_risk_alert_enabled !== false ? 'bg-primary' : 'bg-gray-200'
                                     }`}
                                 >
                                     <span
-                                        className={`inline-block w-5 h-5 bg-white border-2 border-black rounded-full transform transition-transform ${
+                                        className={`inline-block w-5 h-5 bg-white border-ink border-black rounded-full transform transition-transform ${
                                             company.link_risk_alert_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
                                         }`}
                                     />
@@ -733,7 +735,7 @@ export default function CompanyProfile() {
                         </div>
                     </>
                 ) : (
-                    <div className="flex items-center justify-between gap-4 bg-gray-50 border-2 border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between gap-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
                         <div>
                             <p className="font-bold text-sm">Avisar sobre frequência do mesmo freela</p>
                             <p className="text-xs text-gray-600 mt-0.5">
@@ -743,7 +745,7 @@ export default function CompanyProfile() {
                             </p>
                         </div>
                         <span
-                            className={`px-3 py-1 rounded-pill border-2 border-black font-semibold text-xs flex-shrink-0 ${
+                            className={`px-3 py-1 rounded-pill border-ink border-black font-semibold text-xs flex-shrink-0 ${
                                 company.link_risk_alert_enabled !== false ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-600'
                             }`}
                         >
@@ -753,6 +755,35 @@ export default function CompanyProfile() {
                 )}
             </Card>
 
+            {isAvisosEnabled() && (
+                // Grava ao tocar e mostra telefone: o copiloto não lê nem aciona.
+                <div className="mt-6" data-copilot-private data-copilot-risk="D">
+                    <PreferenciasDeAvisos />
+                </div>
+            )}
+
+            {isEditing && (
+                <ActionBar
+                    className="mb-6"
+                    secondary={
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setIsEditing(false);
+                                // Ideally revert changes here by refetching or keeping previous state
+                            }}
+                        >
+                            Cancelar
+                        </Button>
+                    }
+                    primary={
+                        <Button variant="dark" onClick={handleSave} loading={saving} iconLeft={<Save size={16} />}>
+                            {saving ? 'Salvando...' : 'Salvar alterações'}
+                        </Button>
+                    }
+                />
+            )}
+
             {/* Avaliações recebidas de freelas */}
             {companyId && <ProfileReviews reviewedId={companyId} reviewerRole="worker" />}
 
@@ -760,11 +791,11 @@ export default function CompanyProfile() {
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-                    <Link2 size={20} /> Meu Link de Elenco
+                    <Link2 size={20} /> Meu link de Elenco
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
-                    para o seu elenco sem precisar de QR ou Worki ID.
+                    para o seu elenco sem precisar de QR ou código.
                 </p>
                 <Button
                     variant="secondary"
@@ -776,28 +807,6 @@ export default function CompanyProfile() {
                 </Button>
             </Card>
 
-            {/* Atalhos — paridade de navegacao mobile (R6): o BottomNav nao comporta estes destinos. */}
-            <nav aria-labelledby="empresa-atalhos" className="mt-6">
-                <h3 id="empresa-atalhos" className="text-xs font-semibold uppercase tracking-wide text-gray-600">Atalhos</h3>
-                <ul className="mt-2 divide-y-2 divide-gray-200 overflow-hidden rounded-xl border-2 border-black bg-white">
-                    {[
-                        { to: '/company/indicacoes', label: 'Indicações', icon: <Share2 size={18} />, show: true },
-                        { to: '/company/organization', label: 'Organização', icon: <Network size={18} />, show: showOrganizationShortcut },
-                        { to: '/ajuda', label: 'Ajuda', icon: <HelpCircle size={18} />, show: true },
-                    ].filter(item => item.show).map(item => (
-                        <li key={item.to}>
-                            <Link
-                                to={item.to}
-                                className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2 text-sm font-bold transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                            >
-                                <span className="inline-flex items-center gap-2">{item.icon}{item.label}</span>
-                                <ChevronRight size={18} aria-hidden="true" />
-                            </Link>
-                        </li>
-                    ))}
-                </ul>
-            </nav>
-
             {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}
             <div className="mt-6">
                 <Button
@@ -806,7 +815,7 @@ export default function CompanyProfile() {
                     aria-expanded={showAccountSettings}
                     iconLeft={<Settings size={18} />}
                 >
-                    {showAccountSettings ? 'Ocultar Configurações da Conta' : 'Configurações da Conta'}
+                    {showAccountSettings ? 'Ocultar Configurações da conta' : 'Configurações da conta'}
                 </Button>
             </div>
 
@@ -882,7 +891,7 @@ export default function CompanyProfile() {
                     </Card>
 
                     {/* Zona de Perigo */}
-                    <Card className="mt-6 !border-red-500 shadow-[3px_3px_0px_0px_rgba(239,68,68,1)]">
+                    <Card className="mt-6 !border-red-500">
                         <h3 className="text-red-600 font-bold text-lg mb-1">Zona de Perigo</h3>
                         <p className="text-sm text-gray-600 mb-4">A exclusão da sua empresa é irreversível. Todos os dados da empresa serão anonimizados.</p>
                         <Button variant="danger" onClick={() => setDeleteModalOpen(true)}>
@@ -896,13 +905,11 @@ export default function CompanyProfile() {
 
         {/* Modal de confirmação de exclusão */}
         {deleteModalOpen && (
-            <div
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="delete-company-title"
+            <Dialog
+                labelledBy="delete-company-title"
+                onClose={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
+                locked={deleting}
             >
-                <div className="bg-white rounded-2xl w-full max-w-md p-6 border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                     <h2 id="delete-company-title" className="text-lg font-bold mb-4 text-red-600">Tem certeza? Esta ação é irreversível.</h2>
                     <ul className="space-y-2 mb-6 text-sm text-gray-700">
                         <li className="flex items-start gap-2">
@@ -926,26 +933,23 @@ export default function CompanyProfile() {
                             placeholder="EXCLUIR"
                         />
                     </Field>
-                    <div className="flex gap-3">
+                    <DialogActions>
                         <Button
                             variant="secondary"
-                            className="flex-1"
                             onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText(''); }}
                         >
-                            Cancelar
+                            Voltar
                         </Button>
                         <Button
                             variant="danger"
-                            className="flex-1"
                             onClick={handleDeleteAccount}
                             disabled={deleteConfirmText !== 'EXCLUIR'}
                             loading={deleting}
                         >
-                            {deleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                            {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
                         </Button>
-                    </div>
-                </div>
-            </div>
+                    </DialogActions>
+            </Dialog>
         )}
         </>
     );
