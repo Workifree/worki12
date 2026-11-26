@@ -184,7 +184,6 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root *, html.is-hidden .wk-orb
 
 /* ---------- barra de comando no PC: View Transition (fallback: wk-rise, 260 ms) ---------- */
 html[data-wk-vt]::view-transition-old(root), html[data-wk-vt]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-html[data-wk-vt] [data-copilot-palette] { view-transition-name: wk-cmd-vt; }
 html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.26s; animation-timing-function: var(--wk-ease-out); }
 html[data-wk-vt] .wk-rise { animation: none; }
 @media (prefers-reduced-motion: reduce) { html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.01s; } }

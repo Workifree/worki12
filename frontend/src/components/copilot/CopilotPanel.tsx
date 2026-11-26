@@ -102,6 +102,22 @@ export default function CopilotPanel({
 
   const agent = useCopilotAgent({ role, navigate, createLlmFetch: services.createLlmFetch, overrides, pointer })
 
+  // Esc = PARAR, já na primeira tecla, no PC e no celular, inclusive durante a digitação e a animação
+  // do ponteiro. Em captura na janela: nenhuma folha, campo ou tela fica com a tecla antes. Parar é
+  // sempre seguro, então qualquer Esc (até sintético) vale.
+  const { running: isRunning, stop: stopAgent } = agent
+  useEffect(() => {
+    if (!isRunning) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      stopAgent()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [isRunning, stopAgent])
+
   useEffect(() => {
     if (agent.running) vfx.current?.activate(origin)
     else vfx.current?.deactivate()
@@ -140,29 +156,44 @@ export default function CopilotPanel({
    * Abrir: o nome de transição está no botão ANTES (estado antigo) e na barra DEPOIS.
    * Fechar: o inverso (a barra, depois o botão que reapareceu). Raiz sem crossfade.
    */
+  // Uma transição por vez: dois disparos seguidos (clique + atalho) deixariam o botão e a barra com
+  // o mesmo view-transition-name ao mesmo tempo, e o navegador aborta com 'duplicate name'.
+  const morphing = useRef(false)
   const morph = useCallback(
     (direction: 'open' | 'close', change: () => void, at?: OpenDetail) => {
       const origin = direction === 'open' ? findOrigin(at) : null
-      if (!canMorph() || (direction === 'open' && !origin)) {
+      if (morphing.current || !canMorph() || (direction === 'open' && !origin)) {
         change()
         return
       }
+      morphing.current = true
       const doc = document as unknown as { startViewTransition: (update: () => void) => { finished: Promise<unknown> } }
       const root = document.documentElement
-      let named: HTMLElement | null = origin
+      const palette = () => document.querySelector<HTMLElement>('[data-copilot-palette]')
+      // O nome é posto SÓ por estilo inline, e só em UM elemento por estado (antes: o botão ou a barra;
+      // depois: a barra ou o botão). Nada por regra de CSS: um caminho que monte a barra antes da
+      // captura do estado antigo a deixaria com o mesmo nome do botão ('duplicate name').
+      const marked = new Set<HTMLElement>()
+      const mark = (node: HTMLElement | null) => {
+        if (!node) return
+        node.style.viewTransitionName = 'wk-cmd-vt'
+        marked.add(node)
+      }
+      const unmark = () => {
+        marked.forEach((node) => { node.style.viewTransitionName = '' })
+        marked.clear()
+      }
       root.setAttribute('data-wk-vt', '')
-      if (origin) origin.style.viewTransitionName = 'wk-cmd-vt'
+      mark(direction === 'open' ? origin : palette())
       const transition = doc.startViewTransition(() => {
-        if (origin) origin.style.viewTransitionName = ''
+        unmark()
         flushSync(change)
-        if (direction === 'close') {
-          named = findOrigin(at)
-          if (named) named.style.viewTransitionName = 'wk-cmd-vt'
-        }
+        mark(direction === 'open' ? palette() : findOrigin(at))
       })
       const clear = () => {
+        morphing.current = false
         root.removeAttribute('data-wk-vt')
-        if (named) named.style.viewTransitionName = ''
+        unmark()
       }
       transition.finished.then(clear, clear)
     },

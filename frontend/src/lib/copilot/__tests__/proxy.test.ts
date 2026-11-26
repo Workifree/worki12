@@ -182,6 +182,13 @@ describe('saída do modelo', () => {
     expect((await handleCopilot(post(body()), deps)).status).toBe(502)
   })
 
+  it('campo de texto recebe número do modelo (1 vaga, 1 real) e vira texto; número no lugar de texto não abre porta nova', async () => {
+    const { deps } = setup({ fetch: async () => answer({ input_text: { index: 3, text: 1 } }) })
+    const res = await handleCopilot(post(body()), deps)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('\\"text\\":\\"1\\"')
+  })
+
   it('redige a resposta', async () => {
     const { deps } = setup({ fetch: async () => answer({ done: { text: 'o CPF é 529.982.247-25' } }) })
     expect(await (await handleCopilot(post(body()), deps)).text()).not.toContain('529.982')

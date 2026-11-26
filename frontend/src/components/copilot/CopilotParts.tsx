@@ -352,7 +352,7 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600">Recentes</h3>
                 <button type="button" onClick={view.forgetHistory} className="min-h-11 px-2 text-xs font-semibold text-gray-600 underline">
-                  Limpar
+                  Limpar histórico
                 </button>
               </div>
               <Chips items={view.history} onPick={view.send} label="Pedidos recentes" />

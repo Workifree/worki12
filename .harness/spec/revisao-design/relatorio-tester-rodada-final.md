@@ -1,109 +1,73 @@
-# Relatório do harness-tester — rodada pré-publicação (rodada 1 + Rodada 2: lote)
+# Relatório do harness-tester — Rodadas 1 (local, flags off), 2 (local, lote) e 3 (produção)
 
-**Veredito geral: PARCIAL.** Rodada 1 (flags desligadas) abaixo; a seção "Rodada 2: lote" vem primeiro porque supera o D-1 e a limitação "lote não testado".
-Ambiente: http://localhost:5173 (dev Vite, commit 7a1b86ec), banco de produção, 26/11/2026 ~02:50–03:50 (BRT). Contas: e2e-empresa e e2e-worker. Senha usada só nos campos de login.
-
----
-
-# Rodada 2: lote (VITE_FEATURE_LOTE=true, AVISOS=true, presença desligada)
-
-**Veredito da rodada 2: PASS com 1 SUSPEITA ALTA (cancelamento) e 2 defeitos baixos.** D-1 da rodada 1 está resolvido (a tela "Criar turnos" aparece).
-
-## Resultados por item
-1. **Lote de 3 turnos `ZZ-TESTE lote A` — PASSOU.** `/company/create` mostra "Criar turnos" ("Um ou vários de uma vez. Nada é publicado sem o seu toque."), "Comece de um modelo" (6 modelos + "Repetir o fim de semana passado/a semana passada"), "Turnos a partir de texto", "Criar do zero". Modelo "ZZ-TESTE final A" → "Mais detalhes" (título mudado para `ZZ-TESTE lote A`) → "Várias datas" → 27/11, 29/11, 30/11 → "Revisar (3)" → revisão ("3 turnos · 3 vagas · R$ 3,00 previstos") → "Chamar freelas > Escolher pessoas" (Worker E2E) → **duplo clique em "Publicar 3"** → "3 turnos publicados · lote 26/11", chamados "2 enviados · enviando 1". Em `/company/jobs` há **exatamente 3** `ZZ-TESTE lote A` (sem duplicata), agrupados em "Lote de 26/11 · N turnos". Aviso de conflito aparece na revisão ("Worker E2E já está em outro turno nesse horário.") e a "Frequência na semana: 12 turnos…" — avisa, não bloqueia.
-2. **Lote inválido — PASSOU (parcial).** Pelo campo "Colar ou digitar" (2 linhas: uma com data de ontem 25/11 e outra "sem horario"): a linha de ontem vira cartão com "Falta: valor.", "Esta data já passou." e "Já existe um turno parecido (mesma data, entrada e função)." + "Ver turno parecido"; rodapé "Corrija 2 pendências para publicar." e **"Publicar 1" desabilitado**; a linha sem horário não vira turno e aparece em "Confira o que ficou de fora": `Não entendi "…sem horario…": não sei interpretar "sem". Escreva as datas, por exemplo "sex e sáb" ou "29/11".` **Nada foi publicado.** Não testei o caso "linha sem horário" pelo editor de linhas (a entrada de texto o descarta antes); só a mensagem de fora.
-   - Observação: o parser descartou o título digitado ("ZZ TESTE lote B ontem 1" apareceu como "Não entendi"); o cartão ficou sem título, só "Garçom / Garçonete". Esperado pelo modelo de texto, mas o título que o usuário escreve some sem aviso.
-3. **Série semanal pelo lote — PASSOU.** "Várias datas" → sáb 28/11 → "Repetir toda semana até…" (12/12) → "Gerar 3 datas" → "Revisar (3)" mostra Sáb 28/11, 05/12, 12/12 → "Publicar 3" → "3 turnos publicados" (cada um "Sem chamado · Chamar"). Em Turnos: "Série · todo sábado". Menu da série: "Convidar para a série", "Editar os futuros", "Encerrar a série", "Excluir".
-4. **Convite → aceite → empresa vê — PASSOU, 13,6 s.** Freela abriu `/dashboard` e recebeu o modal "Convite de turno" (`ZZ-TESTE lote A`, 30/11) em ≤ 1 carregamento; clicou "Aceitar"; a empresa (página `/company/jobs` aberta, sem recarregar) já mostrava o turno "Worker E2E · Contratado" na primeira leitura do script, **no máximo 13,6 s depois do clique** (`Date.now()` no clique = …278106; detecção = …291670; limite superior porque o estado já estava presente quando o script começou). Mecanismo: polling de 20 s (WebSocket bloqueado pela ferramenta, ver T-1 abaixo).
-5. **Tela de lote em 390 e 320 — PASSOU, 2 observações.** Medido nas etapas início / editor / várias datas / revisão: sem rolagem horizontal; barra de ação ("Voltar" + "Publicar N") é `position: sticky`, altura 48 px, base em y=743 (390) e y=563 (320), **acima** do menu inferior (topo em 779 / 575) e `elementFromPoint` no centro devolve o próprio botão (não cobre, não é coberto). Alvos: só o checkbox 20×20 (dentro de rótulo) a 390; **a 320 as 31 células do calendário medem 41×44 px (3 px abaixo de 44 na largura)** — BAIXO.
-   - Cartão de revisão: "Editar" e "Freelas deste turno" são botões sem contorno nem ícone, parecem texto (afordância fraca) — BAIXO.
-   - **Teclado virtual cobrindo campo: NÃO testado** (emulação de viewport não abre o teclado). Só a barra sticky foi medida.
-
-## Defeitos e suspeitas novos
-### S-3 · ALTO (suspeita, 1 de 2 tentativas) — "Turno excluído com sucesso." sem efeito
-- **Oráculo:** expectativa do usuário (sucesso falso, constitution/patterns "sucesso falso").
-- **Passos:** `/company/jobs` → menu "Mais opções do turno" do `ZZ-TESTE lote A` de 29/11 (convite "Aguardando resposta", chamado aberto) → "Cancelar turno" → confirmar "Cancelar turno". Toast: "Turno excluído com sucesso." Recarreguei a página: o turno de 29/11 **continuou** na lista como "Aguardando resposta" e a página `/candidates` mostrou "Chamado aberto … 1 sem responder". Repeti os mesmos passos: dessa vez saiu da lista (0 restantes após recarga).
-- **Hipótese:** na 1ª tentativa o clique veio por script logo depois de outro cancelamento (lista em refresh); pode ser corrida minha. Não consegui distinguir. Vale um teste manual: cancelar turno com chamado aberto e conferir após F5.
-### D-7 · BAIXO — células do calendário do lote a 320 medem 41×44 (ver item 5).
-### D-8 · BAIXO — título digitado no "Colar ou digitar" é descartado sem aviso (item 2).
-### Ruído (não é defeito): WebSocket idem rodada 1 (T-1).
-
-## Limpeza e dados deixados (Rodada 2)
-- Cancelados pelo produto: `ZZ-TESTE lote A` ×3 (27/11, 29/11, 30/11) e `ZZ-TESTE lote serie` ×3 (28/11, 05/12, 12/12, via "Encerrar a série": "3 turnos cancelados"). Conferido: após recarga `lote A` = 0, `lote serie` = 0.
-- **Não** publiquei o lote inválido `ZZ-TESTE lote B` (nada no banco).
-- O cancelamento do `lote A` de 30/11 (que o freela tinha aceitado) disparou "1 freela notificado": há notificações de cancelamento na conta do freela. Chamados abertos (`shift_calls`) e linhas de `applications`/`shift_call_targets` dos turnos cancelados ficam no banco (cancelamento é soft delete); não verifiquei se o chamado de 29/11 foi encerrado.
-- **Continuam (são da rodada 1):** `ZZ-TESTE final A` (28/11, freela contratado, aberto) e `ZZ-TESTE final B hoje` (concluído, pago, termo aceito).
+Ordem: Rodada 3 (produção) primeiro; depois Rodada 2 (lote) e Rodada 1 (base). Contas: e2e-empresa e e2e-worker. Senha usada só nos campos de login, nunca registrada.
 
 ---
 
-# Rodada 1 (flags desligadas)
+# Rodada 3: produção (https://worki-opal.vercel.app, 26/11/2026 ~04:10–04:50 BRT)
 
-Viewports medidos: 1440 (empresa e freela), 1024, 390, 320, nos dois papéis (script de medição por rota). Sem 4xx/5xx em nenhuma requisição (resource timing nos dois Chromes). Console: só ruído de WebSocket (ver T-1), sem erro de aplicação.
+**Veredito: PASS** (nenhum defeito bloqueante; 1 MÉDIO novo, 3 BAIXOS). Bundle no ar: `assets/index-Csp6ROGO.js`; flags LOTE e AVISOS ligadas (tela "Criar turnos" aparece); presença desligada.
 
-## Defeitos
+## Checagens pedidas
+1. **Site novo no ar — OK.** `/licencas` responde 200 e mostra "Licenças de código aberto" (+ link "Baixar em texto"). Cabeçalho `Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=()` (lido por `fetch('/licencas')`). CSP presente.
+2. **Empresa: lote em produção — OK.** `/company/create` = "Criar turnos" (modelo + "Várias datas"). Modelo "ZZ-TESTE final A" → título `ZZ-TESTE prod lote` → 27/11 e 29/11 → "Revisar" → "Chamar freelas > Escolher pessoas (Worker E2E)" → **duplo clique em "Publicar 2"** → "2 turnos publicados · lote 26/11", "Chamados: 2 enviados". Em Turnos: exatamente 2 `ZZ-TESTE prod lote` ("Lote de 26/11"). **Freela aceitou:** convite 29/11 → "Aceitar" às …779148; a empresa (aba visível, em `/company/create`) mostrou o aviso `Worker E2E aceitou o turno "ZZ-TESTE prod lote" de 29/11.` às …798624 = **19,5 s** (≤30 s). O 2º convite (27/11) também foi aceito; a lista de Turnos aberta da empresa passou a mostrar "Contratado" nas duas linhas sem recarregar (observado dentro da janela de 45 s; não cronometrei esse segundo com precisão).
+3. **Freela 390 e 1440 — OK.** Início, Meus Turnos, Carteira (Empresas), Recebimentos, Mensagens, Perfil, Notificações, Indicações: sem rolagem horizontal, sem erro de aplicação no console, **0 respostas 4xx/5xx** (resource timing; 179 requisições, nenhum 403/42501 em `/rest/v1/workers`). Chamadas a `workers`: todas 200, incluindo `rpc/get_my_worker_profile`. **CPF e PIX:** Perfil mostra "Mostrar CPF" / "Mostrar chave PIX" / "Mostrar onde já trabalhei…" (44×44 px); depois do clique viram "Ocultar CPF"/"Ocultar chave PIX" e, com "Identidade" expandida, o CPF aparece completo (formato ###.###.###-##; um CPF de teste conhecido, não registrado aqui). Não alterei CPF nem nascimento (só observei). **Etapa 2 do CPF (authenticated sem leitura direta de `workers.cpf/birth_date`):** nenhum 42501/403; Sidebar (nome/nível), Início, Meus Turnos, Perfil carregam; empresa abre **Candidatos** (`/company/jobs/<id>/candidates`), **Elenco** (`/company/team`), Início, Hoje, Turnos, Gestão, Mensagens, Relatórios sem erro na tela e 0 4xx/5xx.
+4. **Login e cadastro, nova casca, 390 e 320 — OK.** `/login` (freela e empresa) e "Cadastre-se" ("Criar conta de freela/empresa"): sem rolagem horizontal, botão primário visível (y≈562 a 320), alternância "Sou freela/Sou empresa" funciona. (`/cadastro` não existe: 404 "Página não encontrada"; o cadastro é uma aba de `/login`.)
+5. **Faixa "Instale o Worki" e "sem internet" — FALHA PARCIAL (D-9).** `emulate Offline` **não é possível** aqui ("Network throttling is not supported when network blocking is configured"); simulei com `navigator.onLine=false` + evento `offline`: aparece "Você está sem internet. Algumas telas podem não carregar." (não é o offline real, só a camada de UI).
 
-### D-1 · ~~ALTO~~ RESOLVIDO na rodada 2 (flags ligadas)
-- Antes: `/company/create` renderizava o formulário antigo porque `frontend/.env.local` não definia `VITE_FEATURE_LOTE/PRESENCA/AVISOS`. Agora mostra "Criar turnos". **Atenção para a Vercel:** as mesmas variáveis precisam existir lá, senão o lote não aparece em produção.
+## Defeitos novos (produção)
+### D-9 · MÉDIO — "Instale o Worki" cobre conteúdo e ações; empilha com o aviso de offline (390)
+- **Oráculo:** design-system (camadas: nada cobre ação principal) / expectativa do usuário.
+- **Passos:** login empresa → emulate 390×844 → `/company/jobs` (primeira visita, banner ainda não dispensado) → simular offline (`navigator.onLine=false` + `window.dispatchEvent(new Event('offline'))`).
+- **Obtido:** a faixa "Instale o Worki / Abra seus turnos direto da tela inicial. [Agora não] [Instalar]" fica sobre a lista, acima do menu inferior (≈ y 654–767), com o aviso "Você está sem internet…" empilhado logo acima (≈ y 597–645). Juntos tapam ~170 px da lista, inclusive os botões "Chamar" das linhas seguintes, até o usuário tocar "Agora não". No freela a faixa também cobre o cartão "Nível/XP" em `/profile` (390). No PC (1440) fica no rodapé do conteúdo.
+- **Esperado:** a faixa não cobrir linhas de ação (reservar espaço ou encolher), ou aparecer só em tela sem lista de ações.
+- **Frequência:** sempre na 1ª visita por aparelho.
+- **Suspeita de origem:** componente de convite de instalação (PWA) e aviso offline, ambos em fluxo `fixed` acima do BottomNav.
+### D-10 · BAIXO — "Baixar em texto" em `/licencas` mede 104×16 px (alvo < 44 px, 390).
+### D-11 · BAIXO — no cadastro (390) os links "Termos de Uso" (86×14) e "Política de Privacidade" (211×30) são alvos pequenos (inline em frase).
+### D-12 · BAIXO — telefone aparece sem "Mostrar" no Perfil, enquanto CPF e PIX têm máscara (pode ser intencional; confirmar a regra).
 
-### D-2 · MÉDIO — menu inferior do freela trunca rótulos a 320
-- Oráculo: design-system (texto cortado no BottomNav) / expectativa do usuário.
-- Freela, 320×640, qualquer tela: "Empres…", "Recebimen…", "Mensag…". O da empresa (5 itens) cabe. Repro: login freela → emulate 320 → `/my-jobs`.
+## Não testado (rodada 3)
+- Offline real (`emulate Offline` bloqueado); SW/banner de atualização; "Instalar" de fato.
+- WebSocket Realtime (bloqueado pela ferramenta, T-1); o que funcionou foi o polling.
+- Gravação de nascimento/CPF (só observação, conforme pedido).
+- Teclado virtual, paisagem, 1024/320 das telas logadas.
 
-### D-3 · MÉDIO — informação de horário cortada em linhas de lista (390)
-- Empresa `/company/dashboard` ("Contratados"): "Qua., 25/11 · 01:10–04…" (horário final perdido quando o botão "Presença e pagamento" é largo).
-- Freela `/recebimentos`: "Restaurante E2E · turno de 25…" (data cortada) e `/my-jobs` a 320: "Restaurante E…".
-- Oráculo: expectativa do usuário (dado útil truncado em vez de quebrar linha).
+## Limpeza (produção) e dados deixados
+- Cancelados/excluídos pelo produto, todos `ZZ-TESTE` da conta e2e: `prod lote` ×2 (27/11 e 29/11), `final A` (28/11), `rodada2 D-vinculo` (27/11) ("Cancelar turno", freela notificado) e 4 turnos vazios `equipe reg-B`, `equipe enc-1`, `equipe reg-C`, `equipe reg-F` ("Excluir"). Recarreguei: **não há turno futuro/aberto restante** em Turnos.
+- **Ficaram** (passados ou concluídos, não cancelei para não mexer em histórico/pagamento): `ZZ-TESTE final B hoje` (concluído, pago R$ 1,00, termo aceito), `pre-pub 2511`, `posreforma A`, `equipe2 enc-3`, `equipe reg-A`, `rodada3 E`, `rodada2 C`, `rodada1 B-checkin`, `rodada1 A` (todos de 25–26/11, na lista "Anteriores"; `rodada1 A` e `rodada1 B-checkin` ainda aparecem como contratados sem presença).
+- Notificações geradas nas duas contas (convites, aceites, cancelamentos). Cancelamento é soft delete: as linhas permanecem no banco com status excluído.
+- **Sessões abertas:** os dois Chromes continuam logados em produção.
 
-### D-4 · MÉDIO — alvo de toque pequeno no Elenco
-- Empresa `/company/team` ("Meu Elenco"), 390 e 320: botão/link do nome do freela mede 78×20 px (< 44). Medido por `getBoundingClientRect`.
+---
 
-### D-5 · MÉDIO — "Turno alterado" não chegou ao vivo (suspeita forte, 1 tentativa)
-- Empresa editou saída 12:00→13:00 em `/company/jobs/<id>/edit`; "Turno atualizado com sucesso!". Freela estava em `/dashboard` e **não** recebeu aviso em 40 s. A notificação "Turno alterado" existe e estava na lista ao navegar para `/notifications` ("A empresa alterou data, horário, local ou valor do turno…"). Polling é de 20 s e só roda com aba visível (`liveRefresher.ts`); a janela do freela provavelmente estava oculta, então pode ser a ferramenta. Não consegui separar produto de ferramenta.
-- Observação: o campo Valor está desabilitado na edição ("O valor não pode ser alterado após a criação."), então "empresa altera valor" não é possível; só horário foi testado.
+# Rodada 2: lote (local, VITE_FEATURE_LOTE=true, AVISOS=true, presença desligada)
 
-### D-6 · BAIXO
-- Chips de filtro (`/company/jobs`, 1440): última chip "Concluídos" com borda direita cortada (container `worki-scroll-row` com `px-0` e `overflow-x:auto` no `md`).
-- Heading: `/recibo/:jobId` abre com `h2` ("Você recebeu R$ 1,00…?") antes do `h1` "Recibo de Pagamento".
-- `/my-jobs` a 320: aba "Agendados" cortada no meio da palavra (a lista rola, há fade; "Histórico" some).
-- Sidebar do freela mostra "… Nível 1 · 0 XP" durante o carregamento (número fabricado transitório), depois "Nível 4 · 725 XP".
-- Toast "Turno criado! Convide um freela do seu elenco." persiste após navegar para outra tela (`/candidates`) e para a tela do chamado.
-- `/company/trilha` (trilha desligada) mostra subtítulo "Conclua marcos e receba bônus por PIX." acima de "A trilha não está disponível para você agora" (promete o que está desligado).
-- ~8 GET `auth/v1/user` em rajada a cada navegação (todas 200). Dev/StrictMode duplica o resto; confirmar no build.
-- Rótulo "Esta Semana" capitalizado diferente de "Hoje"/"Amanhã" (`/company/jobs`).
+**Veredito da rodada 2: PASS com 1 SUSPEITA ALTA (cancelamento) e 2 defeitos baixos.** D-1 da rodada 1 resolvido.
 
-## Suspeitas (não reproduzidas como defeito)
-- **S-1** Dados pessoais: `team_connections?select=…workers(…phone,pix_key…)` e `applications?select=…phone,pix_key` são lidos em telas que não os exibem (criar turno, candidatos). Elenco aceito, então RLS permite; é minimização de dados (LGPD), 1 observação.
-- **S-2** "Contratados"/"Agendados" mantêm turnos de ontem (25/11) como "Aguardando chegada" com botão "Registrar chegada" (resíduo de testes anteriores). Em produção real, turno vencido sem presença não some nem muda de estado.
+1. **Lote de 3 `ZZ-TESTE lote A` — PASSOU.** "Criar turnos" → modelo → "Mais detalhes" → "Várias datas" (27/11, 29/11, 30/11) → "Revisar (3)" → "Chamar freelas > Escolher pessoas" → duplo clique em "Publicar 3" → "3 turnos publicados · lote 26/11". Em Turnos: exatamente 3, agrupados "Lote de 26/11 · N turnos". Conflito ("Worker E2E já está em outro turno nesse horário.") e frequência ("12 turnos na semana…") só avisam.
+2. **Lote inválido — PASSOU (parcial).** Pelo "Colar ou digitar" (linha de ontem + linha "sem horario"): cartão com "Falta: valor.", "Esta data já passou.", "Já existe um turno parecido…"; "Corrija 2 pendências para publicar."; **"Publicar 1" desabilitado; nada publicado.** A linha sem horário vai para "Confira o que ficou de fora": `Não entendi "…": não sei interpretar "sem". Escreva as datas, por exemplo "sex e sáb" ou "29/11".` Não testei "sem horário" pelo editor de linhas.
+3. **Série semanal — PASSOU.** "Repetir toda semana até…" (12/12) → "Gerar 3 datas" → Sáb 28/11, 05/12, 12/12 → "Publicar 3". Em Turnos: "Série · todo sábado". Menu: "Convidar para a série", "Editar os futuros", "Encerrar a série", "Excluir".
+4. **Convite → aceite → empresa vê — PASSOU, ≤13,6 s** (polling; limite superior).
+5. **390 e 320 — PASSOU.** Sem rolagem horizontal; barra "Voltar/Publicar" sticky (48 px, base y=743 a 390 e y=563 a 320) acima do menu (topo 779/575); `elementFromPoint` devolve o botão. A 320 as 31 células do calendário medem 41×44. Teclado virtual: não testado.
+- **S-3 · ALTO (suspeita, 1 de 2) — "Turno excluído com sucesso." sem efeito:** cancelar `lote A` de 29/11 (chamado aberto, "Aguardando resposta") mostrou o toast, mas após recarregar o turno continuou com "Chamado aberto … 1 sem responder"; repeti e saiu. Pode ser corrida do meu script de limpeza. Teste manual com F5 recomendado. (Em produção, rodada 3, os cancelamentos conferidos após recarga funcionaram.)
+- **D-7 · BAIXO** células do calendário a 320 = 41×44. **D-8 · BAIXO** título digitado no "Colar ou digitar" é descartado sem aviso. "Editar" e "Freelas deste turno" na revisão parecem texto (afordância fraca).
+- Limpeza da rodada 2: `lote A` ×3 e `lote serie` ×3 cancelados.
 
-## T-1 · Tempo real: ferramenta, não produto
-- `new WebSocket('wss://<supabase>/realtime/v1/websocket')` e `ws://localhost:5173` falham em **0–1 ms** com `net::ERR_INTERNET_DISCONNECTED` nos DOIS Chromes (`navigator.onLine` é true). Bloqueio do ambiente de automação; não é o app. Consequência: Realtime por WebSocket **não foi verificado**.
-- O fallback (`useLiveRefresh`, polling 20 s + foco) funcionou nos dois sentidos, sem recarregar a página:
-  - empresa cria convite → freela recebeu o modal "Convite de turno" ao abrir `/dashboard` (≤20 s);
-  - freela aceita (duplo clique) → empresa viu o aviso "Worker E2E aceitou o turno…" e "Contratados (3→4)" sem recarregar;
-  - freela "Registrar chegada" → a tela da empresa mudou para "Confirmar Chegada"; "Registrar saída" → "Confirmar saída" (ambos sem recarregar).
-  - Tempos da rodada 1 NÃO cronometrados com precisão (cada espera retornou antes de 30 s). Na rodada 2 o aceite foi cronometrado: ≤ 13,6 s.
+---
 
-## O que passou
-- Login nos dois papéis; primeira dobra, menu lateral (1440), rail de ícones com nomes e ≥44 px (1024), menu inferior (390/320): nada cobre nada, sem rolagem horizontal da página em **nenhuma** rota a 1440/1024/390/320 (`scrollWidth == clientWidth`).
-- Criar turno: data passada rejeitada com "Escolha uma data que ainda não passou."; duplo clique em "Criar turno" → 1 único `POST /jobs` (201). Duplo clique em "Enviar convite" do chamado → 1 `shift_call_targets` POST. Duplo clique em "Aceitar" (freela), "Confirmar Chegada" (empresa) e "Confirmar Registro" (pagamento) sem duplicar efeito visível.
-- Fluxo do dia (turno `ZZ-TESTE final B hoje`, R$ 1,00): chamado → aceite ("Vaga garantida!") → "Registrar chegada" → empresa "Chegada confirmada!" → freela saída → empresa "Saída confirmada!" → "Registrar pagamento" (PIX, R$ 1,00) → "Pagamento registrado!" → freela `/recibo/<id>`: a 390×844 o valor "R$ 1,00" está no título (acima da dobra); o botão "Aceitar termo e confirmar recebimento" fica em y≈577 px (visível, 48 px) mas desabilitado até abrir "Ler o termo inteiro" (y≈380, 44 px) e marcar o checkbox. Confirmou ("Recebimento confirmado!"); recarregou e persistiu ("Termo aceito em 26/11/2026 às 02:59", "Recebimento confirmado em …"). Sem `{{placeholder}}` no termo. Recebimentos: "Total recebido R$ 461,00" = Ganhos do Início após recarga; "7 turnos realizados" = Resumo do perfil.
-- Check-in padrão funciona como antes (presença verificada desligada: sem QR/GPS, não testado, conforme instrução).
-- Chamado: aviso de vínculo ("Já 11x esta semana… tolera até 2x/semana") aparece, não bloqueia.
-- `/company/trilha` degrada com mensagem; `/company/hoje`, `/operacao`, `/organization`, `/indicacoes` abrem sem erro.
-- Copiloto: botão "Ajuda e copiloto" **não apareceu** (só "Como faço…?"), então nada foi aberto.
+# Rodada 1 (local, flags desligadas)
 
-## Não testado (e por quê)
-- **CPF (passo 5):** a leitura usa `get_my_worker_profile` (200) e exibe CPF só ao próprio freela (um CPF de teste conhecido, 529.***.***-25). **Edição não testada:** o CPF da conta e2e já está gravado e o formulário diz "O CPF … não muda por aqui" (somente leitura; `set_my_worker_identity` só é chamado quando o CPF está vazio, `Profile.tsx` 523–545). Nascimento não aparece no perfil. CPF inválido / salvar / recarregar: **sem conta de teste sem CPF**. Nenhum CPF foi digitado.
-- WebSocket Realtime (T-1); avisos pela fila (flag ligada na rodada 2, mas sem canal externo, nada a ver na UI); presença verificada (não existe).
-- 320/1024 só varridos por script (sem inspeção visual de todas as telas); Mensagens, Perfil da empresa, Gestão, Relatórios medidos mas não fotografados.
-- Offline, rede lenta, PWA, teclado (Tab/Esc nos modais, teclado virtual), "Intruso", paisagem 844×390.
-- Rodada 2: "linha sem horário" pelo editor de linhas; "Editar os futuros"/"Convidar para a série" da série.
+Viewports medidos: 1440, 1024, 390, 320, nos dois papéis. Sem 4xx/5xx. Console: só WebSocket (T-1).
 
-## Linhas da matriz COBERTURA que mudariam
-Criar turno (dupla submissão, data passada): ✅. Convite→aceite→check-in→saída→pagamento→recibo (modo A) 390: ✅. Varredura 1440/390 empresa+freela: ✅ (medida). **Lote (criar 3, duplo clique, inválido, série, 390/320): ✅.** Cancelar turno com chamado aberto: 🔶 (S-3). CPF edição: ⬜.
-
-## Dados ZZ-TESTE deixados no banco de produção (estado final)
-- `ZZ-TESTE final A` (28/11, 10:00–13:00, R$ 1,00): freela contratado, **agendado, aberto**. Sugestão: cancelar pelo produto.
-- `ZZ-TESTE final B hoje` (26/11): concluído; 1 chamado aceito; presença registrada; pagamento R$ 1,00 registrado e confirmado; termo aceito (recibo nº 2A10CCF8).
-- Notificações nas duas contas (convites, aceites, alteração, pagamento, cancelamento do lote). Soft delete: os 6 turnos de lote cancelados continuam como linhas com status excluído.
-- Resíduos de rodadas anteriores (`ZZ-TESTE rodada1 A`, `rodada2 …`, `equipe …`) não são desta rodada.
+- **D-1 · RESOLVIDO** (rodada 2): `frontend/.env.local` não definia as flags `VITE_FEATURE_LOTE/PRESENCA/AVISOS`. As mesmas variáveis precisam existir na Vercel (confirmado na rodada 3: lote aparece).
+- **D-2 · MÉDIO** menu inferior do freela trunca rótulos a 320 ("Empres…", "Recebimen…", "Mensag…"). Repro: freela, 320×640, qualquer tela. (Não reverifiquei em produção.)
+- **D-3 · MÉDIO** horário/data cortados em listas a 390: empresa Início "Qua., 25/11 · 01:10–04…"; freela Recebimentos "turno de 25…"; `/my-jobs` a 320 "Restaurante E…".
+- **D-4 · MÉDIO** nome do freela em `/company/team` mede 78×20 px (390/320).
+- **D-5 · MÉDIO (suspeita)** "Turno alterado" não chegou ao vivo em 40 s (a notificação existia ao abrir `/notifications`); polling de 20 s só com aba visível; pode ser a janela oculta. Valor desabilitado na edição ("O valor não pode ser alterado após a criação.").
+- **D-6 · BAIXO** chip "Concluídos" com borda cortada no PC; `/recibo/:id` com `h2` antes do `h1`; aba "Agendados" cortada a 320; sidebar do freela mostra "… Nível 1 · 0 XP" durante o carregamento; toast "Turno criado!" persiste ao trocar de tela; trilha desligada promete "bônus por PIX"; ~8 `auth/v1/user` por navegação; "Esta Semana" capitalizado diferente de "Hoje/Amanhã".
+- **S-1** `team_connections`/`applications` selecionam `phone, pix_key` em telas que não os exibem (minimização LGPD). **S-2** turnos de ontem seguem "Aguardando chegada" com "Registrar chegada".
+- **T-1 Tempo real:** `new WebSocket` falha em 0–1 ms com `ERR_INTERNET_DISCONNECTED` nos dois Chromes (ferramenta, não produto); o polling de 20 s funcionou em convite, aceite, chegada e saída.
+- **Passou:** login, menus (1440/1024/390/320) sem sobreposição nem rolagem horizontal; criar turno com data passada rejeitada; duplo clique em criar/convidar/aceitar/confirmar sem duplicar; fluxo do dia completo no 390 (chegada, saída, pagamento R$ 1,00, recibo com termo aceito, persistiu após recarga; valores consistentes entre Recebimentos, Início e Perfil); aviso de frequência não bloqueia; trilha degrada; copiloto não apareceu.
+- **Não testado:** edição de CPF (CPF e2e já gravado e somente leitura: "O CPF … não muda por aqui"; sem conta de teste sem CPF); offline/lento, PWA, teclado, paisagem; Mensagens/Gestão/Relatórios só medidos.
+- **Linhas da matriz que mudariam:** criar turno ✅; fluxo convite→recibo (modo A) 390 ✅; lote (criar 3, duplo clique, inválido, série, 390/320) ✅; lote em produção ✅; CPF Mostrar via RPC ✅; cancelar turno com chamado aberto 🔶; CPF edição ⬜; offline real ⬜.

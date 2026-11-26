@@ -70,7 +70,7 @@ export default function Licenses() {
                 {state.text}
               </pre>
               <p className="text-sm">
-                <a href={LICENSES_URL} className="underline font-semibold">Baixar em texto</a>
+                <a href={LICENSES_URL} className="inline-flex min-h-11 items-center py-2 underline font-semibold">Baixar em texto</a>
               </p>
             </>
           )}

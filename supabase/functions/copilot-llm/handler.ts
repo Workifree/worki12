@@ -184,52 +184,71 @@ function rawOutputFlags(args: unknown): string[] {
   return [...flags]
 }
 
-/** Resposta do modelo: reconstruída campo a campo. Qualquer coisa fora da lista -> `null`. */
-export function validateModelOutput(args: unknown, role: Role): CleanOutput | null {
-  if (!args || typeof args !== 'object') return null
+/**
+ * Em campo de TEXTO, aceita número ou booleano (o modelo manda `text: 1` para "1 vaga"): vira string.
+ * Para campo numérico/booleano NÃO há conversão: texto no lugar de número continua recusado.
+ */
+function coerce(value: unknown, type: 'string' | 'boolean' | 'number' | 'integer'): unknown {
+  if (type === 'string' && ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean')) return String(value)
+  return value
+}
+
+/**
+ * Resposta do modelo: reconstruída campo a campo. Qualquer coisa fora da lista -> `output: null`, com
+ * `why` dizendo QUAL regra falhou (só nome de ação/campo, nunca o conteúdo) para o log do proxy.
+ */
+export function validateModelOutputWhy(args: unknown, role: Role): { output: CleanOutput | null; why?: string } {
+  const bad = (why: string) => ({ output: null, why })
+  if (!args || typeof args !== 'object') return bad('args')
   const input = args as Record<string, unknown>
   let action = input.action
   if (typeof action === 'string') {
     try {
       action = JSON.parse(action)
     } catch {
-      return null
+      return bad('action_json')
     }
   }
-  if (!action || typeof action !== 'object') return null
+  if (!action || typeof action !== 'object') return bad('action_ausente')
   const names = Object.keys(action)
-  if (names.length !== 1 || !Object.prototype.hasOwnProperty.call(ACTIONS, names[0])) return null
+  if (names.length !== 1) return bad(`acoes_${names.length}`)
+  if (!Object.prototype.hasOwnProperty.call(ACTIONS, names[0])) return bad(`acao_fora:${names[0].slice(0, 30)}`)
   const name = names[0]
   const values = (action as Record<string, unknown>)[name]
-  if (!values || typeof values !== 'object') return null
+  if (!values || typeof values !== 'object') return bad(`${name}:sem_campos`)
   const spec = ACTIONS[name].fields
-  if (Object.keys(values).some((key) => !Object.prototype.hasOwnProperty.call(spec, key))) return null
+  const extra = Object.keys(values).find((key) => !Object.prototype.hasOwnProperty.call(spec, key))
+  if (extra !== undefined) return bad(`${name}:campo_extra:${extra.slice(0, 30)}`)
   const clean: Record<string, unknown> = {}
   for (const [key, field] of Object.entries(spec)) {
-    const value = (values as Record<string, unknown>)[key]
+    const value = coerce((values as Record<string, unknown>)[key], field.type)
     if (value === undefined || value === null) {
-      if (field.required) return null
+      if (field.required) return bad(`${name}:falta:${key}`)
       continue
     }
     if (field.type === 'string') {
-      if (typeof value !== 'string') return null
+      if (typeof value !== 'string') return bad(`${name}:${key}:tipo`)
       clean[key] = redactPII(value).slice(0, field.maxLength)
     } else if (field.type === 'boolean') {
-      if (typeof value !== 'boolean') return null
+      if (typeof value !== 'boolean') return bad(`${name}:${key}:tipo`)
       clean[key] = value
     } else {
-      if (typeof value !== 'number' || !Number.isFinite(value)) return null
-      if (field.type === 'integer' && !Number.isInteger(value)) return null
-      if (value < (field.min ?? -Infinity) || value > (field.max ?? Infinity)) return null
+      if (typeof value !== 'number' || !Number.isFinite(value)) return bad(`${name}:${key}:tipo`)
+      if (field.type === 'integer' && !Number.isInteger(value)) return bad(`${name}:${key}:inteiro`)
+      if (value < (field.min ?? -Infinity) || value > (field.max ?? Infinity)) return bad(`${name}:${key}:faixa`)
       clean[key] = value
     }
   }
-  if (name === 'navigate' && !(DESTINATIONS[role] as readonly string[]).includes(clean.destination as string)) return null
+  if (name === 'navigate' && !(DESTINATIONS[role] as readonly string[]).includes(clean.destination as string)) return bad('navigate:destino')
   const output: CleanOutput = { action: { [name]: clean } }
   for (const key of ['evaluation_previous_goal', 'memory', 'next_goal'] as const) {
     if (typeof input[key] === 'string') output[key] = redactPII(input[key] as string).slice(0, 400)
   }
-  return output
+  return { output }
+}
+
+export function validateModelOutput(args: unknown, role: Role): CleanOutput | null {
+  return validateModelOutputWhy(args, role).output
 }
 
 /** Vai junto do pedido na 2ª tentativa, quando o modelo respondeu em texto solto. */
@@ -433,11 +452,16 @@ export async function handleCopilot(request: Request, deps: Deps): Promise<Respo
     inputTokens += spentIn
     outputTokens += spentOut
     // Texto solto (comum com `tool_choice: auto`) vira só uma FALA para a pessoa: `done` não toca na tela.
-    const output = validateModelOutput(
+    const checked = validateModelOutputWhy(
       result.text ? { action: { done: { text: result.text.slice(0, 1500), success: false } } } : result.args,
       valid.role,
     )
-    if (!output) return fail(502, result.noAction ? 'model_no_action' : 'invalid_model_output')
+    const output = checked.output
+    if (!output) {
+      // Só o NOME da regra que falhou (ação/campo), nunca o conteúdo: serve para diagnosticar sem vazar dado.
+      if (!result.noAction) deps.log('output_invalido', { why: checked.why ?? 'desconhecido' })
+      return fail(502, result.noAction ? 'model_no_action' : 'invalid_model_output')
+    }
     deps.log('ok', { inputTokens, outputTokens })
     return reply(200, {
       ...(report ? { eval: report } : {}),

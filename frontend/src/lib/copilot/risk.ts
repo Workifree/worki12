@@ -2,12 +2,13 @@
  * Classificação de risco decidida pelo CÓDIGO, sobre o elemento real e seus ancestrais.
  * O modelo não opina: o que ele disser sobre um alvo é ignorado.
  *
- *  safe      -> navegação e interface pura (link permitido, aba, abrir menu, focar campo)
- *  confirm   -> qualquer outra coisa, inclusive o DESCONHECIDO: cartão de confirmação
+ *  safe      -> navegação e interface pura (link permitido, aba, abrir menu, focar campo) e escolha de
+ *               valor em campo de formulário (opção, data, lista): nada disso grava nem avisa ninguém
+ *  confirm   -> o que grava, envia, publica, chama ou convida (classe C) e o DESCONHECIDO: cartão
  *  forbidden -> categoria D: a IA nunca aciona; só destaca para a pessoa tocar
  *  blocked   -> nem destaca (interface do copiloto, área privada, link externo ou proibido)
  */
-import { alvoEhRiscoD } from './riskCatalog'
+import { alvoEhRiscoD, alvoSemEfeito } from './riskCatalog'
 import { accessibleName, allNames, fold, headingOf, isCopilotUi, isPrivate, safeText } from './dom'
 import { judgeUrl, pathPolicy } from './routes'
 
@@ -49,6 +50,39 @@ const VERBO_EM_LINK =
   /\b(?:pagar|estornar|excluir|apagar|deletar|cancelar|remover|bloquear|dispensar|recusar|aceitar|confirmar|contratar|encerrar|revogar|sair|sacar)\b/
 
 const DISPENSA = /^(?:fechar|voltar|agora nao|nao|nao,? voltar|x)$/
+
+/** Botão `type="button"` que só muda o que aparece (passo, mês, mais itens). Nome inteiro, sem verbo de efeito. */
+const SO_MOSTRA = /^(?:proximo|anterior|proximo mes|mes anterior|ver mais|mostrar mais|ver menos|mostrar menos|ver detalhes|expandir|recolher|ver todos|ver todas)$/
+
+/** Nomes que mudam dado ou avisam alguém: nunca contam como "escolha de valor". */
+const VERBO_C =
+  /\b(?:salvar|enviar|publicar|chamar|convidar|criar|adicionar|gravar|registrar|disparar|avisar|notificar|mandar|duplicar|repetir|aplicar|atualizar|alterar|editar|trocar|indicar|apresentar|marcar todos)\b/
+
+/** Contêineres onde controles de escolha são partes de um formulário (mesmo sem `<form>`). */
+const GRUPO_DE_ESCOLHA = 'form,fieldset,[role="group"],[role="radiogroup"],[role="listbox"],[role="tablist"]'
+
+/** Controle cujo toque só escolhe um valor (opção, data, chip), sem enviar nada. */
+function isChoiceControl(el: Element): boolean {
+  const role = el.getAttribute('role') ?? ''
+  if (['radio', 'option', 'menuitemradio', 'menuitemcheckbox', 'checkbox', 'switch'].includes(role)) return true
+  if (el.tagName === 'INPUT') return ['checkbox', 'radio'].includes((el.getAttribute('type') ?? '').toLowerCase())
+  if (el.tagName === 'BUTTON' && (el.getAttribute('type') ?? 'submit').toLowerCase() === 'button') {
+    return el.hasAttribute('aria-pressed') || el.hasAttribute('aria-checked') || el.hasAttribute('aria-selected')
+  }
+  return false
+}
+
+/** Lista fora de `<form>` que faz parte de um conjunto de campos (há outro campo no mesmo bloco, e ela tem rótulo). */
+export function selectIsFormField(select: Element): boolean {
+  if (select.closest('form')) return true
+  const labelled = ((select as HTMLSelectElement).labels?.length ?? 0) > 0 || !!select.getAttribute('aria-label')
+  if (!labelled) return false
+  const block = select.closest('fieldset,[role="group"],section,dialog,[role="dialog"]')
+  if (!block) return false
+  return Array.from(block.querySelectorAll('input,select,textarea')).some(
+    (field) => field !== select && (field.tagName !== 'INPUT' || isTextEntry(field)),
+  )
+}
 
 const SENSIVEL = new RegExp(
   '(?:senha|password|passcode|\\bcpf\\b|\\bcnpj\\b|\\bpix\\b|\\botp\\b|\\bcodigo\\b|\\btoken\\b|telefone|celular|' +
@@ -223,11 +257,20 @@ export function classifyClick(el: Element, pathname: string = window.location.pa
     return v('safe', 'Navegação.')
   }
   if (el.getAttribute('role') === 'tab' || el.tagName === 'SUMMARY') return v('safe', 'Só muda o que aparece.')
-  if (el.tagName === 'BUTTON' && el.getAttribute('type') === 'button') {
-    if (el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded')) return v('safe', 'Abre ou fecha um menu.')
-    if (DISPENSA.test(name)) return v('safe', 'Fecha ou volta.')
+  const acionavel = el.closest(ACIONAVEL) ?? el
+  if (alvoSemEfeito(acionavel.getAttribute('data-copilot') ?? '')) return v('safe', 'Só abre um passo.')
+  const nomes = allNames(acionavel)
+  const temVerboC = nomes.some((n) => VERBO_C.test(n))
+  if (isChoiceControl(acionavel) && acionavel.closest(GRUPO_DE_ESCOLHA) && !temVerboC) {
+    return v('safe', 'Só escolhe um valor do formulário.')
   }
-  return v('confirm', 'Pode gravar ou avisar alguém.')
+  if (acionavel.tagName === 'BUTTON' && acionavel.getAttribute('type') === 'button') {
+    if (acionavel.hasAttribute('aria-haspopup') || acionavel.hasAttribute('aria-expanded')) return v('safe', 'Abre ou fecha um menu.')
+    if (DISPENSA.test(name)) return v('safe', 'Fecha ou volta.')
+    if (!temVerboC && nomes.some((n) => SO_MOSTRA.test(n))) return v('safe', 'Só muda o que aparece.')
+  }
+  if (temVerboC) return v('confirm', 'Grava, envia ou avisa alguém.')
+  return v('confirm', 'Não sei o que este toque faz: confirme antes.')
 }
 
 export type FillVerdict = { ok: true } | { ok: false; verdict: Verdict }

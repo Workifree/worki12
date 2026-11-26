@@ -307,6 +307,34 @@ describe('injeção por texto de terceiro, com um modelo que OBEDECE a injeção
     expect(stack.bodies.join()).not.toContain('SEGREDO')
   })
 
+  it('D-4: abrir tela no "Me mostre" não pede cartão', async () => {
+    const { navigate, ui } = await runTask('me mostre meus turnos', ({ step }) => (step === 0 ? { navigate: { destination: 'empresa.turnos' } } : done()), fakeUI(), { mode: 'show' })
+    expect(navigate).toHaveBeenCalledTimes(1)
+    expect(ui.cards).toHaveLength(0)
+  })
+
+  it('D-4: escolher valor e marcar data passam direto; "Publicar" ainda pede cartão', async () => {
+    goTo('/company/create')
+    const publish = vi.fn()
+    render(
+      <section>
+        <label>Função<select defaultValue=""><option value="">Escolha</option><option value="g">Garçom</option></select></label>
+        <label>Valor<input /></label>
+        <div role="group" aria-label="Datas rápidas"><button type="button" aria-pressed="false">Amanhã</button></div>
+        <button type="button" onClick={publish}>Publicar 1 turno</button>
+      </section>,
+    )
+    const { ui } = await runTask('crie', ({ step, find }) =>
+      step === 0 ? { select_dropdown_option: { index: find(/Função/), text: 'Garçom' } }
+        : step === 1 ? click(find(/Amanhã/))
+          : step === 2 ? click(find(/Publicar/))
+            : done(),
+    )
+    expect((document.querySelector('select') as HTMLSelectElement).value).toBe('g')
+    expect(ui.cards.map((c) => c.action)).toEqual(['Tocar no botão "Publicar 1 turno"'])
+    expect(publish).not.toHaveBeenCalled()
+  })
+
   it('navigate só aceita destino da lista (o proxy recusa o resto)', async () => {
     const { navigate, result } = await runTask('vá', () => ({ navigate: { destination: '/convite/abc' } }))
     expect(navigate).not.toHaveBeenCalled()

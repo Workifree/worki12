@@ -1,5 +1,5 @@
 /** Sugestões de pedido por papel e tela, e o histórico curto de pedidos (só neste aparelho). */
-import { redactPII } from './redact'
+import { containsPII, redactPII } from './redact'
 import type { CopilotRole } from './routes'
 
 const WORKER: Array<[RegExp, string[]]> = [
@@ -29,21 +29,29 @@ export function suggestionsFor(role: CopilotRole, pathname: string, max = 4): st
 }
 
 const HISTORY_KEY = 'worki:copilot:historico-v1'
-const HISTORY_MAX = 4
+const HISTORY_MAX = 5
+const MARCADOR_PII = /\[(?:cpf|cnpj|telefone|email|senha|codigo|token|pix|id|numero|nascimento|data-antiga|oculto)\]/i
 
 export function readHistory(): string[] {
   try {
     const raw = JSON.parse(window.localStorage.getItem(HISTORY_KEY) ?? '[]') as unknown
-    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string').slice(0, HISTORY_MAX) : []
+    // O que já estava gravado (versão anterior) também passa pelo filtro: nada com dado pessoal volta à tela.
+    return Array.isArray(raw)
+      ? raw.filter((x): x is string => typeof x === 'string' && !!x.trim() && !containsPII(x) && !MARCADOR_PII.test(x)).slice(0, HISTORY_MAX)
+      : []
   } catch {
     return []
   }
 }
 
-/** Guarda o pedido já sem dado pessoal (CPF, telefone etc. viram marcador). Só neste aparelho. */
+/**
+ * Guarda no aparelho só o pedido já redigido, no máximo 5. Pedido com padrão de dado pessoal (CPF,
+ * telefone, e-mail etc.) não é guardado de jeito nenhum, nem com marcador no lugar.
+ */
 export function rememberRequest(text: string): string[] {
+  if (containsPII(text)) return readHistory()
   const clean = redactPII(text).replace(/\s+/g, ' ').trim().slice(0, 120)
-  if (!clean || /\[(?:cpf|cnpj|telefone|email|senha|codigo|token|pix|id|numero|nascimento|oculto)\]/i.test(clean)) return readHistory()
+  if (!clean || MARCADOR_PII.test(clean) || containsPII(clean)) return readHistory()
   const next = [clean, ...readHistory().filter((x) => x !== clean)].slice(0, HISTORY_MAX)
   try {
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
