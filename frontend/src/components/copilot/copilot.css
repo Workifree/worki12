@@ -128,7 +128,7 @@
   transform: rotate(24deg);
 }
 /* Movimento: só quando a pessoa NÃO pediu para reduzir e o agente está ativo (volta 7 s, respira 5,4 s) */
-@media (prefers-reduced-motion: no-preference) {
+@media all {
   .wk-glow[data-on='true'] .wk-glow__sweep, .wk-glow[data-fade='hide'] .wk-glow__sweep, .wk-glow[data-fade='slow'] .wk-glow__sweep { will-change: transform; animation: wk-sweep 7s linear infinite; }
   .wk-glow[data-level='low'] .wk-glow__sweep { animation-duration: 10s; }
   .wk-glow[data-level='high'] .wk-glow__sweep { animation-duration: 5.5s; }
@@ -207,19 +207,19 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root * { animation-play-state:
 @keyframes wk-caret { 50% { opacity: 0; } }
 
 /* ---------- movimento reduzido: tudo estático, nada pisca ---------- */
-@media (prefers-reduced-motion: reduce) {
-  .wk-glow, .wk-glow[data-on='true'], .wk-glow[data-on='false'][data-fade] { transition-duration: 0.2s, 0.7s, 0.7s, 0.7s; }
-  .wk-rise, .wk-sheet { animation: wk-fade 0.15s linear both; }
-  .wk-scrim, .wk-shim, .wk-cmd__line { animation: none; }
-  .wk-cmd__line { opacity: 0.9; }
-  .wk-dots span { animation: none; opacity: 0.7; }
-  .wk-ptr-root, .wk-ptr__inner, .wk-ptr-say { transition: none; }
-  .wk-ptr-ripple { animation: none; opacity: 0.6; transform: none; }
-  .wk-ptr-halo.is-on { animation: none; }
-  .wk-ptr-say.is-typing::after { animation: none; }
-  .wk-ptr-root.is-pressed .wk-ptr__inner { transform: none; }
+@media all {
+html[data-copilot-motion='reduced'] .wk-glow, html[data-copilot-motion='reduced'] .wk-glow[data-on='true'], html[data-copilot-motion='reduced'] .wk-glow[data-on='false'][data-fade] { transition-duration: 0.2s, 0.7s, 0.7s, 0.7s; }
+html[data-copilot-motion='reduced'] .wk-rise, html[data-copilot-motion='reduced'] .wk-sheet { animation: wk-fade 0.15s linear both; }
+html[data-copilot-motion='reduced'] .wk-scrim, html[data-copilot-motion='reduced'] .wk-shim, html[data-copilot-motion='reduced'] .wk-cmd__line { animation: none; }
+html[data-copilot-motion='reduced'] .wk-cmd__line { opacity: 0.9; }
+html[data-copilot-motion='reduced'] .wk-dots span { animation: none; opacity: 0.7; }
+html[data-copilot-motion='reduced'] .wk-ptr-root, html[data-copilot-motion='reduced'] .wk-ptr__inner, html[data-copilot-motion='reduced'] .wk-ptr-say { transition: none; }
+html[data-copilot-motion='reduced'] .wk-ptr-ripple { animation: none; opacity: 0.6; transform: none; }
+html[data-copilot-motion='reduced'] .wk-ptr-halo.is-on { animation: none; }
+html[data-copilot-motion='reduced'] .wk-ptr-say.is-typing::after { animation: none; }
+html[data-copilot-motion='reduced'] .wk-ptr-root.is-pressed .wk-ptr__inner { transform: none; }
 }
-@media (prefers-reduced-motion: no-preference) {
+@media all {
   .wk-shim__win { opacity: 1; will-change: transform; animation: wk-win 2.4s linear infinite; }
   .wk-shim__txt { will-change: transform; animation: wk-txt 2.4s linear infinite; }
 }
@@ -230,7 +230,7 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root * { animation-play-state:
 html[data-wk-vt]::view-transition-old(root), html[data-wk-vt]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.34s; animation-timing-function: var(--wk-ease-out); }
 html[data-wk-vt] .wk-rise { animation: none; }
-@media (prefers-reduced-motion: reduce) { html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.01s; } }
+html[data-copilot-motion='reduced'][data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.01s; }
 
 /* O foco do laboratório (contorno azul) substitui os anéis do Tailwind dentro do copiloto */
 [data-copilot-ui] button:focus-visible, [data-copilot-ui] [role='dialog'] button:focus-visible { --tw-ring-shadow: 0 0 #0000 !important; --tw-ring-offset-shadow: 0 0 #0000 !important; box-shadow: none; }
@@ -240,3 +240,8 @@ html[data-wk-vt] .wk-rise { animation: none; }
 .wk-cmd__row:focus-within { border-bottom-color: var(--wk-blue); }
 .wk-cmd__row--top { align-items: flex-start; }
 .wk-cmd__row--top > .wk-orb { margin-top: 14px; }
+
+/* Animações reduzidas (escolha da pessoa no copiloto): giros e respiração param; o estado continua visível */
+html[data-copilot-motion='reduced'] .wk-glow__sweep, html[data-copilot-motion='reduced'] .wk-glow__halo,
+html[data-copilot-motion='reduced'] .wk-shim__win, html[data-copilot-motion='reduced'] .wk-shim__txt,
+html[data-copilot-motion='reduced'] .wk-trigger__sweep, html[data-copilot-motion='reduced'] .wk-trigger__halo { animation: none !important; }

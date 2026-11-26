@@ -190,27 +190,24 @@ describe('brilho: níveis e gota', () => {
       expect(host.querySelector('filter#wk-ripple feDisplacementMap')).not.toBeNull()
       expect(host.querySelector('.wk-ring')).toBeNull()
 
-      // Celular: 3 ondas em CSS (como o laboratório), e nenhum filtro SVG novo.
-      animate.mockClear()
-      host.innerHTML = ''
-      createGlowVfx(host, { mobile: true }).drop({ x: 50, y: 50 })
-      expect(animate).toHaveBeenCalledTimes(6)
-      expect(host.querySelectorAll('.wk-ring')).toHaveLength(3)
-      expect(host.querySelector('filter, feTurbulence, feDisplacementMap, .wk-drop__svg')).toBeNull()
-
-      // PC fraco (até 4 núcleos): cai para a gota CSS.
-      animate.mockClear()
-      host.innerHTML = ''
-      cores(4)
-      createGlowVfx(host, { mobile: false }).drop({ x: 50, y: 50 })
-      expect(host.querySelectorAll('.wk-ring')).toHaveLength(3)
-      expect(host.querySelector('filter, .wk-drop__svg')).toBeNull()
+      // Celular e aparelho de poucos núcleos: gota SVG completa também (como o laboratório; nada de modo econômico).
+      for (const [mobile, n] of [[true, 8], [false, 4]] as const) {
+        animate.mockClear()
+        host.innerHTML = ''
+        cores(n)
+        createGlowVfx(host, { mobile }).drop({ x: 50, y: 50 })
+        expect(host.querySelectorAll('.wk-drop__svg circle')).toHaveLength(3)
+        expect(host.querySelector('filter#wk-ripple feDisplacementMap')).not.toBeNull()
+        expect(host.querySelector('.wk-ring')).toBeNull()
+      }
 
       animate.mockClear()
       cores(8)
-      window.matchMedia = ((query: string) => ({ matches: /reduce/.test(query), addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+      // Animações "Reduzidas" (escolha no copiloto): nada anima. O padrão é completo, mesmo com o sistema pedindo menos.
+      window.localStorage.setItem('worki:copilot:movimento', 'reduzido')
       createGlowVfx(host).drop({ x: 5, y: 5 })
       expect(animate).not.toHaveBeenCalled()
+      window.localStorage.removeItem('worki:copilot:movimento')
     } finally {
       Element.prototype.animate = original
       Reflect.deleteProperty(navigator, 'hardwareConcurrency')
@@ -219,15 +216,16 @@ describe('brilho: níveis e gota', () => {
     }
   })
 
-  it('aparelho fraco (2 GB ou até 4 núcleos) usa o nível lite, estático', async () => {
+  it('modo econômico só com saveData explícito; núcleos e memória não derrubam o efeito', async () => {
     const { pickFxTier } = await import('../vfx')
     Object.defineProperty(navigator, 'deviceMemory', { value: 2, configurable: true })
-    expect(pickFxTier()).toBe('lite')
-    Reflect.deleteProperty(navigator, 'deviceMemory')
-    Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true })
-    expect(pickFxTier()).toBe('lite')
-    Object.defineProperty(navigator, 'hardwareConcurrency', { value: 8, configurable: true })
+    Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true })
     expect(pickFxTier()).toBe('full')
+    Reflect.deleteProperty(navigator, 'deviceMemory')
+    Object.defineProperty(navigator, 'connection', { value: { saveData: true }, configurable: true })
+    expect(pickFxTier()).toBe('lite')
+    Reflect.deleteProperty(navigator, 'connection')
+    Reflect.deleteProperty(navigator, 'hardwareConcurrency')
   })
 
   it('o brilho muda de nível sem mudar largura (só opacidade)', () => {

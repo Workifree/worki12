@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BookOpen, Check, ChevronDown, CornerDownLeft, History, ListChecks, Send, Sparkles } from 'lucide-react'
 import { Orb } from './Trigger'
+import { getMotionMode, setMotionMode, type MotionMode } from '../../lib/copilot/motion'
 import { PillButton } from './PillButton'
 import { ConfirmCardView } from './ConfirmCardView'
 import type { ChatItem, Pending } from '../../hooks/copilot/useCopilotAgent'
@@ -365,6 +366,7 @@ function HelpRow({ icon, title, detail, onClick, expanded }: { icon: ReactNode; 
 export function IdleBody({ view, children }: { view: CopilotViewProps; children?: ReactNode }) {
   const { agent, availability, consent } = view
   const [showSteps, setShowSteps] = useState(false)
+  const [motion, setMotion] = useState<MotionMode>(getMotionMode)
   const closeThen = (fn?: () => void) => () => {
     view.close()
     fn?.()
@@ -439,6 +441,17 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
           </ol>
         )}
       </Section>
+
+      <div className="flex items-center justify-between gap-3 px-1">
+        <span id="copilot-anim-label" className="text-[11.5px] font-semibold text-[#4b5563]">Animações do copiloto</span>
+        <div role="radiogroup" aria-labelledby="copilot-anim-label" className="wk-seg !w-auto">
+          {([['pleno', 'Completas'], ['reduzido', 'Reduzidas']] as const).map(([value, label]) => (
+            <button key={value} type="button" role="radio" aria-checked={motion === value} onClick={() => { setMotionMode(value); setMotion(value) }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="border-t border-[#e3e6eb] pt-1">
         <HelpRow

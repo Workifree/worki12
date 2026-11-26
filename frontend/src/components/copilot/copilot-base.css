@@ -53,14 +53,14 @@
 .wk-trigger__txt small { font-size: 12.5px; font-weight: 600; color: var(--wk-ink3); }
 @keyframes wk-trigsweep { to { transform: rotate(384deg); } }
 @keyframes wk-trigpulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
-@media (prefers-reduced-motion: no-preference) {
+@media all {
   .wk-orb:not(.wk-orb--done) .wk-orb__core { animation: wk-orbspin 3.6s linear infinite; }
   .wk-orb:not(.wk-orb--done) .wk-orb__halo { animation: wk-orbbreathe 3.2s ease-in-out infinite; }
   .wk-trigger__sweep { animation: wk-trigsweep 7s linear infinite; }
   .wk-trigger__halo { animation: wk-trigpulse 3.6s ease-in-out infinite; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .wk-orb__core, .wk-orb__halo { animation: none !important; }
+@media all {
+html[data-copilot-motion='reduced'] .wk-orb__core, html[data-copilot-motion='reduced'] .wk-orb__halo { animation: none !important; }
 }
 html.is-hidden .wk-orb *, html.is-hidden .wk-trigger * { animation-play-state: paused !important; }
 @media (prefers-contrast: more), (forced-colors: active) { .wk-trigger__ring, .wk-trigger__halo { display: none; } }
