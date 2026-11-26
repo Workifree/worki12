@@ -81,7 +81,7 @@ describe('BottomNav', () => {
   it('sub-rota mantém o item ativo (freela e empresa)', () => {
     renderBottomNav('worker', '/indicacoes')
     expect(screen.getByLabelText('Empresas').className).toContain('text-primary')
-    expect(screen.getByLabelText('Início').className).toContain('text-gray-500')
+    expect(screen.getByLabelText('Início').className).toContain('text-gray-600')
   })
 
   it('empresa: detalhe do turno marca Turnos', () => {
@@ -89,6 +89,6 @@ describe('BottomNav', () => {
     renderBottomNav('company', '/company/jobs/abc/candidates')
 
     expect(screen.getByLabelText('Turnos')).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByLabelText('Turnos').className).toContain('text-blue-600')
+    expect(screen.getByLabelText('Turnos').className).toContain('text-blue-700')
   })
 })

@@ -27,6 +27,9 @@ import PageMeta from '../components/PageMeta';
 import { Button, Card, ErrorState } from '../components/ui';
 import { checkSession } from '../lib/authSession';
 import { getInvitePreviewName } from '../services/invitePreviewService';
+import { isAvisosEnabled } from '../lib/features';
+import { leaveDevice } from '../lib/leaveDevice';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
 
 type PageState =
   | 'loading' | 'confirm' | 'accepting' | 'success' | 'pending' | 'already_exists'
@@ -188,6 +191,7 @@ export default function InviteAccept() {
 
   const switchAccount = async () => {
     try {
+      await leaveDevice();
       await supabase.auth.signOut();
     } catch (err) {
       logError('InviteAccept.signOut', err);
@@ -286,7 +290,7 @@ export default function InviteAccept() {
               )}
             </div>
             {accountEmail && (
-              <p className="mb-4 text-sm text-gray-600">
+              <p data-copilot-private className="mb-4 text-sm text-gray-600">
                 Você está com a conta <strong>{accountEmail}</strong>.
               </p>
             )}
@@ -314,6 +318,10 @@ export default function InviteAccept() {
             ? 'Falta o freela aceitar. Depois disso você pode chamá-lo para turnos.'
             : `Agora ${company} pode te convidar para turnos. Você será avisado quando houver um convite.`,
           true,
+        )}
+
+        {state === 'success' && !isWorkerLink && isAvisosEnabled() && (
+          <div className="mt-4"><PedidoDeAvisos /></div>
         )}
 
         {state === 'pending' && outcome(

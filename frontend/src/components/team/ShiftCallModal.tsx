@@ -508,7 +508,7 @@ export function ShiftCallModal({
                 onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
                 disabled={dispatching || isEmpty}
                 aria-pressed={isActive}
-                className={`h-11 px-4 rounded-pill border-2 border-black font-semibold text-sm flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                className={`min-h-11 max-w-full py-1.5 px-4 rounded-pill border-2 border-black font-semibold text-sm text-left leading-tight flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                   isEmpty
                     ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-500'
                     : isActive

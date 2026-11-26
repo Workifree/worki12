@@ -154,7 +154,7 @@ export default function PayoutPanel({ snapshot: s, onRequest, onCancel, onSavePi
       )}
 
       <p className="text-sm">
-        <Link to="/regulamento-trilha" className="font-bold underline">
+        <Link to="/regulamento-trilha" className="inline-flex min-h-11 items-center font-bold underline">
           Ler o regulamento da trilha
         </Link>
       </p>

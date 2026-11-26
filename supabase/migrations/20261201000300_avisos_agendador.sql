@@ -24,13 +24,9 @@ BEGIN
     IF to_regclass('public.notice_deliveries') IS NULL THEN
         RAISE EXCEPTION 'PRE-CONDICAO avisos: aplicar 20261201000100 antes. HALT.';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')
-       AND EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_net') THEN
-        BEGIN
-            CREATE EXTENSION IF NOT EXISTS pg_net;
-        EXCEPTION WHEN OTHERS THEN
-            RAISE WARNING 'avisos: nao foi possivel instalar pg_net (%). Use cron externo.', SQLERRM;
-        END;
+    -- Instalar extensao de rede e decisao humana: a migration NAO instala o pg_net.
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+        RAISE WARNING 'avisos: pg_net ausente; notice-dispatch nao sera agendado (instalar e decisao humana).';
     END IF;
 END $$;
 

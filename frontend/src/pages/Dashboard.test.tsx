@@ -19,6 +19,7 @@ vi.mock('../lib/supabase', () => ({
       getUser: vi.fn(),
     },
     from: vi.fn(),
+    rpc: vi.fn(),
   },
 }))
 
@@ -119,6 +120,8 @@ function setupMocks(availabilityDays: unknown, pendingReceipts: unknown[] = []) 
     data: { user: { id: 'worker-1', email_confirmed_at: '2026-01-01T00:00:00Z' } },
     error: null,
   } as never)
+
+  vi.mocked(supabase.rpc).mockResolvedValue({ data: workerRow(availabilityDays), error: null } as never)
 
   vi.mocked(supabase.from).mockImplementation((table: string) => {
     if (table === 'workers') return workersFromChain(workerRow(availabilityDays)) as never

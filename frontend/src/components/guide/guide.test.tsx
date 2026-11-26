@@ -62,6 +62,8 @@ describe('guia na tela', () => {
 
   it('navega, destaca, nunca clica e registra início e conclusão', async () => {
     verBoasVindas()
+    // jsdom não tem layout: o alvo precisa de um retângulo na janela para ser recortado.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(20, 120, 200, 44))
     montar()
     await passar(10)
     act(() => { expect(guia.iniciarRoteiro('freela-sos')).toEqual({ ok: true }) })
@@ -77,6 +79,24 @@ describe('guia na tela', () => {
     expect(cliqueNoAlvo).not.toHaveBeenCalled()
     expect(guia.estado().ativo).toBeNull()
     expect(track.mock.calls.map((c) => c[0])).toEqual(['guia_roteiro_iniciado', 'guia_roteiro_concluido'])
+  })
+
+  it('alvo fora da janela ou sem tamanho não escurece a tela inteira (passo 2 de "Repetir um turno" em 1440)', async () => {
+    verBoasVindas()
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(20, 4000, 200, 44))
+    montar('/profile')
+    await passar(10)
+    act(() => { guia.iniciarRoteiro('freela-sos') })
+    await passar(500)
+    // O alvo existe mas está abaixo da janela: balão sim, escurecimento sem recorte não.
+    expect(screen.getByRole('dialog', { name: /Guia:/ })).toBeTruthy()
+    expect(document.querySelector('[data-guide="destaque"]')).toBeNull()
+    rect.mockReturnValue(new DOMRect(0, 0, 0, 0))
+    await passar(300)
+    expect(document.querySelector('[data-guide="destaque"]')).toBeNull()
+    rect.mockReturnValue(new DOMRect(20, 120, 200, 44))
+    await passar(300)
+    expect(document.querySelector('[data-guide="destaque"]')).not.toBeNull()
   })
 
   it('o toque da pessoa no alvo do último passo conclui', async () => {

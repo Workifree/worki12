@@ -4,6 +4,8 @@ import type { AlvoGuia } from '../lib/guide/tipos';
 
 export const ESPERA_DO_ALVO_MS = 3500;
 const INTERVALO_MS = 200;
+/** Janela em que uma seção que abre ou um conteúdo que carrega ainda pode empurrar o alvo. */
+const ACOMODACAO_MS = 4000;
 
 export interface AlvoNaTela {
     elemento: HTMLElement | null;
@@ -31,14 +33,22 @@ export function useGuideTarget(alvos: readonly AlvoGuia[], modal: Element | null
         const lista = chave ? (chave.split(' ') as AlvoGuia[]) : [];
         const inicio = Date.now();
         let rolado: HTMLElement | null = null;
+        let achadoEm = 0;
+        let posicaoNaPagina = 0;
 
         const medir = () => {
             const elemento = encontrarAlvo(lista, modal);
             const tela = medirTela();
-            if (elemento && elemento !== rolado) {
-                rolado = elemento;
+            if (elemento) {
                 const r = elemento.getBoundingClientRect();
-                if (r.top < tela.topoLivre || r.bottom > tela.altura - tela.baseLivre) {
+                // Posição dentro da página: não muda quando é a PESSOA que rola a janela.
+                const naPagina = Math.round(r.top - document.body.getBoundingClientRect().top);
+                const novo = elemento !== rolado;
+                const empurrado = !novo && Math.abs(naPagina - posicaoNaPagina) > 8 && Date.now() - achadoEm < ACOMODACAO_MS;
+                if (novo) achadoEm = Date.now();
+                rolado = elemento;
+                posicaoNaPagina = naPagina;
+                if ((novo || empurrado) && (r.top < tela.topoLivre || r.bottom > tela.altura - tela.baseLivre)) {
                     elemento.scrollIntoView?.({ block: 'center', behavior: reduzMovimento() ? 'auto' : 'smooth' });
                 }
             }

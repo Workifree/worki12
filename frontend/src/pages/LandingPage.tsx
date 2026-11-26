@@ -192,6 +192,7 @@ export default function LandingPage() {
         <div className="flex flex-wrap gap-x-2 justify-center mt-3">
           <button onClick={() => navigate('/termos')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Termos de Uso</button>
           <button onClick={() => navigate('/privacidade')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Política de Privacidade</button>
+          <button onClick={() => navigate('/licencas')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Licenças</button>
           <button onClick={() => navigate('/ajuda')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Ajuda</button>
         </div>
       </footer>

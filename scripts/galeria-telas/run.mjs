@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import { subirVite } from './lib/server.mjs';
 import { isolarContexto } from './lib/mock.mjs';
 import { medir } from './lib/auditoria.mjs';
+import { detectar, detectarTeclado } from './lib/layout.mjs';
 import { gravarIndice } from './lib/indice.mjs';
 import { criarMundo, AGORA } from './fixtures/world.mjs';
 
@@ -19,7 +20,21 @@ const VIEWPORTS = {
   320: { viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true },
   1440: { viewport: { width: 1440, height: 900 } },
 };
-const vps = String(args.vp || '390,320,1440').split(',').filter((v) => VIEWPORTS[v]);
+// --layout: detector de sobreposição/cobertura (lib/layout.mjs). Mais tamanhos, sem fotos de rotina.
+const LAYOUT = !!args.layout;
+Object.assign(VIEWPORTS, {
+  1024: { viewport: { width: 1024, height: 768 } },
+  768: { viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true },
+  '390s': { viewport: { width: 390, height: 720 }, isMobile: true, hasTouch: true },
+  '390c': { viewport: { width: 390, height: 640 }, isMobile: true, hasTouch: true },
+});
+const DESKTOP = new Set(['1440', '1024']);
+const largura = (vp) => String(vp).replace(/\D/g, '');
+const vps = String(args.vp || (LAYOUT ? '1440,1024,768,390,320' : '390,320,1440')).split(',').filter((v) => VIEWPORTS[v]);
+// cenário que restringe `viewports: ['390']` vale para toda a família de mesma largura (390, 390s, 390c).
+const noViewport = (c, v) => !c.viewports || c.viewports.some((x) => x === v || (largura(x) === largura(v) && x !== '1440') || (x === '1440' && DESKTOP.has(v)));
+const naoToque = (vp) => DESKTOP.has(vp);
+const imgsLayout = new Map(); // dedupe global das fotos de achado
 
 const todos = [];
 for (const arq of readdirSync(join(aqui, 'cenarios')).filter((f) => f.endsWith('.mjs')).sort()) {
@@ -42,15 +57,19 @@ let browser;
 const encerrar = async () => { await browser?.close().catch(() => {}); await vite.fechar().catch(() => {}); };
 process.on('SIGINT', () => encerrar().then(() => process.exit(130)));
 
-const resultados = existsSync(join(saida, 'resultados.json')) && filtro ? JSON.parse(readFileSync(join(saida, 'resultados.json'), 'utf8')).cenarios : {};
+const arqRes = LAYOUT ? 'layout.json' : 'resultados.json';
+const resultados = existsSync(join(saida, arqRes)) && filtro ? JSON.parse(readFileSync(join(saida, arqRes), 'utf8')).cenarios : {};
 
 try {
   // Chrome instalado, headless, perfil temporário (o launch cria e apaga). Segunda trava de rede:
   // nenhum nome fora do localhost resolve, mesmo que algo escape da interceptação.
-  browser = await chromium.launch({
+  const abrir = () => chromium.launch({
     channel: 'chrome', headless: true,
     args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--no-first-run', '--proxy-server=direct://'],
   });
+  browser = await abrir();
+  let relancando = null;
+  const relancar = async () => { relancando ||= (async () => { try { await browser.close().catch(() => {}); } finally { browser = await abrir(); relancando = null; } })(); await relancando; };
 
   /** Espera a rede do app assentar (requisições "penduradas" de propósito não contam). */
   const assentar = async (page, pendentes, max = 12000) => {
@@ -98,6 +117,29 @@ try {
     await assentar(page, pendentes, 6000);
   };
 
+  /** Foto da janela com os elementos do achado contornados em vermelho. Só os graves, sem repetir. */
+  const fotoAchados = async (page, cen, vp, achados) => {
+    mkdirSync(join(saida, 'layout'), { recursive: true });
+    let n = 0;
+    for (const a of achados) {
+      if (a.sev < 3 || !a.ids?.length || n >= 2) continue;
+      const chave = `${a.t}|${String(vp).replace(/\D/g, '')}|${a.d.replace(/\d+/g, '#').replace(/"[^"]*"/g, '"_"').slice(0, 90)}`;
+      if ((imgsLayout.get(chave) || 0) >= 2) continue;
+      imgsLayout.set(chave, (imgsLayout.get(chave) || 0) + 1);
+      const arq = `layout/${cen.id}__${vp}__${a.t}${++n}.png`;
+      try {
+        await page.evaluate((ids) => {
+          const els = ids.map((i) => window.__gl[i]).filter(Boolean);
+          els[0]?.scrollIntoView({ block: 'center', behavior: 'instant' });
+          els.forEach((e, k) => { e.style.outline = `3px solid ${k ? '#0057ff' : '#ff0033'}`; e.style.outlineOffset = '-3px'; });
+        }, a.ids);
+        await page.waitForTimeout(80);
+        await page.screenshot({ path: join(saida, arq), animations: 'disabled', timeout: 15000 });
+        a.img = arq;
+      } catch { /* foto é cortesia */ }
+    }
+  };
+
   const fotografar = async (cen, vp) => {
     const mundo = criarMundo(cen.papel);
     cen.prep?.(mundo);
@@ -107,11 +149,14 @@ try {
       ...(cen.ua ? { userAgent: cen.ua } : {}),
     });
     const info = { fotos: [], console: [], falhas: [] };
+    let continuarSemFoto = false;
     try {
       await isolarContexto(context, mundo, rel);
       await context.clock.setFixedTime(AGORA);
       const local = { ...(cen.convitePwa ? {} : { 'worki:pwa-install-dismissed-at': String(AGORA.getTime()) }), ...(cen.local || {}) };
       if (mundo.sessao) local['sb-galeria-auth-token'] = JSON.stringify({ access_token: mundo.token, refresh_token: 'refresh-falso', token_type: 'bearer', expires_in: 31536000, expires_at: mundo.expira, user: mundo.sessao });
+      // Layout: a janela de boas-vindas do guia (uma vez por conta) cobriria toda tela; só ela é dispensada.
+      if (LAYOUT && !cen.mostrarGuia && mundo.sessao) for (const p of ['gestor', 'encarregado', 'freela']) local[`worki:guia:v1:${mundo.sessao.id}:${p}`] = JSON.stringify({ boasVindasVistas: true, concluidos: [], checklistOculto: false });
       await context.addInitScript(([l, s]) => {
         if (sessionStorage.getItem('__galeria')) return;
         sessionStorage.setItem('__galeria', '1');
@@ -143,13 +188,41 @@ try {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(cen.pausa ?? 350);
 
-      Object.assign(info, await page.evaluate(medir, { toque: vp !== '1440' }));
+      Object.assign(info, await page.evaluate(medir, { toque: !naoToque(vp) }));
       if (info.carregando && !cen.carregandoEsperado) info.falhas.push('foto com carregamento ainda na tela');
       if (info.vazia) info.falhas.push('tela em branco');
       if (cen.verificar) {
         const erro = await page.evaluate(cen.verificar);
         if (erro) info.falhas.push(`verificação: ${erro}`);
       }
+      if (LAYOUT) {
+        const achados = [];
+        try {
+          const lay = await page.evaluate(detectar, { toque: !naoToque(vp) });
+          achados.push(...lay.achados);
+          info.nAlvos = lay.nAlvos;
+        } catch (e) { info.falhas.push(`detector: ${e.message.split('\n')[0].slice(0, 160)}`); }
+        if (info.sobra > 1 || info.forados.length) achados.push({ t: 'overflow', sev: info.sobra > 8 ? 3 : 2, d: `página ${Math.round(info.sobra)}px mais larga que a janela${info.forados.length ? `: ${info.forados.slice(0, 3).join('; ')}` : ''}`, ids: [] });
+        if (info.rolagemNoDialogo?.length) achados.push({ t: 'overflow', sev: 2, d: `rolagem lateral no diálogo: ${info.rolagemNoDialogo.join('; ')}`, ids: [] });
+        for (const q of info.pequenos || []) achados.push({ t: 'alvo', sev: 1, d: q, ids: [] });
+        await fotoAchados(page, cen, vp, achados);
+        if (!naoToque(vp)) {
+          const { height } = VIEWPORTS[vp].viewport, width = VIEWPORTS[vp].viewport.width;
+          const reduzida = Math.max(300, height - Math.round(height * 0.42));
+          try {
+            await page.setViewportSize({ width, height: reduzida }); await page.waitForTimeout(120);
+            const tec = await page.evaluate(detectarTeclado);
+            info.nCampos = tec.nCampos;
+            await fotoAchados(page, cen, `${vp}`, tec.achados);
+            achados.push(...tec.achados);
+          } catch (e) { info.falhas.push(`teclado: ${e.message.split('\n')[0].slice(0, 160)}`); }
+          await page.setViewportSize({ width, height }).catch(() => {});
+        }
+        info.layout = achados.map(({ t, sev, d, img }) => ({ t, sev, d, img }));
+        info.fotos = [];
+        continuarSemFoto = true;
+      }
+      if (continuarSemFoto) { /* modo layout: só as fotos dos achados */ } else {
       const nome = `${cen.id}__${vp}.png`;
       // Página inteira: em vez de `fullPage` (que deixa a navegação fixa no meio da foto), a janela
       // cresce até a altura do documento. As medidas acima já foram tiradas no tamanho real.
@@ -171,6 +244,7 @@ try {
         });
         if (rolou) { const fim = `${cen.id}__${vp}-fim.png`; await page.waitForTimeout(100); await page.screenshot({ path: join(saida, fim), animations: 'disabled' }); info.fotos.push(fim); }
       } else rmSync(join(saida, `${cen.id}__${vp}-fim.png`), { force: true });
+      }
     } catch (e) {
       info.falhas.push(`runner: ${e.message.split('\n')[0].slice(0, 200)}`);
     } finally {
@@ -181,7 +255,7 @@ try {
     return info;
   };
 
-  const fila = escolhidos.flatMap((c) => vps.filter((v) => !c.viewports || c.viewports.includes(v)).map((v) => [c, v]));
+  const fila = escolhidos.flatMap((c) => vps.filter((v) => noViewport(c, v)).map((v) => [c, v]));
   console.log(`${escolhidos.length} cenários x ${vps.length} viewports = ${fila.length} fotos -> ${saida}`);
   // Aquecimento: a primeira compilação do Vite não pode estourar o tempo de um cenário.
   await fotografar({ id: '_aquecimento', papel: 'anon', rota: '/login' }, '390');
@@ -190,11 +264,18 @@ try {
   const trabalhador = async () => {
     for (let item = fila.shift(); item; item = fila.shift()) {
       const [c, v] = item;
-      const info = await fotografar(c, v);
+      let info;
+      for (let tent = 0; tent < 3; tent++) {
+        try { info = await fotografar(c, v); } catch (e) { info = { fotos: [], console: [], falhas: [`runner: ${String(e.message).split('\n')[0].slice(0, 160)}`] }; }
+        // Chrome caiu no meio: sobe outro e repete só esta foto.
+        if (!browser.isConnected() || info.falhas.some((f) => /Target page, context or browser has been closed|browser has been closed/.test(f))) { await relancar(); info = null; continue; }
+        break;
+      }
+      if (!info) info = { fotos: [], console: [], falhas: ['runner: Chrome caiu 3 vezes'], layout: [] };
       resultados[c.id] ||= {};
       Object.assign(resultados[c.id], { id: c.id, grupo: c.grupo, ordem: c.ordem, papel: c.papel, rota: c.rota, regra: c.regra, erroEsperado: !!c.erroEsperado });
       (resultados[c.id].viewports ||= {})[v] = info;
-      if (++feitas % 30 === 0) console.log(`  ${feitas} fotos`);
+      if (++feitas % 30 === 0) { console.log(`  ${feitas} fotos`); if (LAYOUT) writeFileSync(join(saida, 'layout.json'), JSON.stringify({ meta: { parcial: true }, cenarios: resultados })); }
     }
   };
   await Promise.all(Array.from({ length: Number(args.paralelo) || 4 }, trabalhador));
@@ -202,7 +283,8 @@ try {
   const lacunas = Object.fromEntries(Object.entries(lacunasPorCenario).map(([k, v]) => [k, [...v]]));
   writeFileSync(join(saida, 'lacunas-de-fixture.json'), JSON.stringify(lacunas, null, 1));
   const meta = { quando: new Date().toISOString(), vazou: relatorio.vazou, bloqueadas: [...new Set(relatorio.bloqueadas)] };
-  gravarIndice(saida, resultados, meta);
+  if (LAYOUT) writeFileSync(join(saida, 'layout.json'), JSON.stringify({ meta, cenarios: resultados }, null, 1));
+  else gravarIndice(saida, resultados, meta);
 
   const rodados = escolhidos.map((c) => resultados[c.id]);
   const ruins = rodados.filter((c) => Object.values(c.viewports).some((x) => x.naoConfirmado || x.falhas?.length));

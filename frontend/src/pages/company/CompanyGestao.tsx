@@ -9,6 +9,7 @@ import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useBonusTrailAccess } from '../../hooks/useBonusTrailAccess';
 import { canSeeOrganization, isGestor } from '../../services/companyScopeService';
 import { getGestaoGroups } from '../../lib/navigation';
+import { isPresencaEnabled } from '../../lib/features';
 import { logError } from '../../lib/logger';
 
 /** Hub "Gestão" (rota /company/gestao): tudo o que não é operação do dia. */
@@ -37,6 +38,7 @@ export default function CompanyGestao() {
         units: canSeeOrganization(company),
         teamInvited: company?.team_enabled === true,
         trail: hasTrail,
+        sites: isPresencaEnabled(),
     });
 
     return (

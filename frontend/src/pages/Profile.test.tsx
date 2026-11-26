@@ -101,6 +101,12 @@ function buildChain(overrides: Record<string, unknown> = {}) {
   return chain
 }
 
+/** O próprio cadastro vem da RPC `get_my_worker_profile`; as demais RPCs seguem vazias. */
+function mockOwnProfile(row: unknown) {
+  vi.mocked(supabase.rpc).mockImplementation(((fn: string) =>
+    Promise.resolve({ data: fn === 'get_my_worker_profile' ? row : [], error: null })) as never)
+}
+
 function setupMocks() {
   const mockAddToast = vi.fn()
   vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
@@ -112,6 +118,7 @@ function setupMocks() {
   } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
 
   vi.mocked(supabase.from).mockReturnValue(buildChain() as unknown as ReturnType<typeof supabase.from>)
+  mockOwnProfile(WORKER_DATA)
 
   return { mockAddToast }
 }
@@ -351,14 +358,8 @@ describe('Profile — disponibilidade declarada (F7)', () => {
       data: { user: { id: 'worker-1' } },
       error: null,
     } as Awaited<ReturnType<typeof supabase.auth.getUser>>)
-    vi.mocked(supabase.from).mockReturnValue(
-      buildChain({
-        single: vi.fn().mockResolvedValue({
-          data: { ...WORKER_DATA, availability_days: { '5': ['noite', 'tarde'] } },
-          error: null,
-        }),
-      }) as unknown as ReturnType<typeof supabase.from>,
-    )
+    vi.mocked(supabase.from).mockReturnValue(buildChain() as unknown as ReturnType<typeof supabase.from>)
+    mockOwnProfile({ ...WORKER_DATA, availability_days: { '5': ['noite', 'tarde'] } })
 
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })

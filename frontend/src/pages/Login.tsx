@@ -475,6 +475,7 @@ export default function Login() {
                     <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
                     <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
                     <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
+                    <Link to="/licencas" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Licenças</Link>
                     <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Ajuda</Link>
                 </nav>
             </Card>

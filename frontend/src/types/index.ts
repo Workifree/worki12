@@ -167,6 +167,10 @@ export interface CompanyProfile {
    */
   link_risk_alert_enabled?: boolean;
   link_risk_alert_threshold?: number;
+  /** Padrão de presença da empresa (presença verificada): ausentes sem as migrations. */
+  default_presence_mode?: PresenceMode;
+  default_site_id?: string | null;
+  default_qr_mode?: PresenceQrMode;
 }
 
 // =============================================
@@ -411,6 +415,13 @@ export interface Job {
   certification_requirement?: string | null;
   candidates_count?: number;
   views?: number;
+  /** Criação em lote (migration 20261128000100): ausente enquanto não aplicada. */
+  creation_batch_id?: string | null;
+  creation_row?: number | null;
+  /** Presença verificada (migrations 20261127000100-000400): ausentes enquanto não aplicadas. */
+  presence_mode?: PresenceMode;
+  site_id?: string | null;
+  qr_mode?: PresenceQrMode;
   company_id?: string;
   company?: {
     id?: string;
@@ -1570,3 +1581,16 @@ export interface OperationAnalytics {
   performanceByWorker: WorkerPerformanceBlock;
   attendanceConfirmations: AttendanceConfirmationsBlock;
 }
+
+// =============================================
+// PRESENÇA VERIFICADA e CRIAÇÃO EM LOTE: os tipos moram nas libs puras; aqui só reexporta.
+// =============================================
+export type {
+  PresenceMode, PresenceQrMode, PresenceKind, PresencePolicy, CompanySite,
+  PresenceExceptionReason, PresenceResult, PresenceCheck, PresenceSeal, PresenceSummary,
+} from '../lib/presence';
+export type {
+  ShiftDraftSource, ShiftBudgetType, AttendanceMode, ShiftDraftTemplate, ShiftDraftOverrides,
+  ShiftDraftRow, ShiftDraftCall, ShiftDraftSeries, ShiftDraftBatch, ShiftDraftIssueKind, ShiftDraftIssue,
+} from '../lib/shiftDrafts';
+import type { PresenceMode, PresenceQrMode } from '../lib/presence';

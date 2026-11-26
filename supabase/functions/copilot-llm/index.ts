@@ -2,10 +2,13 @@
 // Deploy NORMAL (com verificação de JWT no gateway); a função ainda exige um usuário real,
 // porque a chave anon também é um JWT válido para o gateway.
 //
-// Secrets: COPILOT_LLM_PROVIDER (openai|anthropic), COPILOT_LLM_MODEL, COPILOT_LLM_API_KEY.
+// Secrets: COPILOT_LLM_PROVIDER (openai|anthropic|openrouter), COPILOT_LLM_MODEL, COPILOT_LLM_API_KEY.
 // Opcionais: COPILOT_ENABLED=false, COPILOT_ALLOWED_ORIGINS, COPILOT_LIMIT_PER_MINUTE,
 // COPILOT_LIMIT_PER_DAY, COPILOT_USER_DAILY_TOKENS, COPILOT_GLOBAL_DAILY_TOKENS.
-// Sem os três primeiros: 503, e o app oferece só o guia.
+// Se COPILOT_LLM_API_KEY não existir, a chave é o secret `secret-openrouter`, com provider
+// openrouter e modelo anthropic/claude-haiku-5.5 por padrão. Sem chave: 503, e o app oferece só o guia.
+// Não lançado: só as contas de teste (ou COPILOT_ALLOWED_USERS) passam; os demais recebem
+// 403 not_released. COPILOT_PUBLIC=true abre a todos.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { handleCopilot, type Deps } from './handler.ts'
 

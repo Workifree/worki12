@@ -5,6 +5,9 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useGuide } from '../../hooks/useGuide'
+import { OPEN_EVENT, isOpenShortcut, requestOpen, type OpenDetail } from '../../lib/copilot/openEvent'
+import { TOS_GATE_SELECTOR } from '../../lib/copilot/dom'
 import { isCopilotEnabled } from '../../lib/copilot/flags'
 import { pathPolicy, type CopilotRole } from '../../lib/copilot/routes'
 import { checkAgentAvailability, createAgentFetch } from '../../services/copilot/copilotService'
@@ -20,14 +23,12 @@ const DEFAULT_SERVICES: CopilotServices = {
 /** Telas dos dois papéis: mantêm o papel de onde a pessoa veio. */
 const SHARED = /^\/(?:ajuda|recibo|termos|privacidade)/
 
-const GATE = '[data-testid="tos-gate-modal"]'
-
 /** Com o aceite de Termos na frente, o copiloto some (e a tarefa, se houver, é encerrada). */
 function useTermsGateOpen(enabled: boolean): boolean {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     if (!enabled) return
-    const check = () => setOpen(!!document.querySelector(GATE))
+    const check = () => setOpen(!!document.querySelector(TOS_GATE_SELECTOR))
     check()
     const observer = new MutationObserver(check)
     observer.observe(document.body, { childList: true, subtree: true })
@@ -43,19 +44,57 @@ export type CopilotRootProps = Partial<
   enabled?: boolean
 }
 
+/**
+ * Pedidos de abertura (botão de ajuda, Ctrl+K) valem mesmo antes de o painel, carregado sob
+ * demanda, existir: a raiz guarda o último e o repassa.
+ */
+function useOpenRequests(enabled: boolean) {
+  const [request, setRequest] = useState<{ id: number; origin?: OpenDetail } | undefined>()
+  useEffect(() => {
+    if (!enabled) return
+    const onOpen = (event: Event) =>
+      setRequest((last) => ({ id: (last?.id ?? 0) + 1, origin: (event as CustomEvent<OpenDetail | undefined>).detail }))
+    const onKey = (event: KeyboardEvent) => {
+      if (!isOpenShortcut(event) || event.defaultPrevented) return
+      event.preventDefault()
+      requestOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.4 })
+    }
+    window.addEventListener(OPEN_EVENT, onOpen)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener(OPEN_EVENT, onOpen)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [enabled])
+  return request
+}
+
 function ActiveCopilot({ services = DEFAULT_SERVICES, ...props }: Omit<CopilotRootProps, 'enabled'>) {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const guide = useGuide()
   const gate = useTermsGateOpen(!!user)
+  const openRequest = useOpenRequests(!!user)
   const current: CopilotRole | null = SHARED.test(pathname) ? null : pathname.startsWith('/company') ? 'company' : 'worker'
-  const [role, setRole] = useState<CopilotRole>(current ?? 'worker')
-  if (current && current !== role) setRole(current)
+  // Tela dos dois papéis aberta direto (recarga ou link, ex.: /recibo): quem informa o papel é o guia.
+  const informed: CopilotRole | null = guide?.papel ? (guide.papel === 'freela' ? 'worker' : 'company') : null
+  const [role, setRole] = useState<CopilotRole>(current ?? informed ?? 'worker')
+  const wanted = current ?? informed
+  if (wanted && wanted !== role) setRole(wanted)
 
   if (!user || gate || pathPolicy(pathname) === 'blocked') return null
   return (
     <Suspense fallback={null}>
-      <CopilotPanel {...props} key={`${user.id}:${role}`} role={role} services={services} navigate={navigate} />
+      <CopilotPanel
+        {...props}
+        key={`${user.id}:${role}`}
+        role={role}
+        services={services}
+        navigate={navigate}
+        pathname={pathname}
+        openRequest={openRequest}
+      />
     </Suspense>
   )
 }

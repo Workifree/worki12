@@ -30,7 +30,7 @@ export function PresencePolicyFields({ value, onChange, sites, frozen = false, s
                     {sites.length === 0 ? 'Cadastre um local para usar.' : 'Chegada e saída verificadas no local já contam como confirmadas.'}
                 </span>
             </ChoiceCard>
-            {frozen && <p className="text-xs text-gray-600">Já há presença registrada neste turno: a forma e o local não mudam.</p>}
+            {frozen && <p className="text-xs text-gray-600">Já há presença registrada neste turno: a forma, o local e o tipo de QR não mudam.</p>}
             {qr && (
                 <>
                     <Field label="Local do turno" required error={siteError}>
@@ -40,7 +40,7 @@ export function PresencePolicyFields({ value, onChange, sites, frozen = false, s
                         </select>
                     </Field>
                     <Field label="Tipo de QR">
-                        <select value={value.qr_mode} onChange={(e) => onChange({ ...value, qr_mode: e.target.value === 'static' ? 'static' : 'rotating' })}>
+                        <select value={value.qr_mode} disabled={frozen} onChange={(e) => onChange({ ...value, qr_mode: e.target.value === 'static' ? 'static' : 'rotating' })}>
                             <option value="rotating">Na tela do responsável, muda sozinho (recomendado)</option>
                             <option value="static">Cartaz impresso no local</option>
                         </select>

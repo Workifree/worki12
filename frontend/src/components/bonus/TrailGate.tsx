@@ -75,7 +75,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
       </ul>
 
       <p className="text-sm">
-        <Link to="/regulamento-trilha" target="_blank" rel="noopener" className="font-bold underline">
+        <Link to="/regulamento-trilha" target="_blank" rel="noopener" className="inline-flex min-h-11 items-center font-bold underline">
           Ler o regulamento de 1 página
         </Link>
       </p>

@@ -22,6 +22,13 @@ Restrições: a validação tem de acontecer **no servidor**, porque o que o cli
 11. **Como definir o local.** O principal é "Estou no local agora": o Gestor captura a posição com o GPS, o que exige `accuracy <= 50`, senão a UI pede para tentar de novo. O secundário é ajustar o pino num mapa Leaflet com tiles OSM, sem geocodificação paga. A busca por endereço via Nominatim é opcional, com no máximo 1 req/s e com atribuição.
 12. **Headers.** `frontend/vercel.json` passa a ter `geolocation=(self)`, e `camera=(self)` continua.
 
+## Revisão de 25/11/2026 (revisão no catálogo; prevalece sobre os itens acima)
+- **Afrouxar é do Gestor** (itens 2 e 4): `qr_gps` para `dual`, `rotating` para `static` e trocar de local exigem `is_company_owner`, em UPDATE direto, em lote ou por RPC. `qr_mode` congela junto com modo e local no primeiro carimbo.
+- **Guard fail-closed** (item 3): o carimbo direto só passa se o turno for visível e `dual`.
+- **Sem texto livre** (itens 4 e 10): a nota da exceção saiu; só o motivo da lista fechada.
+- **Retenção** (item 10): tentativas falhas e pedidos são apagados em 90 dias. Em `verified`, `manual_exception` e `unverified`, `distance_m` e `accuracy_m` são anulados em 90 dias (só servem para contestação recente); resultado, motivo e autor ficam enquanto existir o recibo.
+- O pedido de ajuda respeita a janela de horário; as RPCs autorizam antes de travar linhas; casca de empresa com local não é apagada no aceite de convite.
+
 ## Consequências
 ### Positivas
 - Pela primeira vez a presença é validada por algo que o client não decide sozinho (segredo do servidor, relógio do servidor, distância calculada no servidor).

@@ -62,6 +62,7 @@ export function createSimulatedStack(brain: Brain, role: CopilotRole = 'company'
     COPILOT_LLM_PROVIDER: 'openai',
     COPILOT_LLM_MODEL: 'gpt-4.1-mini',
     COPILOT_LLM_API_KEY: 'chave-de-teste',
+    COPILOT_PUBLIC: 'true',
   }
   const deps: Deps = {
     env: (name) => env[name],

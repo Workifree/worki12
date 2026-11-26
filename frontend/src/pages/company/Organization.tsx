@@ -236,6 +236,7 @@ export default function Organization() {
                 {managers.map((m) => (
                   <li
                     key={m.id}
+                    data-copilot-private
                     className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2"
                   >
                     <div>
@@ -282,6 +283,7 @@ export default function Organization() {
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   id={`invite-email-${company.company_id}`}
+                  data-copilot-private
                   type="email"
                   value={inviteEmail[company.company_id] || ''}
                   onChange={(e) => setInviteEmail((prev) => ({ ...prev, [company.company_id]: e.target.value }))}

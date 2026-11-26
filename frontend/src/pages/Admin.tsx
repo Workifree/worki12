@@ -291,7 +291,7 @@ export default function Admin() {
                                 autoComplete="username"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"
+                                className="w-full px-3 py-2 min-h-11 border-2 border-gray-300 rounded-xl text-sm focus:border-black focus:outline-none"
                                 placeholder="admin@email.com"
                                 required
                             />
@@ -303,7 +303,7 @@ export default function Admin() {
                                 autoComplete="current-password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-black focus:outline-none"
+                                className="w-full px-3 py-2 min-h-11 border-2 border-gray-300 rounded-xl text-sm focus:border-black focus:outline-none"
                                 placeholder="••••••••"
                                 required
                             />

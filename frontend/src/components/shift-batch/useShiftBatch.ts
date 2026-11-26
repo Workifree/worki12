@@ -30,7 +30,11 @@ export interface ShiftBatchOptions {
     repeatJobId?: string | null;
     /** Entrada do copiloto: SÓ abre a revisão. Não existe caminho que publique sozinho. */
     initialDraft?: ShiftDraftBatch | null;
-    onPublished?: () => void;
+    onPublished?: (jobIds: string[]) => void;
+    /** Abre direto a cópia do período (atalho "Copiar fim de semana"). Só leva à revisão. */
+    startCopy?: 'weekend' | 'week' | null;
+    /** Pendência de fora do rascunho (ex.: local da presença). Preenchida, não publica. */
+    blockPublish?: string | null;
 }
 
 const DIRECT_SOURCES: ShiftDraftSource[] = ['form', 'template', 'repeat'];
@@ -48,7 +52,7 @@ function adopt(draft: ShiftDraftBatch): ShiftDraftBatch {
     };
 }
 
-export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, initialDraft, onPublished }: ShiftBatchOptions) {
+export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, initialDraft, onPublished, startCopy: startCopyRange, blockPublish }: ShiftBatchOptions) {
     const [external] = useState(() => (initialDraft ? adopt(initialDraft) : null));
     const [step, setStep] = useState<BatchStep>(external ? 'review' : 'start');
     const [draft, setDraft] = useState<ShiftDraftBatch | null>(external);
@@ -223,6 +227,14 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
         }
     };
 
+    const autoCopied = useRef(false);
+    useEffect(() => {
+        if (!startCopyRange || external || autoCopied.current) return;
+        autoCopied.current = true;
+        void startCopy(startCopyRange);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez, na entrada pelo atalho
+    }, [startCopyRange]);
+
     const resume = () => {
         if (!stored) return;
         open(stored.batch, 'edit', stored.batch.rows.length > 1 ? 'multi' : 'single');
@@ -259,6 +271,10 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
     /** Só é chamada por um toque em "Publicar". */
     const publish = async (invitees: (row: ShiftDraftRow) => string[]) => {
         if (!draft || publishLock.current) return;
+        if (blockPublish) {
+            setErrorMessage(blockPublish);
+            return;
+        }
         publishLock.current = true;
         setPublishing(true);
         setErrorMessage(null);
@@ -316,7 +332,7 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
             setDone({ template: draft.template, rows, jobIds: result.jobIds, alreadyCreated: result.alreadyCreated, publishedOn: now, plan });
             setDraft(null);
             setStep('done');
-            onPublished?.();
+            onPublished?.(result.jobIds);
             // Em sequência; lote que já existia usa o modo "retry" para não chamar duas vezes.
             void (async () => {
                 for (const item of plan) await send(item, result.alreadyCreated);

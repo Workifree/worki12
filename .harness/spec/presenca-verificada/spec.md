@@ -18,7 +18,7 @@ ADR: `./ADR.md`. Status: PROPOSTO (gate do architect). As decisões do dono que 
 | P11 | `record_presence_exception` só funciona com `is_job_owner` e motivo da lista. Ela carimba e grava `manual_exception` + `decided_by` | PGlite |
 | P12 | `presence_checks` não tem colunas de lat/lng (assert no catálogo) e nenhuma tabela nova tem coordenada do freela | PGlite (`information_schema`) |
 | P13 | `get_presence_qr` só funciona para `is_job_owner` do turno, e só em turno `qr_gps`/`rotating` | PGlite |
-| P14 | `presence_mode`/`site_id` ficam imutáveis depois do primeiro carimbo de qualquer application do turno | PGlite |
+| P14 | `presence_mode`/`site_id`/`qr_mode` ficam imutáveis depois do primeiro carimbo de qualquer application do turno; antes dele, afrouxar ou trocar de local só o Gestor | PGlite |
 | P15 | O cron de purga apaga tentativas falhas com mais de 90 dias e preserva `verified`/`manual_exception` | PGlite (sem pg_cron: chamar a função) |
 | P16 | Freela que nega o GPS vê "Pedir confirmação ao responsável" e chega ao recibo | e2e (harness-tester, 2 Chromes) |
 | P17 | O recibo e o modal de pagamento mostram o selo verificado/exceção/não verificado, e o pagamento nunca é bloqueado | e2e + vitest de componente |
@@ -29,13 +29,13 @@ ADR: `./ADR.md`. Status: PROPOSTO (gate do architect). As decisões do dono que 
 - `company_sites(id, company_id → companies RESTRICT, name, address_text, lat numeric(9,6), lng numeric(9,6), radius_m int CHECK 50..500 DEFAULT 150, created_by, created_at, updated_at, archived_at)`. RLS: SELECT para `is_company_owner(company_id) OR session_company_member_role(company_id) IS NOT NULL` (membro confirmado). Escrita por policy `is_company_owner`. Sem DELETE.
 - `company_site_secrets(site_id PK → company_sites, secret bytea NOT NULL DEFAULT gen_random_bytes(32), version int NOT NULL DEFAULT 1, rotated_at)`. RLS habilitado, sem policy e com `REVOKE ALL FROM authenticated, anon`. O segredo nasce por trigger AFTER INSERT em `company_sites`.
 - `jobs` (+ `presence_mode`, `site_id`, `qr_mode`) e `companies` (+ `default_presence_mode`, `default_site_id`, `default_qr_mode`). Em `jobs.site_id` vale a regra de que o local tem de ser da mesma company (trigger).
-- `presence_checks(id, application_id → applications RESTRICT, job_id, worker_id, kind, result CHECK IN ('verified','manual_exception','qr_invalid','qr_expired','gps_out_of_range','gps_low_accuracy','gps_unavailable','outside_window','invalid_input'), distance_m int, accuracy_m int, qr_ok bool, qr_kind, reason text CHECK em lista, note varchar(200), decided_by uuid, created_at)`. Índice UNIQUE parcial `(application_id, kind) WHERE result IN ('verified','manual_exception')`. RLS SELECT: o freela vê as próprias linhas e `is_job_owner(job_id)` vê as do turno. Escrita só por RPC.
+- `presence_checks(id, application_id → applications RESTRICT, job_id, worker_id, kind, result CHECK IN ('verified','manual_exception','qr_invalid','qr_expired','gps_out_of_range','gps_low_accuracy','gps_unavailable','outside_window','invalid_input'), distance_m int, accuracy_m int, qr_ok bool, qr_kind, reason text CHECK em lista, decided_by uuid, created_at)`. Índice UNIQUE parcial `(application_id, kind) WHERE result IN ('verified','manual_exception')`. RLS SELECT: o freela vê as próprias linhas e `is_job_owner(job_id)` vê as do turno. Escrita só por RPC.
 - Motivos de exceção: `sem_sinal_gps`, `gps_negado`, `qr_ilegivel`, `celular_sem_bateria`, `local_mudou`, `outro`.
 - Tipos à mão em `frontend/src/types/index.ts`: `PresenceMode`, `CompanySite`, `PresenceCheck`, `PresenceResult`.
 
 ## RPCs (todas SECURITY DEFINER, `SET search_path=''`, retorno `jsonb {outcome,...}`)
 - `verify_presence(p_application_id, p_kind, p_qr, p_lat, p_lng, p_accuracy_m)` com GRANT `authenticated`.
-- `record_presence_exception(p_application_id, p_kind, p_reason, p_note)` com GRANT `authenticated` (exige `is_job_owner`).
+- `record_presence_exception(p_application_id, p_kind, p_reason)` com GRANT `authenticated` (exige `is_job_owner`).
 - `request_presence_exception(p_application_id, p_kind, p_reason)`: o freela pede ajuda. Grava a tentativa e notifica `notification_recipients_for_job` (se a E2 não estiver aplicada, notifica o dono da company).
 - `get_presence_qr(p_job_id)` → `{token, expires_in_s}` com GRANT `authenticated`.
 - `get_site_static_qr(p_site_id)` e `rotate_site_secret(p_site_id)` com GRANT `authenticated` (exigem `is_company_owner`).

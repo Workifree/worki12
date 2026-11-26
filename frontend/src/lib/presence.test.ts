@@ -5,7 +5,7 @@ import { getDevicePosition } from './presenceGeo';
 
 const c = (kind: PresenceKind, result: PresenceResult, extra: Partial<PresenceCheck> = {}): PresenceCheck => ({
     id: `${kind}-${result}`, application_id: 'a1', job_id: 'j', worker_id: 'w', kind, result,
-    distance_m: null, accuracy_m: null, reason: null, note: null, decided_by: null,
+    distance_m: null, accuracy_m: null, reason: null, decided_by: null,
     created_at: '2026-11-27T10:00:00Z', ...extra,
 });
 

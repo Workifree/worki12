@@ -51,11 +51,10 @@ export const requestPresenceException = (applicationId: string, kind: PresenceKi
         p_application_id: applicationId, p_kind: kind, p_reason: reason,
     });
 
-export const recordPresenceException = (
-    applicationId: string, kind: PresenceKind, reason: PresenceExceptionReason, note?: string,
-) => call<PresenceOutcome>('record_presence_exception', {
-    p_application_id: applicationId, p_kind: kind, p_reason: reason, p_note: note?.trim() || null,
-});
+export const recordPresenceException = (applicationId: string, kind: PresenceKind, reason: PresenceExceptionReason) =>
+    call<PresenceOutcome>('record_presence_exception', {
+        p_application_id: applicationId, p_kind: kind, p_reason: reason,
+    });
 
 export const registerDepartureUnverified = (applicationId: string) =>
     call<PresenceOutcome>('register_departure_unverified', { p_application_id: applicationId });
@@ -67,7 +66,7 @@ export const rotateSiteSecret = (siteId: string) => call<PresenceOutcome>('rotat
 // ── Leituras ────────────────────────────────────────────────────────────────────────────────
 
 const CHECK_COLUMNS =
-    'id, application_id, job_id, worker_id, kind, result, distance_m, accuracy_m, reason, note, decided_by, created_at';
+    'id, application_id, job_id, worker_id, kind, result, distance_m, accuracy_m, reason, decided_by, created_at';
 
 /** `null` = falha de leitura (diferente de lista vazia: não mostrar "não verificada" por queda de rede). */
 export async function listPresenceChecks(

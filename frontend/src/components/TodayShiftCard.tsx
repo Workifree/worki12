@@ -10,6 +10,10 @@ import { openShiftConversation } from '../lib/shiftChat';
 import { hasArrived, hasLeftShift, isOnShift, type PresenceStamps } from '../lib/shiftPresence';
 import { Alert, Button, Card, StatusBadge } from './ui';
 import LocalDoTurno from './LocalDoTurno';
+import { Dialog } from './ui/Dialog';
+import { PresenceCheckFlow } from './presence/PresenceCheckFlow';
+import { isPresencaEnabled } from '../lib/features';
+import type { PresenceKind } from '../lib/presence';
 import JobLifecycleStepper from './JobLifecycleStepper';
 
 export interface TodayShift extends PresenceStamps {
@@ -22,6 +26,8 @@ export interface TodayShift extends PresenceStamps {
     endTime: string | null;
     location: string | null;
     pay: number | null;
+    /** `jobs.presence_mode`; só vale com a flag de presença ligada. */
+    presenceMode?: string | null;
 }
 
 interface TodayShiftCardProps {
@@ -32,6 +38,8 @@ interface TodayShiftCardProps {
     onCheckedOut?: () => void;
     /** Só aparece em turno contratado e ainda sem chegada. */
     onCancel?: () => void;
+    /** Registro ou verificação em andamento: a tela segura a recarga ao vivo (chamado em par true/false). */
+    onBusyChange?: (busy: boolean) => void;
     steps?: ComponentProps<typeof JobLifecycleStepper>['steps'];
 }
 
@@ -45,12 +53,20 @@ function useNow(intervalMs = 30_000): Date {
     return now;
 }
 
-export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut, onCancel, steps }: TodayShiftCardProps) {
+export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut, onCancel, onBusyChange, steps }: TodayShiftCardProps) {
     const navigate = useNavigate();
     const { addToast } = useToast();
     const now = useNow();
     const [saving, setSaving] = useState(false);
     const [chatting, setChatting] = useState(false);
+    const [verificando, setVerificando] = useState<PresenceKind | null>(null);
+    const exigeQr = isPresencaEnabled() && shift.presenceMode === 'qr_gps';
+    const busy = saving || verificando !== null;
+    useEffect(() => {
+        if (!busy) return;
+        onBusyChange?.(true);
+        return () => onBusyChange?.(false);
+    }, [busy, onBusyChange]);
 
     const schedule = { startDate: shift.startDate, startTime: shift.startTime, endTime: shift.endTime };
     const window = checkinWindow(schedule, now);
@@ -91,6 +107,17 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
         } finally {
             setSaving(false);
         }
+    };
+
+    const presencaRegistrada = async () => {
+        const saida = verificando === 'departure';
+        // Na saída o cartão sai da lista ao recarregar: o aviso vai por toast.
+        if (saida) {
+            setVerificando(null);
+            addToast('Saída registrada!', 'success');
+        }
+        await onChanged();
+        if (saida) onCheckedOut?.();
     };
 
     const chat = async () => {
@@ -150,7 +177,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                             fullWidth
                             data-copilot="freela.turno.registrar-chegada"
                             data-copilot-risk="D"
-                            onClick={() => void register('chegada')}
+                            onClick={() => (exigeQr ? setVerificando('arrival') : void register('chegada'))}
                             loading={saving}
                             disabled={window.state !== 'open'}
                             aria-describedby={hintId}
@@ -168,7 +195,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                         fullWidth
                         data-copilot="freela.turno.registrar-saida"
                         data-copilot-risk="D"
-                        onClick={() => void register('saida')}
+                        onClick={() => (exigeQr ? setVerificando('departure') : void register('saida'))}
                         loading={saving}
                         iconLeft={<LogOut size={18} />}
                     >
@@ -208,6 +235,23 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                     </p>
                 )}
             </div>
+
+            {/* Um diálogo só: o leitor de QR usa id fixo no DOM. */}
+            {exigeQr && verificando && (
+                <Dialog labelledBy={`presenca-${shift.applicationId}`} onClose={() => setVerificando(null)} initialFocus="panel">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h2 id={`presenca-${shift.applicationId}`} className="text-lg font-bold">
+                            Registrar {verificando === 'arrival' ? 'chegada' : 'saída'}
+                        </h2>
+                        <Button variant="ghost" onClick={() => setVerificando(null)}>Fechar</Button>
+                    </div>
+                    <PresenceCheckFlow
+                        applicationId={shift.applicationId}
+                        kind={verificando}
+                        onRegistered={() => void presencaRegistrada()}
+                    />
+                </Dialog>
+            )}
         </Card>
     );
 }

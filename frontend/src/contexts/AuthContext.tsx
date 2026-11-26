@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { clearServiceWorkerCaches } from '../lib/pwa';
 import { clearJobDrafts } from '../lib/jobDraft';
 import { setMonitoringUser } from '../lib/logger';
+import { leaveDevice } from '../lib/leaveDevice';
 
 interface AuthContextType {
     user: User | null;
@@ -33,7 +34,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         getSession();
 
         // Listen for changes on auth state (logged in, signed out, etc.)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            // Rede de segurança para saídas que não passam por `signOut()` (outras telas, sessão
+            // expirada). Fora do callback: chamar o cliente aqui dentro trava o lock do auth.
+            if (event === 'SIGNED_OUT') setTimeout(() => { void leaveDevice(); }, 0);
             setUser(session?.user ?? null);
             if (session?.user) {
                 setMonitoringUser({ id: session.user.id });
@@ -49,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signOut = async () => {
         // R4: propaga o erro pro chamador (Sidebar/Profile/CompanyProfile) tratar com
         // toast + estado de loading — nunca falha em silêncio.
+        // Com sessão ainda válida (a inscrição de push só sai do banco assim). Nunca lança.
+        await leaveDevice();
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         // PWA: esvazia os caches do service worker no logout (defesa em profundidade; ele ja nao guarda dado de usuario).

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
-import { Button } from '../ui/Button'
+import { PillButton } from './PillButton'
 import type { ConfirmCard } from '../../lib/copilot/ui'
 
 /** Cartão montado pelo código. O botão de confirmar só habilita depois de um instante. */
@@ -23,7 +23,7 @@ export function ConfirmCardView({
   }, [armDelayMs])
 
   return (
-    <div role="alertdialog" aria-labelledby="copilot-confirm-title" className="space-y-3">
+    <div role="alertdialog" aria-labelledby="copilot-confirm-title" className="flex min-h-0 flex-col gap-3">
       <h2 id="copilot-confirm-title" className="flex items-center gap-2 text-base font-bold">
         <ShieldCheck size={20} aria-hidden="true" /> Confirme antes
       </h2>
@@ -31,7 +31,7 @@ export function ConfirmCardView({
       <p className="break-words text-sm font-semibold">{card.action}</p>
       <p className="text-sm text-gray-600">{card.reason}</p>
       {card.fields.length > 0 && (
-        <dl className="max-h-[28dvh] space-y-1 overflow-y-auto overscroll-contain rounded-xl border-2 border-black p-3 text-sm">
+        <dl className="max-h-[28dvh] min-h-16 shrink space-y-1 overflow-y-auto overscroll-contain rounded-2xl bg-white/70 p-3 ring-1 ring-black/10 text-sm">
           {card.fields.map((field, i) => (
             <div key={`${field.label}-${i}`} className="flex flex-wrap gap-x-2">
               <dt className="text-gray-600">{field.label}:</dt>
@@ -41,12 +41,12 @@ export function ConfirmCardView({
         </dl>
       )}
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="secondary" onClick={() => onAnswer(false)}>
+        <PillButton tone="light" onClick={() => onAnswer(false)}>
           Não fazer
-        </Button>
-        <Button variant={role === 'company' ? 'dark' : 'primary'} disabled={!armed} onClick={() => onAnswer(true)}>
+        </PillButton>
+        <PillButton tone={role === 'company' ? 'dark' : 'green'} disabled={!armed} onClick={() => onAnswer(true)}>
           Confirmar
-        </Button>
+        </PillButton>
       </div>
     </div>
   )

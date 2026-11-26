@@ -105,6 +105,11 @@ export function useStackedModal(
     return { isTop: active && isTop };
 }
 
+/** Há algum diálogo na tela? Usado para segurar a recarga ao vivo enquanto a pessoa decide. */
+export function useAnyDialogOpen(): boolean {
+    return useSyncExternalStore(subscribe, () => stack.length > 0);
+}
+
 /** Elemento do diálogo da frente (ou null). Os toasts são desenhados dentro dele. */
 export function useTopDialogElement(): HTMLDialogElement | null {
     return useSyncExternalStore(subscribe, () => topEntry()?.element() ?? null);

@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { focusFirstInvalid } from '../../lib/formErrors';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { leaveDevice } from '../../lib/leaveDevice';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
@@ -204,6 +205,7 @@ export default function CompanyOnboarding() {
                     <button
                         onClick={async () => {
                             if (!saidaArmada) { setSaidaArmada(true); setTimeout(() => setSaidaArmada(false), 4000); return; }
+                            await leaveDevice();
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}

@@ -10,7 +10,7 @@
 import { HELP_UI_SELECTOR, accessibleName, headingOf, isDisplayed, safeText, topModal } from './dom'
 import { classifyClick, classifyFill, isSensitiveField, isTextEntry } from './risk'
 import { redactPII } from './redact'
-import { pathPolicy, routePattern, screenName } from './routes'
+import { NAV_DESTINATIONS, pathPolicy, routePattern, screenName } from './routes'
 import { filterToVocabulary } from './vocabulary'
 
 export interface ObservedElement {
@@ -37,7 +37,8 @@ export interface ObserveOptions {
 
 const MAX_ELEMENTS = 140
 const MAX_CHARS = 14_000
-const MAX_LABEL = 70
+// 70 cortava o valor no fim do rótulo ("R$ 80,0…"); o filtro de dados roda antes do corte.
+const MAX_LABEL = 120
 
 const INTERACTIVE =
   'a[href],button,input,select,textarea,summary,[role="button"],[role="tab"],[role="link"],[role="menuitem"],' +
@@ -64,13 +65,42 @@ export function fingerprintOf(el: Element): string {
     .join('\u0001')
 }
 
+/** Valor em dinheiro, data e horário: nunca podem ser cortados no meio nem somem por pouco. */
+const VALOR_INTEIRO = /R\$\s?\d[\d.,]*|\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2}|\d{1,4}[/.-]\d{1,2}(?:[/.-]\d{2,4})?/g
+/** Quanto o corte pode passar do limite para não deixar um valor pela metade ou de fora. */
+const FOLGA_DO_CORTE = 40
+
+/** Corta em `limit`, mas empurra o corte até o fim de um valor monetário, data ou horário. */
+export function cutLabel(text: string, limit = MAX_LABEL): string {
+  if (text.length <= limit) return text
+  let cut = limit
+  for (const match of text.matchAll(VALOR_INTEIRO)) {
+    const start = match.index ?? 0
+    const end = start + match[0].length
+    // O valor cruza o limite, ou começa logo depois dele: leva-o inteiro.
+    if (end > cut && start < cut + FOLGA_DO_CORTE) cut = Math.max(cut, end)
+  }
+  if (cut >= text.length) return text
+  // Termina em fim de palavra (sem partir "Confirm…").
+  const space = text.lastIndexOf(' ', cut)
+  const atWord = text[cut] === ' ' || text[cut] === undefined ? cut : space > cut - 24 ? space : cut
+  return `${text.slice(0, atWord).trimEnd()}…`
+}
+
+/** Marcadores que a redação escreve (`[cpf]`...): os únicos colchetes que podem ficar num rótulo. */
+const MARCADOR_DE_REDACAO = /\[(?:cpf|cnpj|telefone|email|senha|codigo|token|pix|id|numero|nascimento|data-antiga|oculto)\]/gi
+
 export function cleanLabel(raw: string, allowed: ReadonlySet<string> = new Set()): string {
-  const text = filterToVocabulary(redactPII(raw.replace(/\s+/g, ' ').trim()), allowed).replace(/[<>[\]]/g, (c) =>
-    // Colchetes só sobrevivem nos marcadores da redação; texto da página não forja "[3]<button>".
-    c === '<' || c === '>' ? ' ' : c,
-  )
-  const noFakeIndex = text.replace(/\[(\d+)\]/g, '($1)')
-  return noFakeIndex.length > MAX_LABEL ? `${noFakeIndex.slice(0, MAX_LABEL)}…` : noFakeIndex
+  const filtered = filterToVocabulary(redactPII(raw.replace(/\s+/g, ' ').trim()), allowed)
+  // Colchetes só sobrevivem nos marcadores da redação; texto da página não forja "[3]<button>" nem "[ ]".
+  // (A redação já removeu qualquer caractere de uso privado: servem de reserva para os marcadores.)
+  const kept: string[] = []
+  const text = filtered
+    .replace(MARCADOR_DE_REDACAO, (marker) => `${kept.push(marker) - 1}`)
+    .replace(/[<>]/g, ' ')
+    .replace(/[[\]]/g, (c) => (c === '[' ? '(' : ')'))
+    .replace(/(\d+)/g, (_, i: string) => kept[Number(i)])
+  return cutLabel(text)
 }
 
 function describeState(el: HTMLElement, options: ObserveOptions, allowed: ReadonlySet<string>): string {
@@ -84,8 +114,9 @@ function describeState(el: HTMLElement, options: ObserveOptions, allowed: Readon
   const type = (el.getAttribute('type') ?? '').toLowerCase()
   if (el.tagName === 'INPUT' && (type === 'checkbox' || type === 'radio')) {
     parts.push(field.checked ? 'marcado' : 'desmarcado')
-  } else if (el.getAttribute('aria-checked')) {
-    parts.push(el.getAttribute('aria-checked') === 'true' ? 'marcado' : 'desmarcado')
+  } else if (el.getAttribute('aria-checked') || el.getAttribute('aria-pressed')) {
+    // Botão de liga/desliga: sem o estado, o modelo "marca" o que já está marcado e desmarca.
+    parts.push((el.getAttribute('aria-checked') ?? el.getAttribute('aria-pressed')) === 'true' ? 'marcado' : 'desmarcado')
   }
   if (isSensitiveField(el) && (isTextEntry(el) || el.tagName === 'INPUT')) {
     // Nem preenchido/vazio: nada do campo sensível sai.
@@ -107,6 +138,37 @@ function describeState(el: HTMLElement, options: ObserveOptions, allowed: Readon
   return parts.length ? ` ${parts.join(' ')}` : ''
 }
 
+/** Atalhos de menu que a ferramenta `navigate` já cobre: lê-los a cada passo só gasta leitura. */
+const MENU_FIXO = 'nav[aria-label="Navegação principal"],nav[data-bottom-nav]'
+const CAMINHOS_DE_NAVEGACAO = new Set<string>(
+  [...Object.values(NAV_DESTINATIONS.company), ...Object.values(NAV_DESTINATIONS.worker)].map(String),
+)
+/** Listas longas: só as primeiras entram na leitura (o resto vira uma linha de aviso). */
+const MAX_ITENS_DE_LISTA = 20
+
+function isMenuShortcut(el: Element): boolean {
+  if (el.tagName !== 'A' || !el.closest(MENU_FIXO)) return false
+  try {
+    return CAMINHOS_DE_NAVEGACAO.has(new URL(el.getAttribute('href') ?? '', window.location.origin).pathname)
+  } catch {
+    return false
+  }
+}
+
+/** Link de "pular para o conteúdo": só serve ao teclado. */
+function isSkipLink(el: Element): boolean {
+  return el.tagName === 'A' && (el.getAttribute('href') ?? '').startsWith('#')
+}
+
+/** Nome do contêiner clicável SEM repetir o texto dos controles que ele traz dentro (já têm linha própria). */
+function ownName(el: HTMLElement): string {
+  const full = accessibleName(el)
+  if (el.getAttribute('aria-label') || !el.querySelector(INTERACTIVE)) return full
+  const copy = el.cloneNode(true) as HTMLElement
+  copy.querySelectorAll(INTERACTIVE).forEach((inner) => inner.remove())
+  return accessibleName(copy) || full
+}
+
 export function observePage(options: ObserveOptions = {}, doc: Document = document): Observation {
   const pathname = window.location.pathname
   const pattern = routePattern(pathname)
@@ -120,6 +182,7 @@ export function observePage(options: ObserveOptions = {}, doc: Document = docume
   const modal = topModal(doc)
   let size = 0
   let index = 0
+  let omittedMenu = 0
 
   const push = (line: string) => {
     if (size > MAX_CHARS) return false
@@ -133,8 +196,10 @@ export function observePage(options: ObserveOptions = {}, doc: Document = docume
     const sensitiveBlock = el.getAttribute('data-copilot-risk') === 'D' && !el.matches(INTERACTIVE)
     if (el.matches(INTERACTIVE) || (el.hasAttribute('data-copilot') && !el.querySelector(INTERACTIVE))) {
       const element = el as HTMLElement
-      if (element.getAttribute('type') !== 'hidden' && elements.size < MAX_ELEMENTS) {
-        const label = cleanLabel(accessibleName(element), allowed) || '(sem rótulo)'
+      if (isMenuShortcut(element) || isSkipLink(element)) {
+        omittedMenu += 1
+      } else if (element.getAttribute('type') !== 'hidden' && elements.size < MAX_ELEMENTS) {
+        const label = cleanLabel(ownName(element), allowed) || '(sem rótulo)'
         const fillable = isTextEntry(element) || element.tagName === 'SELECT'
         const fill = fillable ? classifyFill(element, pathname) : null
         const level = fill ? (fill.ok ? 'safe' : fill.verdict.level) : classifyClick(element, pathname).level
@@ -143,7 +208,8 @@ export function observePage(options: ObserveOptions = {}, doc: Document = docume
           const id = anchor && ANCHOR_ID.test(anchor) ? ` id=${anchor}` : ''
           const tag = element.tagName.toLowerCase()
           const type = element.getAttribute('type') ?? element.getAttribute('role')
-          const typeText = type && /^[a-z-]{1,20}$/.test(type) ? ` tipo=${type}` : ''
+          // `button type=button` é o óbvio: só diz o que foge do padrão.
+          const typeText = type && /^[a-z-]{1,20}$/.test(type) && !(tag === 'button' && type === 'button') ? ` tipo=${type}` : ''
           const current = index++
           if (push(`[${current}]<${tag}${typeText}${id}${RISK_LABEL[level]}${describeState(element, options, allowed)}> ${label} />`)) {
             elements.set(current, { element, fingerprint: fingerprintOf(element), safeLabel: label })
@@ -161,7 +227,13 @@ export function observePage(options: ObserveOptions = {}, doc: Document = docume
       return
     }
     if (sensitiveBlock) push('(bloco com ação reservada para a pessoa)')
-    Array.from(el.children).forEach(walk)
+    const children = Array.from(el.children)
+    if ((el.tagName === 'UL' || el.tagName === 'OL' || el.getAttribute('role') === 'list') && children.length > MAX_ITENS_DE_LISTA) {
+      children.slice(0, MAX_ITENS_DE_LISTA).forEach(walk)
+      push(`(lista com mais ${children.length - MAX_ITENS_DE_LISTA} itens parecidos, omitidos; peça à pessoa um filtro ou a busca)`)
+      return
+    }
+    children.forEach(walk)
   }
 
   if (modal) {
@@ -171,6 +243,7 @@ export function observePage(options: ObserveOptions = {}, doc: Document = docume
     Array.from(doc.body.children).forEach(walk)
   }
   if (size > MAX_CHARS) lines.push('(lista cortada: há mais itens na tela)')
+  if (omittedMenu > 0) lines.unshift('(atalhos do menu omitidos: para trocar de tela use a ferramenta navigate)')
 
   // Última passada sobre o texto montado.
   return { content: redactPII(lines.join('\n')) || '(nada acionável nesta tela)', elements, pattern, screen }

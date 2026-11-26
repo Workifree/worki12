@@ -22,6 +22,9 @@ import { Dialog } from './ui/Dialog';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle2, XCircle, Building2, Clock, DollarSign, ChevronRight } from 'lucide-react';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
+import { useAuth } from '../contexts/AuthContext';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { workerShiftSources } from '../lib/realtime/liveSources';
 import { useNotifications } from '../contexts/NotificationContext';
 import { Alert, Button, IconButton } from './ui';
 import type { Notification as AppNotification } from '../contexts/NotificationContext';
@@ -70,6 +73,14 @@ export default function InviteTakeover() {
   const recusaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenNotifIdsRef = useRef<Set<string> | null>(null);
 
+  // Convite novo (ou retirado) aparece sem recarregar a página.
+  const { user } = useAuth();
+  useLiveRefresh({
+    sources: user ? workerShiftSources(user.id) : [],
+    onRefresh: () => refresh({ silent: true }),
+    paused: loading || !!respondingId || !!acaoEmCurso,
+  });
+
   // Detecta notificações NOVAS (chegadas via Realtime após o mount) de convite de turno.
   // Na primeira execução só registra o snapshot atual como "visto" — não dispara nada,
   // evitando reabrir o takeover para convites antigos já presentes no histórico.
@@ -86,7 +97,7 @@ export default function InviteTakeover() {
 
     const inviteNotif = freshOnes.find(isShiftInviteNotification);
     if (inviteNotif) {
-      refresh();
+      void refresh({ silent: true });
       maybeNotifyBrowser(
         SHIFT_INVITE_NOTIFICATION_TITLE,
         inviteNotif.message || 'Você recebeu um convite para um turno.',
@@ -94,7 +105,16 @@ export default function InviteTakeover() {
     }
   }, [notifications, refresh]);
 
-  const visibleInvite = pendingInvites.find((invite) => !dismissedIds.has(invite.id));
+  // O convite em tela fica até ser respondido, fechado ou sumir: um que chegue enquanto a pessoa lê
+  // não troca o cartão (ela aceitaria o turno errado).
+  const [shownId, setShownId] = useState<string | null>(null);
+  const available = pendingInvites.filter((invite) => !dismissedIds.has(invite.id));
+  const visibleInvite = available.find((invite) => invite.id === shownId) ?? available[0];
+  if (!loading && (visibleInvite?.id ?? null) !== shownId) {
+    setShownId(visibleInvite?.id ?? null);
+    // "Confirmar recusa" armado nunca passa para outro convite.
+    if (recusaArmada) setRecusaArmada(false);
+  }
 
   if (loading || !visibleInvite) return null;
 

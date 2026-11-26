@@ -9,7 +9,9 @@
 --     confirmacao da empresa). Ganha UM desvio, ligado pela GUC transacao-local app.presence_rpc =
 --     id da candidatura, que so verify_presence liga e desliga. A GUC NAO abre o guard do cliente.
 -- Modo dual: nenhum comportamento muda.
--- LGPD: presence_checks NAO tem coordenada; lat/lng sao usadas em memoria e descartadas.
+-- LGPD: presence_checks NAO tem coordenada; lat/lng sao usadas em memoria e descartadas. Sem texto
+-- livre (so motivo de lista fechada). Retencao: falhas apagadas em 90 dias; nos registros que ficam,
+-- distancia e precisao sao anuladas em 90 dias.
 -- Saida sem verificacao nao bloqueia: register_departure_unverified grava e MARCA ('unverified').
 -- Article 8/9: nao toca saldo.
 --
@@ -19,7 +21,7 @@
 --   DROP TRIGGER trg_zz_workers_presence_anonymize ON public.workers;
 --   DROP FUNCTION public.applications_presence_guard(), public.presence_checks_on_anonymize(),
 --     public.verify_presence(uuid,text,text,double precision,double precision,double precision),
---     public.record_presence_exception(uuid,text,text,text), public.request_presence_exception(uuid,text,text),
+--     public.record_presence_exception(uuid,text,text), public.request_presence_exception(uuid,text,text),
 --     public.register_departure_unverified(uuid), public.get_presence_qr(uuid), public.get_site_static_qr(uuid),
 --     public.rotate_site_secret(uuid), public.purge_presence_checks(), public.internal_presence_token(uuid,uuid,bigint),
 --     public.internal_presence_qr_check(text,uuid,uuid,text), public.internal_presence_window_open(timestamptz,text),
@@ -78,14 +80,13 @@ CREATE TABLE IF NOT EXISTS public.presence_checks (
     qr_kind        text CHECK (qr_kind IN ('rotating', 'static')),
     reason         text CHECK (reason IN ('sem_sinal_gps', 'gps_negado', 'qr_ilegivel',
                        'celular_sem_bateria', 'local_mudou', 'outro')),
-    note           varchar(200),
     decided_by     uuid,
     created_at     timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT presence_checks_exception_author
         CHECK (result <> 'manual_exception' OR (decided_by IS NOT NULL AND reason IS NOT NULL))
 );
 COMMENT ON TABLE public.presence_checks IS
-    'Tentativas e desfechos da presenca verificada. NUNCA gravar coordenada do freela. Falhas purgadas em 90 dias.';
+    'Tentativas e desfechos da presenca verificada. NUNCA gravar coordenada do freela. Sem texto livre. Falhas apagadas e distancia/precisao anuladas em 90 dias.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_presence_checks_decided
     ON public.presence_checks (application_id, kind) WHERE result IN ('verified', 'manual_exception');
@@ -292,27 +293,25 @@ $$;
 
 -- 4. Excecao decidida por quem OPERA o turno.
 CREATE OR REPLACE FUNCTION public.record_presence_exception(
-    p_application_id uuid, p_kind text, p_reason text, p_note text DEFAULT NULL)
+    p_application_id uuid, p_kind text, p_reason text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
     v_uid  uuid := (SELECT auth.uid());
     v_job  public.jobs%ROWTYPE;
     v_app  public.applications%ROWTYPE;
-    v_note text := NULLIF(btrim(p_note), '');
 BEGIN
     IF v_uid IS NULL THEN RETURN jsonb_build_object('outcome', 'unauthenticated'); END IF;
 
-    SELECT j.* INTO v_job FROM public.jobs j
-     WHERE j.id = (SELECT a.job_id FROM public.applications a WHERE a.id = p_application_id) FOR SHARE;
-    IF NOT FOUND OR NOT COALESCE(public.is_job_owner(v_job.id), false) THEN
+    SELECT * INTO v_app FROM public.applications WHERE id = p_application_id;
+    IF NOT FOUND OR v_app.worker_id = v_uid OR NOT COALESCE(public.is_job_owner(v_app.job_id), false) THEN
         RETURN jsonb_build_object('outcome', 'forbidden');
     END IF;
+    SELECT * INTO v_job FROM public.jobs WHERE id = v_app.job_id FOR SHARE;
+    IF NOT FOUND THEN RETURN jsonb_build_object('outcome', 'forbidden'); END IF;
     SELECT * INTO v_app FROM public.applications WHERE id = p_application_id FOR UPDATE;
-    IF v_app.worker_id = v_uid THEN RETURN jsonb_build_object('outcome', 'forbidden'); END IF;
 
     IF p_kind IS NULL OR p_kind NOT IN ('arrival', 'departure') OR p_reason IS NULL
-       OR p_reason NOT IN ('sem_sinal_gps', 'gps_negado', 'qr_ilegivel', 'celular_sem_bateria', 'local_mudou', 'outro')
-       OR length(v_note) > 200 THEN
+       OR p_reason NOT IN ('sem_sinal_gps', 'gps_negado', 'qr_ilegivel', 'celular_sem_bateria', 'local_mudou', 'outro') THEN
         RETURN jsonb_build_object('outcome', 'invalid_input');
     END IF;
     IF v_job.presence_mode <> 'qr_gps' THEN RETURN jsonb_build_object('outcome', 'not_qr_gps'); END IF;
@@ -333,8 +332,8 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'outside_window');
     END IF;
 
-    INSERT INTO public.presence_checks (application_id, job_id, worker_id, kind, result, reason, note, decided_by)
-    VALUES (v_app.id, v_job.id, v_app.worker_id, p_kind, 'manual_exception', p_reason, v_note, v_uid);
+    INSERT INTO public.presence_checks (application_id, job_id, worker_id, kind, result, reason, decided_by)
+    VALUES (v_app.id, v_job.id, v_app.worker_id, p_kind, 'manual_exception', p_reason, v_uid);
 
     -- So a coluna da empresa: o ponto do freela nunca e preenchido em nome dele.
     IF p_kind = 'arrival' THEN
@@ -381,6 +380,9 @@ BEGIN
        OR (p_kind = 'departure' AND v_app.status <> 'in_progress') THEN
         RETURN jsonb_build_object('outcome', 'invalid_status');
     END IF;
+    IF NOT public.internal_presence_window_open(v_job.start_date, v_job.work_start_time::text) THEN
+        RETURN jsonb_build_object('outcome', 'outside_window');
+    END IF;
     -- Um aviso a cada 10 min por candidatura e momento.
     IF EXISTS (SELECT 1 FROM public.presence_checks c WHERE c.application_id = v_app.id AND c.kind = p_kind
                   AND c.result = 'exception_requested' AND c.created_at > now() - interval '10 minutes') THEN
@@ -409,14 +411,16 @@ DECLARE
     v_worker boolean;
 BEGIN
     IF v_uid IS NULL THEN RETURN jsonb_build_object('outcome', 'unauthenticated'); END IF;
-    SELECT j.* INTO v_job FROM public.jobs j
-     WHERE j.id = (SELECT a.job_id FROM public.applications a WHERE a.id = p_application_id) FOR SHARE;
+    -- Autoriza ANTES de travar: estranho nao segura lock de linha alheia.
+    SELECT * INTO v_app FROM public.applications WHERE id = p_application_id;
+    IF NOT FOUND OR (v_app.worker_id IS DISTINCT FROM v_uid
+                     AND NOT COALESCE(public.is_job_owner(v_app.job_id), false)) THEN
+        RETURN jsonb_build_object('outcome', 'forbidden');
+    END IF;
+    SELECT * INTO v_job FROM public.jobs WHERE id = v_app.job_id FOR SHARE;
     IF NOT FOUND THEN RETURN jsonb_build_object('outcome', 'forbidden'); END IF;
     SELECT * INTO v_app FROM public.applications WHERE id = p_application_id FOR UPDATE;
     v_worker := v_app.worker_id = v_uid;
-    IF NOT v_worker AND NOT COALESCE(public.is_job_owner(v_job.id), false) THEN
-        RETURN jsonb_build_object('outcome', 'forbidden');
-    END IF;
     IF v_job.presence_mode <> 'qr_gps' THEN RETURN jsonb_build_object('outcome', 'not_qr_gps'); END IF;
     IF v_job.status = 'deleted' OR v_app.status <> 'in_progress' THEN
         RETURN jsonb_build_object('outcome', 'invalid_status');
@@ -508,6 +512,11 @@ BEGIN
      WHERE result NOT IN ('verified', 'manual_exception', 'unverified')
        AND created_at < now() - interval '90 days';
     GET DIAGNOSTICS v_n = ROW_COUNT;
+    -- Verificada, excecao e sem verificacao ficam com o recibo; as medidas do aparelho saem.
+    UPDATE public.presence_checks
+       SET distance_m = NULL, accuracy_m = NULL
+     WHERE created_at < now() - interval '90 days'
+       AND (distance_m IS NOT NULL OR accuracy_m IS NOT NULL);
     RETURN v_n;
 END;
 $$;
@@ -520,7 +529,7 @@ BEGIN
     DELETE FROM public.presence_checks
      WHERE worker_id = NEW.id AND result NOT IN ('verified', 'manual_exception', 'unverified');
     UPDATE public.presence_checks
-       SET note = NULL, distance_m = NULL, accuracy_m = NULL
+       SET distance_m = NULL, accuracy_m = NULL
      WHERE worker_id = NEW.id;
     RETURN NEW;
 END;
@@ -538,7 +547,7 @@ DECLARE
 BEGIN
     FOREACH v_f IN ARRAY ARRAY[
         'public.verify_presence(uuid,text,text,double precision,double precision,double precision)',
-        'public.record_presence_exception(uuid,text,text,text)',
+        'public.record_presence_exception(uuid,text,text)',
         'public.request_presence_exception(uuid,text,text)',
         'public.register_departure_unverified(uuid)',
         'public.get_presence_qr(uuid)', 'public.get_site_static_qr(uuid)', 'public.rotate_site_secret(uuid)']
@@ -578,7 +587,8 @@ BEGIN
         OR NEW.worker_checkout_at IS DISTINCT FROM OLD.worker_checkout_at
         OR NEW.company_checkin_confirmed_at IS DISTINCT FROM OLD.company_checkin_confirmed_at
         OR NEW.company_checkout_confirmed_at IS DISTINCT FROM OLD.company_checkout_confirmed_at)
-       AND EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = OLD.job_id AND j.presence_mode = 'qr_gps')
+       -- Fail-closed: so libera se o turno for VISIVEL e dual. Inexistente ou escondido = recusa.
+       AND NOT EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = OLD.job_id AND j.presence_mode = 'dual')
     THEN
         RAISE EXCEPTION 'applications_presence_guard: este turno exige presenca verificada.' USING ERRCODE = '42501';
     END IF;

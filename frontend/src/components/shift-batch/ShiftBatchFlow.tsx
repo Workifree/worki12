@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
     SERIES_BROKEN_MESSAGE, dayLabel, mergeDrafts, resolveSeries, separateRows, shortDate, sortRows,
     validateBatch, type ExistingShift, type ShiftDraftRow,
@@ -14,7 +14,10 @@ import { useBatchLinkRisk, useCallData, useRowBusy } from './useCallData';
 import { useShiftBatch, type ShiftBatchOptions } from './useShiftBatch';
 
 /** Começo → edição → revisão → publicado. */
-export function ShiftBatchFlow(options: ShiftBatchOptions) {
+export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
+    /** Campos que valem para o lote inteiro, mostrados na edição e na revisão. */
+    extra?: ReactNode;
+}) {
     const flow = useShiftBatch(options);
     const { draft, step, today } = flow;
     /** 'all' = escolha geral; senão a chave da linha. */
@@ -66,6 +69,7 @@ export function ShiftBatchFlow(options: ShiftBatchOptions) {
 
     return (
         <div id="lote-topo">
+            {extra && (step === 'edit' || step === 'review') && <div className="mb-4">{extra}</div>}
             {step === 'start' && (
                 <>
                     {flow.startError && <Alert tone="warning" role="alert" className="mb-4">{flow.startError}</Alert>}

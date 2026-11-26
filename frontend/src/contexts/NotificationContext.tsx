@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { notificationSources } from '../lib/realtime/liveSources';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logError } from '../lib/logger'
@@ -35,25 +38,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const unreadCount = notifications.filter(n => !n.read_at).length;
 
-    useEffect(() => {
-        if (!user) {
-            return () => {
-                setNotifications([]);
-            };
-        }
-
-        let isActive = true;
-
-        const loadNotifications = async () => {
+    const beginLoad = useLatestResponse();
+    const loadNotifications = useCallback(
+        async (userId: string, isActive: () => boolean, silent = false) => {
             if (!dbAvailable) return;
+            const claim = beginLoad();
             const { data, error } = await supabase
                 .from('notifications')
                 .select('*')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(50);
 
-            if (!isActive) return;
+            if (!isActive()) return;
+
+            // Recarga de fundo que falha mantém a lista que já está no sino.
+            if (error && silent) return;
+            if (!claim()) return;
 
             setCarregando(false);
             if (error) {
@@ -66,9 +67,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             setErroCarga(false);
             if (data) setNotifications(data);
-        };
+        },
+        [dbAvailable, beginLoad],
+    );
 
-        loadNotifications();
+    // O canal abaixo não se recupera de queda: foco, rede e polling conferem de novo.
+    useLiveRefresh({
+        sources: user ? notificationSources(user.id) : [],
+        onRefresh: (ctx) => (user ? loadNotifications(user.id, ctx.isCurrent, true) : undefined),
+    });
+
+    useEffect(() => {
+        if (!user) {
+            return () => {
+                setNotifications([]);
+            };
+        }
+
+        let isActive = true;
+
+        void loadNotifications(user.id, () => isActive);
 
         const dbChannel = dbAvailable ? supabase
             .channel('notifications-changes')
@@ -82,7 +100,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        setNotifications(prev => [payload.new as Notification, ...prev]);
+                        // A recarga pode já ter trazido a mesma linha.
+                        setNotifications(prev => prev.some(n => n.id === payload.new.id)
+                            ? prev
+                            : [payload.new as Notification, ...prev]);
                     } else if (payload.eventType === 'UPDATE') {
                         setNotifications(prev => prev.map(n => n.id === payload.new.id ? payload.new as Notification : n));
                     }

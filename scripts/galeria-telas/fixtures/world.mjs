@@ -255,6 +255,8 @@ function rpcs() {
     list_jobs_by_responsible: (_a, m) => ({ outcome: 'ok', truncated: false, items: m.db.jobs.filter((j) => j.company_id === ID.empresa && j.start_date.slice(0, 10) >= dia(0) && j.status !== 'cancelled').map((j) => ({
       job_id: j.id, title: j.title, status: j.status, date: j.start_date.slice(0, 10), start_time: j.work_start_time, slots: j.slots, filled: m.db.applications.filter((a) => a.job_id === j.id && ['hired', 'in_progress', 'completed'].includes(a.status)).length,
       responsible_id: j.responsible_id, responsible_label: j.responsible_id === ID.encarregado ? 'Roberto Dias' : 'Você (dona)', creator_label: 'Você (dona)', tag_id: j.tag_id, tag_name: j.tag_id ? 'Eventos' : null, tag_archived: false })) }),
+    get_my_worker_profile: (_a, m) => m.db.workers.find((w) => w.id === m.sessao?.id) ?? null,
+    set_my_worker_identity: { outcome: 'saved' },
     get_busy_workers: [],
     get_shift_worker_payment_card: (a, m) => ({ outcome: 'ok', items: m.db.applications.filter((x) => x.job_id === a.p_job_id).map((x) => { const w = m.db.workers.find((y) => y.id === x.worker_id); return { worker_id: w.id, full_name: w.full_name, avatar_url: null, pix_key: w.pix_key, phone: w.phone }; }) }),
     cancel_job: { outcome: 'not_found' },

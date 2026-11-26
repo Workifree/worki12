@@ -27,7 +27,7 @@ Banco e componentes novos prontos. Nenhum arquivo existente do frontend foi edit
    - Se o freela registrou a saída sem verificação, a empresa ainda precisa de um dos dois botões do painel antes de concluir.
 6. `lib/checkinWindow.ts` (`attendanceGuardMessage`): tratar `applications_presence_guard` como "Este turno exige QR e localização. Atualize a página." Tratar também `jobs_presence_policy` na edição de turno.
 7. `ReceiptView` e modal "Registrar pagamento": quando `qr_gps`, `<PresenceBadge checks={checks} departureDone={!!(app.worker_checkout_at || app.company_checkout_confirmed_at)} />`. Se `listPresenceChecks` devolver `null` (falha de leitura), não mostrar o selo. Nunca bloquear o pagamento. Em turno com chegada por exceção, `worker_checkin_at` fica vazio: usar `company_checkin_confirmed_at` como chegada em horas e recibo.
-8. `pages/Privacy.tsx`: finalidade "verificação de presença": localização lida uma vez por gesto, não armazenada; guardados resultado, distância e precisão; falhas por 90 dias; verificada ou exceção enquanto existir o recibo; alternativa sem localização. Texto jurídico: revisar antes de publicar.
+8. `pages/Privacy.tsx`: finalidade "verificação de presença": localização lida uma vez por gesto, não armazenada; guardados resultado, distância e precisão; falhas, distância e precisão por 90 dias; resultado e motivo enquanto existir o recibo; alternativa sem localização. Texto jurídico: revisar antes de publicar.
 9. `types/index.ts`: reexportar os tipos de `lib/presence.ts` e acrescentar a `Job`/`Company` as colunas novas.
 
 ## Diferenças em relação ao ADR e à spec
@@ -37,10 +37,12 @@ Banco e componentes novos prontos. Nenhum arquivo existente do frontend foi edit
 - Turno rotativo não aceita o QR impresso, e o estático não aceita o rotativo.
 - Mapa Leaflet e busca Nominatim não entraram (dependência nova): há "Estou aqui agora" e "Conferir no mapa" (abre o OpenStreetMap em outra aba, enviando a coordenada do local).
 - LGPD: anonimização de freela e empresa por triggers próprios; `anonymize_account` não foi editada.
-- `qr_mode` não congela (permite trocar para o cartaz se o celular do responsável falhar).
+- Afrouxar (`qr_gps` para `dual`, `rotating` para `static`, trocar o local) é só do Gestor, e `qr_mode` também congela no primeiro registro; se o celular do responsável falhar depois disso, usar a exceção manual. Na edição pelo encarregado, desabilitar essas opções (o banco recusa com `jobs_presence_policy`).
+- Sem nota livre na exceção: `record_presence_exception(application_id, kind, reason)`.
+- Retenção: falhas apagadas em 90 dias; distância e precisão anuladas em 90 dias também nos registros que ficam.
 
 ## Limites conhecidos (dizer ao dono)
-GPS falso não é detectável no navegador; o QR rotativo pode ser retransmitido por vídeo em até 60 s; o cartaz pode ser fotografado; não prova a identidade de quem segura o aparelho. Quem opera o turno pode voltar o turno para `dual` antes do primeiro registro.
+GPS falso não é detectável no navegador; o QR rotativo pode ser retransmitido por vídeo em até 60 s; o cartaz pode ser fotografado; não prova a identidade de quem segura o aparelho. O Gestor pode voltar o turno para `dual` antes do primeiro registro.
 
 ## Antes de aplicar em produção
 Gate de `harness-security-reviewer` (RPCs DEFINER, desvio no validador, LGPD) e avaliação independente. O PGlite usa schema mínimo e seam simplificado: conferir no catálogo real que as asserções passam e rodar `supabase/tests/applications_update_hardening.sql` e as auditorias de equipe. e2e P16 a P18 depois da integração.

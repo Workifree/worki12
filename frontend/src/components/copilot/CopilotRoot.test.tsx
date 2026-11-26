@@ -3,11 +3,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSimulatedStack, click, done, goTo, humanClick, installDomStubs, isHuman, type Brain } from '../../lib/copilot/__tests__/harness'
 import { Dialog } from '../ui/Dialog'
+import { requestOpen } from '../../lib/copilot/openEvent'
+import { GuiaContext, type GuiaContextValue } from '../../hooks/useGuide'
 import { CopilotRoot, type CopilotRootProps } from './CopilotRoot'
 
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1' }, loading: false }) }))
 
-beforeAll(installDomStubs)
+// O painel é carregado sob demanda: aquecer o módulo evita estourar o prazo do primeiro teste.
+beforeAll(async () => {
+  installDomStubs()
+  await import('./CopilotPanel')
+})
 beforeEach(() => {
   window.localStorage.clear()
   goTo('/company/jobs')
@@ -26,7 +32,7 @@ function setup(brain: Brain = () => done(), props: CopilotRootProps = {}, availa
   const utils = render(
     <MemoryRouter initialEntries={[path]}>
       {page}
-      <CopilotRoot enabled services={services} confirmArmDelayMs={0} overrides={{ isHuman, stepDelaySeconds: 0, navigationSettleMs: 0 }} {...props} />
+      <CopilotRoot enabled services={services} confirmArmDelayMs={0} overrides={{ isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'desktop' }} {...props} />
     </MemoryRouter>,
   )
   return { ...utils, stack, services }
@@ -39,7 +45,7 @@ const acceptNotice = async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Entendi, quero usar' }))
 }
 const ask = (text: string) => {
-  fireEvent.change(screen.getByRole('textbox', { name: 'O que você precisa?' }), { target: { value: text } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Como posso ajudar?' }), { target: { value: text } })
   fireEvent.click(screen.getByRole('button', { name: 'Enviar pedido' }))
 }
 
@@ -148,5 +154,130 @@ describe('conversa', () => {
     await screen.findByText('Muito bem.', {}, { timeout: 8000 })
     expect(tap).toHaveBeenCalledTimes(1)
     expect(target).not.toHaveAttribute('data-copilot-highlight')
+  })
+})
+
+describe('barra de comando e duas experiências', () => {
+  it('Ctrl+K abre a barra de comando de qualquer tela, sem aba nem botão', async () => {
+    setup(undefined, { showLauncher: false })
+    await act(async () => {
+      await import('./CopilotPanel')
+    })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(within(dialog).getByRole('heading', { name: 'Copiloto do Worki' })).toBeInTheDocument()
+    // Esc fecha e devolve o foco.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+  })
+
+  it('PC usa a seta; celular usa o dedo virtual e o bottom sheet (sem seta de mouse)', async () => {
+    const desktop = setup()
+    await open()
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(document.querySelector('[data-copilot-pointer="cursor"]')).not.toBeNull()
+    expect(document.querySelector('[data-copilot-pointer="finger"]')).toBeNull()
+    desktop.unmount()
+    cleanup()
+
+    setup(undefined, { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'mobile' } })
+    await open()
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    expect(document.querySelector('[data-copilot-pointer="finger"]')).not.toBeNull()
+    expect(document.querySelector('[data-copilot-pointer="cursor"]')).toBeNull()
+  })
+
+  it('aviso de dado pessoal aparece colado ao campo', async () => {
+    setup()
+    await open()
+    await acceptNotice()
+    await screen.findByRole('textbox', { name: 'Como posso ajudar?' })
+    expect(screen.getByText(/Não digite CPF, senha/)).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Como posso ajudar?' }), { target: { value: 'meu cpf é 123.456.789-09' } })
+    expect(screen.getByText(/parece um dado pessoal/)).toBeInTheDocument()
+  })
+
+  it('quando o agente PERGUNTA: mostra a pergunta com respostas rápidas e segue com a resposta (não encerra sozinho)', async () => {
+    const question = 'Qual turno? Por exemplo: o de hoje, o de amanhã ou o de sábado'
+    setup(({ step }) => (step === 0 ? { ask_user: { question } } : done('Abri o de amanhã.')))
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('abra o turno')
+    await screen.findByText(question, {}, { timeout: 8000 })
+    expect(screen.getByRole('button', { name: 'PARAR' })).toBeInTheDocument()
+    const chips = screen.getByRole('list', { name: 'Respostas rápidas' })
+    expect(within(chips).getByRole('button', { name: 'o de hoje' })).toBeInTheDocument()
+    expect(within(chips).getByRole('button', { name: 'Deixa para lá' })).toBeInTheDocument()
+    humanClick(within(chips).getByRole('button', { name: 'o de amanhã' }))
+    await screen.findByText('Abri o de amanhã.', {}, { timeout: 8000 })
+    expect(screen.queryByText(/Parei/)).toBeNull()
+  })
+
+  it('"deixa para lá" na pergunta encerra com mensagem própria, não com a do botão PARAR', async () => {
+    setup(({ step }) => (step === 0 ? { ask_user: { question: 'Qual turno?' } } : done()))
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('abra o turno')
+    humanClick(await screen.findByRole('button', { name: 'Deixa para lá' }, { timeout: 8000 }))
+    await screen.findByText(/Certo, parei por aqui/, {}, { timeout: 8000 })
+    expect(screen.queryByText('Parei, como você pediu.')).toBeNull()
+  })
+
+  it('em /recibo aberto direto o papel vem do guia (empresa não vira freela)', async () => {
+    const guide = { papel: 'gestor' } as unknown as GuiaContextValue
+    const stack = createSimulatedStack(() => done())
+    const createLlmFetch = vi.fn(() => stack.llmFetch)
+    render(
+      <GuiaContext.Provider value={guide}>
+        <MemoryRouter initialEntries={['/recibo/12']}>
+          <CopilotRoot enabled services={{ checkAvailability: async () => true, createLlmFetch }} confirmArmDelayMs={0} overrides={{ isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'desktop' }} />
+        </MemoryRouter>
+      </GuiaContext.Provider>,
+    )
+    await open()
+    await acceptNotice().catch(() => {})
+    ask('oi')
+    await waitFor(() => expect(createLlmFetch).toHaveBeenCalledWith('company'), { timeout: 8000 })
+    // Espera a tarefa acabar: enquanto roda, a guarda de eventos fica armada e barraria o Esc do teste seguinte.
+    await screen.findByText('Pronto.', {}, { timeout: 8000 })
+  })
+
+  it('PC: o botão vira a barra de comando (View Transition em morph) e a barra volta a ser o botão; sem a API, abre direto', async () => {
+    const doc = document as unknown as { startViewTransition?: unknown }
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 10, 120, 44))
+    const names: string[] = []
+    const start = vi.fn((update: () => void) => {
+      // O nome de transição precisa estar no elemento de origem ANTES da troca (estado antigo).
+      names.push(`antes:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      update()
+      names.push(`depois:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(true)
+      return { finished: Promise.resolve() }
+    })
+    doc.startViewTransition = start
+    try {
+      setup()
+      await screen.findByRole('button', { name: 'Abrir o copiloto' })
+      act(() => requestOpen({ x: 10, y: 10 }))
+      const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(names[0]).toBe('antes:wk-cmd-vt')
+      expect(dialog).toHaveAttribute('data-copilot-palette')
+      await waitFor(() => expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(false))
+      // Fechar também faz o morph de volta (a barra → o botão).
+      fireEvent.keyDown(document, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+      expect(start).toHaveBeenCalledTimes(2)
+      expect(names.at(-1)).toBe('depois:wk-cmd-vt')
+    } finally {
+      delete doc.startViewTransition
+    }
+    cleanup()
+    setup()
+    await screen.findByRole('button', { name: 'Abrir o copiloto' })
+    act(() => requestOpen())
+    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
   })
 })

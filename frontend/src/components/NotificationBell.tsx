@@ -18,7 +18,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
     // O painel é renderizado num portal com posição `fixed` ancorada no sino —
     // assim ele escapa do `overflow-hidden` do menu lateral (Sidebar), que antes
     // o cortava em vez de deixá-lo abrir por cima do conteúdo.
-    const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+    const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
@@ -27,7 +27,9 @@ export default function NotificationBell({ className = "" }: { className?: strin
     const updateCoords = useCallback(() => {
         const rect = buttonRef.current?.getBoundingClientRect();
         if (!rect) return;
-        setCoords({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+        // Alinha a borda direita do painel ao sino, mas nunca deixa vazar pela esquerda (sino no menu lateral).
+        const largura = Math.min(window.innerWidth >= 768 ? 384 : 320, window.innerWidth - 16);
+        setCoords({ top: rect.bottom + 8, left: Math.min(Math.max(8, rect.right - largura), Math.max(8, window.innerWidth - largura - 8)) });
     }, []);
 
     // Enquanto aberto: mantém o painel alinhado ao sino em resize/scroll.
@@ -110,7 +112,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
             {isOpen && coords && createPortal(
                 <div
                     ref={panelRef}
-                    style={{ position: 'fixed', top: coords.top, right: coords.right }}
+                    style={{ position: 'fixed', top: coords.top, left: coords.left }}
                     className="w-80 md:w-96 max-w-[calc(100vw-16px)] bg-white rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] border-2 border-black z-[100] overflow-hidden origin-top-right"
                 >
                     <div className="px-4 py-2 border-b-2 border-black flex justify-between items-center gap-2 bg-white">

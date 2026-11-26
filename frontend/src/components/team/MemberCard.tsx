@@ -125,6 +125,7 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
           {/* Modo restrito (encarregado) não lê PII: nada de campo PIX, nem vazio. */}
           {!restricted && worker.pix_key?.trim() && (
             <div
+              data-copilot-private
               onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-between gap-2 mt-3 bg-gray-50 border border-gray-200 rounded-xl pl-3 pr-1 py-1 max-w-sm"
             >

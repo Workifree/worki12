@@ -23,6 +23,10 @@ import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import { getSessionUserOrThrow } from '../../lib/authSession';
 import { ActionBar, Button, ButtonLink, Card, DialogActions, DialogHeader, ErrorState, ListRow, Menu, SkeletonList, StatusBadge } from '../../components/ui';
 import { Dialog } from '../../components/ui/Dialog';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { jobSources } from '../../lib/realtime/liveSources';
 
 
 export default function CompanyJobDetails() {
@@ -63,6 +67,15 @@ export default function CompanyJobDetails() {
     const [semAcesso, setSemAcesso] = useState(false);
     const { addToast } = useToast();
 
+    const beginDetails = useLatestResponse();
+    const beginApplications = useLatestResponse();
+    const dialogOpen = useAnyDialogOpen();
+    useLiveRefresh({
+        sources: id ? jobSources(id) : [],
+        onRefresh: () => Promise.all([fetchJobDetails({ silent: true }), fetchApplications({ silent: true })]),
+        paused: loading || dialogOpen || showDeleteConfirm || showCancelJob,
+    });
+
     // Esc fecha o menu de ações (o clique fora é a camada transparente z-10 abaixo do menu).
 
     useEffect(() => {
@@ -75,28 +88,32 @@ export default function CompanyJobDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só re-executa quando id muda
     }, [id]);
 
-    const fetchApplications = async () => {
+    const fetchApplications = async ({ silent = false }: { silent?: boolean } = {}) => {
         if (!id) return;
-        setErroFreelas(false);
+        const claim = beginApplications();
+        if (!silent) setErroFreelas(false);
         const { data, error } = await supabase
             .from('applications')
             .select('status, company_checkin_confirmed_at, company_checkout_confirmed_at')
             .eq('job_id', id);
         if (error) {
             logError('CompanyJobDetails.fetchApplications', error);
-            setErroFreelas(true);
+            if (!silent && claim()) setErroFreelas(true);
             return;
         }
+        if (!claim()) return;
+        setErroFreelas(false);
         setApps((data ?? []) as ApplicationStepInput[]);
     };
 
-    const fetchJobDetails = async () => {
+    const fetchJobDetails = async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginDetails();
         // G3: guarda de id falsy — evita `jobs?id=eq.null`/`applications?job_id=eq.null`
         // mesmo se essa função for chamada de outro lugar além do useEffect que já checa `if (id)`.
         if (!id) { navigate('/company/jobs'); return; }
         try {
             const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
-            if (!user) { navigate('/login'); return; }
+            if (!user) { if (!silent) navigate('/login'); return; }
 
             const { data, error } = await supabase
                 .from('jobs')
@@ -106,16 +123,17 @@ export default function CompanyJobDetails() {
                 .single();
 
             if (error) throw error;
-            if (!canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
+            if (!canSeeJob(await getJobScope(), data)) { if (!silent) setSemAcesso(true); return; }
 
+            if (!claim()) return;
             setJob(data);
         } catch (error) {
             // Falha de rede/RLS nao pode se disfarcar de "turno nao existe" mandando pra lista
             // em silencio — a pessoa perde o contexto sem saber por que (Nielsen #1).
             logError('Error fetching job:', error);
-            setErroCarga(true);
+            if (!silent && claim()) setErroCarga(true);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 

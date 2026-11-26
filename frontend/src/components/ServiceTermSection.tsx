@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -32,6 +32,10 @@ interface ServiceTermSectionProps {
     /** "Não recebi / valor errado": abre a conversa com a empresa do turno. */
     onDispute?: () => void;
     disputing?: boolean;
+    /** `true` enquanto a pessoa lê, marca ou envia: a tela segura a recarga ao vivo. */
+    onBusyChange?: (busy: boolean) => void;
+    /** Muda a cada recarga ao vivo do recibo: relê o termo sem esqueleto. */
+    refreshKey?: number;
 }
 
 /**
@@ -79,6 +83,8 @@ export default function ServiceTermSection({
     amountMissing = false,
     onDispute,
     disputing = false,
+    onBusyChange,
+    refreshKey = 0,
 }: ServiceTermSectionProps) {
     const { addToast } = useToast();
 
@@ -124,6 +130,32 @@ export default function ServiceTermSection({
             active = false;
         };
     }, [shiftPaymentId]);
+
+    const busy = isWorkerViewer && (
+        accepting || confirming
+        || (!!term && !term.accepted_at && (showFullText || agreedToTerm))
+        || (!workerConfirmedAt && confirmoRecebimento)
+    );
+    useEffect(() => {
+        if (!busy) return;
+        onBusyChange?.(true);
+        return () => onBusyChange?.(false);
+    }, [busy, onBusyChange]);
+
+    const busyRef = useRef(busy);
+    useEffect(() => {
+        busyRef.current = busy;
+    });
+    useEffect(() => {
+        if (!refreshKey || !shiftPaymentId) return;
+        let active = true;
+        void ServiceTermService.getByShiftPayment(shiftPaymentId).then((result) => {
+            if (!active || result.failed || busyRef.current) return;
+            setTerm(result.term);
+            setFetchFailed(false);
+        });
+        return () => { active = false; };
+    }, [refreshKey, shiftPaymentId]);
 
     const handleRetryFetch = async () => {
         setLoading(true);
@@ -226,6 +258,7 @@ export default function ServiceTermSection({
                         {/* Aberto, o termo rola dentro da própria caixa: o aceite e o botão ficam logo abaixo. */}
                         <p
                             tabIndex={showFullText && !isAccepted ? 0 : undefined}
+                            data-copilot-private
                             className={`whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-800 print:max-h-none print:overflow-visible ${
                                 isAccepted ? '' : showFullText ? 'max-h-[45vh] overflow-y-auto' : 'max-h-48 overflow-hidden'
                             }`}
@@ -259,7 +292,7 @@ export default function ServiceTermSection({
                                 consentimento AFIRMATIVO — soma-se ao gate de leitura
                                 (`showFullText`), nunca o substitui. Ler o termo e concordar com
                                 ele são coisas diferentes; R7/R8 do spec pedem os dois. */}
-                            <label className="flex items-start gap-3 font-semibold text-sm cursor-pointer select-none">
+                            <label className="flex items-start gap-3 min-h-11 py-1 font-semibold text-sm cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={agreedToTerm}
@@ -341,7 +374,7 @@ export default function ServiceTermSection({
 
                     {/* Indícios best-effort do aceite — NUNCA "verificado"/"comprovado" (falsificáveis, ver ADR). */}
                     {isAccepted && (term.accepted_ip || term.accepted_user_agent) && (
-                        <p className="text-xs text-gray-600 mt-3 print:hidden">
+                        <p data-copilot-private className="text-xs text-gray-600 mt-3 print:hidden">
                             Indícios do aceite (não são prova): {term.accepted_ip ? `IP ${term.accepted_ip}` : ''}
                             {term.accepted_ip && term.accepted_user_agent ? ' · ' : ''}
                             {term.accepted_user_agent ? `Dispositivo: ${term.accepted_user_agent}` : ''}
@@ -400,7 +433,7 @@ export default function ServiceTermSection({
                 ) : isWorkerViewer ? (
                     <div className="print:hidden space-y-2">
                         {!mustReadTerm && (
-                            <label className="flex items-start gap-2 cursor-pointer select-none">
+                            <label className="flex items-start gap-2 min-h-11 py-1 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={confirmoRecebimento}

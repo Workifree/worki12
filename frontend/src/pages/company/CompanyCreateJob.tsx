@@ -30,6 +30,11 @@ import type { ReactNode } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
 import { roleLabel } from '../../lib/statusLabels';
 import { formatBRL } from '../../lib/currency';
+import { isPresencaEnabled } from '../../lib/features';
+import { PresencePolicyFields } from '../../components/presence/PresencePolicyFields';
+import { usePresenceSetup } from '../../components/company/usePresenceSetup';
+import { toPolicy } from '../../components/company/presenceDefaults';
+import { listPresenceChecks } from '../../services/presenceService';
 
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -51,7 +56,7 @@ const CHIP_OFF = 'bg-white text-black hover:bg-gray-100';
 
 type CampoDoTurno =
     | 'title' | 'category' | 'description' | 'start_date' | 'work_start_time' | 'work_end_time'
-    | 'weekdays' | 'rangeEnd' | 'budget';
+    | 'weekdays' | 'rangeEnd' | 'budget' | 'site';
 
 export default function CompanyCreateJob() {
     const navigate = useNavigate();
@@ -97,6 +102,19 @@ export default function CompanyCreateJob() {
         })();
         return () => { active = false; };
     }, [tagsEnabled, currentCompany]);
+    // Presença verificada: desligada, nada é consultado nem gravado.
+    const presencaLigada = isPresencaEnabled();
+    const presenca = usePresenceSetup(presencaLigada ? currentCompany?.company_id ?? null : null, !isEditing);
+    const setPresenca = presenca.setPolicy;
+    /** Já há registro no turno: forma e local não mudam (o banco recusa). */
+    const [presencaCongelada, setPresencaCongelada] = useState(false);
+    useEffect(() => {
+        if (!presencaLigada || !id) return;
+        let ativo = true;
+        void listPresenceChecks({ jobId: id }).then((checks) => { if (ativo && checks) setPresencaCongelada(checks.length > 0); });
+        return () => { ativo = false; };
+    }, [presencaLigada, id]);
+
     const [createdJobId, setCreatedJobId] = useState<string | null>(null);
     const [showInvitePanel, setShowInvitePanel] = useState(false);
 
@@ -305,6 +323,7 @@ export default function CompanyCreateJob() {
                 if (modo === 'editar') {
                     setTagId(data.tag_id ?? '');
                     setInitialTagId(data.tag_id ?? '');
+                    if (presencaLigada) setPresenca(toPolicy(data));
                 }
                 setFormData({
                     title: data.title,
@@ -403,6 +422,7 @@ export default function CompanyCreateJob() {
             else if (overCap) marcar('rangeEnd', `um período menor (a série passaria de ${MAX_SERIES_OCCURRENCES} turnos)`, `A série passaria de ${MAX_SERIES_OCCURRENCES} turnos. Encurte o período.`);
         }
         if (!(parseFloat(formData.budget) > 0)) marcar('budget', 'o valor', 'Informe um valor maior que zero.');
+        if (presencaLigada && presenca.siteError) marcar('site', 'o local da presença', presenca.siteError);
         return erros;
     };
 
@@ -493,6 +513,7 @@ export default function CompanyCreateJob() {
                         work_end_time: formData.work_end_time,
                         has_lunch: formData.has_lunch,
                         slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
+                        ...(presencaLigada ? presenca.policy : {}),
                     },
                 });
 
@@ -534,6 +555,7 @@ export default function CompanyCreateJob() {
                 // CHECK (slots >= 1) no banco — o clamp aqui evita que um campo limpo pela
                 // pessoa (string vazia → NaN) vire erro de constraint na cara dela.
                 slots: Math.max(1, Number.parseInt(formData.slots, 10) || 1),
+                ...(presencaLigada ? presenca.policy : {}),
                 // `status` NÃO entra aqui de propósito — ver o insert e o update abaixo.
                 // Este payload é compartilhado pelos dois caminhos, e enquanto ele carregava
                 // `status: 'open'` fixo, EDITAR um turno reescrevia o status: um turno `paused`
@@ -582,7 +604,11 @@ export default function CompanyCreateJob() {
             }
         } catch (error: unknown) {
             logError('Error saving job:', error);
-            addToast(error instanceof Error ? error.message : 'Erro ao salvar turno. Verifique os dados.', 'error');
+            if (presencaLigada && (error as { message?: string } | null)?.message?.includes('jobs_presence_policy')) {
+                addToast('O banco recusou a mudança na presença. Se já há registro neste turno, a forma e o local não mudam.', 'error');
+            } else {
+                addToast(error instanceof Error ? error.message : 'Erro ao salvar turno. Verifique os dados.', 'error');
+            }
         } finally {
             setLoading(false);
         }
@@ -877,6 +903,18 @@ export default function CompanyCreateJob() {
                         </div>
                     )}
                 </FormSection>
+
+                {presencaLigada && (
+                    <Card as="section" aria-label="Presença">
+                        <PresencePolicyFields
+                            value={presenca.policy}
+                            onChange={presenca.setPolicy}
+                            sites={presenca.sites}
+                            frozen={presencaCongelada}
+                            siteError={tentouEnviar ? presenca.siteError : undefined}
+                        />
+                    </Card>
+                )}
 
                 <FormSection title="Valor">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

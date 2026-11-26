@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { invalidateCompanyScope } from '../services/companyScopeService';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
@@ -114,13 +114,41 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     expect(nav.querySelector('[aria-current]')).toBeNull();
   });
 
-  it('freela: cinco itens e o cartão do rodapé leva ao perfil, ativo em /profile', () => {
+  it('freela: cinco itens e a conta no rodapé leva ao perfil, ativa em /profile', () => {
     renderSidebar('/profile', 'worker');
 
     expect(itens()).toEqual(['Início', 'Meus Turnos', 'Empresas', 'Recebimentos', 'Mensagens']);
-    const perfil = screen.getByRole('link', { name: /Ver meu perfil/ });
+    const perfil = screen.getByRole('link', { name: /Nível 1/ });
     expect(perfil).toHaveAttribute('href', '/profile');
     expect(perfil).toHaveAttribute('aria-current', 'page');
-    expect(within(perfil).getByText('0 XP')).toBeInTheDocument();
+    expect(within(perfil).getByText(/0 XP/)).toBeInTheDocument();
+  });
+
+  it('rodapé de uma linha: Perfil, Ajuda e Sair ficam no menu "..." (teclado e rótulo)', async () => {
+    renderSidebar('/dashboard', 'worker');
+
+    const gatilho = screen.getByRole('button', { name: 'Mais opções da conta' });
+    expect(screen.queryByRole('button', { name: 'Sair' })).not.toBeInTheDocument();
+    fireEvent.click(gatilho);
+
+    const menu = await screen.findByRole('menu', { name: 'Conta' });
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Meu perfil', 'Ajuda', 'Sair']);
+  });
+
+  it('empresa: o menu da conta não repete "Meu perfil" e termina em Sair', async () => {
+    mockRpc.mockResolvedValue({ data: [companyRow()], error: null });
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções da conta' }));
+
+    const menu = await screen.findByRole('menu', { name: 'Conta' });
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Ajuda', 'Sair']);
+  });
+
+  it('recolhida (768-1099px): o texto dos itens continua para leitor de tela', () => {
+    renderSidebar('/dashboard', 'worker');
+    const inicio = screen.getByRole('link', { name: 'Início' });
+    expect(within(inicio).getByText('Início')).toHaveClass('max-[1099px]:sr-only');
+    expect(inicio).toHaveAttribute('title', 'Início');
   });
 });

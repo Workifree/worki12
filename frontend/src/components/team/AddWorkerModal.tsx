@@ -145,6 +145,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
           <Field label="Link de perfil do freela">
             <input
               id="worker-link-input"
+              data-copilot-private
               type="text"
               value={linkInput}
               onChange={(e) => setLinkInput(e.target.value)}
@@ -197,6 +198,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
           <Field label="Código do freela">
             <input
               id="phone-input"
+              data-copilot-private
               type="text"
               value={workerId}
               onChange={(e) => setWorkerId(e.target.value)}

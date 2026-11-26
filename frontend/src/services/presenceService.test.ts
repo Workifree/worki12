@@ -35,10 +35,10 @@ describe('verifyPresence', () => {
     });
 });
 
-it('nota vazia vira null', async () => {
+it('exceção manda só o motivo da lista, sem texto livre', async () => {
     mockRpc.mockResolvedValue({ data: { outcome: 'recorded' }, error: null });
-    await recordPresenceException('app', 'arrival', 'outro', '   ');
-    expect(mockRpc.mock.calls[0][1]).toMatchObject({ p_note: null });
+    await recordPresenceException('app', 'arrival', 'outro');
+    expect(mockRpc.mock.calls[0][1]).toEqual({ p_application_id: 'app', p_kind: 'arrival', p_reason: 'outro' });
 });
 
 it('saveSite trata zero linhas (RLS) como falha', async () => {

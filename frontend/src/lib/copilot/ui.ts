@@ -30,6 +30,14 @@ export interface HandoffRequest {
   reason: string
 }
 
+/** O que o executor vai fazer a seguir, para o ponteiro virtual mostrar ANTES (só imagem). */
+export interface ActRequest {
+  element: HTMLElement
+  kind: 'click' | 'type' | 'select'
+  /** Texto a escrever, só para a pré-visualização local. */
+  text?: string
+}
+
 export interface CopilotUI {
   /** Só resolve `true` com um toque da pessoa no cartão. */
   confirm(card: ConfirmCard, element: HTMLElement | null, signal: AbortSignal): Promise<boolean>
@@ -41,4 +49,11 @@ export interface CopilotUI {
   ask(question: string, signal: AbortSignal): Promise<string>
   /** Texto do passo, gerado pelo código ("Tocando em Turnos"). */
   step(text: string): void
+  /**
+   * Opcional: antes de tocar/escrever, mostra o ponteiro chegando ao alvo. Resolve quando a ação de
+   * verdade pode acontecer (ou na hora, com PARAR). Nunca dispara evento.
+   */
+  actOn?(request: ActRequest, signal: AbortSignal): Promise<void>
+  /** Opcional: rolagem do dedo/seta. */
+  scrolled?(down: boolean, signal: AbortSignal): Promise<void>
 }

@@ -8,6 +8,7 @@ const mockAddToast = vi.fn();
 vi.mock('../../contexts/ToastContext', () => ({
   useToast: () => ({ addToast: mockAddToast, removeToast: vi.fn() }),
 }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 vi.mock('../../lib/logger', () => ({ logError: vi.fn() }));
 vi.mock('../../components/PageMeta', () => ({ default: () => null }));
 vi.mock('../../components/company/TagsPanel', () => ({ default: () => null }));

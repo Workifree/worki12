@@ -1,11 +1,11 @@
-import { User, Zap, PlusCircle, Building2, LogOut, HelpCircle, ChevronDown, ChevronRight, BadgeCheck, CircleDashed } from 'lucide-react';
+import { User, PlusCircle, Building2, LogOut, HelpCircle, ChevronDown, BadgeCheck, CircleDashed, UserCircle } from 'lucide-react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import NotificationBell from './NotificationBell';
-import { Button } from './ui';
+import { ButtonLink, Menu } from './ui';
 import { useEffect, useState } from 'react';
 import { useCompanyNavContext } from '../hooks/useCompanyNavContext';
 import { COMPANY_CREATE_ACTION, COMPANY_GESTAO_PATH, WORKER_PROFILE_LINK, getCompanyNav, getWorkerNav, isNavActive } from '../lib/navigation';
@@ -16,6 +16,12 @@ interface SidebarProps {
     type?: 'worker' | 'company';
 }
 
+/**
+ * Lateral do desktop (>= 768px). Largura vem de `--worki-side-w` (index.css): 15rem a partir de
+ * 1100px; entre 768 e 1099px fica recolhida em ícones (4,5rem), com o rótulo só para leitor de
+ * tela e `title` como dica. Estrutura: cabeçalho compacto, "Criar turno" (empresa), navegação e
+ * conta em UMA linha (avatar, nome, menu "...").
+ */
 export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const [name, setName] = useState('');
     // `null` = ainda carregando: o menu não pode afirmar "Não verificado" antes de saber.
@@ -114,43 +120,46 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
         window.location.assign('/company/dashboard');
     };
 
-    // Acabamento refinado (11/2026): moldura brutalista (borda 2px + sombra offset) mantida,
-    // mas estática (sem "pulo" no hover do menu inteiro) e com tipografia contida.
-    const activeNavClass = isCompany
-        ? 'bg-black text-white border-black shadow-brutal-sm'
-        : 'bg-primary text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]';
+    // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
+    // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).
+    const activeNavClass = isCompany ? 'bg-black text-white' : 'bg-primary-dark text-white';
+
+    // Recolhida (768 a 1099px): só ícones. O texto continua no DOM (`sr-only`) para leitor de tela.
+    const label = 'max-[1099px]:sr-only';
+
+    const accountItems = [
+        !isCompany && { label: WORKER_PROFILE_LINK.label, icon: UserCircle, onSelect: () => navigate(WORKER_PROFILE_LINK.path) },
+        { label: 'Ajuda', icon: HelpCircle, onSelect: () => navigate('/ajuda') },
+        { label: loggingOut ? 'Saindo...' : 'Sair', icon: LogOut, onSelect: handleLogout, danger: true, disabled: loggingOut },
+    ];
 
     return (
-        <aside aria-label="Menu lateral" className="hidden md:flex flex-col w-72 h-[calc(100vh-32px)] m-4 sticky top-4
-                      bg-white border-2 border-black rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
-                      overflow-hidden z-50">
+        <aside aria-label="Menu lateral" className="hidden md:flex flex-col shrink-0 w-[var(--worki-side-w)] h-[calc(100dvh-2rem)] self-start m-4 sticky top-4
+                      bg-white border-2 border-black rounded-2xl shadow-brutal-lg overflow-hidden z-50">
 
-            {/* Logo */}
-            <div className={`px-6 py-5 border-b-2 border-black ${isCompany ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-8 h-8 shrink-0 rounded-full border-2 flex items-center justify-center ${isCompany ? 'bg-black text-white border-black' : 'bg-primary text-black border-white'}`}>
-                            <span className="font-bold text-xs">W.</span>
-                        </div>
-                        <p className="text-2xl font-bold tracking-tight">Worki</p>
-                        {isCompany && <span className="text-xs font-semibold uppercase tracking-wide bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full border border-black">Empresa</span>}
+            {/* Cabeçalho compacto: marca + sino. Recolhida: marca em cima, sino embaixo. */}
+            <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 pl-4 pr-2 max-[1099px]:h-auto max-[1099px]:flex-col max-[1099px]:justify-center max-[1099px]:gap-0 max-[1099px]:px-0 max-[1099px]:py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-black text-white' : 'bg-primary-dark text-white'}`}>W.</span>
+                    <div className={`min-w-0 leading-none ${label}`}>
+                        <p className="text-base font-bold tracking-tight text-black">Worki</p>
+                        {isCompany && <p className="mt-1 text-xs font-semibold text-gray-600">Empresa</p>}
                     </div>
-                    <NotificationBell className={isCompany ? "text-gray-500 hover:bg-gray-100" : "text-gray-400 hover:bg-white/10"} />
                 </div>
+                <NotificationBell className="text-gray-700 hover:bg-gray-100" />
             </div>
 
-            {/* Seletor de unidade (F13 R13) — só aparece quando a sessão opera mais de uma
-                empresa (gerente de duas lojas, ou sócio navegando por unidade). Zero mudança
-                visual para as contas de hoje (uma unidade). */}
+            {/* Seletor de unidade (F13 R13): só com mais de uma empresa. Recolhida, o seletor vive no
+                topo da página (CompanyLayout), onde cabe o nome. */}
             {isCompany && myCompanies.length > 1 && (
-                <div className="px-4 pt-4">
+                <div className="shrink-0 px-3 pt-3 max-[1099px]:hidden">
                     <label htmlFor="sidebar-company-switch" className="sr-only">Trocar de unidade</label>
                     <div className="relative">
                         <select
                             id="sidebar-company-switch"
                             value={currentCompanyId ?? ''}
                             onChange={(e) => handleSwitchCompany(e.target.value)}
-                            className="w-full h-11 appearance-none bg-gray-50 border-2 border-black rounded-xl pl-3 pr-9 text-sm font-semibold text-gray-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 hover:border-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
                         >
                             {myCompanies.map((c) => (
                                 <option key={c.company_id} value={c.company_id}>
@@ -158,115 +167,89 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                                 </option>
                             ))}
                         </select>
-                        <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                        <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" />
                     </div>
                 </div>
             )}
 
             {isCompany && (
-                <div className="px-4 pt-4">
-                    <Link
+                <div className="shrink-0 px-3 pt-3">
+                    <ButtonLink
                         to={COMPANY_CREATE_ACTION.path}
-                        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-black bg-black text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all duration-150 motion-reduce:transition-none motion-reduce:transform-none hover:-translate-y-px hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                        variant="dark"
+                        fullWidth
+                        title={COMPANY_CREATE_ACTION.label}
+                        iconLeft={<PlusCircle size={18} aria-hidden="true" />}
+                        className="max-[1099px]:px-0"
                     >
-                        <PlusCircle size={18} aria-hidden="true" />
-                        {COMPANY_CREATE_ACTION.label}
-                    </Link>
+                        <span className={label}>{COMPANY_CREATE_ACTION.label}</span>
+                    </ButtonLink>
                 </div>
             )}
 
-            {/* Navigation — itens e sub-rotas ativas vêm de lib/navigation */}
-            <nav aria-label="Navegação principal" className="flex-1 px-4 py-5 flex flex-col gap-1.5 overflow-y-auto [@media(max-height:860px)]:py-2 [@media(max-height:860px)]:gap-0.5">
+            {/* Navegação: itens e sub-rotas ativas vêm de lib/navigation. Rola só se faltar altura. */}
+            <nav aria-label="Navegação principal" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
                 {navItems.map((item) => {
                     const active = isNavActive(pathname, item);
                     return (
                         <Link
                             key={item.id}
                             to={item.path}
+                            title={item.label}
                             aria-current={active ? 'page' : undefined}
-                            className={`
-              flex items-center gap-3 h-11 px-4 shrink-0 rounded-xl border-2 text-sm font-semibold
-              transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
-              ${active
-                                    ? activeNavClass
-                                    : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-black'}
-            `}
+                            className={`flex h-10 shrink-0 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors duration-fast motion-reduce:transition-none max-[1099px]:justify-center max-[1099px]:px-0
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2
+              ${active ? activeNavClass : 'text-gray-700 hover:bg-gray-100 hover:text-black'}`}
                         >
                             <item.icon size={18} strokeWidth={2} aria-hidden="true" className="shrink-0" />
-                            <span className="truncate">{item.label}</span>
+                            <span className={`truncate ${label}`}>{item.label}</span>
                         </Link>
                     );
                 })}
             </nav>
 
-            {/* Conta: identidade + sair */}
-            <div className="p-4 border-t-2 border-black bg-gray-50 flex flex-col gap-2">
-                {/* O cartão é o link: empresa vai para Gestão, freela para o próprio perfil. */}
+            {/* Conta em UMA linha: identidade (link) + menu "..." com Perfil, Ajuda e Sair. */}
+            <div className="flex shrink-0 items-center gap-1 border-t border-gray-200 p-2 max-[1099px]:flex-col max-[1099px]:gap-0">
                 <NavLink
                     to={isCompany ? COMPANY_GESTAO_PATH : WORKER_PROFILE_LINK.path}
-                    className={({ isActive }) => `flex items-center gap-3 p-3 rounded-xl border-2 border-black bg-white transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${!isCompany && isActive ? 'shadow-[3px_3px_0px_0px_rgba(0,166,81,1)]' : ''}`}
+                    title={name || undefined}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl p-1.5 transition-colors duration-fast hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black max-[1099px]:flex-none"
                     // No lado da empresa, quem marca "página atual" é o item Gestão do menu.
                     {...(isCompany ? { 'aria-current': undefined } : {})}
                 >
-                    <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-xl bg-gray-100 border-2 border-black flex items-center justify-center overflow-hidden">
-                            {isCompany ? (
-                                <Building2 size={22} aria-hidden="true" />
-                            ) : (
-                                workerData?.avatar_url ? <img src={workerData.avatar_url} alt="" className="w-full h-full object-cover" /> : <User size={22} aria-hidden="true" />
-                            )}
-                        </div>
-                        {!isCompany && (
-                            <div className="absolute -top-2 -right-2 bg-primary-dark text-white text-xs font-bold px-1.5 py-0.5 rounded-full border border-black leading-none">
-                                {`LVL ${workerData?.level || 1}`}
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1 gap-0.5">
-                        {isCompany && isVerified === null ? (
-                            <div className="space-y-1.5 animate-pulse" role="status" aria-label="Carregando dados da empresa">
-                                <div className="h-4 w-32 rounded bg-gray-200" />
-                                <div className="h-3 w-20 rounded bg-gray-200" />
-                            </div>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-black bg-gray-100">
+                        {isCompany ? (
+                            <Building2 size={18} aria-hidden="true" />
+                        ) : workerData?.avatar_url ? (
+                            <img src={workerData.avatar_url} alt="" className="h-full w-full object-cover" />
                         ) : (
-                            <span className="text-sm font-semibold text-accent truncate">{name || (isCompany ? 'Empresa' : '...')}</span>
+                            <User size={18} aria-hidden="true" />
+                        )}
+                    </span>
+                    <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${label}`}>
+                        {isCompany && isVerified === null ? (
+                            <span className="flex animate-pulse flex-col gap-1.5" role="status" aria-label="Carregando dados da empresa">
+                                <span className="h-3.5 w-28 rounded bg-gray-200" />
+                                <span className="h-3 w-16 rounded bg-gray-200" />
+                            </span>
+                        ) : (
+                            <span className="truncate text-sm font-semibold leading-tight text-black">{name || (isCompany ? 'Empresa' : '...')}</span>
                         )}
                         {isCompany ? (isVerified !== null && (
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${isVerified ? 'text-blue-700' : 'text-gray-500'}`}>
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium leading-tight ${isVerified ? 'text-blue-700' : 'text-gray-600'}`}>
                                 {isVerified
-                                    ? <BadgeCheck size={14} aria-hidden="true" className="text-blue-600 shrink-0" />
-                                    : <CircleDashed size={14} aria-hidden="true" className="text-gray-400 shrink-0" />}
+                                    ? <BadgeCheck size={13} aria-hidden="true" className="shrink-0 text-blue-600" />
+                                    : <CircleDashed size={13} aria-hidden="true" className="shrink-0 text-gray-500" />}
                                 {isVerified ? 'Verificado' : 'Não verificado'}
                             </span>
                         )) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600">
-                                <Zap size={12} aria-hidden="true" className="text-primary-ink fill-primary shrink-0" />
-                                {`${workerData?.xp || 0} XP`}
+                            <span className="truncate text-xs font-medium leading-tight text-gray-600">
+                                {`Nível ${workerData?.level || 1} · ${workerData?.xp || 0} XP`}
                             </span>
                         )}
-                        {!isCompany && <span className="text-xs font-bold text-black underline">Ver meu perfil</span>}
-                    </div>
-                    <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-gray-500" />
+                    </span>
                 </NavLink>
-
-                <Button
-                    variant="ghost"
-                    fullWidth
-                    onClick={handleLogout}
-                    loading={loggingOut}
-                    iconLeft={<LogOut size={16} aria-hidden="true" />}
-                    className="!text-red-600 enabled:hover:bg-red-50"
-                >
-                    {loggingOut ? 'Saindo...' : 'Sair'}
-                </Button>
-
-                <NavLink
-                    to="/ajuda"
-                    className="flex items-center justify-center gap-1.5 w-full min-h-11 py-1 text-xs font-medium text-gray-500 hover:text-black transition-colors"
-                >
-                    <HelpCircle size={14} aria-hidden="true" />
-                    Ajuda
-                </NavLink>
+                <Menu label="Mais opções da conta" menuLabel="Conta" items={accountItems} />
             </div>
         </aside>
     );

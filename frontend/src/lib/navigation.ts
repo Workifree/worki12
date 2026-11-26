@@ -7,7 +7,7 @@
  */
 import {
     BarChart3, Briefcase, Building2, Contact, HelpCircle, Home, Inbox, LayoutGrid, MessageSquare,
-    Network, Receipt, Trophy, UserCog, Users, type LucideIcon,
+    MapPin, Network, Receipt, Trophy, UserCog, Users, type LucideIcon,
 } from 'lucide-react';
 import { matchPath } from 'react-router-dom';
 
@@ -129,7 +129,7 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             id: 'gestao', label: 'Gestão', icon: LayoutGrid, path: COMPANY_GESTAO_PATH,
             matches: [
                 COMPANY_GESTAO_PATH, '/company/configuracoes/equipe', '/company/profile',
-                '/company/organization', '/company/trilha',
+                '/company/organization', '/company/trilha', '/company/locais/*',
             ],
         },
     ];
@@ -180,9 +180,11 @@ export interface GestaoAccess {
     teamInvited: boolean;
     /** `useBonusTrailAccess`. */
     trail: boolean;
+    /** Presença verificada ligada: cadastro de locais (só Gestor grava). */
+    sites?: boolean;
 }
 
-export function getGestaoGroups({ gestor, units, teamInvited, trail }: GestaoAccess): GestaoGroup[] {
+export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = false }: GestaoAccess): GestaoGroup[] {
     const groups: GestaoGroup[] = [
         {
             id: 'pessoas', label: 'Pessoas',
@@ -197,6 +199,10 @@ export function getGestaoGroups({ gestor, units, teamInvited, trail }: GestaoAcc
                 ...(gestor ? [{
                     id: 'dados', title: 'Dados da empresa', icon: Building2, path: '/company/profile',
                     description: 'Perfil público, briefing padrão e conta',
+                }] : []),
+                ...(gestor && sites ? [{
+                    id: 'locais', title: 'Locais', icon: MapPin, path: '/company/locais',
+                    description: 'QR e localização para confirmar presença',
                 }] : []),
                 ...(units ? [{
                     id: 'unidades', title: 'Unidades', icon: Network, path: '/company/organization',

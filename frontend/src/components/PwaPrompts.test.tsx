@@ -132,11 +132,11 @@ describe('PwaPrompts', () => {
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
     })
 
-    it('"Dispensar" esconde o convite e grava a dispensa em localStorage', () => {
+    it('"Agora não" esconde o convite e grava a dispensa em localStorage', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
 
-      fireEvent.click(screen.getByRole('button', { name: 'Dispensar convite de instalação' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
 
       expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
@@ -169,7 +169,7 @@ describe('PwaPrompts', () => {
       act(() => pwaMock.set({ installAvailable: true }))
 
       expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Dispensar convite de instalação' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
       expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
     })
   })
@@ -257,13 +257,25 @@ describe('PwaPrompts', () => {
       expect(screen.queryByText(/sem internet/i)).not.toBeInTheDocument()
     })
 
-    it('fica no fluxo (empurra o conteúdo) e respeita a safe-area, sem cobrir o cabeçalho', () => {
+    it('é um cartão da pilha FIXA (nunca empurra o layout) e a pilha respeita a safe-area no CSS', () => {
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
-      renderAt()
+      const { container } = renderAt()
 
       const banner = screen.getByRole('status')
-      expect(banner.classList.contains('fixed') || banner.classList.contains('absolute')).toBe(false)
-      expect(banner.className).toContain('env(safe-area-inset-top)')
+      expect(container.firstElementChild).toHaveClass('worki-pwa-stack')
+      expect(container.firstElementChild).toContainElement(banner)
+      // Posição, z-index e safe-area vivem em `.worki-pwa-stack` (index.css); o cartão em si não posiciona.
+      expect(banner.className).not.toMatch(/(^| )(fixed|absolute|sticky)( |$)/)
+    })
+
+    it('com offline, atualização e instalação juntas, tudo cabe na mesma pilha', () => {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+      const { container } = renderAt()
+      act(() => pwaMock.set({ updateAvailable: true }))
+
+      expect(container.querySelectorAll('.worki-pwa-stack')).toHaveLength(1)
+      expect(screen.getByText(/sem internet/i)).toBeInTheDocument()
+      expect(screen.getByText('Nova versão disponível')).toBeInTheDocument()
     })
   })
 })

@@ -15,10 +15,15 @@ import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
 import { formatBRL } from '../lib/currency';
 import ErroDeCarga from '../components/ErroDeCarga';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { workerShiftSources } from '../lib/realtime/liveSources';
 import { useWorkerInvites, EVENTO_CONVITES, type ConvitesMudaramDetail } from '../hooks/useShiftInvites';
 import { AttendanceConfirmationService } from '../services/attendanceConfirmationService';
 import { hasArrived, hasLeftShift } from '../lib/shiftPresence';
 import TodayShiftCard, { type TodayShift } from '../components/TodayShiftCard';
+import { isAvisosEnabled, isPresencaEnabled } from '../lib/features';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
 import { attendanceGuardMessage, checkinWindow, checkinWindowMessage, isTodayShift } from '../lib/checkinWindow';
 import { openShiftConversation } from '../lib/shiftChat';
 import type {
@@ -118,6 +123,7 @@ export interface JobApplication {
     company_checkin_confirmed_at: string | null;
     company_checkout_confirmed_at: string | null;
     created_at?: string;
+    presence_mode?: string | null;
 }
 
 type ActiveTab = 'invites' | 'in_progress' | 'scheduled' | 'history';
@@ -213,6 +219,7 @@ function toTodayShift(job: JobApplication): TodayShift {
         worker_checkout_at: job.worker_checkout_at,
         company_checkin_confirmed_at: job.company_checkin_confirmed_at,
         company_checkout_confirmed_at: job.company_checkout_confirmed_at,
+        presenceMode: job.presence_mode,
     };
 }
 
@@ -288,6 +295,9 @@ export default function MyJobs() {
     const [confirmationsLoading, setConfirmationsLoading] = useState(true);
     const [erroConfirmacoes, setErroConfirmacoes] = useState(false);
     const [respondingConfirmationId, setRespondingConfirmationId] = useState<string | null>(null);
+    const answeredRef = useRef(new Set<string>());
+    const [busyCards, setBusyCards] = useState(0);
+    const trackBusyCard = useCallback((busy: boolean) => setBusyCards((n) => n + (busy ? 1 : -1)), []);
     // R7/A3/A4 (requisito duro, não superado pelo ddl-aprovado.md): depois de responder, o card
     // NÃO some — troca os botões por um badge ("Confirmado"/"Avisou que não vai"), pra o freela
     // conseguir conferir "será que eu respondi?" sem precisar lembrar. `getMyPendingConfirmations`
@@ -303,16 +313,24 @@ export default function MyJobs() {
         Record<string, AttendanceConfirmationResponse | 'already_responded'>
     >({});
 
-    const fetchJobs = useCallback(async () => {
+    const [userId, setUserId] = useState<string | null>(null);
+    const beginJobs = useLatestResponse();
+    const beginConfirmations = useLatestResponse();
+
+    // `silent` = recarga ao vivo: sem esqueleto e, se falhar, a tela fica como está.
+    const fetchJobs = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginJobs();
         const session = await checkSession();
-        if (session.status === 'signed_out') return navigate('/login');
+        if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
         if (session.status === 'unavailable') {
             logError('MyJobs.fetchJobs.session', session.error);
+            if (silent) return;
             setErroCarga(true);
             setLoading(false);
             return;
         }
         const user = session.user;
+        setUserId(user.id);
 
         // Fetch my reviews to know what I've rated
         const { data: myReviews, error: reviewsError } = await supabase
@@ -322,13 +340,13 @@ export default function MyJobs() {
         // Sem saber o que já foi avaliado, a tela ofereceria (e abriria sozinha) avaliação repetida.
         if (reviewsError) {
             logError('MyJobs.fetchJobs.reviews', reviewsError);
+            if (silent) return;
             setErroCarga(true);
             setLoading(false);
             return;
         }
 
         const reviewedSet = new Set(myReviews?.map(r => r.job_id) || []);
-        setReviewedJobIds(reviewedSet);
 
         const { data, error } = await supabase
             .from('applications')
@@ -341,6 +359,7 @@ export default function MyJobs() {
                 company_checkin_confirmed_at,
                 company_checkout_confirmed_at,
                 job:jobs (
+                    ${isPresencaEnabled() ? 'presence_mode,' : ''}
                     id,
                     title,
                     budget,
@@ -362,8 +381,11 @@ export default function MyJobs() {
 
         if (error) {
             logError('Error fetching applications:', error);
+            if (silent) return;
             setErroCarga(true);
         } else {
+            if (!claim()) return;
+            setReviewedJobIds(reviewedSet);
             setErroCarga(false);
             const in_progress: JobApplication[] = [];
             const scheduled: JobApplication[] = [];
@@ -386,6 +408,7 @@ export default function MyJobs() {
                     work_start_time: string | null;
                     work_end_time: string | null;
                     location: string | null;
+                    presence_mode?: string | null;
                     company: {
                         id: string;
                         name: string;
@@ -417,7 +440,8 @@ export default function MyJobs() {
                     worker_checkout_at: app.worker_checkout_at,
                     company_checkin_confirmed_at: app.company_checkin_confirmed_at,
                     company_checkout_confirmed_at: app.company_checkout_confirmed_at,
-                    created_at: app.created_at
+                    created_at: app.created_at,
+                    presence_mode: app.job.presence_mode
                 };
 
                 // "Em andamento" = em curso, ou contratado com a chegada liberada agora.
@@ -448,7 +472,7 @@ export default function MyJobs() {
             return { in_progress, scheduled };
         }
         setLoading(false);
-    }, [navigate]);
+    }, [navigate, beginJobs]);
 
     useEffect(() => {
         fetchJobs();
@@ -470,18 +494,24 @@ export default function MyJobs() {
         return () => window.removeEventListener(EVENTO_CONVITES, aoMudarConvites);
     }, [fetchJobs]);
 
-    const fetchConfirmations = useCallback(async () => {
+    const fetchConfirmations = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginConfirmations();
         try {
             const rows = await AttendanceConfirmationService.getMyPendingConfirmationsChecked();
-            setPendingConfirmations(rows);
+            if (!claim()) return;
+            // O cartão já respondido nesta sessão continua na tela (some do servidor como pendente).
+            setPendingConfirmations((prev) => [
+                ...rows,
+                ...prev.filter((p) => answeredRef.current.has(p.id) && !rows.some((r) => r.id === p.id)),
+            ]);
             setErroConfirmacoes(false);
         } catch (err) {
             logError('MyJobs.fetchConfirmations', err);
-            setErroConfirmacoes(true);
+            if (!silent && claim()) setErroConfirmacoes(true);
         } finally {
             setConfirmationsLoading(false);
         }
-    }, []);
+    }, [beginConfirmations]);
 
     useEffect(() => {
         fetchConfirmations();
@@ -510,6 +540,7 @@ export default function MyJobs() {
                         : 'Empresa avisada que você não vai poder ir.',
                     'success',
                 );
+                answeredRef.current.add(confirmation.id);
                 setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: confirmedOutcome }));
                 return;
             }
@@ -519,6 +550,7 @@ export default function MyJobs() {
             // de palpite.
             if (result.outcome === 'already_responded') {
                 addToast('Você já respondeu a este pedido.', 'info');
+                answeredRef.current.add(confirmation.id);
                 setRespondedConfirmations((prev) => ({ ...prev, [confirmation.id]: 'already_responded' }));
                 return;
             }
@@ -645,18 +677,6 @@ export default function MyJobs() {
         }
     };
 
-    if (erroCarga && !loading) return (
-        <div className="pb-24 max-w-4xl mx-auto pt-6">
-            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); refreshInvites?.(); fetchConfirmations(); }} />
-        </div>
-    );
-
-    if (loading) return (
-        <div className="flex flex-col gap-6 max-w-4xl mx-auto">
-            <SkeletonList count={4} itemClassName="h-28" />
-        </div>
-    );
-
     // Turnos de hoje ficam no topo, com as ações; não se repetem nas abas.
     const todayJobs = [...jobs.in_progress, ...jobs.scheduled].filter(isTodayJob).sort(byShiftDate);
     const todayIds = new Set(todayJobs.map((j) => j.id));
@@ -669,6 +689,33 @@ export default function MyJobs() {
                 : scheduledList.length > 0 ? 'scheduled'
                     : jobs.history.length > 0 ? 'history'
                         : 'invites'
+    );
+
+    useLiveRefresh({
+        sources: userId ? workerShiftSources(userId) : [],
+        onRefresh: () => {
+            // A aba que a pessoa está vendo não muda sozinha porque chegou dado novo.
+            setActiveTab((prev) => prev ?? activeTab);
+            return Promise.all([
+                fetchJobs({ silent: true }),
+                fetchConfirmations({ silent: true }),
+                refreshInvites?.({ silent: true }),
+            ]);
+        },
+        paused: loading || invitesLoading || rateModalOpen || !!cancelJob || cancelLoading || !!detailJob
+            || !!respondingConfirmationId || !!respondingId || !!chattingId || busyCards > 0,
+    });
+
+    if (erroCarga && !loading) return (
+        <div className="pb-24 max-w-4xl mx-auto pt-6">
+            <ErroDeCarga onRetry={() => { setLoading(true); fetchJobs(); void refreshInvites?.(); fetchConfirmations(); }} />
+        </div>
+    );
+
+    if (loading) return (
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+            <SkeletonList count={4} itemClassName="h-28" />
+        </div>
     );
 
     const abrirConvites = () => {
@@ -689,6 +736,9 @@ export default function MyJobs() {
 
             <PageHeader title="Meus Turnos" className="mb-0" />
 
+            {/* Permissão de aviso só é oferecida quando há o que avisar. */}
+            {isAvisosEnabled() && pendingInvites.length > 0 && <PedidoDeAvisos />}
+
             {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
             {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (
                 <Alert
@@ -706,6 +756,7 @@ export default function MyJobs() {
                         <TodayShiftCard
                             key={job.id}
                             heading="Hoje"
+                            onBusyChange={trackBusyCard}
                             shift={toTodayShift(job)}
                             steps={hasArrived(job) ? computeWorkerSteps(job) : undefined}
                             onChanged={fetchJobs}

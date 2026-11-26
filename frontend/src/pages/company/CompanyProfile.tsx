@@ -3,6 +3,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { leaveDevice } from '../../lib/leaveDevice';
+import { isAvisosEnabled } from '../../lib/features';
+import PreferenciasDeAvisos from '../../components/avisos/PreferenciasDeAvisos';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
@@ -359,6 +362,7 @@ export default function CompanyProfile() {
             setDeleting(false);
             return;
         }
+        await leaveDevice();
         await supabase.auth.signOut();
         clearJobDrafts();
         navigate('/login');
@@ -577,6 +581,7 @@ export default function CompanyProfile() {
                                             placeholder="https://..."
                                         />
                                     </Field>
+                                    <div data-copilot-private>
                                     <Field label="E-mail corporativo">
                                         <input
                                             name="email"
@@ -585,6 +590,7 @@ export default function CompanyProfile() {
                                             placeholder="email@empresa.com"
                                         />
                                     </Field>
+                                    </div>
                                     <Field label="Localização">
                                         <input
                                             name="address"
@@ -603,6 +609,7 @@ export default function CompanyProfile() {
                                             </a>
                                         ) : <p className="text-gray-600">{company.website || '—'}</p>}
                                     </ReadField>
+                                    <div data-copilot-private>
                                     <ReadField label="E-mail corporativo">
                                         {company.email ? (
                                             <a href={`mailto:${company.email}`} className="min-h-11 inline-flex max-w-full items-center gap-2 text-gray-900 font-semibold hover:text-blue-600 transition-colors">
@@ -610,6 +617,7 @@ export default function CompanyProfile() {
                                             </a>
                                         ) : <p className="text-gray-600">—</p>}
                                     </ReadField>
+                                    </div>
                                     <ReadField label="Localização">
                                         <div className="flex items-start gap-2">
                                             <MapPin size={18} className="text-gray-500 mt-0.5 shrink-0" />
@@ -746,6 +754,13 @@ export default function CompanyProfile() {
                     </div>
                 )}
             </Card>
+
+            {isAvisosEnabled() && (
+                // Grava ao tocar e mostra telefone: o copiloto não lê nem aciona.
+                <div className="mt-6" data-copilot-private data-copilot-risk="D">
+                    <PreferenciasDeAvisos />
+                </div>
+            )}
 
             {isEditing && (
                 <ActionBar

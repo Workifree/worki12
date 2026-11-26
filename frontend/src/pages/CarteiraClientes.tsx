@@ -6,6 +6,8 @@ import PageMeta from '../components/PageMeta';
 import { Button, Card, Menu, PageHeader } from '../components/ui';
 import SectionTabs from '../components/SectionTabs';
 import { useWorkerStores } from '../hooks/useTeamConnections';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { workerTeamSources } from '../lib/realtime/liveSources';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { TeamConnectionService } from '../services/teamConnectionService';
@@ -192,6 +194,12 @@ export default function CarteiraClientes() {
   const { myStores, pendingConnections, loading, erroCarga, acceptConnection, blockConnection, declineConnection, refresh } = useWorkerStores();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
+
+  useLiveRefresh({
+    sources: user ? workerTeamSources(user.id) : [],
+    onRefresh: () => refresh({ silent: true }),
+    paused: loading || !!respondingId || !!confirmLeaveId,
+  });
 
   const handleAccept = async (connectionId: string) => {
     setRespondingId(connectionId);

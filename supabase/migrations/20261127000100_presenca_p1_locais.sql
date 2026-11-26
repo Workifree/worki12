@@ -5,6 +5,7 @@
 -- company_site_secrets: RLS ligado, SEM policy e SEM grant para cliente. So funcao DEFINER le.
 --
 -- DOWN (so antes de 000200, ou depois do DOWN dela):
+--   internal_drop_empty_company_shell: remover o NOT EXISTS de company_sites (antes do DROP TABLE).
 --   DROP TRIGGER trg_zz_companies_sites_anonymize ON public.companies;
 --   DROP TABLE public.company_site_secrets;
 --   DROP TABLE public.company_sites;
@@ -130,6 +131,30 @@ DROP TRIGGER IF EXISTS trg_zz_companies_sites_anonymize ON public.companies;
 CREATE TRIGGER trg_zz_companies_sites_anonymize AFTER UPDATE OF anonymized_at ON public.companies
     FOR EACH ROW WHEN (OLD.anonymized_at IS NULL AND NEW.anonymized_at IS NOT NULL)
     EXECUTE FUNCTION public.company_sites_on_anonymize();
+
+-- Casca vazia (E4): a que ja tem local NAO e vazia; sem isto a FK RESTRICT abortaria o aceite de
+-- convite de equipe. Edicao do corpo do catalogo.
+DO $$
+DECLARE
+    v_oid regprocedure := to_regprocedure('public.internal_drop_empty_company_shell(uuid)');
+    v_def text;
+    v_pat text := 'NOT EXISTS [(]SELECT 1 FROM public[.]jobs[[:space:]]';
+BEGIN
+    IF v_oid IS NULL THEN
+        RAISE NOTICE 'P1: internal_drop_empty_company_shell ausente; nada a ajustar.';
+        RETURN;
+    END IF;
+    v_def := pg_catalog.pg_get_functiondef(v_oid);
+    IF pg_catalog.strpos(v_def, 'company_sites') > 0 THEN
+        RETURN;
+    END IF;
+    IF (SELECT count(*) FROM pg_catalog.regexp_matches(v_def, v_pat, 'g')) <> 1 THEN
+        RAISE EXCEPTION 'ASSERCAO P1: internal_drop_empty_company_shell mudou no catalogo. HALT.';
+    END IF;
+    v_def := pg_catalog.regexp_replace(v_def, v_pat,
+        'NOT EXISTS (SELECT 1 FROM public.company_sites cs WHERE cs.company_id = c.id) AND NOT EXISTS (SELECT 1 FROM public.jobs ');
+    EXECUTE v_def;
+END $$;
 
 DO $$
 BEGIN

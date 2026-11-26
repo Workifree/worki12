@@ -231,7 +231,7 @@ export default function CompanyPublicProfile() {
                                 href={websiteHref}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-xl hover:bg-gray-200 transition-colors"
+                                className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 min-h-11 rounded-xl hover:bg-gray-200 transition-colors"
                             >
                                 <Globe size={16} /> Site
                             </a>

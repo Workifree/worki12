@@ -36,7 +36,16 @@ import type {
 } from '../../types';
 import { getAuthenticatedCompanyId, isGestor } from '../../services/companyScopeService';
 import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { jobSources } from '../../lib/realtime/liveSources';
 import { roleLabel, statusLabel } from '../../lib/statusLabels';
+import { isPresencaEnabled } from '../../lib/features';
+import QrPresenceStep from '../../components/company/QrPresenceStep';
+import { PresenceBadge } from '../../components/presence/PresenceBadge';
+import { listPresenceChecks } from '../../services/presenceService';
+import type { PresenceCheck, PresenceQrMode } from '../../lib/presence';
 
 // ---------------------------------------------------------------------------
 // Confirmação de véspera (D-1) — helpers puros (module scope, sem estado de componente),
@@ -276,6 +285,9 @@ export default function CompanyJobCandidates() {
     const [jobStartDate, setJobStartDate] = useState('');
     const [jobStartTime, setJobStartTime] = useState<string | null>(null);
     const [jobEndTime, setJobEndTime] = useState<string | null>(null);
+    // Presença verificada: `qrMode` só existe em turno `qr_gps` com a função ligada.
+    const [qrMode, setQrMode] = useState<PresenceQrMode | null>(null);
+    const [presenceChecks, setPresenceChecks] = useState<PresenceCheck[] | null>(null);
     const [jobCompanyId, setJobCompanyId] = useState<string | null>(null);
     const [companyName, setCompanyName] = useState('');
 
@@ -359,6 +371,7 @@ export default function CompanyJobCandidates() {
     };
 
     const { addToast } = useToast();
+    const beginCandidates = useLatestResponse();
 
     const {
         calls,
@@ -368,6 +381,17 @@ export default function CompanyJobCandidates() {
         cancel: cancelCall,
         refresh: refreshCalls,
     } = useShiftCalls(id ?? '');
+
+    // Ao vivo: espera enquanto há diálogo aberto ou gravação em andamento.
+    const dialogOpen = useAnyDialogOpen();
+    useLiveRefresh({
+        sources: id ? jobSources(id) : [],
+        onRefresh: () => Promise.all([fetchCandidates({ silent: true }), refreshCalls({ silent: true })]),
+        paused: loading || dialogOpen || callModalOpen || !!voidingPayment || ratingModalOpen
+            || !!scheduleModalApp || !!paymentModalApp || !!dismissApp || !!manualAttendance
+            || !!confirmDeliveryApp || releasing || !!confirmingCheckin || !!requestingConfirmationId
+            || !!cancelInviteId || !!effectivatingId,
+    });
 
     // Posições já ocupadas do turno. Usa os MESMOS status que a RPC `claim_shift_slot` conta —
     // se os dois divergirem, a tela mostra vaga aberta que o banco recusa (ou o contrário).
@@ -389,27 +413,32 @@ export default function CompanyJobCandidates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchCandidates usa state setters estaveis, so precisa re-executar quando id muda
     }, [id]);
 
-    const fetchCandidates = async () => {
+    // `silent` = recarga ao vivo: sem esqueleto, sem navegar e, se falhar, a tela fica como está.
+    const fetchCandidates = async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginCandidates();
         // G3: guarda de id falsy — o useEffect já checa `if (id)` antes de chamar,
         // mas repetimos aqui pra nunca consultar `jobs?id=eq.null`/`applications?job_id=eq.null`
         // mesmo se essa função for chamada de outro lugar (ex.: `fetchCandidates()` após ações).
         if (!id) { navigate('/company/jobs'); return; }
         try {
             const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
-            if (!user) { navigate('/login'); return; }
-            setErroCarga(false);
+            if (!user) { if (!silent) navigate('/login'); return; }
+            if (!silent) setErroCarga(false);
 
             // Fetch Job Title (only if owned by this company)
+            const jobColumns = 'title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement, company_id, responsible_id';
             const { data: job, error: jobError } = await supabase
                 .from('jobs')
-                .select('title, budget, location, start_date, work_start_time, work_end_time, slots, certification_requirement, company_id, responsible_id')
+                // As colunas de presença só existem depois das migrations (flag).
+                .select((isPresencaEnabled() ? `${jobColumns}, presence_mode, qr_mode` : jobColumns) as typeof jobColumns)
                 .eq('id', id)
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
             // PGRST116 = nenhuma linha; outro erro é falha de carga, não "turno inexistente".
             if (jobError && jobError.code !== 'PGRST116') throw jobError;
-            if (!job) { navigate('/company/jobs'); return; }
-            if (!canSeeJob(await getJobScope(), job)) { setSemAcesso(true); return; }
+            if (!job) { if (!silent) navigate('/company/jobs'); return; }
+            if (!canSeeJob(await getJobScope(), job)) { if (!silent) setSemAcesso(true); return; }
+            if (!claim()) return;
             setJobTitle(job.title);
             setJobCertificationRequirement(job.certification_requirement ?? null);
             setJobBudget(job.budget ?? 0);
@@ -418,6 +447,13 @@ export default function CompanyJobCandidates() {
             setJobStartDate(job.start_date ?? '');
             setJobStartTime(job.work_start_time ?? null);
             setJobEndTime(job.work_end_time ?? null);
+            const presence = job as { presence_mode?: string; qr_mode?: PresenceQrMode };
+            const usesQr = isPresencaEnabled() && presence.presence_mode === 'qr_gps';
+            setQrMode(usesQr ? presence.qr_mode ?? 'rotating' : null);
+            const checks = usesQr ? await listPresenceChecks({ jobId: id }) : null;
+            if (!claim()) return;
+            // Leitura que falhou (`null`) numa recarga de fundo mantém os selos já lidos.
+            setPresenceChecks((prev) => (silent && usesQr && checks === null ? prev : checks));
             setJobCompanyId((job as { company_id?: string | null }).company_id ?? null);
 
             // Nome da empresa OPERADA pela sessão (não `user.id`: gerente/encarregado não são a
@@ -426,7 +462,8 @@ export default function CompanyJobCandidates() {
             const { data: companyRow } = empresaOperada
                 ? await supabase.from('companies').select('name').eq('id', empresaOperada).maybeSingle()
                 : { data: null };
-            setCompanyName(companyRow?.name ?? '');
+            if (!claim()) return;
+            if (!silent || companyRow) setCompanyName(companyRow?.name ?? '');
 
             // Fetch Applications with Worker Profile (using 'workers' table now)
             // Minimização de dado (LGPD, harness-security-reviewer): traz só as colunas que esta
@@ -446,7 +483,10 @@ export default function CompanyJobCandidates() {
 
             if (error) throw error;
             // Encarregado: o embed `workers` volta `null`; os cartões das RPCs preenchem.
-            setCandidates(await fillMissingWorkers(data || [], id));
+            const filled = await fillMissingWorkers(data || [], id);
+            if (!claim()) return;
+            setCandidates(filled);
+            setErroCarga(false);
 
             // Fetch escrow kind per application for this job (só o kind é usado para ramificar
             // Confirmar entrega vs Registrar pagamento — ver `renderCompletionAction`).
@@ -461,6 +501,7 @@ export default function CompanyJobCandidates() {
                     kindMap[row.application_id] = row.kind;
                 }
             });
+            if (!claim()) return;
             setEscrowKindMap(kindMap);
 
             // Modo A: registros de pagamento externo já feitos para este turno — um por
@@ -471,32 +512,35 @@ export default function CompanyJobCandidates() {
                 const payments = await PaymentRecordService.listActivePaymentsByJob(id);
                 const byWorker: Record<string, ShiftPayment> = {};
                 payments.forEach((p) => { byWorker[p.worker_id] = p; });
+                if (!claim()) return;
                 setPaymentByWorker(byWorker);
                 setPaymentsRead('ok');
             } catch (paymentsError) {
                 logError('CompanyJobCandidates.fetchPayments', paymentsError);
-                setPaymentsRead('error');
+                if (!silent && claim()) setPaymentsRead('error');
             }
 
             // Confirmação de véspera (D-1) — try/catch isolado: uma falha aqui não pode derrubar
             // o carregamento dos candidatos (checagem/pagamento continuam funcionando sem isso).
             try {
-                const confirmationRows = await AttendanceConfirmationService.getConfirmationsForJob(id);
+                const confirmationRows = await AttendanceConfirmationService.getConfirmationsForJob(id, true);
                 const byApp: Record<string, ShiftAttendanceConfirmation[]> = {};
                 confirmationRows.forEach((row) => {
                     (byApp[row.application_id] ??= []).push(row);
                 });
+                if (!claim()) return;
                 setConfirmationsByApp(byApp);
             } catch (confirmationError) {
                 logError('CompanyJobCandidates.fetchConfirmations', confirmationError);
             }
         } catch (error) {
             logError('CompanyJobCandidates', error);
+            if (silent || !claim()) return;
             setErroCarga(true);
             // A recarga parou antes de reler os pagamentos: o que está na memória não vale mais.
             setPaymentsRead('error');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -1238,6 +1282,20 @@ export default function CompanyJobCandidates() {
     // Zona 2 do cartão: UM próximo passo de presença (ou o dinheiro, depois da saída).
     const renderPresenceStep = (app: Application) => {
         if (app.company_checkin_confirmed_at && app.company_checkout_confirmed_at) return renderCompletionAction(app);
+        if (qrMode) {
+            return (
+                <QrPresenceStep
+                    jobId={app.job_id}
+                    applicationId={app.id}
+                    workerName={app.worker?.full_name || 'Freela'}
+                    kind={app.company_checkin_confirmed_at ? 'departure' : 'arrival'}
+                    qrMode={qrMode}
+                    checks={presenceChecks}
+                    primary={app.id === primaryAppId}
+                    onDecided={() => { void fetchCandidates(); }}
+                />
+            );
+        }
         const type = app.company_checkin_confirmed_at ? 'checkout' as const : 'checkin' as const;
         const workerMarked = !!(type === 'checkin' ? app.worker_checkin_at : app.worker_checkout_at);
         const label = type === 'checkin'
@@ -1292,6 +1350,7 @@ export default function CompanyJobCandidates() {
         if (!pixKey) {
             return (
                 <Alert
+                    data-copilot-private
                     tone="warning"
                     title="Freela sem chave PIX"
                     action={app.worker?.phone ? (
@@ -1305,7 +1364,7 @@ export default function CompanyJobCandidates() {
             );
         }
         return (
-            <div className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-primary-light py-1 pl-4 pr-1">
+            <div data-copilot-private className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-primary-light py-1 pl-4 pr-1">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-black">
                     <Wallet size={16} className="shrink-0" />
                     <span className="truncate">{pixKey}</span>
@@ -1574,6 +1633,15 @@ export default function CompanyJobCandidates() {
                                     {onShift && response === 'cannot_attend' && <StatusBadge tone="danger" icon={ThumbsDown}>Avisou que não vai</StatusBadge>}
                                     {onShift && response === null && requestCount > 0 && <StatusBadge tone="neutral" icon={Bell}>Sem resposta</StatusBadge>}
                                 </div>
+                            )}
+
+                            {qrMode && presenceChecks && ['hired', 'in_progress', 'completed'].includes(app.status)
+                                && presenceChecks.some((c) => c.application_id === app.id) && (
+                                <PresenceBadge
+                                    className="mt-2"
+                                    checks={presenceChecks.filter((c) => c.application_id === app.id)}
+                                    departureDone={!!(app.worker_checkout_at || app.company_checkout_confirmed_at)}
+                                />
                             )}
 
                             {/* Etapas */}
@@ -1860,6 +1928,13 @@ export default function CompanyJobCandidates() {
                             <div className="space-y-4">
                                 {renderSourcePicker(paymentSource, setPaymentSource)}
                                 {renderPix(paymentModalApp)}
+                                {/* Informa; nunca bloqueia o pagamento. Falha de leitura = sem selo. */}
+                                {qrMode && presenceChecks && (
+                                    <PresenceBadge
+                                        checks={presenceChecks.filter((c) => c.application_id === paymentModalApp.id)}
+                                        departureDone={!!(paymentModalApp.worker_checkout_at || paymentModalApp.company_checkout_confirmed_at)}
+                                    />
+                                )}
 
                                 <Field label="Valor pago (R$)">
                                     <input

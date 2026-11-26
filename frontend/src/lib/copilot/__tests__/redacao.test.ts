@@ -40,6 +40,15 @@ describe('redação de dados pessoais', () => {
     ['nascimento ISO', '1990-03-12', '1990'],
     ['nascimento por extenso', '12 de março de 1990', '1990'],
     ['nascimento com ano curto', 'nasci em 12/03/90', '12/03'],
+    ['CPF com vírgulas', 'cpf 123,456,789-09', '456'],
+    ['CPF com espaços e dígitos finais', '123 456 789 09', '456'],
+    ['CPF com ponto final', 'cpf 123.456.789.09', '456'],
+    ['CPF colado em valor em dinheiro', 'R$ 123.456.789-09', '789-09'],
+    ['e-mail com "at" e "ponto"', 'joao at gmail ponto com', 'joao'],
+    ['e-mail com (at) e (dot)', 'joao (at) gmail (dot) com', 'joao'],
+    ['senha em frase com "é"', 'minha senha é banana', 'banana'],
+    ['senha em inglês', 'my password is banana', 'banana'],
+    ['senha de uma letra', 'senha: x', ': x'],
   ])('%s', (_name, input, mustVanish) => {
     const out = red(input)
     expect(out).not.toContain(mustVanish)
@@ -57,6 +66,43 @@ describe('redação de dados pessoais', () => {
     'Current time: 25/11/2026, 14:03:22',
   ])('preserva o que a tarefa precisa: %s', (input) => {
     expect(red(input)).toBe(input)
+  })
+
+  it.each([
+    'R$ 80,00',
+    'valor R$ 80,00 por turno',
+    'R$80',
+    'R$ 1.500,00',
+    'de R$ 80,00 a R$ 120,00',
+    'total R$ 12.345.678,90 no mês',
+    'R$ 1.234.567,89 em 2026-11-28',
+  ])('valor em dinheiro passa inteiro: %s', (input) => {
+    expect(red(input)).toBe(input)
+    expect(containsPII(input, NOW)).toBe(false)
+  })
+
+  it('dinheiro ao lado de dado pessoal: só o dado pessoal sai', () => {
+    expect(red('paga R$ 80,00; cpf 529.982.247-25; tel (11) 98765-4321')).toBe('paga R$ 80,00; cpf [cpf]; tel [telefone]')
+  })
+
+  it('o marcador de dinheiro não pode ser forjado nem reaproveitado', () => {
+    expect(red('R$ 80,00 e ' + String.fromCharCode(0xe000, 0xe101, 0xe001))).toBe('R$ 80,00 e ')
+  })
+
+  it.each([
+    ['dígitos e vírgulas', '1,'.repeat(20_000)],
+    ['dinheiro repetido', 'R$ 1.234,56 '.repeat(3_400)],
+    ['R$ sem número', 'R$ '.repeat(13_000)],
+    ['CPF quase completo', '123 456 78 '.repeat(3_600)],
+    ['arroba sem fim', 'a at '.repeat(8_000)],
+    ['(at) sem domínio', 'x (at) '.repeat(5_700)],
+    ['senha sem fim', 'senha é '.repeat(5_000)],
+    ['letras e espaços', 'a'.repeat(100) + ' '.repeat(39_900)],
+    ['ponto e dígitos', '1.'.repeat(20_000)],
+  ])('desempenho adversarial (40 mil caracteres): %s', (_n, input) => {
+    const t = performance.now()
+    redactPII(input.slice(0, 40_000), NOW)
+    expect(performance.now() - t).toBeLessThan(1000)
   })
 
   it('a entrada não forja o marcador interno de data protegida', () => {

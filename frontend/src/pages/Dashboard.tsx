@@ -1,5 +1,5 @@
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { EVENTO_CONVITES } from '../hooks/useShiftInvites';
 import { formatBRL } from '../lib/currency';
 import { levelProgress } from '../lib/gamification';
@@ -18,9 +18,12 @@ import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { Alert, Button, Card, PageHeader, StatusBadge } from '../components/ui';
 import TodayShiftCard from '../components/TodayShiftCard';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { workerShiftSources, workerTeamSources } from '../lib/realtime/liveSources';
 import { isTodayShift } from '../lib/checkinWindow';
 import { getSessionUserOrThrow } from '../lib/authSession';
 import { isOnShift, hasLeftShift } from '../lib/shiftPresence';
+import { getMyWorkerProfile } from '../services/workerIdentityService';
 
 interface NextJobData {
     id: string;
@@ -41,6 +44,7 @@ interface NextJobData {
         location: string | null;
         company: { name: string };
         budget?: number | null;
+        presence_mode?: string | null;
     };
 }
 
@@ -80,7 +84,7 @@ export default function Dashboard() {
     });
 
     // React Query Hooks
-    const { data: worker, isLoading: isLoadingWorker, isError: erroWorker, refetch: refetchWorker } = useQuery({
+    const { data: worker, isLoading: isLoadingWorker, isLoadingError: erroWorker, refetch: refetchWorker } = useQuery({
         queryKey: ['workerProfile'],
         networkMode: 'always',
         queryFn: async () => {
@@ -88,13 +92,13 @@ export default function Dashboard() {
             // Sem sessão → null (redireciona pro login). Erro de query → throw: isError segura
             // o redirect — falha transitória de rede/RLS não pode expulsar quem está logado.
             if (!user) return null;
-            const { data, error } = await supabase.from('workers').select('*').eq('id', user.id).single();
+            const { data, error } = await getMyWorkerProfile(user.id);
             if (error) throw error;
             return data;
         }
     });
 
-    const { data: shifts, isLoading: carregandoNextJob, isError: erroNextJob, refetch: refetchNextJob } = useQuery({
+    const { data: shifts, isLoading: carregandoNextJob, isLoadingError: erroNextJob, refetch: refetchNextJob } = useQuery({
         queryKey: ['nextJob'],
         networkMode: 'always',
         queryFn: async () => {
@@ -140,7 +144,7 @@ export default function Dashboard() {
         enabled: !!worker
     });
 
-    const { data: history = [], isLoading: carregandoHistory, isError: erroHistory, refetch: refetchHistory } = useQuery({
+    const { data: history = [], isLoading: carregandoHistory, isLoadingError: erroHistory, refetch: refetchHistory } = useQuery({
         queryKey: ['workerHistory'],
         networkMode: 'always',
         queryFn: async () => {
@@ -174,7 +178,7 @@ export default function Dashboard() {
         job: { title: string | null; company: { name: string | null } | { name: string | null }[] | null } |
              { title: string | null; company: { name: string | null } | { name: string | null }[] | null }[] | null;
     }
-    const { data: pendingReceipts = [], isError: erroReceipts, refetch: refetchReceipts } = useQuery<PendingReceiptRow[]>({
+    const { data: pendingReceipts = [], isLoadingError: erroReceipts, refetch: refetchReceipts } = useQuery<PendingReceiptRow[]>({
         queryKey: ['pendingReceipts'],
         networkMode: 'always',
         queryFn: async () => {
@@ -198,6 +202,18 @@ export default function Dashboard() {
 
     // "Minhas Empresas" — empresas conectadas (equipe aceita), atalho para /carteira.
     const { myStores, loading: storesLoading, erroCarga: erroStores, refresh: refreshStores } = useWorkerStores();
+
+    // Ao vivo: turnos, convites, pagamentos e empresas. Espera o registro de presença terminar.
+    const [busyCards, setBusyCards] = useState(0);
+    const trackBusyCard = useCallback((busy: boolean) => setBusyCards((n) => n + (busy ? 1 : -1)), []);
+    useLiveRefresh({
+        sources: authUser ? [...workerShiftSources(authUser.id), ...workerTeamSources(authUser.id)] : [],
+        onRefresh: () => Promise.all([
+            refetchNextJob(), refetchHistory(), refetchReceipts(),
+            refreshInvites?.({ silent: true }), refreshStores?.({ silent: true }),
+        ]),
+        paused: !worker || busyCards > 0,
+    });
 
     // Quests Logic (derived from worker data)
     // R: XP só é concedido por foto de perfil (+50) e especialidades (+75) — ver RPC
@@ -255,8 +271,8 @@ export default function Dashboard() {
         if (erroNextJob) void refetchNextJob();
         if (erroHistory) void refetchHistory();
         if (erroReceipts) void refetchReceipts();
-        if (invitesError) refreshInvites?.();
-        if (erroStores) refreshStores?.();
+        if (invitesError) void refreshInvites?.();
+        if (erroStores) void refreshStores?.();
     };
 
     // Helper for Quest Progress
@@ -329,12 +345,14 @@ export default function Dashboard() {
                                 endTime: t.job.work_end_time,
                                 location: t.job.location,
                                 pay: t.job.budget ?? null,
+                                presenceMode: t.job.presence_mode,
                                 worker_checkin_at: t.worker_checkin_at,
                                 worker_checkout_at: t.worker_checkout_at,
                                 company_checkin_confirmed_at: t.company_checkin_confirmed_at,
                                 company_checkout_confirmed_at: t.company_checkout_confirmed_at,
                             }}
                             onChanged={() => refetchNextJob()}
+                            onBusyChange={trackBusyCard}
                         />
                     ))}
                 </section>

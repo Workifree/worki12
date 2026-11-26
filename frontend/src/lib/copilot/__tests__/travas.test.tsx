@@ -123,7 +123,7 @@ describe('leitura da tela', () => {
       </main>,
     )
     const { content } = observePage()
-    expect(content).toBe('[0]<button tipo=button risco=pede-confirmacao> Salvar />')
+    expect(content).toBe('[0]<button risco=pede-confirmacao> Salvar />')
   })
 
   it('texto da página não forja linhas de item', () => {

@@ -75,7 +75,8 @@ export function posicionarBalao(alvo: Area | null, tela: Tela): Posicao {
     const centro = Math.round((tela.largura - width) / 2);
     const base = tela.baseLivre + MARGEM;
 
-    if (!alvo) {
+    // Alvo fora da janela: o balão fica na base, nunca fora da tela.
+    if (!alvo || alvo.bottom <= 0 || alvo.top >= tela.altura) {
         return { bottom: base, left: centro, width, maxHeight: Math.min(teto, Math.round(tela.altura * 0.6)) };
     }
 

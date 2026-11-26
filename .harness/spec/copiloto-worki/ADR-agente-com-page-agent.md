@@ -93,6 +93,17 @@ Dependência e produto
 - Telas legadas sem `data-*`, ou com `div` clicável sem `role`, ficam invisíveis ao copiloto.
 - Qualidade, latência e custo com modelo real em pt-BR **não foram medidos**. Nenhuma chave foi usada.
 
+## Implementação das classes de risco (26/11/2026)
+A tabela A/B/C/D do mapa de intenções é o desenho; o código tem quatro veredictos (`risk.ts`): `safe`, `confirm`,
+`forbidden` e `blocked`. **D = `forbidden`: só entrega e destaca, nunca executa, nem com cartão.** **`confirm`**
+(formulário, botão desconhecido, lista que grava na hora) **executa só depois do cartão de confirmação montado pelo
+código**, com o texto e os campos lidos do elemento real. **A classe B da spec virou `confirm`.** O botão "enviar"
+segue como está; mudar para "a pessoa toca no botão final" fica como decisão futura, não desta rodada.
+
+Contrato com a biblioteca: `lib/copilot/__tests__/page-agent-contrato.test.ts` fixa a versão exata (1.12.4) e a
+existência de `clickElement`, `scrollVertically` e dos métodos do `PageController` que o executor sobrescreve. Um
+upgrade quebra esse teste de propósito.
+
 ## Article 16 e ADR de IA em runtime
 O Article 16 trata de IA no desenvolvimento e diz que o produto não depende de IA para funcionar. Isso é mantido: flag
 desligada por padrão, motor carregado só sob pedido, 503 sem secret e o app completo com o modo guia. Mas há **IA em runtime

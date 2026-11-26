@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
 import LocalDoTurno from '../components/LocalDoTurno';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -157,30 +159,41 @@ export default function MeusRecebimentos() {
     const [erroCarga, setErroCarga] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
 
+    const [userId, setUserId] = useState<string | null>(null);
+    const beginPayments = useLatestResponse();
+
+    // `silent` = recarga ao vivo: sem esqueleto e, se falhar, a lista fica como está.
+    const fetchPayments = useCallback(async (isActive: () => boolean, silent = false) => {
+        const claim = beginPayments();
+        if (!silent) setLoading(true);
+        try {
+            const session = await checkSession();
+            if (!isActive()) return;
+            if (session.status === 'signed_out') { if (!silent) navigate('/login'); return; }
+            if (session.status === 'unavailable') throw session.error;
+            setUserId(session.user.id);
+
+            const data = await PaymentRecordService.listForWorkerChecked(session.user.id);
+            if (isActive() && claim()) { setItems(data); setErroCarga(false); }
+        } catch (error) {
+            logError('MeusRecebimentos: fetchPayments', error);
+            if (!silent && isActive() && claim()) setErroCarga(true);
+        } finally {
+            if (!silent && isActive()) setLoading(false);
+        }
+    }, [navigate, beginPayments]);
+
     useEffect(() => {
         let active = true;
-
-        const fetchPayments = async () => {
-            setLoading(true);
-            try {
-                const session = await checkSession();
-                if (!active) return;
-                if (session.status === 'signed_out') { navigate('/login'); return; }
-                if (session.status === 'unavailable') throw session.error;
-
-                const data = await PaymentRecordService.listForWorkerChecked(session.user.id);
-                if (active) { setItems(data); setErroCarga(false); }
-            } catch (error) {
-                logError('MeusRecebimentos: fetchPayments', error);
-                if (active) setErroCarga(true);
-            } finally {
-                if (active) setLoading(false);
-            }
-        };
-
-        fetchPayments();
+        void fetchPayments(() => active);
         return () => { active = false; };
-    }, [navigate, reloadKey]);
+    }, [fetchPayments, reloadKey]);
+
+    useLiveRefresh({
+        sources: userId ? [{ table: 'shift_payments', filter: `worker_id=eq.${userId}` }] : [],
+        onRefresh: (ctx) => fetchPayments(ctx.isCurrent, true),
+        paused: loading,
+    });
 
     const handleOpen = (jobId: string) => navigate(`/recibo/${jobId}`);
 

@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import CompanyLayout from './CompanyLayout';
 
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
+vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
 vi.mock('../components/Sidebar', () => ({ default: () => null }));
 vi.mock('../components/BottomNav', () => ({ default: () => null }));
 vi.mock('../components/NotificationBell', () => ({ default: () => null }));

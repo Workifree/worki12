@@ -23,8 +23,16 @@ import type { RecurrenceType } from '../../types';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
 import { Button, ButtonLink, Card, DialogActions, DialogHeader, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge, FIELD_CONTROL_CLASS } from '../../components/ui';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
+import BatchList from '../../components/company/BatchList';
+import BatchEntry from '../../components/company/BatchEntry';
+import { batchLabels } from '../../components/company/batchGroups';
+import { isLoteEnabled } from '../../lib/features';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
 import { Dialog } from '../../components/ui/Dialog';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { companyShiftSources } from '../../lib/realtime/liveSources';
 
 type JobFilter = 'all' | 'open' | 'closed' | 'andamento';
 const FILTERS: Array<{ key: JobFilter; label: string }> = [
@@ -170,6 +178,8 @@ interface Job {
     requirements?: string;
     briefing?: string | null;
     slots?: number;
+    /** Só vem (via `select('*')`) depois da migration do lote. */
+    creation_batch_id?: string | null;
 }
 
 function formatTimeRange(job: Job): string | null {
@@ -362,6 +372,7 @@ export default function CompanyJobs() {
     // (é exatamente o que ela pediu pra ver) e continua alternável manualmente.
     const [pastExpanded, setPastExpanded] = useState(initialFilter === 'closed');
     const { addToast } = useToast();
+    const beginJobs = useLatestResponse();
 
     // Ações de série (F3, R11/R10) — cada uma abre seu próprio modal de confirmação.
     const [editSeriesJob, setEditSeriesJob] = useState<SeriesJobSnapshot | null>(null);
@@ -373,6 +384,13 @@ export default function CompanyJobs() {
         fetchJobs();
     }, []);
 
+    const dialogOpen = useAnyDialogOpen();
+    useLiveRefresh({
+        sources: currentCompany ? companyShiftSources(currentCompany.company_id) : [],
+        onRefresh: () => fetchJobs({ silent: true }),
+        paused: loading || dialogOpen || !!deleteJobId || !!editSeriesJob || !!cancelSeriesId || !!inviteSeriesTarget,
+    });
+
     // Debounce search input
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -383,10 +401,12 @@ export default function CompanyJobs() {
         if (filter === 'closed') setPastExpanded(true);
     }, [filter]);
 
-    const fetchJobs = async () => {
+    // `silent` = recarga ao vivo: sem esqueleto e, se falhar, a lista fica como está.
+    const fetchJobs = async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginJobs();
         try {
             const user = await getSessionUserOrThrow();
-            if (!user) { navigate('/login'); return; }
+            if (!user) { if (!silent) navigate('/login'); return; }
 
             // Encarregado: só os turnos dele e os que cobre (R9).
             const scope = await getJobScope();
@@ -398,7 +418,7 @@ export default function CompanyJobs() {
             if (scope.restricted) query = query.in('responsible_id', scopeResponsibleIds(scope));
             const { data: allJobs, error: jobsError } = await query.order('created_at', { ascending: false });
             if (jobsError) throw jobsError;
-            setErroCarga(false);
+            if (!silent) setErroCarga(false);
             const jobsData = allJobs ? allJobs.filter((job) => canSeeJob(scope, job)) : allJobs;
 
             if (jobsData) {
@@ -444,10 +464,11 @@ export default function CompanyJobs() {
                 const seriesIds = Array.from(new Set(jobsData.map(j => j.series_id).filter((id): id is string => !!id)));
                 let seriesTypeById: Record<string, RecurrenceType> = {};
                 if (seriesIds.length > 0) {
-                    const { data: seriesRows } = await supabase
+                    const { data: seriesRows, error: seriesError } = await supabase
                         .from('job_series')
                         .select('id, recurrence_type')
                         .in('id', seriesIds);
+                    if (seriesError && silent) return;
                     seriesTypeById = Object.fromEntries((seriesRows || []).map(s => [s.id, s.recurrence_type as RecurrenceType]));
                 }
 
@@ -460,13 +481,15 @@ export default function CompanyJobs() {
                     seriesRecurrenceType: job.series_id ? (seriesTypeById[job.series_id] ?? null) : null,
                 }));
 
+                if (!claim()) return;
                 setJobs(jobsWithFreela);
+                setErroCarga(false);
             }
         } catch (error) {
             logError('Erro ao carregar vagas', error);
-            setErroCarga(true);
+            if (!silent && claim()) setErroCarga(true);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -550,6 +573,7 @@ export default function CompanyJobs() {
     // Uma ação primária na tela: o primeiro turno (fora de "Anteriores") que precisa de gente.
     const primaryJobId = dayBuckets.filter((b) => b.key !== 'past').flatMap((b) => b.jobs).find(needsPeople)?.id;
     const deleteTarget = jobs.find((j) => j.id === deleteJobId);
+    const lotes = isLoteEnabled() ? batchLabels(jobs) : new Map<string, string>();
 
     const renderRow = (job: Job, bucketKey: DayBucketKey) => (
         <JobRow
@@ -592,6 +616,7 @@ export default function CompanyJobs() {
                 action={<CreateShiftLink />}
                 inlineAction
             />
+            <BatchEntry className="mb-4" />
 
             {/* Busca + filtros: uma linha de controles, o ativo em preto */}
             <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
@@ -672,7 +697,7 @@ export default function CompanyJobs() {
                                 const ended = showAll ? [] : bucket.jobs.filter(isJobEnded);
                                 return (
                                     <div className="space-y-3">
-                                        {visible.map((job) => renderRow(job, bucket.key))}
+                                        <BatchList items={visible} batchOf={(job) => job.creation_batch_id} labels={lotes} render={(job) => renderRow(job, bucket.key)} />
                                         {ended.length > 0 && (
                                             <details className="group">
                                                 <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-gray-600">

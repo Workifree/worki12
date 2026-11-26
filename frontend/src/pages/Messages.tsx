@@ -12,6 +12,10 @@ import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
 import { Button, PageHeader } from '../components/ui'
 import { checkSession } from '../lib/authSession';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { conversationListSources } from '../lib/realtime/liveSources';
+import { mergeMessages } from '../lib/mergeMessages';
 import { activeShiftLabel, type ShiftAttendanceLike } from '../lib/shiftProgress'
 import { TONE_CLASS, getStatus, statusLabel } from '../lib/statusLabels';
 
@@ -110,19 +114,33 @@ export default function Messages() {
         }
     };
 
+    // Quem subiu para ler o histórico não é puxado para o fim quando chega algo.
+    const stickToEndRef = useRef(true);
     // Scroll to bottom when messages change
     useEffect(() => {
         const log = logRef.current;
-        if (log) log.scrollTop = log.scrollHeight;
+        if (log && (stickToEndRef.current || messages[messages.length - 1]?.is_mine)) log.scrollTop = log.scrollHeight;
     }, [messages]);
 
-    // Load conversations and unread counts
+    const openId = selectedConversation?.id ?? null;
+    // Conversa aberta agora: leitura atrasada não pode cair em outra conversa.
+    const openConversationRef = useRef<string | null>(null);
+    openConversationRef.current = openId;
     useEffect(() => {
-        const loadData = async () => {
+        stickToEndRef.current = true;
+    }, [openId]);
+
+    const beginList = useLatestResponse();
+
+    // Load conversations and unread counts. `silent` = recarga ao vivo: falha mantém a tela e a
+    // conversa aberta não é reescolhida pela URL.
+    const loadData = async (silent = false) => {
+            const claim = beginList();
             const session = await checkSession();
-            if (session.status === 'signed_out') return navigate('/login');
+            if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
             if (session.status === 'unavailable') {
                 logError('Messages.session', session.error);
+                if (silent) return;
                 setErroCarga(true);
                 setLoading(false);
                 return;
@@ -159,6 +177,7 @@ export default function Messages() {
 
             if (error) {
                 logError('Error fetching conversations:', error);
+                if (silent) return;
                 setErroCarga(true);
                 setLoading(false);
                 return;
@@ -208,6 +227,7 @@ export default function Messages() {
 
                 if (unreadError) {
                     logError('Messages.unread', unreadError);
+                    if (silent) return;
                 }
                 setErroNaoLidas(!!unreadError);
 
@@ -234,6 +254,15 @@ export default function Messages() {
                 unread_count: unreadCounts[c.id] || 0
             }));
 
+            if (!claim()) return;
+
+            if (silent) {
+                const open = openConversationRef.current;
+                setConversations(convList.map(c => (c.id === open ? { ...c, unread_count: 0 } : c)));
+                setSelectedConversation(prev => (prev ? convList.find(c => c.id === prev.id) ?? prev : prev));
+                return;
+            }
+
             setConversations(convList);
 
             // Auto-select conversation from URL or first one
@@ -246,14 +275,40 @@ export default function Messages() {
             }
 
             setLoading(false);
-        };
+    };
 
-        loadData();
+    useEffect(() => {
+        void loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData usa setters estáveis; as deps são os gatilhos de recarga
     }, [navigate, selectedConversationId, reloadKey]);
+
+    // Recupera o que o canal da conversa aberta possa ter perdido, mesclando por id.
+    const recoverMessages = async () => {
+        if (!openId || !currentUser || messagesFor !== openId) return;
+        const { data, error } = await supabase
+            .from('Message')
+            .select('*')
+            .eq('conversationid', openId)
+            .order('createdat', { ascending: true });
+        if (error) {
+            logError('Messages.recover', error);
+            return;
+        }
+        if (openConversationRef.current !== openId) return;
+        const rows = ((data || []) as Omit<Message, 'is_mine'>[]).map(m => ({ ...m, is_mine: m.senderid === currentUser }));
+        setMessages(prev => mergeMessages(prev, rows));
+        if (rows.some(m => !m.is_mine && !m.read_at)) void markAsRead(openId, currentUser);
+    };
+
+    useLiveRefresh({
+        sources: conversationListSources(),
+        onRefresh: () => Promise.all([loadData(true), recoverMessages()]),
+        paused: loading,
+    });
 
     // Load messages when conversation is selected
     useEffect(() => {
-        if (!selectedConversation || !currentUser) return;
+        if (!openId || !currentUser) return;
 
         setErroMensagens(false);
 
@@ -261,7 +316,7 @@ export default function Messages() {
             const { data, error } = await supabase
                 .from('Message')
                 .select('*')
-                .eq('conversationid', selectedConversation.id)
+                .eq('conversationid', openId)
                 .order('createdat', { ascending: true });
 
             if (error) {
@@ -275,22 +330,22 @@ export default function Messages() {
                 ...m,
                 is_mine: m.senderid === currentUser
             })));
-            setMessagesFor(selectedConversation.id);
+            setMessagesFor(openId);
 
             // Mark as read when opening
-            markAsRead(selectedConversation.id, currentUser);
+            markAsRead(openId, currentUser);
         };
 
         loadMessages();
 
         // Subscribe to realtime updates
         const channel = supabase
-            .channel(`messages:${selectedConversation.id}`)
+            .channel(`messages:${openId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'Message',
-                filter: `conversationid=eq.${selectedConversation.id}`
+                filter: `conversationid=eq.${openId}`
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
@@ -301,13 +356,13 @@ export default function Messages() {
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine) {
-                    markAsRead(selectedConversation.id, currentUser);
+                    markAsRead(openId, currentUser);
                 }
             })
             .subscribe();
 
         // Presence channel for typing indicator
-        const pChannel = supabase.channel(`typing:${selectedConversation.id}`)
+        const pChannel = supabase.channel(`typing:${openId}`)
         pChannel
             .on('presence', { event: 'sync' }, () => {
                 const state = pChannel.presenceState();
@@ -327,7 +382,8 @@ export default function Messages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser, reloadMensagens]);
+        // Pelo id: reler a lista troca o objeto da conversa sem recarregar (nem piscar) o histórico.
+    }, [openId, currentUser, reloadMensagens]);
 
     const handleSendMessage = async () => {
         if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
@@ -422,7 +478,7 @@ export default function Messages() {
                         </p>
                     )}
 
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="flex-1 overflow-y-auto" data-copilot-private>
                         {erroCarga ? (
                             <div className="p-4">
                                 <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
@@ -518,7 +574,12 @@ export default function Messages() {
 
                             {/* Messages */}
                             <div
+                                data-copilot-private
                                 ref={logRef}
+                                onScroll={(e) => {
+                                    const log = e.currentTarget;
+                                    stickToEndRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+                                }}
                                 role="log"
                                 aria-label="Mensagens da conversa"
                                 tabIndex={0}

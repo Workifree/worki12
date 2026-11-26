@@ -18,7 +18,11 @@ import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { Button, ButtonLink, Card, EmptyState, ErrorState, IconButton, ListRow, PageHeader, SkeletonList, StatusBadge } from '../../components/ui';
 import { applicationStep, occupancy, shiftWhen } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
+import BatchEntry from '../../components/company/BatchEntry';
+import { GuideChecklist } from '../../components/guide/GuideChecklist';
 import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { companyShiftSources } from '../../lib/realtime/liveSources';
 
 
 export default function CompanyDashboard() {
@@ -48,7 +52,7 @@ export default function CompanyDashboard() {
     }, []);
 
     // React Query Hooks
-    const { data: company, isLoading: isLoadingCompany, isError: isErrorCompany, refetch: refetchCompany } = useQuery({
+    const { data: company, isLoading: isLoadingCompany, isLoadingError: isErrorCompany, refetch: refetchCompany } = useQuery({
         queryKey: ['companyProfile'],
         queryFn: async () => {
             // Gerente de unidade (F13) NAO tem linha em `companies` com o proprio id: o
@@ -60,7 +64,7 @@ export default function CompanyDashboard() {
         }
     });
 
-    const { data: jobs = [], isLoading: isLoadingJobs, isError: isErrorJobs, refetch: refetchJobs } = useQuery({
+    const { data: jobs = [], isLoading: isLoadingJobs, isLoadingError: isErrorJobs, refetch: refetchJobs } = useQuery({
         queryKey: ['companyJobs'],
         queryFn: async () => {
             const scope = await getJobScope();
@@ -80,7 +84,7 @@ export default function CompanyDashboard() {
         enabled: !!company
     });
 
-    const { data: applications = [], isLoading: isLoadingApps, isError: isErrorApps, refetch: refetchApps } = useQuery({
+    const { data: applications = [], isLoading: isLoadingApps, isLoadingError: isErrorApps, refetch: refetchApps } = useQuery({
         queryKey: ['companyApplications'],
         queryFn: async () => {
             const companyId = await getAuthenticatedCompanyId();
@@ -113,7 +117,7 @@ export default function CompanyDashboard() {
     }
 
     // Detalhes dos turnos ativos/em andamento para acesso direto de acompanhamento
-    const { data: activeShifts = [], isLoading: isLoadingShifts, isError: isErrorShifts, refetch: refetchShifts } = useQuery<ActiveShiftRow[]>({
+    const { data: activeShifts = [], isLoading: isLoadingShifts, isLoadingError: isErrorShifts, refetch: refetchShifts } = useQuery<ActiveShiftRow[]>({
         queryKey: ['companyActiveShifts'],
         queryFn: async () => {
             const companyId = await getAuthenticatedCompanyId();
@@ -156,7 +160,7 @@ export default function CompanyDashboard() {
         tipo: 'registrar' | 'efetivar';
         venceuEm?: string;
     }
-    const { data: pendingPayments = [], isError: isErrorPending, refetch: refetchPending } = useQuery<PendingPayRow[]>({
+    const { data: pendingPayments = [], isLoadingError: isErrorPending, refetch: refetchPending } = useQuery<PendingPayRow[]>({
         queryKey: ['companyPendingPayments'],
         queryFn: async () => {
             try {
@@ -210,6 +214,13 @@ export default function CompanyDashboard() {
             }
         },
         enabled: !!company
+    });
+
+    const liveCompany = useCurrentCompany();
+    useLiveRefresh({
+        sources: liveCompany ? companyShiftSources(liveCompany.company_id) : [],
+        onRefresh: () => Promise.all([refetchJobs(), refetchApps(), refetchShifts(), refetchPending()]),
+        paused: !company,
     });
 
     // Derived State
@@ -270,6 +281,8 @@ export default function CompanyDashboard() {
             <PageHeader title={pageTitle} subtitle={[todayLabel, companyName].filter(Boolean).join(' · ')} action={<CreateShiftLink />} inlineAction />
 
             <div className="space-y-8">
+                <GuideChecklist ocultavel />
+                <BatchEntry />
                 <TrailShortcutCard />
 
                 {isErrorPending && (

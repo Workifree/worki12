@@ -25,6 +25,7 @@ import { logError } from '../lib/logger';
 import { ShiftInviteService } from '../services/shiftInviteService';
 import { ShiftCallService } from '../services/shiftCallService';
 import { useToast } from '../contexts/ToastContext';
+import { useLatestResponse } from './useLatestResponse';
 import type {
   Application,
   InvitationResponse,
@@ -156,8 +157,8 @@ export interface UseWorkerInvitesResult {
   respondingId: string | null;
   /** Aceitar ou recusar. Recebe o `id` do PendingInvite (não o do chamado). */
   respond: (inviteId: string, response: InvitationResponse) => Promise<boolean>;
-  /** Recarregar. */
-  refresh: () => void;
+  /** Recarregar. `silent`: recarga de fundo (sem esqueleto; falha mantém o que está na tela). */
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 /**
@@ -209,36 +210,39 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     ];
   }, []);
 
+  const beginLoad = useLatestResponse();
   const load = useCallback(
-    async (isActive: () => boolean = () => true) => {
+    async (isActive: () => boolean = () => true, silent = false) => {
+      const claim = beginLoad();
       const session = await checkSession();
       if (!isActive()) return;
       if (session.status === 'signed_out') {
-        navigate('/login');
+        if (!silent) navigate('/login');
         return;
       }
       if (session.status === 'unavailable') {
         logError('useWorkerInvites.session', session.error);
+        if (silent) return;
         setError(true);
         setLoading(false);
         return;
       }
 
-      setLoading(true);
+      if (!silent) setLoading(true);
       try {
         const invites = await fetchInvites();
-        if (!isActive()) return;
+        if (!isActive() || !claim()) return;
         setError(false);
         setPendingInvites(invites);
       } catch (err) {
         logError('useWorkerInvites.fetch', err);
-        if (!isActive()) return;
+        if (!isActive() || silent) return;
         // Mantém o que já estava na tela: falha de consulta não esvazia a lista.
         setError(true);
       }
       setLoading(false);
     },
-    [navigate, fetchInvites],
+    [navigate, fetchInvites, beginLoad],
   );
 
   useEffect(() => {
@@ -249,9 +253,14 @@ export function useWorkerInvites(): UseWorkerInvitesResult {
     };
   }, [load]);
 
-  const refresh = useCallback(() => {
-    void load();
-  }, [load]);
+  const refresh = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = load(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [load],
+  );
 
   // Outra instancia respondeu um convite — esta precisa refletir isso.
   useEffect(() => {
@@ -479,7 +488,7 @@ export interface UseShiftCallsResult {
   openCall: ShiftCall | null;
   cancellingId: string | null;
   cancel: (callId: string) => Promise<boolean>;
-  refresh: () => void;
+  refresh: (options?: { silent?: boolean }) => unknown;
 }
 
 export function useShiftCalls(jobId: string | null | undefined): UseShiftCallsResult {
@@ -490,26 +499,29 @@ export function useShiftCalls(jobId: string | null | undefined): UseShiftCallsRe
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const { addToast } = useToast();
 
+  const beginLoad = useLatestResponse();
   const load = useCallback(
-    async (isActive: () => boolean = () => true) => {
+    async (isActive: () => boolean = () => true, silent = false) => {
       if (!jobId) {
         setLoading(false);
         return;
       }
-      setLoading(true);
+      const claim = beginLoad();
+      if (!silent) setLoading(true);
       try {
         const list = await ShiftCallService.listCallsByJob(jobId);
-        if (!isActive()) return;
+        if (!isActive() || !claim()) return;
         setLoaded({ jobId, calls: list });
         setLoadError(false);
       } catch (error) {
         if (!isActive()) return;
         logError('useShiftCalls.load', error);
+        if (silent) return;
         setLoadError(true);
       }
       setLoading(false);
     },
-    [jobId],
+    [jobId, beginLoad],
   );
 
   useEffect(() => {
@@ -520,9 +532,14 @@ export function useShiftCalls(jobId: string | null | undefined): UseShiftCallsRe
     };
   }, [load]);
 
-  const refresh = useCallback(() => {
-    void load();
-  }, [load]);
+  const refresh = useCallback(
+    (options?: { silent?: boolean }) => {
+      const done = load(undefined, options?.silent === true);
+      // Só a recarga de fundo devolve a promessa (quem a espera é o tempo real).
+      return options?.silent ? done : void done;
+    },
+    [load],
+  );
 
   const calls = loaded && loaded.jobId === jobId ? loaded.calls : NO_CALLS;
 

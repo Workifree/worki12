@@ -46,7 +46,7 @@
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { MAX_SERIES_OCCURRENCES } from '../lib/recurrence';
-import type { JobSeries, RecurrenceType } from '../types';
+import type { JobSeries, PresenceMode, PresenceQrMode, RecurrenceType } from '../types';
 import { getAuthenticatedCompanyId as resolverEmpresaDaSessao } from './companyScopeService';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,10 @@ export interface JobSeriesTemplate {
   has_lunch?: boolean;
   slots: number;
   scope?: string;
+  /** Presença verificada: só enviados com a função ligada. */
+  presence_mode?: PresenceMode;
+  site_id?: string | null;
+  qr_mode?: PresenceQrMode;
 }
 
 export interface CreateJobSeriesParams {

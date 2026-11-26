@@ -9,6 +9,9 @@ export const HELP_UI_SELECTOR = `[${UI_ATTR}],[data-guide]`
 
 export const PRIVATE_SELECTOR = '[data-copilot-private]'
 
+/** Aceite de Termos na frente. O `TosGateModal` real só tem o id do título; o testid é dos testes. */
+export const TOS_GATE_SELECTOR = '#tos-gate-title,[data-testid="tos-gate-modal"]'
+
 const NAME_SKIP = `${PRIVATE_SELECTOR},[${UI_ATTR}],[data-page-agent-ignore="true"],[aria-hidden="true"],script,style,noscript,template`
 
 export function fold(text: string): string {

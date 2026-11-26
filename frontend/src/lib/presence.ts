@@ -50,7 +50,6 @@ export interface PresenceCheck {
     distance_m: number | null;
     accuracy_m: number | null;
     reason: PresenceExceptionReason | null;
-    note: string | null;
     decided_by: string | null;
     created_at: string;
 }
@@ -60,7 +59,6 @@ export const MAX_RADIUS_M = 500;
 export const DEFAULT_RADIUS_M = 150;
 /** Precisão máxima aceita para marcar o ponto de um local ("Estou aqui agora"). */
 export const SITE_CAPTURE_MAX_ACCURACY_M = 50;
-export const NOTE_MAX = 200;
 
 export function kindLabel(kind: PresenceKind): string {
     return kind === 'arrival' ? 'chegada' : 'saída';

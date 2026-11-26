@@ -105,7 +105,7 @@ describe('PresenceExceptionPanel', () => {
         await userEvent.selectOptions(screen.getByRole('combobox'), 'sem_sinal_gps');
         await userEvent.click(submit);
         await waitFor(() => expect(done).toHaveBeenCalled());
-        expect(service.recordPresenceException).toHaveBeenCalledWith('app', 'arrival', 'sem_sinal_gps', '');
+        expect(service.recordPresenceException).toHaveBeenCalledWith('app', 'arrival', 'sem_sinal_gps');
     });
 
     it('sem permissão mostra o motivo e não conclui', async () => {

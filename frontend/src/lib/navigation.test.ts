@@ -25,6 +25,9 @@ const CONTEXTUAL: Record<string, string> = {
     '/company/jobs/:id': 'turnos',
     '/company/jobs/:id/edit': 'turnos',
     '/company/jobs/:id/candidates': 'turnos',
+    // Presença verificada (rotas atrás de VITE_FEATURE_PRESENCA).
+    '/company/jobs/:id/qr': 'turnos',
+    '/company/locais/:id/qr': 'gestao',
     '/company/worker/:id': 'elenco',
     '/company/empresa/:id': 'elenco',
     '/empresa/:id': 'empresas',
@@ -42,7 +45,7 @@ function expandTabs(paths: string[]): Set<string> {
 function companyReachable(device: 'desktop' | 'mobile', hasTeam: boolean): Set<string> {
     const items = getCompanyNav({ isEncarregado: false, hasTeam });
     const nav = device === 'desktop' ? items : toBottomNav(items);
-    const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: hasTeam, trail: true })
+    const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: hasTeam, trail: true, sites: true })
         .flatMap((g) => g.cards)
         .filter((c) => device === 'mobile' || !c.mobileOnly);
     const direct = [

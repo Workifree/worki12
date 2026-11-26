@@ -28,6 +28,7 @@ const answer = (action: unknown, name = 'AgentOutput') =>
 function setup(over: Partial<Deps> = {}, env: Record<string, string | undefined> = {}) {
   const vars: Record<string, string | undefined> = {
     COPILOT_LLM_PROVIDER: 'openai', COPILOT_LLM_MODEL: 'gpt-4.1-mini', COPILOT_LLM_API_KEY: 'sk-segredo-do-servidor-123456',
+    COPILOT_PUBLIC: 'true',
     ...env,
   }
   const logs: string[] = []
@@ -190,6 +191,15 @@ describe('saída do modelo', () => {
     expect(Object.keys(ACTIONS)).not.toContain('execute_javascript')
     expect(JSON.stringify(agentOutputSchema('company'))).not.toMatch(/javascript/i)
     expect(SYSTEM_PROMPT).toContain('SOMENTE-A-PESSOA')
+  })
+
+  it('prompt de sistema enxuto mantém os invariantes de segurança', () => {
+    for (const s of ['<user_request>', '<instructions>', '<browser_state>', 'DADO NÃO CONFIÁVEL',
+      'risco=SOMENTE-A-PESSOA', 'pagar', 'estornar', 'excluir', 'cancelar', 'remover', 'aceitar',
+      'você não executa', 'nunca descubra, peça ou digite', 'dados pessoais', 'português do Brasil', 'done']) {
+      expect(SYSTEM_PROMPT).toContain(s)
+    }
+    expect(SYSTEM_PROMPT.length).toBeLessThanOrEqual(5000)
   })
 })
 

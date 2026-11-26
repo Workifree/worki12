@@ -35,6 +35,8 @@ const SERIES = between(read('20260817000400_job_series'),
   'CREATE OR REPLACE FUNCTION public.create_job_series(', 'COMMENT ON FUNCTION public.create_job_series');
 const P = ['20261127000100_presenca_p1_locais', '20261127000200_presenca_p2_politica_turno',
   '20261127000300_presenca_p3_verificacao'].map(read);
+const SHELL = between(read('20261123000500_equipe_e4_convites_e_papel'),
+  'CREATE OR REPLACE FUNCTION public.internal_drop_empty_company_shell', 'COMMENT ON FUNCTION public.internal_drop_empty_company_shell');
 const IDX = read('20261127000400_presenca_indices');
 
 const id = (n) => `00000000-0000-0000-0000-0000000000${String(n).padStart(2, '0')}`;
@@ -49,7 +51,12 @@ CREATE SCHEMA auth; GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_r
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('test.uid', true), '')::uuid $$;
 
 CREATE TABLE public.companies (id uuid PRIMARY KEY, owner_id uuid, organization_id uuid, name text,
-  created_at timestamptz DEFAULT now(), anonymized_at timestamptz);
+  created_at timestamptz DEFAULT now(), anonymized_at timestamptz, onboarding_completed boolean);
+${['team_connections', 'shift_payments', 'company_members', 'team_lists', 'payment_methods', 'company_spend_limits',
+  'company_monthly_revenue', 'worker_trainings', 'worker_company_badge_prefs', 'service_terms', 'shift_calls', 'company_tags',
+  'responsibility_coverages'].map((n) => `CREATE TABLE public.${n} (company_id uuid);`).join(' ')}
+CREATE TABLE public.worker_certifications (verified_by_company_id uuid);
+CREATE TABLE public.worker_referrals (referring_company_id uuid, requesting_company_id uuid);
 CREATE TABLE public.workers (id uuid PRIMARY KEY, anonymized_at timestamptz);
 CREATE TABLE public.members (company_id uuid, user_id uuid);
 CREATE TABLE public.job_series (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid, recurrence_type text,
@@ -124,6 +131,7 @@ await db.exec(TRUST);
 await db.exec(`CREATE TRIGGER trg_zz_companies_trust_guard BEFORE INSERT OR UPDATE ON public.companies
   FOR EACH ROW EXECUTE FUNCTION public.profile_trust_guard('{id,owner_id,organization_id,name}', '{}');`);
 await db.exec(SERIES);
+await db.exec(SHELL);
 await db.exec('GRANT ALL ON public.job_series TO authenticated');
 
 for (const [i, m] of P.entries()) {
@@ -261,7 +269,8 @@ check('P9 empresa nao verifica pelo freela', (await verify(GESTOR, APP, 'arrival
 const LATE = await mkJob({ offset: '48 hours' });
 const LATE_APP = await mkApp(LATE);
 check('P9 fora da janela', (await verify(W, LATE_APP, 'arrival', await tok(SITE, LATE))).outcome === 'outside_window');
-check('excecao tambem respeita a janela', (await rpc(GESTOR, 'record_presence_exception', [LATE_APP, 'arrival', 'outro', null])).outcome === 'outside_window');
+check('excecao tambem respeita a janela', (await rpc(GESTOR, 'record_presence_exception', [LATE_APP, 'arrival', 'outro'])).outcome === 'outside_window');
+check('pedido de ajuda respeita a janela', (await rpc(W, 'request_presence_exception', [LATE_APP, 'arrival', 'outro'])).outcome === 'outside_window');
 check('saida antes da chegada recusada', (await verify(W, APP, 'departure', await good())).outcome === 'invalid_status');
 
 let res = await verify(W, APP, 'arrival', await tok(SITE, JOB, -1), [-5.79600, -35.211, 40]);
@@ -304,11 +313,10 @@ check('pedido repetido nao spamma', (await rpc(W, 'request_presence_exception', 
   && (await one('SELECT count(*)::int n FROM public.notifications WHERE link LIKE $1', [`%${EJOB}%`])).n === 1);
 check('outro freela nao pede', (await rpc(W2, 'request_presence_exception', [EAPP, 'arrival', 'outro'])).outcome === 'not_owner');
 for (const [l, u] of [['freela', W], ['encarregado sem escopo', ENC2], ['outra empresa', OUTRA]]) {
-  check(`P11 ${l} nao aprova`, (await rpc(u, 'record_presence_exception', [EAPP, 'arrival', 'outro', null])).outcome === 'forbidden');
+  check(`P11 ${l} nao aprova`, (await rpc(u, 'record_presence_exception', [EAPP, 'arrival', 'outro'])).outcome === 'forbidden');
 }
-check('P11 motivo fora da lista', (await rpc(ENC, 'record_presence_exception', [EAPP, 'arrival', 'porque sim', null])).outcome === 'invalid_input');
-check('P11 nota > 200', (await rpc(ENC, 'record_presence_exception', [EAPP, 'arrival', 'outro', 'x'.repeat(201)])).outcome === 'invalid_input');
-res = await rpc(ENC, 'record_presence_exception', [EAPP, 'arrival', 'gps_negado', ' ok ']);
+check('P11 motivo fora da lista', (await rpc(ENC, 'record_presence_exception', [EAPP, 'arrival', 'porque sim'])).outcome === 'invalid_input');
+res = await rpc(ENC, 'record_presence_exception', [EAPP, 'arrival', 'gps_negado']);
 check('P11 encarregado do turno aprova', res.outcome === 'recorded', res.outcome);
 a = await stamps(EAPP);
 check('P11 carimba so a coluna da empresa', a.status === 'in_progress' && !!a.company_checkin_confirmed_at && !a.worker_checkin_at);
@@ -341,23 +349,77 @@ check('verify em turno dual', (await verify(W, DAPP, 'arrival', 'x')).outcome ==
 
 console.log('--- congelamento (P14)');
 const frozen = async (sql, p) => { try { await db.query(sql, p); return false; } catch (e) { return e.code === '42501'; } };
+check('P14 tipo de QR congela', await frozen(`UPDATE public.jobs SET qr_mode='static' WHERE id=$1`, [EJOB]));
 check('P14 modo congela', await frozen(`UPDATE public.jobs SET presence_mode='dual' WHERE id=$1`, [EJOB]));
 check('P14 local congela', await frozen('UPDATE public.jobs SET site_id=$2 WHERE id=$1', [EJOB, SITE2]));
 check('P14 dual com carimbo nao vira qr_gps', await frozen(`UPDATE public.jobs SET presence_mode='qr_gps', site_id=$2 WHERE id=$1`, [dualRow.id, SITE]));
 check('P14 outras colunas seguem editaveis', !(await frozen(`UPDATE public.jobs SET title='n' WHERE id=$1`, [EJOB])));
 check('P14 sem carimbo muda', !(await frozen(`UPDATE public.jobs SET presence_mode='dual' WHERE id=$1`, [OTHER_JOB])));
 
+console.log('--- afrouxar a politica e so do Gestor');
+await db.exec(`ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY j_sel ON public.jobs FOR SELECT TO authenticated USING (true);
+  CREATE POLICY j_upd ON public.jobs FOR UPDATE TO authenticated
+    USING (public.is_company_owner(company_id) OR responsible_id = auth.uid()) WITH CHECK (true);
+  CREATE FUNCTION public.t_weaken(p uuid) RETURNS void LANGUAGE sql SECURITY DEFINER AS
+    'UPDATE public.jobs SET presence_mode = ''dual'' WHERE id = p';`);
+const G1 = await mkJob({ responsible_id: ENC });
+const G2 = await mkJob({ responsible_id: ENC });
+const upd = (uid, set, job = G1, extra = []) => as(uid, `UPDATE public.jobs SET ${set} WHERE id=$1`, [job, ...extra]);
+check('encarregado nao volta para dual', denied(await upd(ENC, `presence_mode='dual'`)));
+check('encarregado nao troca para impresso', denied(await upd(ENC, `qr_mode='static'`)));
+check('encarregado nao troca o local', denied(await upd(ENC, 'site_id=$2', G1, [SITE2])));
+check('encarregado nao afrouxa em lote', denied(await as(ENC, `UPDATE public.jobs SET presence_mode='dual' WHERE id IN ($1,$2)`, [G1, G2])));
+check('encarregado nao afrouxa por RPC DEFINER', denied(await as(ENC, 'SELECT public.t_weaken($1)', [G1])));
+check('encarregado edita o resto', (await upd(ENC, `title='t', presence_mode='qr_gps'`)).n === 1);
+const G3 = await mkJob({ responsible_id: ENC, presence_mode: 'dual', site_id: null, qr_mode: 'static' });
+check('encarregado pode endurecer', (await upd(ENC, `presence_mode='qr_gps', site_id=$2, qr_mode='rotating'`, G3, [SITE])).n === 1);
+check('Gestor troca local, tipo de QR e modo', (await upd(GESTOR, 'site_id=$2', G1, [SITE2])).n === 1
+  && (await upd(GESTOR, `qr_mode='static'`)).n === 1 && (await upd(GESTOR, `presence_mode='dual'`)).n === 1);
+
+console.log('--- guard fail-closed');
+const stampAs = (app) => as(W, `UPDATE public.applications SET status='in_progress', worker_checkin_at=now() WHERE id=$1`, [app]);
+const byGuard = (x) => denied(x) && x.error.includes('applications_presence_guard');
+const ORPHAN = await mkApp('00000000-0000-0000-0000-0000000000ff');
+let blocked = await stampAs(ORPHAN);
+check('turno inexistente: recusa', byGuard(blocked), blocked.error);
+const HID = await mkJob({ presence_mode: 'dual', site_id: null });
+const HAPP = await mkApp(HID);
+await db.exec(`DROP POLICY j_sel ON public.jobs;
+  CREATE POLICY j_sel ON public.jobs FOR SELECT TO authenticated USING (id <> '${HID}')`);
+blocked = await stampAs(HAPP);
+check('turno invisivel: recusa mesmo sendo dual', byGuard(blocked), blocked.error);
+await db.exec('DROP POLICY j_sel ON public.jobs; CREATE POLICY j_sel ON public.jobs FOR SELECT TO authenticated USING (true)');
+blocked = await stampAs(HAPP);
+check('turno dual visivel: fluxo legitimo segue', blocked.n === 1, blocked.error);
+
+console.log('--- casca vazia com local');
+const SHELL_ID = id(8), EMPTY_ID = id(9);
+await db.exec(`INSERT INTO public.companies(id, owner_id) VALUES ('${SHELL_ID}','${SHELL_ID}'), ('${EMPTY_ID}','${EMPTY_ID}')`);
+await mkSite(SHELL_ID, SHELL_ID, 'casa');
+const drop = async (c) => { try { return (await one('SELECT public.internal_drop_empty_company_shell($1) n', [c])).n; } catch (e) { return e.message; } };
+check('casca com local nao e apagada (sem abortar)', (await drop(SHELL_ID)) === 0);
+check('casca vazia segue sendo apagada', (await drop(EMPTY_ID)) === 1);
+
 console.log('--- sem coordenada (P12), purga (P15), LGPD');
+check('sem texto livre em presence_checks', (await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name='presence_checks' AND column_name='note'`)).rows.length === 0);
 check('P12 nenhuma coluna de coordenada fora do local', (await db.query(`SELECT 1 FROM information_schema.columns
   WHERE table_schema='public' AND column_name ~* '(^|_)(lat|lng|lon|latitude|longitude)($|_)' AND table_name <> 'company_sites'`)).rows.length === 0);
 check('P15 cliente nao purga', denied(await as(GESTOR, 'SELECT public.purge_presence_checks()')));
+await db.exec('UPDATE public.presence_checks SET distance_m = 10, accuracy_m = 5');
+await db.exec('SELECT public.purge_presence_checks()');
+check('retencao: antes de 90 dias as medidas ficam', (await one('SELECT count(*)::int n FROM public.presence_checks WHERE distance_m IS NULL')).n === 0);
 await db.exec(`UPDATE public.presence_checks SET created_at = now() - interval '91 days'`);
 const kept = (await one(`SELECT count(*)::int n FROM public.presence_checks WHERE result IN ('verified','manual_exception','unverified')`)).n;
 await db.exec('SELECT public.purge_presence_checks()');
 check('P15 purga so falhas e pedidos', (await one('SELECT count(*)::int n FROM public.presence_checks')).n === kept && kept >= 5);
+check('retencao: apos 90 dias apaga as medidas e mantem o resultado', (await one(`SELECT count(*)::int n FROM public.presence_checks
+  WHERE distance_m IS NOT NULL OR accuracy_m IS NOT NULL`)).n === 0
+  && (await one(`SELECT count(*)::int n FROM public.presence_checks WHERE result='verified'`)).n >= 3);
+await db.exec('UPDATE public.presence_checks SET distance_m = 10');
 await db.exec(`UPDATE public.workers SET anonymized_at=now() WHERE id='${W}'`);
-check('LGPD: anonimizar freela apaga nota e medidas', (await one(`SELECT count(*)::int n FROM public.presence_checks
-  WHERE worker_id=$1 AND (note IS NOT NULL OR distance_m IS NOT NULL OR accuracy_m IS NOT NULL)`, [W])).n === 0);
+check('LGPD: anonimizar freela apaga medidas', (await one(`SELECT count(*)::int n FROM public.presence_checks
+  WHERE worker_id=$1 AND (distance_m IS NOT NULL OR accuracy_m IS NOT NULL)`, [W])).n === 0);
 await db.exec(`UPDATE public.companies SET anonymized_at=now() WHERE id='${OUTRA}'`);
 const gone = await one('SELECT lat::float8 l, archived_at a FROM public.company_sites WHERE id=$1', [SITE_B]);
 check('LGPD: local da empresa anonimizada perde o conteudo', gone.l === 0 && !!gone.a);

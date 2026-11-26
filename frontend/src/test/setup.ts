@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom/vitest'
+import { vi } from 'vitest'
+
+// Tempo real: nenhum teste abre canal de verdade. Para simular evento, `emitLive` de `./liveHubMock`.
+vi.mock('../lib/realtime/defaultHub', async () => {
+  const { testHub } = await import('./liveHubMock')
+  return { getLiveHub: () => testHub }
+})
 
 // O jsdom não implementa `showModal()`/`close()` do <dialog>. Polyfill SÓ de teste (no app, quem
 // não tem `showModal` cai no fallback de `lib/dialogElement.ts`).

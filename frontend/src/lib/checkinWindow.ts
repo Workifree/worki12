@@ -117,6 +117,9 @@ export function isTodayShift(shift: TodayCandidate, now: Date = new Date()): boo
  */
 export function attendanceGuardMessage(error: unknown, schedule?: ShiftSchedule): string | null {
     const raw = (error as { message?: unknown } | null)?.message;
+    if (typeof raw === 'string' && raw.includes('applications_presence_guard')) {
+        return 'Este turno exige QR e localização. Atualize a página.';
+    }
     if (typeof raw !== 'string' || !raw.includes('applications_update_guard')) return null;
     if (raw.includes('este turno foi cancelado')) return 'Este turno foi cancelado.';
     if (raw.includes('horario de presenca no futuro')) return 'O horário não pode ser no futuro.';

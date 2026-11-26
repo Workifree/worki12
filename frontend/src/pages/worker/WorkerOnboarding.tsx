@@ -15,6 +15,11 @@ import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorag
 import type { AvailabilityDays, AvailabilityPeriod, AvailabilityWeekday } from '../../types';
 import { checkSession } from '../../lib/authSession';
 import ErroDeCarga from '../../components/ErroDeCarga';
+import { leaveDevice } from '../../lib/leaveDevice';
+import { setMyWorkerIdentity } from '../../services/workerIdentityService';
+import { saoPauloDay } from '../../lib/checkinWindow';
+
+const CONTA_EXCLUIDA = 'Esta conta foi excluída e não aceita um novo cadastro.';
 
 /**
  * Converte os cinco chips rápidos do cadastro na grade dia×período do F7.
@@ -121,6 +126,9 @@ export default function WorkerOnboarding() {
     ];
 
     const [erroSessao, setErroSessao] = useState(false);
+    // Valores que o servidor recusou: o campo acusa o erro até a pessoa mudar o que digitou.
+    const [cpfRecusado, setCpfRecusado] = useState<string | null>(null);
+    const [nascimentoRecusado, setNascimentoRecusado] = useState<string | null>(null);
     const [tentativa, setTentativa] = useState(0);
 
     useEffect(() => {
@@ -229,7 +237,13 @@ export default function WorkerOnboarding() {
         if (step === 1) {
             if (!formData.fullName.trim()) marcar('fullName', 'nome completo', 'Informe seu nome completo.');
             if (formData.cpf.replace(/\D/g, '').length !== 11) marcar('cpf', 'CPF (11 dígitos)', 'Informe o CPF com 11 dígitos.');
+            else if (!validateCPFOrCNPJ(formData.cpf)) marcar('cpf', 'CPF válido', 'CPF inválido. Confira os números.');
+            else if (cpfRecusado === formData.cpf) marcar('cpf', 'CPF válido', 'CPF inválido. Confira os números.');
             if (!formData.birthDate) marcar('birthDate', 'data de nascimento', 'Informe sua data de nascimento.');
+            // Mesma regra do banco: data passada (São Paulo), de 1900 em diante.
+            else if (formData.birthDate < '1900-01-01' || formData.birthDate >= saoPauloDay(new Date()) || nascimentoRecusado === formData.birthDate) {
+                marcar('birthDate', 'data de nascimento válida', 'Confira a data de nascimento.');
+            }
             if (!formData.phone.trim()) marcar('phone', 'celular', 'Informe seu celular.');
             if (!formData.city.trim()) marcar('city', 'cidade', 'Informe sua cidade.');
             if (!formData.pixKeyType) marcar('pixKeyType', 'tipo da chave PIX', 'Escolha o tipo da chave PIX.');
@@ -277,6 +291,16 @@ export default function WorkerOnboarding() {
         setLoading(true);
         setErroSalvar(false);
         try {
+            // Sem argumentos a RPC não escreve nada: serve para saber se a migration cpf-restrito
+            // já está no banco. Sem ela, cpf e nascimento seguem no upsert, como antes.
+            const sonda = await setMyWorkerIdentity();
+            if (sonda.outcome === 'anonymized') throw new Error(CONTA_EXCLUIDA);
+            if (sonda.outcome === 'error' || sonda.outcome === 'unauthenticated') {
+                throw new Error('Erro ao salvar perfil. Tente novamente.');
+            }
+            const identidadePorRpc = sonda.outcome !== 'unavailable';
+            const cpf = formData.cpf.replace(/\D/g, '');
+
             const { error } = await supabase
                 .from('workers')
                 .upsert({
@@ -284,8 +308,7 @@ export default function WorkerOnboarding() {
                     full_name: formData.fullName,
                     phone: formData.phone,
                     city: formData.city,
-                    cpf: formData.cpf.replace(/\D/g, ''),
-                    birth_date: formData.birthDate,
+                    ...(identidadePorRpc ? {} : { cpf, birth_date: formData.birthDate }),
                     pix_key: normalizePixKeyForStorage(formData.pixKeyType, formData.pixKey),
                     roles: formData.roles,
                     // A empresa NUNCA vê `roles`. Todas as telas dela — cartão do Elenco
@@ -318,13 +341,38 @@ export default function WorkerOnboarding() {
                     // que continua sendo o lugar de edição fina.
                     availability_days: gradeAPartirDosChips(formData.availability),
                     goal: formData.goal,
-                    onboarding_completed: true,
+                    // Pela RPC, o cadastro só é concluído depois de cpf/nascimento gravados.
+                    ...(identidadePorRpc ? {} : { onboarding_completed: true }),
                     accepted_tos: true,
                     tos_version: 'v1',
                     tos_accepted_at: new Date().toISOString()
                 });
 
             if (error) throw error;
+
+            if (identidadePorRpc) {
+                const { outcome } = await setMyWorkerIdentity({ cpf, birthDate: formData.birthDate });
+                if (outcome === 'invalid_cpf' || outcome === 'invalid_birth_date') {
+                    if (outcome === 'invalid_cpf') setCpfRecusado(formData.cpf);
+                    else setNascimentoRecusado(formData.birthDate);
+                    setStep(1);
+                    setTentou(true);
+                    addToast(outcome === 'invalid_cpf' ? 'CPF inválido. Confira os números.' : 'Confira a data de nascimento.', 'error');
+                    return;
+                }
+                if (outcome === 'anonymized') throw new Error(CONTA_EXCLUIDA);
+                // `*_locked`: já havia valor gravado, que permanece. O cadastro segue.
+                if (outcome !== 'saved' && outcome !== 'cpf_locked' && outcome !== 'birth_date_locked') {
+                    throw new Error('Erro ao salvar perfil. Tente novamente.');
+                }
+                const { data: concluido, error: erroConclusao } = await supabase
+                    .from('workers')
+                    .update({ onboarding_completed: true })
+                    .eq('id', userId)
+                    .select('id');
+                if (erroConclusao) throw erroConclusao;
+                if (!concluido || concluido.length === 0) throw new Error('Erro ao salvar perfil. Tente novamente.');
+            }
 
             // Wallet e legado do modelo de pagamento pausado (ADR-20260822): se falhar DEPOIS
             // do perfil salvo, abortar aqui mostraria 'Erro ao salvar perfil' — mentira que
@@ -376,6 +424,7 @@ export default function WorkerOnboarding() {
                                 setTimeout(() => setSaidaArmada(false), 4000);
                                 return;
                             }
+                            await leaveDevice();
                             await supabase.auth.signOut();
                             window.location.href = '/';
                         }}
@@ -414,7 +463,7 @@ export default function WorkerOnboarding() {
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
-                            <div className="space-y-5">
+                            <div className="space-y-5" data-copilot-private>
                                 <h2 className="text-lg font-bold">Quem é você?</h2>
 
                                 <div className="space-y-4">

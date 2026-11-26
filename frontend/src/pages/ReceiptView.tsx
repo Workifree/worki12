@@ -11,14 +11,23 @@ import { fillMissingWorkers } from '../services/workerCardsService';
 import { formatDateOnly, calculateWorkedHours } from '../lib/dateUtils';
 import PageMeta from '../components/PageMeta';
 import ServiceTermSection from '../components/ServiceTermSection';
+import HelpButton from '../layouts/HelpButton';
+import { GuideRoleEmpresa, GuideRoleFreela } from '../components/guide/GuideRole';
 import { ArrowLeft, Printer, Clock, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 import { Button, Card } from '../components/ui';
 import type { ShiftPaymentReceipt } from '../services/paymentRecordService';
 import type { PaymentSource } from '../types';
 import { getSessionUserOrThrow } from '../lib/authSession';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { useLatestResponse } from '../hooks/useLatestResponse';
+import { jobSources } from '../lib/realtime/liveSources';
 import { formatBRL, formatWorkedTime } from '../lib/currency';
 import { openShiftConversation, type MessagesLocationState } from '../lib/shiftChat';
 import { useToast } from '../contexts/ToastContext';
+import { isPresencaEnabled } from '../lib/features';
+import { listPresenceChecks } from '../services/presenceService';
+import { PresenceBadge } from '../components/presence/PresenceBadge';
+import type { PresenceCheck } from '../lib/presence';
 
 const PAYMENT_SOURCE_LABELS: Record<PaymentSource, string> = {
     external_pix: 'PIX',
@@ -85,6 +94,9 @@ export default function ReceiptView() {
     // não só de valor. Caminho legado sem application vinculada = sem attendance (não inventa).
     const [attendance, setAttendance] = useState<ShiftAttendance | null>(null);
 
+    // Selo de presença (só turno `qr_gps`). `null` = não mostrar, inclusive em falha de leitura.
+    const [presence, setPresence] = useState<PresenceCheck[] | null>(null);
+
     const [voided, setVoided] = useState<VoidedPayment | null>(null);
     const [disputing, setDisputing] = useState(false);
     const { addToast } = useToast();
@@ -94,15 +106,21 @@ export default function ReceiptView() {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- so precisa re-executar quando jobId/worker mudam
     }, [jobId, workerIdParam]);
 
-    const fetchReceipt = async () => {
+    const beginReceipt = useLatestResponse();
+    // O termo está sendo lido/aceito ou há confirmação em envio: nada muda sob a pessoa.
+    const [termBusy, setTermBusy] = useState(false);
+    const [liveVersion, setLiveVersion] = useState(0);
+
+    // `silent` = recarga ao vivo: sem esqueleto e, se falhar, o recibo fica como está.
+    const fetchReceipt = async ({ silent = false }: { silent?: boolean } = {}) => {
+        const claim = beginReceipt();
         // G3: guarda de id falsy — evita `shift_payments?job_id=eq.null` mesmo se essa função
         // for chamada de outro lugar além do useEffect que já checa `if (jobId)`.
         if (!jobId) { setLoading(false); return; }
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
             const user = await getSessionUserOrThrow(); // rede fora lança e cai no erro com retry
-            if (!user) { navigate('/login'); return; }
-            setCurrentUserId(user.id);
+            if (!user) { if (!silent) navigate('/login'); return; }
 
             let data = await PaymentRecordService.getReceiptChecked(jobId, workerIdParam ?? undefined);
             // Encarregado: o embed `workers` volta `null`; o cartão do turno dá o nome.
@@ -112,13 +130,29 @@ export default function ReceiptView() {
                 );
                 data = { ...data, worker: filled.worker };
             }
-            setVoided(data ? null : await fetchVoided(jobId, workerIdParam));
-            setReceipt(data);
+            const nextVoided = data ? null : await fetchVoided(jobId, workerIdParam);
+            // `undefined` = a leitura falhou numa recarga de fundo: mantém o que está na tela.
+            let nextPresence: PresenceCheck[] | null | undefined = null;
+            let nextAttendance: ShiftAttendance | null | undefined = null;
 
             // Chegada/saída vivem em `applications`, não em `shift_payments` — busca à parte
             // pelo application_id do marcador (RLS: mesmos participantes do recibo, worker ou
             // empresa dona, então a leitura é permitida para quem já pode ver o recibo).
             const applicationId = data?.payment.application_id;
+            if (applicationId && isPresencaEnabled()) {
+                const { data: jobData, error: jobErr } = await supabase
+                    .from('jobs')
+                    .select('presence_mode')
+                    .eq('id', jobId)
+                    .maybeSingle();
+                if (jobErr) {
+                    logError('ReceiptView: fetchPresenceMode', jobErr);
+                    if (silent) nextPresence = undefined;
+                } else if (jobData?.presence_mode === 'qr_gps') {
+                    nextPresence = await listPresenceChecks({ applicationId });
+                    if (silent && nextPresence === null) nextPresence = undefined;
+                }
+            }
             if (applicationId) {
                 const { data: appData, error: appErr } = await supabase
                     .from('applications')
@@ -127,29 +161,43 @@ export default function ReceiptView() {
                     .maybeSingle();
                 if (appErr) {
                     logError('ReceiptView: fetchAttendance', appErr);
-                    setAttendance(null);
+                    if (silent) nextAttendance = undefined;
                 } else {
                     const checkin = appData?.worker_checkin_at ?? appData?.company_checkin_confirmed_at ?? null;
                     const checkout = appData?.worker_checkout_at ?? appData?.company_checkout_confirmed_at ?? null;
-                    setAttendance({
+                    nextAttendance = {
                         checkin,
                         checkinSource: appData?.worker_checkin_at ? 'worker' : (appData?.company_checkin_confirmed_at ? 'company' : null),
                         checkout,
                         checkoutSource: appData?.worker_checkout_at ? 'worker' : (appData?.company_checkout_confirmed_at ? 'company' : null),
-                    });
+                    };
                 }
-            } else {
-                setAttendance(null);
             }
+
+            if (!claim()) return;
+            setCurrentUserId(user.id);
+            setReceipt(data);
+            setVoided(nextVoided);
+            if (nextPresence !== undefined) setPresence(nextPresence);
+            if (nextAttendance !== undefined) setAttendance(nextAttendance);
+            setErroCarga(false);
+            if (silent) setLiveVersion((v) => v + 1);
         } catch (error) {
             logError('ReceiptView: fetchReceipt', error);
+            if (silent || !claim()) return;
             // Falha de rede ≠ "recibo não existe / sem permissão" — colapsar os dois faria o
             // freela achar que o pagamento sumiu (dinheiro é o pior lugar para um falso negativo).
             setErroCarga(true);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
+
+    useLiveRefresh({
+        sources: jobId ? jobSources(jobId) : [],
+        onRefresh: () => fetchReceipt({ silent: true }),
+        paused: loading || termBusy || disputing,
+    });
 
     const voltar = () => { if (window.history.length > 1) navigate(-1); else navigate('/recebimentos'); };
 
@@ -265,7 +313,9 @@ export default function ReceiptView() {
             isWorkerViewer={isWorkerViewer}
             isCompanyViewer={isCompanyViewer}
             workerConfirmedAt={payment.worker_confirmed_at ?? null}
-            onConfirmed={fetchReceipt}
+            onConfirmed={() => { void fetchReceipt(); }}
+            onBusyChange={setTermBusy}
+            refreshKey={liveVersion}
             amountMissing={amountMissing}
             onDispute={isWorkerViewer ? () => void handleDispute() : undefined}
             disputing={disputing}
@@ -281,14 +331,19 @@ export default function ReceiptView() {
                 <Button variant="ghost" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />}>
                     Voltar
                 </Button>
-                <Button
-                    variant="secondary"
-                    onClick={() => window.print()}
-                    aria-label="Imprimir recibo"
-                    iconLeft={<Printer size={16} />}
-                >
-                    Imprimir
-                </Button>
+                <div className="flex items-center gap-2">
+                    {/* Aberto direto (link ou recarga), nenhum layout informou o papel. */}
+                    {isWorkerViewer ? <GuideRoleFreela /> : <GuideRoleEmpresa />}
+                    <HelpButton variante="icone" />
+                    <Button
+                        variant="secondary"
+                        onClick={() => window.print()}
+                        aria-label="Imprimir recibo"
+                        iconLeft={<Printer size={16} />}
+                    >
+                        Imprimir
+                    </Button>
+                </div>
             </div>
 
             {needsConfirmation && (
@@ -308,6 +363,7 @@ export default function ReceiptView() {
 
             {/* Recibo */}
             <Card
+                data-copilot-private
                 padding="lg"
                 className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-black"
             >
@@ -400,6 +456,9 @@ export default function ReceiptView() {
                                 </p>
                             </div>
                         </div>
+                    )}
+                    {presence && (
+                        <PresenceBadge checks={presence} departureDone={!!attendance?.checkout} className="mt-3" />
                     )}
                 </div>
 

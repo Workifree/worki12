@@ -3,6 +3,7 @@
  * histórico, URL nem a linha do elemento clicado; por isso o corpo FINAL é reconstruído aqui:
  * só os campos conhecidos, redigidos de novo, e abortado se ainda sobrar padrão de dado pessoal.
  */
+import { devEvalModel } from './evalModel'
 import { containsPII, redactPII } from './redact'
 import type { CopilotRole } from './routes'
 
@@ -63,7 +64,8 @@ export function createCopilotFetch(options: CopilotFetchOptions): typeof fetch {
     return send(options.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await options.getHeaders()) },
-      body: JSON.stringify(body),
+      // `import.meta.env.DEV` é `false` no build: produção nunca envia `eval`.
+      body: JSON.stringify(import.meta.env.DEV ? { ...body, ...devEvalModel() } : body),
       signal: init?.signal,
       credentials: 'omit',
       redirect: 'error',

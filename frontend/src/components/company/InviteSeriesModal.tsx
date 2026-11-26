@@ -239,7 +239,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                             <Alert
                                 tone="warning"
                                 role="alert"
-                                action={<Button variant="secondary" onClick={refreshTeam}>Tentar de novo</Button>}
+                                action={<Button variant="secondary" onClick={() => { void refreshTeam(); }}>Tentar de novo</Button>}
                             >
                                 Não conseguimos carregar o seu elenco.
                             </Alert>

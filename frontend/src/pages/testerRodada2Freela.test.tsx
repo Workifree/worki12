@@ -21,10 +21,11 @@ const mocks = vi.hoisted(() => ({
   claimSlot: vi.fn(),
 }))
 
-vi.mock('../lib/supabase', () => ({ supabase: { auth: { getUser: vi.fn() }, from: vi.fn() } }))
+vi.mock('../lib/supabase', () => ({ supabase: { auth: { getUser: vi.fn() }, from: vi.fn(), rpc: vi.fn() } }))
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
 vi.mock('../components/PageMeta', () => ({ default: () => null }))
 vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'worker-1' } }) }))
 vi.mock('../contexts/NotificationContext', () => ({ useNotifications: () => ({ notifications: [] }) }))
 vi.mock('../services/shiftCallService', () => ({
   ShiftCallService: {
@@ -243,6 +244,9 @@ describe('D-14 — "no turno agora" só com chegada e sem saída', () => {
   })
 
   function renderDashboard(stamps: Record<string, string>) {
+    vi.mocked(supabase.rpc).mockResolvedValue({
+      data: { id: 'worker-1', full_name: 'Freela Teste', roles: [], availability_days: null }, error: null,
+    } as never)
     mockTables({
       workers: () => ({ id: 'worker-1', full_name: 'Freela Teste', roles: [], availability_days: null }),
       applications: () => [applicationRow(stamps)],

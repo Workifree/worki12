@@ -105,6 +105,25 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
   accent-color: #008840;
 }
 
+/* ── Casca (layouts, Sidebar, BottomNav, PwaPrompts) ─────────────────────────────────────────
+   Medidas da casca em UM lugar. Quem posiciona algo fixo (aviso, botão flutuante do copiloto,
+   barra de ação) lê estas variáveis em vez de chutar valores.
+   --worki-side-w   largura da lateral no desktop (recolhida em ícones até 1099px).
+   --worki-header-h altura do cabeçalho do celular (inclui a safe-area do topo).
+   --worki-nav-h    altura da barra inferior (celular; inclui borda e safe-area de baixo).
+   --worki-fab-bottom / --worki-fab-right: SLOT do botão flutuante do copiloto (HelpButton).
+     No celular, `bottom` = acima da barra inferior; no desktop, canto inferior direito.
+     Use `bottom: var(--worki-fab-bottom); right: var(--worki-fab-right)`; o aviso PWA nunca
+     usa o canto direito (fica à esquerda/centro), então os dois não colidem. */
+:root {
+  --worki-side-w: 4.5rem;
+  --worki-fab-right: 0.75rem;
+  --worki-fab-bottom: 1rem;
+}
+@media (min-width: 1100px) {
+  :root { --worki-side-w: 15rem; }
+}
+
 /* Celular: o que rola até ficar visível (foco, âncora, scrollIntoView) não para embaixo do
    cabeçalho, da barra inferior nem do botão flutuante. */
 @media (max-width: 767px) {
@@ -118,6 +137,74 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
   /* Altura ocupada pela barra inferior: a ActionBar gruda logo acima dela. */
   .worki-layout {
     --worki-nav-h: calc(4rem + 2px + env(safe-area-inset-bottom, 0px));
+    --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
+  }
+  :root {
+    --worki-fab-bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+}
+
+/* Rolagem sem "pulo": o fundo atrás do rebote é o canvas (não branco) e, no app instalado,
+   o puxar-para-atualizar do navegador não desloca as barras fixas. */
+html { -webkit-tap-highlight-color: transparent; }
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: none; }
+}
+@media (pointer: coarse) {
+  a, button, summary, [role='button'] { touch-action: manipulation; }
+}
+
+/* Entrada de tela: fade curto com 4px de subida (150ms). Só ao trocar de rota (o layout troca a
+   `key`); movimento reduzido não anima. O estado final não tem transform: sticky e fixed
+   dos filhos seguem normais. */
+@media (prefers-reduced-motion: no-preference) {
+  .worki-page-enter { animation: worki-page-enter 150ms cubic-bezier(0, 0, 0, 1) backwards; }
+}
+@keyframes worki-page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* Avisos PWA (instalar, atualizar, sem internet): pilha FIXA que nunca entra no fluxo, então
+   nada é empurrado nem redimensionado. Celular: acima da barra inferior (e da ActionBar, se
+   houver), centralizada, respeitando a safe-area. Desktop: canto inferior esquerdo da área de
+   conteúdo (ao lado da lateral). z-index 55: acima de barra e lateral (50), abaixo de menu (60),
+   dialog (70) e toast (80). */
+.worki-pwa-stack {
+  position: fixed;
+  z-index: 55;
+  left: 0;
+  right: 0;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding-inline: max(0.75rem, env(safe-area-inset-left, 0px)) max(0.75rem, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.worki-pwa-stack > * { pointer-events: auto; }
+@media (max-width: 767px) {
+  body:has([data-bottom-nav]) .worki-pwa-stack {
+    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+  /* Tela com ActionBar: o convite de instalar espera (não cobre o botão principal); os avisos
+     críticos sobem acima dela. */
+  body:has(.worki-action-bar) .worki-pwa-stack {
+    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 7rem);
+  }
+  body:has(.worki-action-bar) .worki-pwa-install { display: none; }
+}
+@media (min-width: 768px) {
+  .worki-pwa-stack {
+    right: auto;
+    left: 1rem;
+    bottom: 1rem;
+    width: min(26rem, calc(100vw - 2rem));
+    padding-inline: 0;
+  }
+  body:has(aside[aria-label='Menu lateral']) .worki-pwa-stack {
+    left: calc(max(0px, (100vw - 80rem) / 2) + var(--worki-side-w) + 3rem);
+    width: min(26rem, calc(100vw - var(--worki-side-w) - 4rem));
   }
 }
 
@@ -131,11 +218,11 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
 }
 
 /* Chat: ocupa exatamente o que sobra da tela, para o campo e o Enviar ficarem sempre visíveis.
-   Celular: cabeçalho (3.5rem) + respiro do topo + barra inferior (4rem + borda + safe-area) +
-   folga de 0.5rem + faixa offline (altura publicada pelo PwaPrompts). */
+   Celular: cabeçalho (3.5rem + safe-area do topo) + respiro do topo + barra inferior (4rem +
+   borda + safe-area) + folga de 0.5rem. Os avisos PWA são fixos e não entram na conta. */
 .worki-chat {
   --chat-top: 1rem;
-  --chat-chrome: calc(3.5rem + var(--chat-top) + 4.5rem + 2px + env(safe-area-inset-bottom, 0px) + var(--worki-offline-h, 0px));
+  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 2px + env(safe-area-inset-bottom, 0px));
   height: calc(100vh - var(--chat-chrome));
   height: calc(100dvh - var(--chat-chrome));
   min-height: 14rem;
@@ -149,7 +236,7 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
   }
 }
 @media (min-width: 768px) {
-  .worki-chat { --chat-chrome: calc(4rem + var(--worki-offline-h, 0px)); }
+  .worki-chat { --chat-chrome: 4rem; }
 }
 .worki-layout:has(.worki-chat) { min-height: 0; }
 

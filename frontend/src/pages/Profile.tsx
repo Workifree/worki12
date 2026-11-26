@@ -24,6 +24,10 @@ import ErroDeCarga from '../components/ErroDeCarga';
 import { Dialog } from '../components/ui/Dialog';
 import { roleLabel } from '../lib/statusLabels';
 import { formatWorkedTime } from '../lib/currency';
+import { getMyWorkerProfile, setMyWorkerIdentity } from '../services/workerIdentityService';
+import { isAvisosEnabled } from '../lib/features';
+import { leaveDevice } from '../lib/leaveDevice';
+import PreferenciasDeAvisos from '../components/avisos/PreferenciasDeAvisos';
 
 // F7 — grade de disponibilidade: dia (0=domingo..6=sábado, mesma convenção de `job_series.weekdays`)
 // × período. Vive em estado PRÓPRIO (fora de `FormData`) porque não é texto — é a mesma estrutura
@@ -298,11 +302,7 @@ export default function Profile() {
 
             setWorkerId(user.id);
 
-            const { data, error } = await supabase
-                .from('workers')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            const { data, error } = await getMyWorkerProfile(user.id);
 
             if (error) {
                 logError('Error fetching profile:', error);
@@ -517,6 +517,32 @@ export default function Profile() {
             // Estado proprio: reusar o `loading` da pagina trocava o formulario inteiro pelo
             // skeleton durante o request — parecia recarga/perda do que foi digitado (N1).
             setSalvando(true);
+
+            // CPF vai pela RPC (a trava "só se vazio" é do servidor). Sem a RPC no banco, segue no
+            // UPDATE abaixo, como antes. Recusa interrompe o salvamento inteiro.
+            const cpfNovo = !cpfJaCadastrado && cpfValido ? cpfDigitado : null;
+            let cpfNoUpdate = false;
+            if (cpfNovo) {
+                const { outcome } = await setMyWorkerIdentity({ cpf: cpfNovo });
+                if (outcome === 'unavailable') {
+                    cpfNoUpdate = true;
+                } else if (outcome === 'cpf_locked') {
+                    addToast('Já existe um CPF no seu cadastro e ele não muda por aqui. Nada foi salvo.', 'error');
+                    setIsEditing(false);
+                    setLoading(true);
+                    setReloadKey((k) => k + 1);
+                    return;
+                } else if (outcome === 'invalid_cpf') {
+                    addToast('CPF inválido. Confira os números e salve de novo.', 'error');
+                    return;
+                } else if (outcome === 'anonymized') {
+                    addToast('Esta conta foi excluída e não aceita alterações.', 'error');
+                    return;
+                } else if (outcome !== 'saved' && outcome !== 'birth_date_locked') {
+                    throw new Error(`set_my_worker_identity: ${outcome}`);
+                }
+            }
+
             const rolesArray = formData.roles.split(',').map(r => r.trim()).filter(r => r.length > 0);
 
             // F7 — `normalizeAvailabilityGrade` poda dias sem período e devolve `null` (SQL NULL)
@@ -529,7 +555,7 @@ export default function Profile() {
                 bio: formData.bio,
                 pix_key: normalizePixKeyForStorage(pixKeyType, formData.pix_key),
                 // Só entra no payload quando ainda não havia CPF — nunca sobrescreve um já gravado.
-                ...(!cpfJaCadastrado && cpfValido ? { cpf: cpfDigitado } : {}),
+                ...(cpfNoUpdate && cpfNovo ? { cpf: cpfNovo } : {}),
                 primary_role: formData.primary_role,
                 roles: rolesArray,
                 availability_days: normalizeAvailabilityGrade(availabilityGrade),
@@ -549,7 +575,7 @@ export default function Profile() {
                 throw new Error('Não foi possível salvar o perfil: verifique se você ainda tem permissão para editar.');
             }
 
-            setProfile({ ...profile, ...updates });
+            setProfile({ ...profile, ...updates, ...(cpfNovo ? { cpf: cpfNovo } : {}) });
             initialFormDataRef.current = { ...formData };
             // F7 — a grade em edição vira o novo "baseline" (não o valor normalizado gravado:
             // `{}` local continua representando "nada marcado" na UI de edição; a poda para
@@ -603,6 +629,8 @@ export default function Profile() {
         if (loggingOut) return;
         setLoggingOut(true);
         try {
+            // Aparelho compartilhado não pode seguir recebendo avisos de quem saiu.
+            await leaveDevice();
             await signOut();
             navigate('/login');
         } catch (error) {
@@ -629,6 +657,7 @@ export default function Profile() {
             setDeleting(false);
             return;
         }
+        await leaveDevice();
         await supabase.auth.signOut();
         navigate('/login');
     };
@@ -699,7 +728,7 @@ export default function Profile() {
                             aria-label="Trocar foto de perfil"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                            className="absolute -bottom-1 -right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                            className="absolute -bottom-1 -right-1 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-white text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Camera size={16} />
                         </button>
@@ -929,6 +958,7 @@ export default function Profile() {
                         </Field>
                         <Field label="Telefone">
                             <input
+                                data-copilot-private
                                 id="perfil-campo-telefone"
                                 type="tel"
                                 value={formData.phone}
@@ -940,7 +970,7 @@ export default function Profile() {
 
                         {/* CPF — exigido pelo termo de prestação (F6). Editável só enquanto vazio. */}
                         {cpfJaCadastrado ? (
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5" data-copilot-private>
                                 <span className="text-sm font-bold text-black">CPF</span>
                                 <p className="flex h-11 items-center rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-sm text-gray-700">
                                     {formatCpfCnpj(String(profile.cpf))}
@@ -957,6 +987,7 @@ export default function Profile() {
                                 hint="Necessário para assinar o termo do turno. Confira bem: depois de salvo, não dá para alterar por aqui."
                             >
                                 <input
+                                    data-copilot-private
                                     id="perfil-campo-cpf"
                                     type="text"
                                     inputMode="numeric"
@@ -990,6 +1021,7 @@ export default function Profile() {
                             hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
                         >
                             <input
+                                data-copilot-private
                                 id="perfil-campo-pix"
                                 type="text"
                                 value={formData.pix_key}
@@ -1050,7 +1082,7 @@ export default function Profile() {
                     </div>
                 ) : (
                     <div className="mt-5 space-y-6">
-                        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <dl data-copilot-private className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                             <DataRow label="Telefone">{profile.phone || 'Não informado'}</DataRow>
                             <DataRow label="Chave PIX">{profile.pix_key || 'Não informada'}</DataRow>
                             <DataRow label="CPF">
@@ -1194,6 +1226,8 @@ export default function Profile() {
                     <ProfileReviews reviewedId={workerId} reviewerRole="company" />
                 </ProfileSection>
             )}
+
+            {isAvisosEnabled() && <PreferenciasDeAvisos />}
 
             {/* PREFERÊNCIAS — cada bloco é um opt-in/opt-out independente (F10, F11, F12). */}
             <ProfileSection title="Preferências e privacidade">
@@ -1370,7 +1404,7 @@ export default function Profile() {
                     <p className="mb-5 text-sm text-gray-600">
                         Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu código.
                     </p>
-                    <div className="mb-5 flex justify-center">
+                    <div className="mb-5 flex justify-center" data-copilot-private>
                         <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <QRCodeSVG
                                 value={workerId}
@@ -1380,7 +1414,7 @@ export default function Profile() {
                             />
                         </div>
                     </div>
-                    <div className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
+                    <div data-copilot-private className="rounded-xl border-2 border-gray-200 bg-gray-50 p-3 text-center">
                         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-600">Seu código</p>
                         <p className="break-all font-mono text-xs font-bold text-gray-700">{workerId}</p>
                     </div>

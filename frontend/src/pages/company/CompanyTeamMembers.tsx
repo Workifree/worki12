@@ -10,6 +10,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { notificationSources } from '../../lib/realtime/liveSources';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -109,17 +114,29 @@ export default function CompanyTeamMembers() {
   const [linkRotationPending, setLinkRotationPending] = useState(false);
   const [rotating, setRotating] = useState(false);
 
-  const reload = useCallback(async (id: string): Promise<TeamMemberItem[]> => {
+  const beginMembers = useLatestResponse();
+  const reload = useCallback(async (id: string, silent = false): Promise<TeamMemberItem[]> => {
+    const claim = beginMembers();
     const result = await listMembers(id);
     if (result.outcome !== 'ok') {
-      setLoadError(true);
+      if (!silent && claim()) setLoadError(true);
       return [];
     }
+    if (!claim()) return result.items;
     setLoadError(false);
     setMembers(result.items);
     setLinkRotationPending(result.elencoLinkRotationPending === true);
     return result.items;
-  }, []);
+  }, [beginMembers]);
+
+  // `company_members` não é publicada: "Fulano entrou. É ele?" chega pela notificação do Gestor.
+  const { user } = useAuth();
+  const dialogOpen = useAnyDialogOpen();
+  useLiveRefresh({
+    sources: user && companyId ? notificationSources(user.id) : [],
+    onRefresh: () => (companyId ? reload(companyId, true) : undefined),
+    paused: loading || dialogOpen || inviteOpen || inviting || !!busyId || removeBusy || confirmBusy || rotating,
+  });
 
   /** Resolve a empresa pelo seam e carrega a equipe. */
   const loadAll = useCallback(async (): Promise<void> => {
@@ -621,6 +638,7 @@ export default function CompanyTeamMembers() {
                   hint="Só para abrir a conversa certa. Não fica guardado."
                 >
                   <input
+                    data-copilot-private
                     type="tel"
                     name="invitee-phone"
                     inputMode="tel"
@@ -656,7 +674,7 @@ export default function CompanyTeamMembers() {
                 <p className="text-sm text-gray-700">
                   Envie o link para <strong>{share.displayName}</strong>. O link vale por 14 dias e é só dessa pessoa.
                 </p>
-                <p className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
+                <p data-copilot-private className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
                   {shareLink}
                 </p>
                 <Button variant="dark" size="lg" fullWidth onClick={openWhatsApp} iconLeft={<MessageCircle size={18} />}>

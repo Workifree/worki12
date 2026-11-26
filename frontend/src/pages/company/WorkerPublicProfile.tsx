@@ -406,7 +406,7 @@ export default function WorkerPublicProfile() {
                         registrado no Worki), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
-                    <div className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                    <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
                         <h3 className="font-bold text-gray-800 text-sm mb-3">Contato e pagamento</h3>
                         {hasTeamConnection ? (
                             <div className="space-y-3">

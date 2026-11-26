@@ -8,7 +8,7 @@
  *  - select: setter nativo (a primitiva original atribui `value` e o React ignora a mudança);
  *  - JavaScript arbitrário: não existe.
  */
-import { PageController, clickElement, inputTextElement, scrollVertically } from '@page-agent/page-controller'
+import { PageController, clickElement, scrollVertically } from '@page-agent/page-controller'
 import { accessibleName, headingOf, isDisplayed, topModal } from './dom'
 import type { ActionGuard } from './guard'
 import { writeLog } from './log'
@@ -72,6 +72,14 @@ function formFields(el: Element): ConfirmCard['fields'] {
     })
 }
 
+/** Em botão de liga/desliga o cartão diz o EFEITO, não só o toque. */
+function verboDe(el: Element): string {
+  const pressed = el.getAttribute('aria-pressed')
+  if (pressed === 'true') return 'Desmarcar (hoje está marcado)'
+  if (pressed === 'false') return 'Marcar (hoje está desmarcado)'
+  return `Tocar ${tipoDe(el)}`
+}
+
 export class GuardedPageController extends PageController {
   private readonly deps: ControllerDeps
   private observation: Observation | null = null
@@ -129,8 +137,11 @@ export class GuardedPageController extends PageController {
   override async scroll(options: { down: boolean; numPages: number; pixels?: number; index?: number }): Promise<ActionResult> {
     const element = options.index === undefined ? null : (this.observation?.elements.get(options.index)?.element ?? null)
     const pixels = (options.pixels ?? options.numPages * window.innerHeight) * (options.down ? 1 : -1)
+    await this.deps.ui.scrolled?.(options.down, this.deps.signal)
+    if (this.deps.signal.aborted) return fail('Tarefa interrompida.')
     await scrollVertically(pixels, element)
-    return ok('Rolei a tela.')
+    // Sem este aviso, modelos rolam em laço esperando itens novos.
+    return ok('Rolei. A leitura já traz a tela INTEIRA: rolar não revela itens novos. Não role de novo; toque, destaque ou responda.')
   }
 
   elementFor(index: number): ObservedElement | null {
@@ -220,7 +231,7 @@ export class GuardedPageController extends PageController {
     if (verdict.level === 'confirm') {
       confirmed = await this.askConfirmation(element, {
         screen: screenName(window.location.pathname),
-        action: `Tocar ${tipoDe(element)} "${localName(element)}"${
+        action: `${verboDe(element)} "${localName(element)}"${
           element.closest('dialog') ? ` da janela "${headingOf(element.closest('dialog')!).slice(0, 80)}"` : ''
         }`,
         reason: verdict.reason,
@@ -233,8 +244,11 @@ export class GuardedPageController extends PageController {
       }
       writeLog('confirmado', `Você confirmou: ${safeLabel}`)
     }
+    // O ponteiro chega ao alvo (só imagem) e a tela pode mudar enquanto isso: confere de novo.
+    await this.deps.ui.actOn?.({ element, kind: 'click' }, this.deps.signal)
     const stillHalted = this.halted()
     if (stillHalted) return stillHalted
+    if (fingerprintOf(element) !== entry.fingerprint || !element.isConnected) return fail('A tela mudou. Nada foi feito.')
     // Reclassifica no último instante.
     const last = classifyClick(element)
     if (last.level === 'forbidden') return this.handoff(element, safeLabel, last.reason)
@@ -270,7 +284,21 @@ export class GuardedPageController extends PageController {
       return this.waitShowMe(element, 'type', `Preencha "${localName(element)}" com: ${text.slice(0, 200)}`)
     }
     const field = element as HTMLInputElement
-    const clean = await this.guarded(element, false, () => inputTextElement(element, text))
+    await this.deps.ui.actOn?.({ element, kind: 'type', text }, this.deps.signal)
+    const interrupted = this.halted()
+    if (interrupted) return interrupted
+    if (fingerprintOf(element) !== entry.fingerprint || !element.isConnected) return fail('A tela mudou. Nada foi feito.')
+    // Não usa `inputTextElement`: ele espera cerca de 0,4 s e escreve pelo setter nativo mesmo
+    // depois do PARAR (setter não é evento, e `input` é passivo para a guarda).
+    const clean = await this.guarded(element, false, async () => {
+      await clickElement(element)
+      if (this.deps.signal.aborted) return
+      // Conferência e escrita sem nenhum `await` no meio.
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')!.set!.call(field, text)
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const stopped = this.halted()
+    if (stopped) return stopped
     if (!clean) {
       this.deps.stop('blocked')
       return fail('A trava de segurança barrou esse preenchimento.')
@@ -319,6 +347,10 @@ export class GuardedPageController extends PageController {
         return fail('A pessoa não confirmou. Nada foi feito.')
       }
     }
+    await this.deps.ui.actOn?.({ element, kind: 'select' }, this.deps.signal)
+    const interrupted = this.halted()
+    if (interrupted) return interrupted
+    if (fingerprintOf(element) !== entry.fingerprint || !element.isConnected) return fail('A tela mudou. Nada foi feito.')
     const clean = await this.guarded(element, false, async () => {
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value')!.set!
       setter.call(select, option.value)

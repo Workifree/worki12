@@ -74,12 +74,27 @@ BEGIN
         'FOR EACH ROW EXECUTE FUNCTION public.profile_trust_guard(%L, %L)', v_cols::text, v_args[2]);
 END $$;
 
--- 2. Turno: local da mesma empresa; modo e local congelam depois do primeiro carimbo.
+-- 2. Turno: local da mesma empresa; AFROUXAR a politica so o Gestor; modo, local e tipo de QR
+--    congelam depois do primeiro carimbo. Trigger de linha: vale para UPDATE direto, em lote e por
+--    RPC (a sessao e lida por auth.uid(); sessao nula = servidor).
 CREATE OR REPLACE FUNCTION public.jobs_presence_policy_guard()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        IF (NEW.presence_mode IS DISTINCT FROM OLD.presence_mode OR NEW.site_id IS DISTINCT FROM OLD.site_id)
+        IF (SELECT auth.uid()) IS NOT NULL
+           AND ((OLD.presence_mode = 'qr_gps' AND NEW.presence_mode IS DISTINCT FROM 'qr_gps')
+                OR (OLD.qr_mode = 'rotating' AND NEW.qr_mode IS DISTINCT FROM 'rotating')
+                OR ((OLD.presence_mode = 'qr_gps' OR OLD.site_id IS NOT NULL)
+                    AND NEW.site_id IS DISTINCT FROM OLD.site_id)
+                OR NEW.company_id IS DISTINCT FROM OLD.company_id)
+           AND NOT COALESCE(public.is_company_owner(OLD.company_id), false)
+        THEN
+            RAISE EXCEPTION 'jobs_presence_policy: so o Gestor pode afrouxar a confirmacao de presenca ou trocar o local.'
+                USING ERRCODE = '42501';
+        END IF;
+
+        IF (NEW.presence_mode IS DISTINCT FROM OLD.presence_mode OR NEW.site_id IS DISTINCT FROM OLD.site_id
+            OR NEW.qr_mode IS DISTINCT FROM OLD.qr_mode)
            AND EXISTS (SELECT 1 FROM public.applications a
                         WHERE a.job_id = OLD.id
                           AND (a.worker_checkin_at IS NOT NULL OR a.worker_checkout_at IS NOT NULL
@@ -108,7 +123,7 @@ $$;
 REVOKE ALL ON FUNCTION public.jobs_presence_policy_guard() FROM PUBLIC, anon, authenticated;
 DROP TRIGGER IF EXISTS trg_jobs_presence_policy ON public.jobs;
 CREATE TRIGGER trg_jobs_presence_policy
-    BEFORE INSERT OR UPDATE OF presence_mode, site_id, company_id ON public.jobs
+    BEFORE INSERT OR UPDATE OF presence_mode, site_id, qr_mode, company_id ON public.jobs
     FOR EACH ROW EXECUTE FUNCTION public.jobs_presence_policy_guard();
 
 CREATE OR REPLACE FUNCTION public.companies_presence_default_guard()

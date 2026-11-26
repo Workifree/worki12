@@ -215,8 +215,8 @@ export default function MyCertificationsSection() {
 
   return (
     <Card>
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <h3 className="text-lg font-bold flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h3 className="text-lg font-bold flex items-center gap-2 min-w-0">
           <Award size={20} aria-hidden="true" /> Minhas Certificações
         </h3>
         {/* Com a lista vazia, a ação primária é a do estado vazio (abaixo) — não duplicar. */}
@@ -253,7 +253,7 @@ export default function MyCertificationsSection() {
       )}
 
       {!loading && certifications.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3" data-copilot-private>
           {certifications.map((cert) => {
             const expired = isCertificationExpired(cert.expires_at);
             const verified = !!cert.verified_by_company_id && !!cert.verified_at;
@@ -345,7 +345,7 @@ export default function MyCertificationsSection() {
             </div>
 
             {!pendingLossConfirm ? (
-              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+              <form data-copilot-private onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
                 <Field label="Título *">
                   <input
                     id="cert-title"

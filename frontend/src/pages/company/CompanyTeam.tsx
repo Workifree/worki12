@@ -19,6 +19,9 @@ import type { WorkerHistoryWithCompany } from '../../components/team/types';
 import { DialogActions, Alert, Button, Card, PageHeader } from '../../components/ui';
 import SectionTabs from '../../components/SectionTabs';
 import { Dialog } from '../../components/ui/Dialog';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { companyTeamSources } from '../../lib/realtime/liveSources';
 
 // ---------------------------------------------------------------------------
 // Página principal: CompanyTeam
@@ -61,6 +64,13 @@ export default function CompanyTeam() {
   const [editingList, setEditingList] = useState<TeamListWithMembers | null>(null);
   const [deletingList, setDeletingList] = useState<TeamListWithMembers | null>(null);
   const [isDeletingList, setIsDeletingList] = useState(false);
+
+  const dialogOpen = useAnyDialogOpen();
+  useLiveRefresh({
+    sources: companyId ? companyTeamSources(companyId) : [],
+    onRefresh: () => refresh({ silent: true }),
+    paused: loading || dialogOpen || showAddModal || isDeleting || isDeletingList,
+  });
 
   const refreshLists = useCallback(async () => {
     setLoadingLists(true);
@@ -203,7 +213,7 @@ export default function CompanyTeam() {
   if (erroCarga && teamMembers.length === 0 && pendingConnections.length === 0) {
     return (
       <div className="max-w-4xl mx-auto pb-20">
-        <ErroDeCarga onRetry={refresh} />
+        <ErroDeCarga onRetry={() => { void refresh(); }} />
       </div>
     );
   }
@@ -258,7 +268,7 @@ export default function CompanyTeam() {
           tone="warning"
           role="alert"
           className="mb-4"
-          action={<Button variant="secondary" onClick={refresh}>Tentar de novo</Button>}
+          action={<Button variant="secondary" onClick={() => { void refresh(); }}>Tentar de novo</Button>}
         >
           Não conseguimos atualizar o elenco. O que está abaixo pode estar desatualizado.
         </Alert>
@@ -288,7 +298,7 @@ export default function CompanyTeam() {
                 onInvite={(m) => setInvitingMember(m)}
                 history={historyByWorker[member.worker.id]}
                 historyUnavailable={historyError}
-                historyLoading={historyLoadedFor !== teamMembers}
+                historyLoading={!historyLoadedFor?.some((m) => m.worker.id === member.worker.id)}
               />
             ))}
           </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Alert, Button, Card, Field } from '../ui';
-import { EXCEPTION_REASONS, NOTE_MAX, kindLabel, presenceMessage } from '../../lib/presence';
+import { EXCEPTION_REASONS, kindLabel, presenceMessage } from '../../lib/presence';
 import type { PresenceExceptionReason, PresenceKind } from '../../lib/presence';
 import { recordPresenceException, registerDepartureUnverified } from '../../services/presenceService';
 
@@ -19,7 +19,6 @@ export function PresenceExceptionPanel({
     applicationId, kind, workerName, requestedReason, onDecided,
 }: PresenceExceptionPanelProps) {
     const [reason, setReason] = useState<PresenceExceptionReason | ''>(requestedReason ?? '');
-    const [note, setNote] = useState('');
     const [reasonError, setReasonError] = useState<string>();
     const [failure, setFailure] = useState<string | null>(null);
     const [busy, setBusy] = useState<'confirm' | 'unverified' | null>(null);
@@ -38,7 +37,7 @@ export function PresenceExceptionPanel({
         }
         setBusy('confirm');
         setFailure(null);
-        const result = await recordPresenceException(applicationId, kind, reason, note);
+        const result = await recordPresenceException(applicationId, kind, reason);
         finish(result.outcome, 'recorded');
     };
 
@@ -74,9 +73,6 @@ export function PresenceExceptionPanel({
                             <option key={value} value={value}>{label}</option>
                         ))}
                     </select>
-                </Field>
-                <Field label="Observação (opcional)" hint="O freela pode ler. Não escreva dados de saúde nem documentos.">
-                    <input value={note} maxLength={NOTE_MAX} onChange={(e) => setNote(e.target.value)} />
                 </Field>
                 {failure && <Alert tone="danger" role="alert">{failure}</Alert>}
                 <Button type="submit" variant="dark" fullWidth loading={busy === 'confirm'} disabled={busy !== null}>

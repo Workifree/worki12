@@ -7,6 +7,7 @@ import { useTopDialogElement } from '../../hooks/useModalDismiss';
 import { useGuideTarget } from '../../hooks/useGuideTarget';
 import { posicionarBalao } from '../../lib/guide/alvo';
 import { alvoEhRiscoD } from '../../lib/guide/api';
+import { TOS_GATE_SELECTOR } from '../../lib/copilot/dom';
 import { ROTAS, estaNaRota, type RotaId } from '../../lib/guide/rotas';
 import type { PassoAtivo } from '../../lib/guide/tipos';
 
@@ -98,7 +99,7 @@ export function GuideSpotlight({
     }, [resumo, no]);
 
     // Os Termos são um aceite obrigatório: o guia some enquanto estiverem na tela.
-    if (modal?.querySelector('[data-testid="tos-gate-modal"]')) return null;
+    if (modal?.querySelector(TOS_GATE_SELECTOR)) return null;
 
     const aoTeclar = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Escape') return;
@@ -114,12 +115,15 @@ export function GuideSpotlight({
             : rota.partirDe && !estaNaRota(pathname, rota.partirDe) ? rota.partirDe : undefined
         : undefined;
     const posicao = posicionarBalao(naRota ? area : null, tela);
+    // Alvo fora da janela (ainda rolando até ele) ou sem tamanho: escurecer a tela sem recorte nenhum
+    // deixa a pessoa no escuro. Sem recorte visível, não há escurecimento.
+    const recorteVisivel = !!area && area.width > 0 && area.bottom > area.top && area.bottom > 0 && area.top < tela.altura;
 
     return createPortal(
         <div ref={camada} data-guide="camada" className={CAMADA}>
             <p className="sr-only" aria-live="polite">{anuncio}</p>
 
-            {naRota && area && !pausado && (
+            {naRota && area && recorteVisivel && !pausado && (
                 <div
                     aria-hidden="true"
                     data-guide="destaque"

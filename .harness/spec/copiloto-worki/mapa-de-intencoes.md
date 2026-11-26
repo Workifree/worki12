@@ -17,6 +17,20 @@ Outro agente edita a UI agora: as linhas de `pages/` e `components/` podem deslo
 | **C** | executar com confirmação | reversível de verdade, sem terceiro prejudicado |
 | **D** | só guiar e destacar | dinheiro ou registro de pagamento, excluir ou cancelar vínculo, remover/bloquear, Termos, aceitar/recusar convite ou consentimento, senha/CPF/PIX, acesso, prova de presença |
 
+> **Como a spec virou código (26/11/2026, `lib/copilot/risk.ts` + `guardedController.ts`).** O executor não tem quatro
+> classes: tem quatro VEREDITOS, decididos pelo código sobre o elemento real, nunca pelo modelo.
+>
+> | Classe da spec | Veredito no código | O que acontece |
+> |---|---|---|
+> | A | `safe` | executa (link permitido, aba, abrir menu, focar campo, item marcado `data-copilot-risk="A"`) |
+> | B e C | `confirm` | executa SÓ depois do cartão de confirmação montado pelo código (ação, tela e campos reais do formulário). **A classe B virou `confirm`**: preencher sem enviar e executar com confirmação usam o mesmo cartão, e o desconhecido cai aqui (falha para o lado fechado) |
+> | D | `forbidden` | **só entrega e destaca**: o item é destacado, a tarefa termina e a pessoa toca. Nunca executa, nem com cartão |
+> | (fora da spec) | `blocked` | nem destaca (interface do copiloto, área privada, link externo ou proibido) |
+>
+> Consequência declarada: um formulário desconhecido é `confirm` (executa após o cartão), não `forbidden`. O botão
+> "enviar" não mudou de comportamento nesta rodada; endurecer "enviar" para a classe B original (a pessoa toca no
+> botão final) é uma decisão separada, ainda aberta.
+
 Abreviações: `SIS` shiftInviteService, `SCS` shiftCallService, `PRS` paymentRecordService, `TCS` teamConnectionService,
 `SOS_` sosService, `TMS` teamMembersService, `SOP` shiftOperationService, `TLS` teamListService, `JSS` jobSeriesService,
 `REF` referralService, `CERT` certificationService, `ATT` attendanceConfirmationService (todos em `services/*.ts`).

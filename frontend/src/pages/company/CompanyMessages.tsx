@@ -12,6 +12,10 @@ import { fillMissingWorkers } from '../../services/workerCardsService';
 import { Button, PageHeader } from '../../components/ui'
 import ErroDeCarga from '../../components/ErroDeCarga'
 import { checkSession } from '../../lib/authSession'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { conversationListSources } from '../../lib/realtime/liveSources';
+import { mergeMessages } from '../../lib/mergeMessages';
 import { activeShiftLabel, type ShiftAttendanceLike } from '../../lib/shiftProgress'
 import { TONE_CLASS, getStatus, statusLabel } from '../../lib/statusLabels';
 
@@ -94,11 +98,20 @@ export default function CompanyMessages() {
             : c)));
     };
 
+    // Quem subiu para ler o histórico não é puxado para o fim quando chega algo.
+    const stickToEndRef = useRef(true);
     // Scroll to bottom when messages change
     useEffect(() => {
         const log = logRef.current;
-        if (log) log.scrollTop = log.scrollHeight;
+        if (log && (stickToEndRef.current || messages[messages.length - 1]?.is_mine)) log.scrollTop = log.scrollHeight;
     }, [messages]);
+
+    const openId = selectedConversation?.id ?? null;
+    useEffect(() => {
+        stickToEndRef.current = true;
+    }, [openId]);
+
+    const beginList = useLatestResponse();
 
     const falharCarga = (contexto: string, causa: unknown) => {
         logError(contexto, causa);
@@ -106,10 +119,14 @@ export default function CompanyMessages() {
         setLoading(false);
     };
 
-    const loadData = async () => {
+    // `silent` = recarga ao vivo: falha mantém a tela e a conversa não é reescolhida pela URL.
+    const loadData = async (silent = false) => {
+        const claim = beginList();
+        const falhar = (contexto: string, causa: unknown) =>
+            silent ? logError(contexto, causa) : falharCarga(contexto, causa);
         const session = await checkSession();
-        if (session.status === 'signed_out') return navigate('/login');
-        if (session.status === 'unavailable') return falharCarga('CompanyMessages.session', session.error);
+        if (session.status === 'signed_out') return silent ? undefined : navigate('/login');
+        if (session.status === 'unavailable') return falhar('CompanyMessages.session', session.error);
         const user = session.user;
         setCurrentUser(user.id);
 
@@ -119,7 +136,7 @@ export default function CompanyMessages() {
         try {
             operadas = await getMyCompanies();
         } catch (causa) {
-            return falharCarga('CompanyMessages.companies', causa);
+            return falhar('CompanyMessages.companies', causa);
         }
         const companyIds = new Set(operadas.map(c => c.company_id));
         companyIds.add(user.id); // dono cujo company_id E o proprio uid
@@ -153,8 +170,8 @@ export default function CompanyMessages() {
             `)
             .order('createdat', { ascending: false });
 
-        if (error) return falharCarga('SUPABASE ERROR fetching conversations:', error);
-        setErroCarga(false);
+        if (error) return falhar('SUPABASE ERROR fetching conversations:', error);
+        if (!silent) setErroCarga(false);
 
         // Filter to only show conversations for jobs belonging to any of the user's companies
         interface ConversationData {
@@ -207,7 +224,7 @@ export default function CompanyMessages() {
                 .neq('senderid', user.id) // Messages sent by OTHERS (workers)
                 .is('read_at', null);     // That are NOT read
 
-            if (unreadError) return falharCarga('CompanyMessages.unread', unreadError);
+            if (unreadError) return falhar('CompanyMessages.unread', unreadError);
 
             if (unreadData) {
                 unreadCounts = unreadData.reduce((acc: Record<string, number>, curr) => {
@@ -227,7 +244,7 @@ export default function CompanyMessages() {
                 .in('conversationid', conversationIds)
                 .order('createdat', { ascending: false })
                 .limit(PREVIEW_LIMIT);
-            if (previewError) return falharCarga('CompanyMessages.preview', previewError);
+            if (previewError) return falhar('CompanyMessages.preview', previewError);
             const rows = (previewData ?? []) as Array<{ conversationid: string; content: string; senderid: string; createdat: string }>;
             previewsComplete = rows.length < PREVIEW_LIMIT;
             for (const row of rows) {
@@ -250,6 +267,16 @@ export default function CompanyMessages() {
             no_messages: previewsComplete && !latest.has(c.id),
             unread_count: unreadCounts[c.id] || 0
         }));
+
+        if (!claim()) return;
+
+        if (silent) {
+            const open = openConversationRef.current;
+            setErroCarga(false);
+            setConversations(sortConversations(convList.map(c => (c.id === open ? { ...c, unread_count: 0 } : c))));
+            setSelectedConversation(prev => (prev ? convList.find(c => c.id === prev.id) ?? prev : prev));
+            return;
+        }
 
         setConversations(sortConversations(convList));
 
@@ -290,26 +317,32 @@ export default function CompanyMessages() {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData usa state setters estaveis, deps cobrem triggers de refresh
     }, [navigate, selectedConversationId, refreshTrigger]);
 
-    // Realtime subscription for list updates
-    useEffect(() => {
-        const channel = supabase
-            .channel('company_conversations_list')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'Conversation'
-            }, () => {
-                setRefreshTrigger(prev => prev + 1);
-            })
-            .subscribe();
+    // Recupera o que o canal da conversa aberta possa ter perdido, mesclando por id.
+    const recoverMessages = async () => {
+        if (!openId || !currentUser || messagesFor !== openId) return;
+        const { data, error } = await supabase
+            .from('Message')
+            .select('*')
+            .eq('conversationid', openId)
+            .order('createdat', { ascending: true });
+        if (error) {
+            logError('CompanyMessages.recover', error);
+            return;
+        }
+        if (openConversationRef.current !== openId) return;
+        const rows = ((data || []) as Omit<Message, 'is_mine'>[]).map(m => ({ ...m, is_mine: m.senderid === currentUser }));
+        setMessages(prev => mergeMessages(prev, rows));
+        if (rows.some(m => !m.is_mine && !m.read_at)) void markAsRead(openId, currentUser);
+    };
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
+    useLiveRefresh({
+        sources: conversationListSources(),
+        onRefresh: () => Promise.all([loadData(true), recoverMessages()]),
+        paused: loading,
+    });
 
     useEffect(() => {
-        if (!selectedConversation) return;
+        if (!openId) return;
 
         setErroMensagens(false);
         setMessages([]);
@@ -319,7 +352,7 @@ export default function CompanyMessages() {
             const { data, error } = await supabase
                 .from('Message')
                 .select('*')
-                .eq('conversationid', selectedConversation.id)
+                .eq('conversationid', openId)
                 .order('createdat', { ascending: true });
 
             if (error) {
@@ -332,27 +365,27 @@ export default function CompanyMessages() {
                 ...m,
                 is_mine: m.senderid === currentUser
             })));
-            setMessagesFor(selectedConversation.id);
+            setMessagesFor(openId);
 
             // Mark as read when opening
             if (currentUser) {
-                markAsRead(selectedConversation.id, currentUser);
+                markAsRead(openId, currentUser);
             }
         };
 
         loadMessages();
 
         const channel = supabase
-            .channel(`company-messages:${selectedConversation.id}`)
+            .channel(`company-messages:${openId}`)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'Message',
-                filter: `conversationid=eq.${selectedConversation.id}`
+                filter: `conversationid=eq.${openId}`
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
-                updatePreview(selectedConversation.id, newMsg.content, newMsg.createdat, isMine);
+                updatePreview(openId, newMsg.content, newMsg.createdat, isMine);
 
                 setMessages(prev => prev.some(m => m.id === newMsg.id)
                     ? prev
@@ -360,13 +393,13 @@ export default function CompanyMessages() {
 
                 // If I am viewing this and it's not mine, mark as read immediately
                 if (!isMine && currentUser) {
-                    markAsRead(selectedConversation.id, currentUser);
+                    markAsRead(openId, currentUser);
                 }
             })
             .subscribe();
 
         // Presence channel for typing indicator
-        const pChannel = supabase.channel(`typing:${selectedConversation.id}`)
+        const pChannel = supabase.channel(`typing:${openId}`)
         pChannel
             .on('presence', { event: 'sync' }, () => {
                 const state = pChannel.presenceState();
@@ -386,7 +419,8 @@ export default function CompanyMessages() {
             supabase.removeChannel(channel);
             pChannel.unsubscribe();
         };
-    }, [selectedConversation, currentUser, messagesAttempt]);
+        // Pelo id: reler a lista troca o objeto da conversa sem recarregar (nem piscar) o histórico.
+    }, [openId, currentUser, messagesAttempt]);
 
     const handleSendMessage = async () => {
         if (sendingRef.current || !newMessage.trim() || !selectedConversation || !currentUser) return;
@@ -507,7 +541,7 @@ export default function CompanyMessages() {
                                                 )}
                                             </div>
                                             <div className="flex items-center justify-between gap-2">
-                                                <p className={`min-w-0 truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
+                                                <p data-copilot-private className={`min-w-0 truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>
                                                     {conv.last_message ?? (conv.no_messages ? 'Sem mensagens ainda' : 'Abra para ver as mensagens')}
                                                 </p>
                                                 {conv.unread_count > 0 && (
@@ -569,6 +603,11 @@ export default function CompanyMessages() {
 
                             <div
                                 ref={logRef}
+                                onScroll={(e) => {
+                                    const log = e.currentTarget;
+                                    stickToEndRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+                                }}
+                                data-copilot-private
                                 role="log"
                                 aria-label="Mensagens da conversa"
                                 tabIndex={0}

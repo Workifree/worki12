@@ -60,6 +60,11 @@ bartender barman bar copa copeiro chapeiro pizzaiolo confeiteiro padeiro recepca
 seguranca limpeza faxina repositor estoque estoquista vendedor vendas promotor entregador motorista
 montador producao salao delivery loja restaurante evento eventos buffet outros
 id numero antiga oculto removido link nascimento
+chave copiloto trocar sobre alterar abaixo
+completa especifico orcamento exigida certificacao repetir cria varios mesmo horario
+cozinheiro cozinha barman atendente loja recepcao limpeza copa estoque seguranca promotor
+auxiliar eventos buffet garcom garconete pessoas precisa projeto fixo hora dia
+bartender hostess cumim barista cafeteria frente reposicao portaria degustacao steward hospitality
 reais real brl pix cpf cnpj telefone whatsapp email senha codigo sos urgente urgencia certeza
 tem certeza desfazer desfeito irreversivel permanente definitivo fechar dispensa janela dialogo
 publicacao selecione escolha digite informe ex exemplo clique toque aqui abaixo acima
@@ -73,6 +78,12 @@ const VOCABULARIO: ReadonlySet<string> = new Set(PALAVRAS.split(/\s+/).filter(Bo
 
 const PALAVRA = /\p{L}+/gu
 
+/**
+ * Valor em dinheiro, data e horário não são texto de terceiro: passam inteiros (a redação de dados
+ * pessoais já decidiu antes o que é dado pessoal). Sem isto "R$ 80,00" virava "….$ 80,00" e "08h30" "08…30".
+ */
+const PALAVRA_OU_PROTEGIDO = /R\$\s?\d[\d.,]*|\d{1,2}h(?:\d{2})?(?!\p{L})|\d[\d:/.-]*\d|\p{L}+/gu
+
 /** Palavras que a própria pessoa escreveu (já redigidas): o modelo já as conhece. */
 export function wordsOf(text: string): string[] {
   return (text.match(PALAVRA) ?? []).map(strip).filter((w) => w.length > 1)
@@ -81,7 +92,8 @@ export function wordsOf(text: string): string[] {
 export function filterToVocabulary(text: string, extra: ReadonlySet<string> = new Set()): string {
   return text
     .normalize('NFC')
-    .replace(PALAVRA, (word) => {
+    .replace(PALAVRA_OU_PROTEGIDO, (word) => {
+      if (/^(?:R\$|\d)/.test(word)) return word
       const key = strip(word)
       return VOCABULARIO.has(key) || extra.has(key) ? word : '…'
     })

@@ -25,6 +25,10 @@ import {
 import { occupancy } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
 import SectionTabs from '../../components/SectionTabs';
+import BatchList from '../../components/company/BatchList';
+import BatchEntry from '../../components/company/BatchEntry';
+import { useBatchLabels } from '../../components/company/useBatchLabels';
+import { GuideChecklist } from '../../components/guide/GuideChecklist';
 import TrailShortcutCard from '../../components/company/TrailShortcutCard';
 import { useToast } from '../../contexts/ToastContext';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
@@ -32,6 +36,10 @@ import { logError } from '../../lib/logger';
 import { checkSession } from '../../lib/authSession';
 import ErroDeVerificacao from '../../components/ErroDeVerificacao';
 import { todayInBrazil } from '../../lib/dateUtils';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
+import { useAnyDialogOpen } from '../../hooks/useModalDismiss';
+import { companyShiftSources } from '../../lib/realtime/liveSources';
 import {
   TODAY_RANGE_DAYS,
   addDaysTo,
@@ -173,44 +181,53 @@ export default function CompanyToday() {
     if (userId === null) navigate('/login', { replace: true });
   }, [userId, navigate]);
 
-  // pessoas (só o Gestor lista a equipe), operadores, etiquetas e coberturas vigentes
-  useEffect(() => {
-    if (!companyId || !company) return;
-    let active = true;
-    void (async () => {
+  // pessoas (só o Gestor lista a equipe), operadores, etiquetas e coberturas vigentes.
+  // `silent` (ao vivo): o que falhar fica como está na tela.
+  const beginSide = useLatestResponse();
+  const loadSide = useCallback(
+    async (isActive: () => boolean, silent = false) => {
+      if (!companyId || !company) return;
+      const claim = beginSide();
       const [tagList, coverageList, members, ops] = await Promise.all([
         teamEnabled ? listTagsChecked(companyId) : Promise.resolve({ ok: true, items: [] as CompanyTag[] }),
         teamEnabled ? listActiveCoveragesChecked(companyId, today) : Promise.resolve({ ok: true, items: [] as ActiveCoverage[] }),
         gestor && teamEnabled ? listMembers(companyId) : Promise.resolve(null),
         teamEnabled ? listCompanyOperators(companyId) : Promise.resolve({ ok: true, items: [] as CompanyOperator[] }),
       ]);
-      if (!active) return;
-      setTags(tagList.items);
-      setCoverages(coverageList.items);
-      setSideFailed(!tagList.ok || !coverageList.ok);
-      setOperators(ops.items);
-      setOperatorsFailed(!ops.ok);
+      if (!isActive() || !claim()) return;
+      if (!silent || tagList.ok) setTags(tagList.items);
+      if (!silent || coverageList.ok) setCoverages(coverageList.items);
+      if (!silent) setSideFailed(!tagList.ok || !coverageList.ok);
+      if (!silent || ops.ok) setOperators(ops.items);
+      if (!silent) setOperatorsFailed(!ops.ok);
       if (members && members.outcome === 'ok') {
         setPeople(
           members.items
             .filter((m) => m.state === 'active' && m.userId)
             .map((m): Person => ({ userId: m.userId as string, label: m.displayName?.trim() || 'Sem nome' })),
         );
-      } else {
+      } else if (!silent) {
         setPeople([]);
       }
-    })();
-    return () => { active = false; };
-  }, [companyId, company, gestor, teamEnabled, today, reloadKey]);
+    },
+    [companyId, company, gestor, teamEnabled, today, beginSide],
+  );
 
-  // turnos da janela — o `finally` SEMPRE encerra o carregamento
   useEffect(() => {
-    if (!companyId || !company) return;
-    if (!gestor && !userId) return; // encarregado precisa saber quem é (sem sessão: o login cuida)
     let active = true;
-    const from = today;
-    const to = addDaysTo(today, TODAY_RANGE_DAYS - 1);
-    void (async () => {
+    void loadSide(() => active);
+    return () => { active = false; };
+  }, [loadSide, reloadKey]);
+
+  // turnos da janela — fora do modo silencioso, o `finally` SEMPRE encerra o carregamento
+  const beginTurnos = useLatestResponse();
+  const loadJobs = useCallback(
+    async (isActive: () => boolean, silent = false) => {
+      if (!companyId || !company) return;
+      if (!gestor && !userId) return; // encarregado precisa saber quem é (sem sessão: o login cuida)
+      const claim = beginTurnos();
+      const from = today;
+      const to = addDaysTo(today, TODAY_RANGE_DAYS - 1);
       try {
         if (gestor) {
           const result = await listJobsByResponsible({
@@ -220,7 +237,7 @@ export default function CompanyToday() {
             responsibleId: personFilter,
             tagId: tagFilter,
           });
-          if (!active) return;
+          if (!isActive() || (silent && result.outcome !== 'ok') || !claim()) return;
           if (result.outcome !== 'ok') {
             setLoadError(true);
             setJobs([]);
@@ -231,20 +248,33 @@ export default function CompanyToday() {
           }
         } else {
           const result = await listOwnJobs({ companyId, userId: userId as string, from, to, tagId: tagFilter });
-          if (!active) return;
+          if (!isActive() || (silent && result.outcome !== 'ok') || !claim()) return;
           setLoadError(result.outcome !== 'ok');
           setJobs(result.items);
           setTruncated(false);
         }
       } catch (error) {
         logError('CompanyToday.load', error);
-        if (active) setLoadError(true);
+        if (!silent && isActive() && claim()) setLoadError(true);
       } finally {
-        if (active) setLoading(false);
+        if (!silent && isActive()) setLoading(false);
       }
-    })();
+    },
+    [companyId, company, gestor, userId, today, personFilter, tagFilter, beginTurnos],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void loadJobs(() => active);
     return () => { active = false; };
-  }, [companyId, company, gestor, userId, today, personFilter, tagFilter, reloadKey]);
+  }, [loadJobs, reloadKey]);
+
+  const dialogOpen = useAnyDialogOpen();
+  useLiveRefresh({
+    sources: companyId ? companyShiftSources(companyId) : [],
+    onRefresh: (ctx) => Promise.all([loadJobs(ctx.isCurrent, true), loadSide(ctx.isCurrent, true)]),
+    paused: loading || dialogOpen || !!passIds || coverOpen || !!cancelling || !!endingId,
+  });
 
   const reload = useCallback(() => {
     syncToday();
@@ -294,6 +324,7 @@ export default function CompanyToday() {
   const filtered = personFilter !== null || tagFilter !== null;
 
   const groups = useMemo(() => groupByDay(jobs, today), [jobs, today]);
+  const { labels: lotes, batchOf } = useBatchLabels(jobs.map((j) => j.jobId));
   const visibleIds = useMemo(() => new Set(jobs.map((j) => j.jobId)), [jobs]);
   const selectedVisible = useMemo(() => [...selected].filter((id) => visibleIds.has(id)), [selected, visibleIds]);
   const labelOf = useCallback(
@@ -383,6 +414,8 @@ export default function CompanyToday() {
         }
       />
 
+      <GuideChecklist ocultavel className="mb-6" />
+      <BatchEntry className="mb-4" />
       <TrailShortcutCard className="mb-6" />
 
       {teamEnabled && operatorsFailed && (
@@ -492,7 +525,7 @@ export default function CompanyToday() {
         <section key={group.date} aria-label={group.label} className="mb-8">
           <h2 className="mb-3 text-lg font-bold first-letter:uppercase">{group.label}</h2>
           <ul className="space-y-3">
-            {group.jobs.map((job) => {
+            <BatchList as="li" items={group.jobs} batchOf={(j) => batchOf(j.jobId)} labels={lotes} render={(job) => {
               const passable = canPassJob(job, perms);
               // Dono único não ganha ação nova (R23); sem a RPC no ambiente, o botão não aparece.
               const cancellable = teamEnabled && cancelAvailable && canCancelJob(job, perms, new Date());
@@ -572,7 +605,7 @@ export default function CompanyToday() {
                   </Card>
                 </li>
               );
-            })}
+            }} />
           </ul>
         </section>
       ))}

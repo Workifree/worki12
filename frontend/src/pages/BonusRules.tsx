@@ -60,7 +60,7 @@ export default function BonusRules() {
 
           <p className="text-sm text-gray-600 pt-2">{BONUS_RULES_FOOTER}</p>
           <p className="text-sm">
-            <Link to="/termos" className="underline font-semibold">
+            <Link to="/termos" className="inline-flex min-h-11 items-center underline font-semibold">
               Termos de Uso
             </Link>
           </p>

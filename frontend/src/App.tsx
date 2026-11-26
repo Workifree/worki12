@@ -9,6 +9,10 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
 import RouteFocus from './components/RouteFocus';
 import PageMeta from './components/PageMeta';
+import { GuideProvider } from './components/guide/GuideProvider';
+import CopilotRoot from './components/copilot/CopilotRoot';
+import { guia } from './lib/guide/api';
+import { isLoteEnabled, isPresencaEnabled } from './lib/features';
 
 import { Suspense, lazy } from 'react';
 import type { ReactNode } from 'react';
@@ -33,6 +37,10 @@ const QuemTeIndicou = lazy(() => import('./pages/QuemTeIndicou'));
 
 // Company Pages
 const CompanyCreateJob = lazy(() => import('./pages/company/CompanyCreateJob'));
+const CompanyCreateBatch = lazy(() => import('./pages/company/CompanyCreateBatch'));
+const CompanySites = lazy(() => import('./pages/company/CompanySites'));
+const CompanySiteQr = lazy(() => import('./pages/company/CompanySiteQr'));
+const CompanyShiftQr = lazy(() => import('./pages/company/CompanyShiftQr'));
 const CompanyJobs = lazy(() => import('./pages/company/CompanyJobs'));
 const CompanyProfile = lazy(() => import('./pages/company/CompanyProfile'));
 const CompanyJobDetails = lazy(() => import('./pages/company/CompanyJobDetails'));
@@ -53,6 +61,7 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const BonusRules = lazy(() => import('./pages/BonusRules'));
+const Licenses = lazy(() => import('./pages/Licenses'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Admin = lazy(() => import('./pages/Admin'));
@@ -116,7 +125,9 @@ function App() {
         <NotificationProvider>
           <ToastProvider>
             <BrowserRouter>
+              <GuideProvider>
               <PwaPrompts />
+              <CopilotRoot showLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
               <RouteFocus />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -125,6 +136,7 @@ function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/termos" element={titled('Termos de Uso', <Terms />)} />
                   <Route path="/privacidade" element={titled('Política de Privacidade', <Privacy />)} />
+                  <Route path="/licencas" element={titled('Licenças de código aberto', <Licenses />)} />
                   <Route path="/regulamento-trilha" element={titled('Regulamento da trilha', <BonusRules />)} />
                   <Route path="/esqueci-senha" element={titled('Recuperar senha', <ForgotPassword />)} />
                   <Route path="/redefinir-senha" element={titled('Nova senha', <ResetPassword />)} />
@@ -183,7 +195,14 @@ function App() {
                     {/* Company Layout Routes */}
                     <Route path="/company" element={<CompanyLayout />}>
                       <Route path="dashboard" element={<CompanyDashboard />} />
-                      <Route path="create" element={titled('Criar turno', <CompanyCreateJob />)} />
+                      <Route path="create" element={titled('Criar turno', isLoteEnabled() ? <CompanyCreateBatch /> : <CompanyCreateJob />)} />
+                      {isPresencaEnabled() && (
+                        <>
+                          <Route path="locais" element={titled('Locais', <CompanySites />)} />
+                          <Route path="locais/:id/qr" element={titled('Cartaz do QR', <CompanySiteQr />)} />
+                          <Route path="jobs/:id/qr" element={titled('QR do turno', <CompanyShiftQr />)} />
+                        </>
+                      )}
                       <Route path="jobs" element={<CompanyJobs />} />
                       <Route path="jobs/:id" element={<CompanyJobDetails />} />
                       <Route path="jobs/:id/edit" element={titled('Editar turno', <CompanyCreateJob />)} />
@@ -213,6 +232,7 @@ function App() {
                   <Route path="*" element={titled('Página não encontrada', <NotFound />)} />
                 </Routes>
               </Suspense>
+              </GuideProvider>
             </BrowserRouter>
           </ToastProvider>
         </NotificationProvider>

@@ -199,7 +199,7 @@ export const AttendanceConfirmationService = {
    * por `worker_id`/`application_id` para exibir UM badge por freela é responsabilidade de quem
    * consome (`CompanyJobCandidates`), não deste service — mantemos a leitura crua e auditável.
    */
-  async getConfirmationsForJob(jobId: string): Promise<ShiftAttendanceConfirmation[]> {
+  async getConfirmationsForJob(jobId: string, strict = false): Promise<ShiftAttendanceConfirmation[]> {
     try {
       if (!jobId) return [];
 
@@ -211,12 +211,14 @@ export const AttendanceConfirmationService = {
 
       if (error) {
         logError('attendanceConfirmation.getConfirmationsForJob', error);
+        if (strict) throw error;
         return [];
       }
 
       return (data ?? []) as ShiftAttendanceConfirmation[];
     } catch (err) {
       logError('attendanceConfirmation.getConfirmationsForJob', err);
+      if (strict) throw err;
       return [];
     }
   },

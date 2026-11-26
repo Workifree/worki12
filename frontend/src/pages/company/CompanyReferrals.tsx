@@ -215,7 +215,7 @@ export default function CompanyReferrals() {
           tone="warning"
           role="alert"
           className="mb-4"
-          action={<Button variant="secondary" onClick={recarregarElenco}>Tentar de novo</Button>}
+          action={<Button variant="secondary" onClick={() => { void recarregarElenco(); }}>Tentar de novo</Button>}
         >
           Não conseguimos carregar o seu elenco.
         </Alert>

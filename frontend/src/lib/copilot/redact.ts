@@ -24,7 +24,7 @@ const DATA = `(?:\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2}|\\d{1,2
 
 const ANTES_DAS_DATAS: readonly Rule[] = [
   // Senha informada em texto livre.
-  [/\b(senha|password|passcode)(\s*(?:é|eh|:|=)\s*)(?!\[)[^\s<>"']+/giu, '$1$2[senha]'],
+  [/\b(senha|password|passcode)(\s*[:=]\s*|\s+(?:é|eh|is)\s+)(?!\[)[^\s<>"']+/giu, '$1$2[senha]'],
   [/\b(senha|password|passcode)(\s+)(?=[^\s<>"']*\d)(?!\[)[^\s<>"']{4,}/giu, '$1$2[senha]'],
   // Códigos de uso único.
   [/\b(c[oó]digo|otp|token|pin)\b([^\d\n[\]]{0,24}?)\b\d(?:[ -]?\d){3,7}\b/giu, '$1$2[codigo]'],
@@ -36,7 +36,7 @@ const ANTES_DAS_DATAS: readonly Rule[] = [
   [/\bsk-[\w-]{12,}/g, '[token]'],
   // E-mail (inclusive %40 e "arroba").
   [/[\p{L}\d._%+-]+(?:@|%40)[\p{L}\d-]+(?:\.[\p{L}\d-]+)+/gu, '[email]'],
-  [/[\p{L}\d._+-]+\s*[([]?\s*\barroba\b\s*[)\]]?\s*[\p{L}\d-]+(?:\s*(?:\.|\bponto\b)\s*[\p{L}]{2,})+/giu, '[email]'],
+  [/[\p{L}\d._+-]+\s*[([]?\s*\b(?:arroba|at)\b\s*[)\]]?\s*[\p{L}\d-]+(?:\s*[([]?\s*(?:\.|\bponto\b|\bdot\b)\s*[)\]]?\s*[\p{L}]{2,})+/giu, '[email]'],
   [/[\p{L}\d._%+-]+@[\p{L}\d-]+/gu, '[email]'],
   // PIX copia e cola (EMV).
   [/000201[^\n]{20,500}?6304[0-9A-Fa-f]{4}/g, '[pix]'],
@@ -44,7 +44,7 @@ const ANTES_DAS_DATAS: readonly Rule[] = [
   // UUID: id de registro e também chave PIX aleatória.
   [/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[id]'],
   [/\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}\/[A-Z0-9]{4}-\d{2}\b/gi, '[cnpj]'],
-  [/\b\d{3}\.\d{3}\.\d{3}[-.\s]?\d{2}\b/g, '[cpf]'],
+  [/\b\d{3}[.,\s]\d{3}[.,\s]\d{3}[-.,\s]?\d{2}\b/g, '[cpf]'],
   // Data de nascimento pelo contexto.
   [new RegExp(`\\b(nasc[\\p{L}.]*|anivers[\\p{L}]*)([^\\d\\n]{0,30}?)${DATA}`, 'giu'), '$1$2[nascimento]'],
 ]
@@ -61,13 +61,29 @@ const DEPOIS_DAS_DATAS: readonly Rule[] = [
   [/(?<![\w-])(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[\w-]{20,}(?![\w-])/g, '[token]'],
 ]
 
-const DATA_COMPLETA = new RegExp(
+// Valor em dinheiro não é dado pessoal: sai da frente das regras numéricas e volta intacto. Só com o
+// símbolo R$ e agrupamento de milhar válido; o que vier colado ("-09", ".12") segue as regras de CPF.
+const DINHEIRO = /R\$\s?(?:\d{1,3}(?:\.\d{3}){1,2}|\d{1,7})(?:,\d{1,2})?(?!\d|[-.]\d)/g
+
+const DATA_COMPLETA =new RegExp(
   `\\b(?:(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4})|(\\d{4})-(\\d{2})-(\\d{2})|\\d{1,2}\\s+de\\s+(?:${MESES})\\s+de\\s+(\\d{4}))(?!\\d)`,
   'giu',
 )
 
 /** Idade mínima (anos) para uma data completa ser tratada como possível data de nascimento. */
 const ANOS_DATA_ANTIGA = 14
+
+/**
+ * Teto de tamanho que torna as regras lineares: várias varrem o trecho inteiro a partir de cada
+ * posição (custo quadrático). Trecho sem espaço acima do teto sai INTEIRO (nada vaza por corte), e
+ * sequências longas de espaços são encurtadas.
+ */
+const TRECHO_LONGO = /\S{201,}/g
+const ESPACOS_LONGOS = /(\s{16})\s+/g
+
+function limitar(text: string): string {
+  return text.replace(ESPACOS_LONGOS, '$1').replace(TRECHO_LONGO, '[oculto]')
+}
 
 function apply(text: string, rules: readonly Rule[]): string {
   return rules.reduce(
@@ -80,7 +96,13 @@ function apply(text: string, rules: readonly Rule[]): string {
 export function redactPII(input: string, now: Date = new Date()): string {
   const guardadas: string[] = []
   const limite = now.getFullYear() - ANOS_DATA_ANTIGA
-  let text = apply(normalizeText(input), ANTES_DAS_DATAS)
+  // Marcador em área de uso privado (a normalização já removeu qualquer um vindo da entrada).
+  const guardar = (match: string) => {
+    guardadas.push(match)
+    return `\uE000${String.fromCharCode(0xe100 + guardadas.length - 1)}\uE001`
+  }
+  let text = limitar(normalizeText(input)).replace(DINHEIRO, guardar)
+  text = apply(text, ANTES_DAS_DATAS)
 
   // Datas antigas saem; datas recentes (agenda de turnos) são protegidas das regras numéricas.
   text = text.replace(DATA_COMPLETA, (match, ...g: string[]) => {
@@ -89,9 +111,7 @@ export function redactPII(input: string, now: Date = new Date()): string {
     const dia = Number(g[0] || g[5] || 1)
     const mes = Number(g[1] || g[4] || 1)
     if (ano > now.getFullYear() + 5 || dia > 31 || mes > 12) return match
-    guardadas.push(match)
-    // Marcador em área de uso privado (a normalização já removeu qualquer um vindo da entrada).
-    return `\uE000${String.fromCharCode(0xe100 + guardadas.length - 1)}\uE001`
+    return guardar(match)
   })
 
   text = apply(text, DEPOIS_DAS_DATAS)
