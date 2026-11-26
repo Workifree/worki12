@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { checkSession } from '../lib/authSession';
 import type { ReactNode } from 'react';
 import { CheckCircle2, Clock, XCircle, DollarSign, Star, AlertCircle, Bell, Building2, X, LogIn, LogOut, MessageCircle, Users, ThumbsUp, ThumbsDown, CalendarClock, Receipt, ChevronRight, History } from 'lucide-react';
-import { Alert, Button, Card, DialogActions, EmptyState, IconButton, PageHeader, SkeletonList, StatusBadge, Tabs } from '../components/ui';
+import { Alert, Button, Card, DialogActions, EmptyState, IconButton, Menu, PageHeader, SkeletonList, StatusBadge, Tabs } from '../components/ui';
 import PageMeta from '../components/PageMeta';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
@@ -24,7 +24,7 @@ import { hasArrived, hasLeftShift } from '../lib/shiftPresence';
 import TodayShiftCard, { type TodayShift } from '../components/TodayShiftCard';
 import { isAvisosEnabled, isPresencaEnabled } from '../lib/features';
 import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
-import { attendanceGuardMessage, checkinWindow, checkinWindowMessage, isTodayShift } from '../lib/checkinWindow';
+import { attendanceGuardMessage, checkinWindow, isTodayShift } from '../lib/checkinWindow';
 import { openShiftConversation } from '../lib/shiftChat';
 import type {
     ReviewDirection,
@@ -741,17 +741,17 @@ export default function MyJobs() {
 
             {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
             {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (
-                <Alert
-                    tone="warning"
-                    title="Convite esperando resposta"
-                    action={<Button variant="secondary" onClick={abrirConvites}>Ver convite</Button>}
-                >
-                    Quem aceitar primeiro fica com a vaga.
-                </Alert>
+                <div className="flex items-center gap-3 rounded-2xl border border-status-warning-line bg-status-warning-bg px-4 py-2">
+                    <p className="min-w-0 flex-1 text-sm text-status-warning-fg">
+                        <span className="font-semibold">Convite esperando resposta.</span>{' '}
+                        Quem aceitar primeiro fica com a vaga.
+                    </p>
+                    <Button variant="secondary" size="sm" className="shrink-0" onClick={abrirConvites}>Ver convite</Button>
+                </div>
             )}
 
             {todayJobs.length > 0 && (
-                <section aria-label="Hoje" className="grid grid-cols-1 gap-4">
+                <section aria-label="Hoje" className="grid grid-cols-1 gap-3">
                     {todayJobs.map((job) => (
                         <TodayShiftCard
                             key={job.id}
@@ -772,7 +772,7 @@ export default function MyJobs() {
                 Cruza `pendingConfirmations` (application_id) com os turnos já carregados (`in_progress`/
                 `scheduled`) para exibir empresa/data/horário/local sem uma query extra. */}
             {!confirmationsLoading && pendingConfirmations.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3">
                     {pendingConfirmations.map((confirmation) => {
                         const job = [...jobs.in_progress, ...jobs.scheduled].find(
                             (j) => j.id === confirmation.application_id,
@@ -784,56 +784,59 @@ export default function MyJobs() {
                         const localResponse = respondedConfirmations[confirmation.id];
 
                         return (
-                            <Card
+                            <div
                                 key={confirmation.id}
-                                padding="sm"
-                                className="shadow-brutal-brand"
+                                className="flex flex-col gap-2 rounded-2xl border border-primary/40 bg-primary-light p-3"
                             >
-                                <p className="flex items-center gap-2 text-sm font-semibold text-primary-dark">
-                                    <CalendarClock size={18} aria-hidden="true" className="shrink-0 text-primary" />
-                                    Confirma seu turno {rotuloDeQuando(job.raw_date)}?
-                                </p>
-                                <h3 className="mt-1 font-bold [overflow-wrap:anywhere]">{job.title}</h3>
-                                <p className="mb-3 text-sm text-gray-600 [overflow-wrap:anywhere]">
-                                    {job.company_name} · {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
-                                </p>
+                                <div className="min-w-0">
+                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-primary-ink">
+                                        <CalendarClock size={16} aria-hidden="true" className="shrink-0" />
+                                        Confirma seu turno {rotuloDeQuando(job.raw_date)}?
+                                    </p>
+                                    <h3 className="text-sm font-bold truncate">{job.title}</h3>
+                                    <p className="text-xs text-gray-700 truncate">
+                                        {job.company_name} · {job.date}{job.time ? ` · ${job.time}${job.end_time ? `–${job.end_time}` : ''}` : ''}
+                                    </p>
+                                </div>
                                 {localResponse === 'confirmed' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-primary-light text-primary-dark rounded-xl font-bold text-sm">
-                                        <ThumbsUp size={18} /> Confirmado
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-white text-primary-ink rounded-xl font-semibold text-sm">
+                                        <ThumbsUp size={16} aria-hidden="true" /> Confirmado
                                     </span>
                                 ) : localResponse === 'cannot_attend' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-red-50 text-red-600 border-2 border-red-200 rounded-xl font-bold text-sm">
-                                        <ThumbsDown size={18} /> Avisou que não vai
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-red-50 text-red-700 border border-red-200 rounded-xl font-semibold text-sm">
+                                        <ThumbsDown size={16} aria-hidden="true" /> Avisou que não vai
                                     </span>
                                 ) : localResponse === 'already_responded' ? (
-                                    <span className="flex items-center justify-center gap-2 w-full h-11 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm">
+                                    <span className="flex items-center justify-center gap-2 w-full min-h-11 bg-white text-gray-600 rounded-xl font-semibold text-sm">
                                         Você já respondeu
                                     </span>
                                 ) : (
-                                    <div className="flex flex-col gap-2 min-[360px]:flex-row">
+                                    // Lado a lado até 320px, sem ícone: os dois rótulos cabem em uma linha.
+                                    <div className="grid grid-cols-2 gap-2">
                                         <Button
-                                            variant="primary"
-                                            className="flex-1 !px-2"
+                                            // Um primário por dobra: com turno hoje, o botão cheio é o de presença.
+                                            variant={todayJobs.length > 0 ? 'secondary' : 'primary'}
+                                            size="sm"
+                                            className="!px-2 whitespace-nowrap"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'confirmed')}
                                             disabled={isResponding}
                                             loading={isResponding}
-                                            iconLeft={<ThumbsUp size={18} />}
                                         >
                                             Sim, vou
                                         </Button>
                                         <Button
                                             variant="secondary"
-                                            className="flex-1 !px-2"
+                                            size="sm"
+                                            className="!px-2 whitespace-nowrap"
                                             onClick={() => void handleRespondConfirmation(confirmation, 'cannot_attend')}
                                             disabled={isResponding}
                                             loading={isResponding}
-                                            iconLeft={<ThumbsDown size={18} />}
                                         >
                                             Não vou poder
                                         </Button>
                                     </div>
                                 )}
-                            </Card>
+                            </div>
                         );
                     })}
                 </div>
@@ -853,7 +856,6 @@ export default function MyJobs() {
                     requestAnimationFrame(() => document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'nearest' }));
                 }}
                 panelId="meus-turnos-painel"
-                className="[&>button]:px-1.5"
             />
 
             {/* Content */}
@@ -906,7 +908,7 @@ export default function MyJobs() {
                             // Spans (não divs): o mesmo conteúdo vai dentro de <button> quando a empresa tem perfil.
                             const cabecalhoEmpresa = (
                                 <>
-                                    <span className="block w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                    <span className="block w-10 h-10 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                         {companyLogo ? (
                                             <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
                                         ) : (
@@ -977,7 +979,7 @@ export default function MyJobs() {
 
                                     {/* Briefing */}
                                     {(job?.briefing || job?.description) && (
-                                        <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-4">
+                                        <div className="bg-gray-50 rounded-xl p-3 mb-4">
                                             <p className="text-xs font-semibold text-gray-600 mb-1">Briefing</p>
                                             <p className="text-sm text-gray-700 line-clamp-3">{job.briefing || job.description}</p>
                                         </div>
@@ -1066,108 +1068,114 @@ export default function MyJobs() {
                         description={todayJobs.length > 0 ? 'O turno de hoje está no cartão no topo da tela.' : undefined}
                     />
                 )}
-                {activeTab === 'scheduled' && scheduledList.map((job) => (
-                    <Card key={job.id} padding="sm" className="flex flex-col gap-3">
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                <h3 className="min-w-0 text-base font-bold [overflow-wrap:anywhere]">{job.title}</h3>
-                                <span className="font-bold tabular-nums text-primary-dark">{payLabel(job.pay)}</span>
-                            </div>
-                            <p className="text-sm text-gray-700 [overflow-wrap:anywhere]">{job.company_name}</p>
-                            <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-700 tabular-nums">
-                                <Clock size={14} aria-hidden="true" /> {weekdayDate(job)} · {job.time}{job.end_time ? `–${job.end_time}` : ''}
-                            </p>
-                            <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-700 [overflow-wrap:anywhere]">
-                                <LocalDoTurno location={job.location} />
-                            </p>
-                            <p className="mt-2 text-xs text-gray-600">{checkinWindowMessage(checkinWindow(scheduleOf(job)))}</p>
-                        </div>
-                        <div className="flex flex-col gap-2 border-t-2 border-gray-200 pt-3 sm:flex-row sm:justify-between">
-                            <Button
-                                variant="secondary"
-                                data-copilot="freela.turno.falar-empresa"
-                                onClick={() => handleChat(job)}
-                                loading={chattingId === job.id}
-                                iconLeft={<MessageCircle size={16} />}
-                            >
-                                Falar com a empresa
-                            </Button>
-                            <Button
-                                variant="dangerOutline"
-                                data-copilot="freela.turnos.cancelar"
-                                data-copilot-risk="D"
-                                onClick={() => setCancelJob(job)}
-                                iconLeft={<XCircle size={16} />}
-                            >
-                                Cancelar turno
-                            </Button>
-                        </div>
-                    </Card>
-                ))}
+                {activeTab === 'scheduled' && scheduledList.length > 0 && (
+                    <ul className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+                        {scheduledList.map((job) => (
+                            <li key={job.id} className="flex items-center gap-2 py-3 pl-4 pr-2">
+                                <div className="min-w-0 flex-1">
+                                    <p className="flex min-w-0 items-baseline gap-2">
+                                        <span className="shrink-0 text-sm font-bold tabular-nums">
+                                            {weekdayDate(job)} · {job.time}{job.end_time ? `–${job.end_time}` : ''}
+                                        </span>
+                                    </p>
+                                    <h3 className="text-sm font-semibold truncate" title={job.title}>{job.title}</h3>
+                                    <p className="text-xs text-gray-600 truncate">
+                                        <span className="font-semibold text-primary-ink tabular-nums">{payLabel(job.pay)}</span>
+                                        {' · '}<span>{job.company_name}</span>{job.location ? ` · ${job.location}` : ''}
+                                    </p>
+                                </div>
+                                <IconButton
+                                    aria-label="Falar com a empresa"
+                                    data-copilot="freela.turno.falar-empresa"
+                                    onClick={() => handleChat(job)}
+                                    disabled={chattingId === job.id}
+                                >
+                                    <MessageCircle size={20} />
+                                </IconButton>
+                                <Menu
+                                    label={`Mais opções do turno ${job.title}`}
+                                    items={[{
+                                        label: 'Cancelar turno',
+                                        icon: XCircle,
+                                        danger: true,
+                                        onSelect: () => setCancelJob(job),
+                                        'data-copilot': 'freela.turnos.cancelar',
+                                        'data-copilot-risk': 'D',
+                                    }]}
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                )}
 
                 {/* ── ABA HISTÓRICO ── */}
                 {activeTab === 'history' && jobs.history.length === 0 && (
                     <EmptyState icon={History} title="Seu histórico está vazio." />
                 )}
-                {activeTab === 'history' && jobs.history.map((job) => {
-                    const waiting = awaitingLabel(job);
-                    const dropped = !waiting && job.status !== 'completed';
-                    return (
-                        <Card key={job.id} padding="sm" tone="nested" onActivate={() => setDetailJob(job)}>
-                            <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
-                                    <h3 className="font-semibold text-gray-800 line-clamp-2 [overflow-wrap:anywhere]">{job.title}</h3>
-                                    <p className="text-sm text-gray-600 [overflow-wrap:anywhere]">{job.date} • {job.company_name}</p>
-                                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                                        <HistoryStatus job={job} />
-                                        <span className={`font-bold tabular-nums ${dropped ? 'text-gray-600 line-through' : 'text-gray-800'}`}>
-                                            {payLabel(job.pay)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <ChevronRight size={18} aria-hidden="true" className="mt-1 shrink-0 text-gray-400" />
-                            </div>
-                            {waiting && (
-                                <div className="mt-3 pt-3 border-t border-gray-200">
-                                    <p className="mb-2 text-xs text-gray-600">Falta a empresa fechar o turno.</p>
-                                    <Button
-                                        variant="secondary"
-                                        onClick={(e) => { e.stopPropagation(); void handleChat(job); }}
-                                        loading={chattingId === job.id}
-                                        iconLeft={<MessageCircle size={14} />}
+                {activeTab === 'history' && jobs.history.length > 0 && (
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        {jobs.history.map((job) => {
+                            const waiting = awaitingLabel(job);
+                            const dropped = !waiting && job.status !== 'completed';
+                            const avaliar = job.status === 'completed' && !reviewedJobIds.has(job.job_id);
+                            return (
+                                <li key={job.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDetailJob(job)}
+                                        className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
                                     >
-                                        Falar com a empresa
-                                    </Button>
-                                </div>
-                            )}
-                            {job.status === 'completed' && (
-                                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                                    <Button
-                                        variant="secondary"
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/recibo/${job.job_id}`); }}
-                                        iconLeft={<Receipt size={14} />}
-                                    >
-                                        Recibo
-                                    </Button>
-                                    {!reviewedJobIds.has(job.job_id) ? (
-                                        <Button
-                                            variant="secondary"
-                                            onClick={(e) => { e.stopPropagation(); handleOpenRateModal(job); }}
-                                            iconLeft={<Star size={14} />}
-                                        >
-                                            Avaliar
-                                        </Button>
-                                    ) : (
-                                        <span className="text-xs text-gray-600 flex items-center gap-1">
-                                            <Star size={12} fill="currentColor" /> Avaliado
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-semibold text-gray-900 truncate" title={job.title}>{job.title}</span>
+                                            <span className="block text-xs text-gray-600 truncate">{job.date} · {job.company_name}</span>
+                                            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <HistoryStatus job={job} />
+                                                <span className={`text-sm font-bold tabular-nums ${dropped ? 'text-gray-600 line-through' : 'text-gray-900'}`}>
+                                                    {payLabel(job.pay)}
+                                                </span>
+                                            </span>
                                         </span>
+                                        <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-gray-400" />
+                                    </button>
+                                    {/* Uma ação visível por linha; as demais estão no detalhe. */}
+                                    {waiting ? (
+                                        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+                                            <p className="text-xs text-gray-600">Falta a empresa fechar o turno.</p>
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => void handleChat(job)}
+                                                loading={chattingId === job.id}
+                                                iconLeft={<MessageCircle size={14} />}
+                                            >
+                                                Falar com a empresa
+                                            </Button>
+                                        </div>
+                                    ) : job.status === 'completed' && (
+                                        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                                            {avaliar ? (
+                                                <Button variant="secondary" size="sm" onClick={() => handleOpenRateModal(job)} iconLeft={<Star size={14} />}>
+                                                    Avaliar
+                                                </Button>
+                                            ) : (
+                                                <>
+                                                    <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(`/recibo/${job.job_id}`)} iconLeft={<Receipt size={14} />}>
+                                                        Recibo
+                                                    </Button>
+                                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                                        <Star size={12} fill="currentColor" aria-hidden="true" /> Avaliado
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
                                     )}
-                                </div>
-                            )}
-                        </Card>
-                    );
-                })}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </div>
+
 
             <RateModal
                 isOpen={rateModalOpen}
@@ -1188,7 +1196,7 @@ export default function MyJobs() {
                 >
                         <div className="flex items-start justify-between gap-3 mb-5">
                             <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                <div className="w-12 h-12 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                     {detailJob.company_logo ? (
                                         <img src={detailJob.company_logo} alt={detailJob.company_name} className="w-full h-full object-cover" />
                                     ) : (
@@ -1237,7 +1245,7 @@ export default function MyJobs() {
                         </div>
 
                         {detailJob.status === 'completed' && reviewedJobIds.has(detailJob.job_id) && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600 border-t-2 border-gray-100 pt-4">
+                            <div className="flex items-center gap-2 text-sm text-gray-600 border-t border-gray-200 pt-4">
                                 <Star size={16} className="text-yellow-500 fill-yellow-500" /> Você já avaliou esta empresa.
                             </div>
                         )}
@@ -1278,7 +1286,7 @@ export default function MyJobs() {
                     className="max-w-sm"
                 >
                         <div className="flex items-start gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-xl border-2 border-black bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
                                 <XCircle size={20} className="text-red-600" />
                             </div>
                             <div>

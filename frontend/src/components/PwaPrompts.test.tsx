@@ -268,6 +268,22 @@ describe('PwaPrompts', () => {
       expect(banner.className).not.toMatch(/(^| )(fixed|absolute|sticky)( |$)/)
     })
 
+    it('reserva o próprio espaço: publica --worki-pwa-h enquanto visível e limpa ao sumir', () => {
+      const spy = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+      const rect = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue({ height: 40, width: 300, top: 0, left: 0, right: 300, bottom: 40, x: 0, y: 0, toJSON: () => ({}) })
+      renderAt()
+      expect(document.documentElement.style.getPropertyValue('--worki-pwa-h')).toBe('52px')
+
+      act(() => {
+        spy.mockReturnValue(true)
+        window.dispatchEvent(new Event('online'))
+      })
+      expect(document.documentElement.style.getPropertyValue('--worki-pwa-h')).toBe('')
+      rect.mockRestore()
+    })
+
     it('com offline, atualização e instalação juntas, tudo cabe na mesma pilha', () => {
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
       const { container } = renderAt()

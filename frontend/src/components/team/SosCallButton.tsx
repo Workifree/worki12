@@ -177,7 +177,7 @@ function SosModal({ reason, message, dispatching, onReasonChange, onMessageChang
     >
       <div className="space-y-4">
         {/* A membrana da feature — nunca escondida em texto pequeno. */}
-        <div className="flex items-start gap-2 text-sm text-black bg-yellow-50 border-2 border-black rounded-xl p-3">
+        <div className="flex items-start gap-2 text-sm text-black bg-yellow-50 border border-gray-200 rounded-xl p-3">
           <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
           <span>
             Você não vai ver quem foi chamado — só quantos foram avisados, e depois quem

@@ -6,11 +6,11 @@ import { ButtonLink } from '../ui';
 export default function BatchEntry({ className = '' }: { className?: string }) {
     if (!isLoteEnabled()) return null;
     return (
-        <div className={`flex flex-col gap-2 sm:flex-row ${className}`}>
-            <ButtonLink variant="secondary" to="/company/create">
+        <div className={`flex flex-wrap gap-2 ${className}`}>
+            <ButtonLink variant="secondary" size="sm" to="/company/create">
                 <CalendarRange size={16} aria-hidden="true" /> Vários de uma vez
             </ButtonLink>
-            <ButtonLink variant="secondary" to="/company/create?copiar=fim-de-semana">
+            <ButtonLink variant="secondary" size="sm" to="/company/create?copiar=fim-de-semana">
                 <History size={16} aria-hidden="true" /> Copiar fim de semana
             </ButtonLink>
         </div>

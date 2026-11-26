@@ -25,7 +25,7 @@ export function DateChips({ value, today, onChange }: { value: string; today: st
                     min={today}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    className="h-11 w-full rounded-xl border-2 border-black bg-white px-4 text-base font-normal sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="h-11 w-full rounded-xl border-ink border-black bg-white px-4 text-base font-normal sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
             </label>
             {value && <p className="text-sm text-gray-600" role="status">Selecionado: {dayLabel(value)}</p>}
@@ -74,7 +74,7 @@ export function MultiDateCalendar({
                             aria-pressed={pressed}
                             aria-label={`${WEEKDAY_FULL_LABELS[weekdayOf(date)]}, ${date.slice(8)}/${date.slice(5, 7)}`}
                             onClick={() => onToggle(date)}
-                            className={`h-11 min-w-0 rounded-xl border-2 text-sm font-bold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black disabled:cursor-not-allowed disabled:border-transparent disabled:text-gray-400 ${pressed ? 'border-black bg-black text-white' : 'border-gray-200 bg-white text-black hover:border-black'} ${date === today && !pressed ? 'underline' : ''}`}
+                            className={`h-11 min-w-0 rounded-xl border-ink text-sm font-bold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black disabled:cursor-not-allowed disabled:border-transparent disabled:text-gray-400 ${pressed ? 'border-black bg-black text-white' : 'border-gray-200 bg-white text-black hover:border-black'} ${date === today && !pressed ? 'underline' : ''}`}
                         >
                             {Number(date.slice(8))}
                         </button>

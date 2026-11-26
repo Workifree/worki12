@@ -8,7 +8,7 @@ import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { ActionBar, Button, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
 import { validateCPFOrCNPJ, EMAIL_REGEX, formatCpfCnpj, normalizePixKeyForStorage, type PixKeyType } from '../../lib/validation';
 
@@ -398,7 +398,7 @@ export default function WorkerOnboarding() {
     const pendencias = pendenciasDoPasso().map((p) => p.falta);
 
     const chipClass = (selected: boolean) =>
-        `min-h-11 px-4 py-2 rounded-full border-2 font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+        `min-h-11 px-4 py-2 rounded-full border-ink font-semibold text-sm text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
             selected
                 ? 'bg-primary-dark text-white border-black'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-black'
@@ -411,7 +411,7 @@ export default function WorkerOnboarding() {
     );
 
     return (
-        <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans text-accent">
+        <div className="min-h-screen bg-white sm:bg-canvas flex flex-col items-center px-4 pt-4 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
@@ -457,17 +457,17 @@ export default function WorkerOnboarding() {
                 </div>
 
                 {/* Form Card */}
-                <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+                <div className="sm:rounded-2xl sm:border sm:border-gray-200 sm:bg-white sm:p-8">
 
-                    <form onSubmit={handleNext} noValidate className="space-y-6">
+                    <form onSubmit={handleNext} noValidate className="space-y-5">
 
                         {/* Step 1: Personal Data */}
                         {step === 1 && (
-                            <div className="space-y-5" data-copilot-private>
+                            <div className="space-y-4" data-copilot-private>
                                 <h2 className="text-lg font-bold">Quem é você?</h2>
 
-                                <div className="space-y-4">
-                                    <Field label="Nome completo" required error={erroDe('fullName')}>
+                                <div className="space-y-3">
+                                    <Field label="Nome completo" error={erroDe('fullName')}>
                                         <input
                                             type="text"
                                             required
@@ -479,8 +479,8 @@ export default function WorkerOnboarding() {
                                             placeholder="Seu nome completo"
                                         />
                                     </Field>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="CPF" required error={erroDe('cpf')}>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="CPF" error={erroDe('cpf')}>
                                             <input
                                                 type="text"
                                                 required
@@ -493,7 +493,7 @@ export default function WorkerOnboarding() {
                                                 placeholder="000.000.000-00"
                                             />
                                         </Field>
-                                        <Field label="Data de nascimento" required error={erroDe('birthDate')}>
+                                        <Field label="Data de nascimento" error={erroDe('birthDate')}>
                                             <input
                                                 type="date"
                                                 required
@@ -505,8 +505,8 @@ export default function WorkerOnboarding() {
                                             />
                                         </Field>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Celular / WhatsApp" required error={erroDe('phone')}>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="Celular / WhatsApp" error={erroDe('phone')}>
                                             <input
                                                 type="tel"
                                                 required
@@ -519,7 +519,7 @@ export default function WorkerOnboarding() {
                                                 placeholder="(00) 00000-0000"
                                             />
                                         </Field>
-                                        <Field label="Cidade" required error={erroDe('city')}>
+                                        <Field label="Cidade" error={erroDe('city')}>
                                             <input
                                                 type="text"
                                                 required
@@ -532,8 +532,8 @@ export default function WorkerOnboarding() {
                                             />
                                         </Field>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Tipo de chave PIX" required error={erroDe('pixKeyType')}>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                        <Field label="Tipo de chave PIX" error={erroDe('pixKeyType')}>
                                             <select
                                                 required
                                                 value={formData.pixKeyType}
@@ -546,7 +546,7 @@ export default function WorkerOnboarding() {
                                                 ))}
                                             </select>
                                         </Field>
-                                        <Field label="Chave PIX" required error={erroDe('pixKey')}>
+                                        <Field label="Chave PIX" error={erroDe('pixKey')}>
                                             <input
                                                 type="text"
                                                 required
@@ -576,7 +576,6 @@ export default function WorkerOnboarding() {
                                     <fieldset>
                                         <legend className="text-sm font-bold mb-2">
                                             Quais suas especialidades?
-                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2" role="group" aria-label="Especialidades" aria-describedby={erroDe('roles') ? 'roles-error' : undefined} data-invalid={erroDe('roles') ? 'true' : undefined} tabIndex={-1}>
                                             {rolesList.map(role => (
@@ -594,7 +593,7 @@ export default function WorkerOnboarding() {
                                         {erroDe('roles') && <p id="roles-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('roles')}</p>}
                                     </fieldset>
 
-                                    <Field label="Tempo de experiência" required error={erroDe('experienceYears')}>
+                                    <Field label="Tempo de experiência" error={erroDe('experienceYears')}>
                                         <select
                                             required
                                             value={formData.experienceYears}
@@ -632,7 +631,7 @@ export default function WorkerOnboarding() {
                                         <legend className="text-sm font-bold mb-2">O que você procura como freela? <span className="font-normal text-gray-600">(opcional)</span></legend>
                                         <div className="grid grid-cols-1 gap-2">
                                             {['Renda extra com quem já confio', 'Mais turnos / mais trabalho', 'Construir minha reputação e histórico'].map(opt => (
-                                                <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                <label key={opt} className={`border-ink rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.goal === opt ? 'border-black bg-primary-light text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input
                                                         type="radio"
                                                         name="goal"
@@ -651,7 +650,6 @@ export default function WorkerOnboarding() {
                                     <fieldset>
                                         <legend className="text-sm font-bold mb-2">
                                             Disponibilidade
-                                            <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
                                         </legend>
                                         <div className="flex flex-wrap gap-2" role="group" aria-label="Disponibilidade" aria-describedby={erroDe('availability') ? 'availability-error' : undefined} data-invalid={erroDe('availability') ? 'true' : undefined} tabIndex={-1}>
                                             {availabilityOptions.map(opt => (
@@ -669,7 +667,8 @@ export default function WorkerOnboarding() {
                                         {erroDe('availability') && <p id="availability-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('availability')}</p>}
                                     </fieldset>
 
-                                    <div className="flex items-start gap-3">
+                                    {/* Linha inteira clicável, 44px; os links da frase também têm 44px de altura. */}
+                                    <div className="flex min-h-11 items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
@@ -677,13 +676,13 @@ export default function WorkerOnboarding() {
                                             aria-describedby={erroDe('tos') ? 'tos-error' : undefined}
                                             checked={tosAccepted}
                                             onChange={e => setTosAccepted(e.target.checked)}
-                                            className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
+                                            className="mt-3 h-5 w-5 flex-shrink-0 rounded border-ink border-black accent-primary"
                                         />
-                                        <label htmlFor="tos" className="text-sm text-gray-700">
+                                        <label htmlFor="tos" className="min-h-11 py-2.5 text-sm leading-6 text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Política de Privacidade</a>
                                         </label>
                                     </div>
                                     {erroDe('tos') && <p id="tos-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erroDe('tos')}</p>}
@@ -697,7 +696,7 @@ export default function WorkerOnboarding() {
                             <p
                                 role="status"
                                 aria-live="polite"
-                                className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                                className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl p-3"
                             >
                                 Falta preencher: {pendencias.join(', ')}.
                             </p>
@@ -709,32 +708,27 @@ export default function WorkerOnboarding() {
                             </p>
                         )}
 
-                        <div className="pt-5 flex flex-wrap gap-2 justify-between items-center border-t-2 border-gray-100">
-                            {step > 1 ? (
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => setStep(step - 1)}
-                                    iconLeft={<ArrowLeft size={18} />}
-                                >
+                        <ActionBar
+                            secondary={step > 1 ? (
+                                <Button variant="secondary" onClick={() => setStep(step - 1)} iconLeft={<ArrowLeft size={18} />}>
                                     Voltar
                                 </Button>
-                            ) : (
-                                <div /> /* Spacer */
-                            )}
-
-                            <Button
-                                type="submit"
-                                size="lg"
-                                data-copilot="freela.cadastro.avancar"
-                                loading={loading}
-                                iconRight={<ArrowRight size={18} />}
-                            >
-                                {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
-                            </Button>
-                        </div>
+                            ) : undefined}
+                            primary={
+                                <Button
+                                    type="submit"
+                                    data-copilot="freela.cadastro.avancar"
+                                    loading={loading}
+                                    iconRight={<ArrowRight size={18} />}
+                                    size="lg"
+                                                                    >
+                                    {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
+                                </Button>
+                            }
+                        />
 
                     </form>
-                </Card>
+                </div>
             </div>
         </div>
     );

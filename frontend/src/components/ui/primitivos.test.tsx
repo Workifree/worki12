@@ -32,7 +32,7 @@ describe('primitivos da fundação', () => {
     )
     const link = screen.getByRole('link', { name: 'Criar turno' })
     expect(link.className).not.toContain('enabled:')
-    expect(link).toHaveClass('bg-black', 'shadow-brutal-sm')
+    expect(link).toHaveClass('bg-black', 'shadow-brutal-xs')
   })
 
   it('ActionBar: secundária antes da principal no DOM', () => {

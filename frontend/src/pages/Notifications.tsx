@@ -25,14 +25,14 @@ const PAGE_SIZE = 20;
 
 function getIcon(type: string, title: string) {
     // O tipo "status_change" cobre aceite e cancelamento: o título decide o ícone.
-    if (/cancel|estorn|recus|dispens/i.test(title)) return <XCircle size={20} className="text-red-600" />;
-    if (/preenchida|aceit|confirm/i.test(title) && type !== 'payment') return <CheckCircle2 size={20} className="text-green-700" />;
+    if (/cancel|estorn|recus|dispens/i.test(title)) return <XCircle size={20} aria-hidden="true" className="text-red-700" />;
+    if (/preenchida|aceit|confirm/i.test(title) && type !== 'payment') return <CheckCircle2 size={20} aria-hidden="true" className="text-primary-ink" />;
     switch (type) {
-        case 'message': return <MessageSquare size={20} className="text-blue-500" />;
-        case 'payment': return <CreditCard size={20} className="text-green-500" />;
-        case 'status_change': return <Info size={20} className="text-yellow-500" />;
-        case 'system': return <AlertCircle size={20} className="text-gray-500" />;
-        default: return <Bell size={20} className="text-gray-500" />;
+        case 'message': return <MessageSquare size={20} aria-hidden="true" className="text-blue-700" />;
+        case 'payment': return <CreditCard size={20} aria-hidden="true" className="text-primary-ink" />;
+        case 'status_change': return <Info size={20} aria-hidden="true" className="text-status-warning-fg" />;
+        case 'system': return <AlertCircle size={20} aria-hidden="true" className="text-gray-600" />;
+        default: return <Bell size={20} aria-hidden="true" className="text-gray-600" />;
     }
 }
 
@@ -139,24 +139,29 @@ export default function Notifications() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto pb-4">
-            <PageHeader
-                title="Notificações"
-                action={unreadCount > 0 ? (
-                    <Button variant="ghost" onClick={() => markAllAsRead()} data-copilot={userType === 'hire' ? 'empresa.notificacoes.marcar-todas' : 'freela.notificacoes.marcar-todas'}>
-                        Marcar todas como lidas
-                    </Button>
-                ) : undefined}
-            />
+        <div className="max-w-2xl mx-auto pb-4 flex flex-col gap-4">
+            <PageHeader className="mb-0" title="Notificações" />
 
-            {/* Filtros em quantas linhas precisar: nenhum fica cortado. */}
-            <div role="group" aria-label="Filtrar notificações" className="flex flex-wrap gap-2 mb-6">
+            {/* Filtros numa linha só, com rolagem lateral (borda esmaecida): nunca 2 ou 3 linhas. */}
+            <div
+                role="group"
+                aria-label="Filtrar notificações"
+                className="-mx-4 flex gap-2 overflow-x-auto px-4 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,#000_16px,#000_calc(100%-24px),transparent)] sm:mx-0 sm:px-0 sm:[mask-image:none] [&>*]:shrink-0"
+            >
                 {FILTERS.map((f) => (
                     <FilterChip key={f.id} pressed={filterType === f.id} onClick={() => handleFilterChange(f.id)}>
                         {f.label}
                     </FilterChip>
                 ))}
             </div>
+
+            {unreadCount > 0 && (
+                <div className="-my-2 flex justify-end">
+                    <Button variant="ghost" size="sm" className="-mr-2 !px-2" onClick={() => markAllAsRead()} data-copilot={userType === 'hire' ? 'empresa.notificacoes.marcar-todas' : 'freela.notificacoes.marcar-todas'}>
+                        Marcar todas como lidas
+                    </Button>
+                </div>
+            )}
 
             {/* Content */}
             {carregando && notifications.length === 0 ? (
@@ -181,7 +186,7 @@ export default function Notifications() {
                 />
             ) : (
                 <>
-                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border-2 border-black bg-white">
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
                         {paginatedGroups.map((group) => {
                             const n = group.latest;
                             const unread = group.items.some((item) => !item.read_at);
@@ -192,7 +197,7 @@ export default function Notifications() {
                                     <button
                                         type="button"
                                         onClick={() => void handleGroupClick(group)}
-                                        className={`flex w-full gap-3 p-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-blue-50' : 'bg-white'}`}
+                                        className={`flex w-full gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-blue-50' : 'bg-white'}`}
                                     >
                                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
                                             {getIcon(n.type, n.title)}
@@ -201,7 +206,7 @@ export default function Notifications() {
                                             <span className={`block text-sm ${unread ? 'font-bold text-black' : 'font-semibold text-gray-700'}`}>
                                                 {n.title}
                                             </span>
-                                            {shift && <span className="mt-0.5 block text-xs font-bold text-black">Turno: {shift}</span>}
+                                            {shift && <span className="mt-0.5 block text-xs font-semibold text-gray-900">Turno: {shift}</span>}
                                             <span className="mt-0.5 block text-sm text-gray-600">{n.message}</span>
                                             <span className="mt-1 block text-xs text-gray-600">
                                                 {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
@@ -223,7 +228,7 @@ export default function Notifications() {
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6">
+                        <div className="flex items-center justify-between gap-2 mt-2">
                             <Button
                                 variant="secondary"
                                 onClick={() => setPage(p => p - 1)}
@@ -232,7 +237,7 @@ export default function Notifications() {
                             >
                                 Página anterior
                             </Button>
-                            <span className="text-sm font-bold text-gray-600 tabular-nums">
+                            <span className="text-sm font-semibold text-gray-600 tabular-nums">
                                 {page} / {totalPages}
                             </span>
                             <Button

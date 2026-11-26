@@ -204,7 +204,7 @@ export default function AcceptManagerInvite() {
   if (isConfirm) {
     actions = (
       <>
-        <div className="mb-4 rounded-xl border-2 border-gray-200 p-4 text-left text-sm">
+        <div className="mb-4 rounded-xl border border-gray-200 p-4 text-left text-sm">
           <p className="font-bold mb-1">Se você aceitar</p>
           <ul className="list-disc pl-5 space-y-1 text-gray-700">
             <li>você passa a operar a empresa: turnos, Elenco e pagamentos;</li>
@@ -254,7 +254,7 @@ export default function AcceptManagerInvite() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white sm:bg-canvas flex items-start sm:items-center justify-center p-4 pt-8">
       <PageMeta
         title="Convite de Gestor"
         noindex
@@ -264,10 +264,10 @@ export default function AcceptManagerInvite() {
       <div className="w-full max-w-md">
         <Card
           padding="lg"
-          className="text-center shadow-brutal-lg [overflow-wrap:anywhere]"
+          className="text-center [overflow-wrap:anywhere] max-sm:border-0 max-sm:p-0"
         >
           <div
-            className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 ${
               page === 'loading' || isConfirm ? 'bg-blue-50' : isSuccess ? 'bg-blue-600' : 'bg-gray-100'
             }`}
           >

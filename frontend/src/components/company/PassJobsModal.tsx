@@ -59,7 +59,7 @@ export default function PassJobsModal({ jobIds, destinations, onClose, onDone }:
               aria-pressed={selected}
               disabled={busy}
               onClick={() => setTo(d.userId)}
-              className={`min-h-14 w-full rounded-xl border-2 px-4 py-3 text-left text-base font-bold transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+              className={`min-h-14 w-full rounded-xl border-ink px-4 py-3 text-left text-base font-bold transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                 selected ? 'border-black bg-black text-white' : 'border-gray-300 bg-white hover:border-black'
               }`}
             >
@@ -69,7 +69,7 @@ export default function PassJobsModal({ jobIds, destinations, onClose, onDone }:
         })}
       </div>
 
-      <div className="mt-4 flex items-start gap-2 rounded-xl border-2 border-black bg-blue-50 p-3 text-sm">
+      <div className="mt-4 flex items-start gap-2 rounded-xl border border-gray-200 bg-blue-50 p-3 text-sm">
         <Bell size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
         <p>
           {target ? <strong>{target.label}</strong> : 'A pessoa escolhida'} será notificada. Quem passou também

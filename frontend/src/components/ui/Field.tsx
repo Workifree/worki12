@@ -1,15 +1,17 @@
 import { cloneElement, useId } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { cx } from './cx'
 
 /** Classes canônicas de controle (input/textarea/select) — reutilizáveis fora do Field. */
 const FIELD_CONTROL_BASE =
-  'w-full border-2 border-black rounded-xl bg-white px-4 text-base sm:text-sm text-black placeholder:text-gray-500 ' +
-  'focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ' +
-  'aria-[invalid=true]:border-red-600 aria-[invalid=true]:focus:ring-red-500'
+  'w-full border-ink border-gray-900 rounded-xl bg-white px-4 text-base sm:text-sm text-black placeholder:text-gray-500 ' +
+  'focus:outline-none focus:border-2 focus:border-black focus:ring-2 focus:ring-primary/40 ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'aria-[invalid=true]:border-red-600 aria-[invalid=true]:focus:border-red-600 aria-[invalid=true]:focus:ring-red-500/40'
 
-/** input/select: altura fixa de 44px. */
-export const FIELD_CONTROL_CLASS = `${FIELD_CONTROL_BASE} h-11`
+/** input/select: altura fixa de 48px. `select` ganha seta do sistema (`.worki-select`, index.css). */
+export const FIELD_CONTROL_CLASS = `${FIELD_CONTROL_BASE} h-12`
 
 /** textarea: sem altura fixa — altura mínima própria e respiro vertical. */
 export const FIELD_TEXTAREA_CLASS = `${FIELD_CONTROL_BASE} min-h-24 py-3 leading-relaxed`
@@ -32,10 +34,12 @@ export interface FieldProps {
   hint?: ReactNode
   error?: string
   required?: boolean
+  /** Marca "(opcional)" no rótulo. Marca-se o opcional, nunca o obrigatório (sem asterisco). */
+  optional?: boolean
   className?: string
 }
 
-export function Field({ label, children, hint, error, required, className }: FieldProps) {
+export function Field({ label, children, hint, error, required, optional, className }: FieldProps) {
   const autoId = useId()
   const controlId = children.props.id ?? autoId
   const hintId = `${controlId}-hint`
@@ -53,18 +57,18 @@ export function Field({ label, children, hint, error, required, className }: Fie
     // Obrigatório para a tecnologia assistiva também. O <form> que usa `required` leva
     // `noValidate`: a mensagem é a nossa, junto do campo, não o balão do navegador.
     required: required || children.props.required,
-    className: cx(children.type === 'textarea' ? FIELD_TEXTAREA_CLASS : FIELD_CONTROL_CLASS, children.props.className),
+    className: cx(
+      children.type === 'textarea' ? FIELD_TEXTAREA_CLASS : FIELD_CONTROL_CLASS,
+      children.type === 'select' && 'worki-select pr-10',
+      children.props.className,
+    ),
   })
 
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
-      <label htmlFor={controlId} className="text-sm font-bold text-black">
+      <label htmlFor={controlId} className="text-sm font-semibold text-gray-900">
         {label}
-        {required && (
-          <span aria-hidden="true" className="ml-0.5 text-red-600">
-            *
-          </span>
-        )}
+        {optional && !required && <span className="ml-1 font-normal text-gray-600">(opcional)</span>}
       </label>
       {control}
       {hint && (
@@ -73,8 +77,9 @@ export function Field({ label, children, hint, error, required, className }: Fie
         </p>
       )}
       {error && (
-        <p id={errorId} role="alert" className="text-xs font-bold text-red-600">
-          {error}
+        <p id={errorId} role="alert" className="flex items-start gap-1 text-[13px] font-semibold text-red-700">
+          <AlertCircle size={16} aria-hidden="true" className="mt-px shrink-0" />
+          <span className="min-w-0">{error}</span>
         </p>
       )}
     </div>

@@ -145,7 +145,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part =
                         : 'Chamado encerrado'}
                   <span className="text-xs font-normal text-gray-600">Motivo: {SHIFT_CALL_REASON_LABELS[call.reason]}</span>
                   {isSos && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-white border-2 border-black">
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-white border border-gray-200">
                       Fora do Elenco
                     </span>
                   )}
@@ -159,7 +159,8 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part =
 
               {isOpen && (
                 <Button
-                  variant="secondary"
+                  variant="dangerOutline"
+                  size="sm"
                   onClick={() => askCancel(call.id)}
                   disabled={cancellingId === call.id}
                   loading={cancellingId === call.id}
@@ -223,7 +224,7 @@ export function ShiftCallsPanel({ calls, loading, cancellingId, onCancel, part =
       {showLive && live.map(renderCall)}
 
       {showClosed && (
-        <details className="rounded-2xl border-2 border-gray-200 bg-white">
+        <details className="rounded-2xl border border-gray-200 bg-white">
           <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-bold">
             Histórico de chamados ({closed.length})
           </summary>

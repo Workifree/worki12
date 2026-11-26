@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { HTMLAttributes, ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { HTMLAttributes, ReactNode, RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Download, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
 import { Button, Card } from './ui'
@@ -33,6 +33,33 @@ function subscribeOnline(onChange: () => void): () => void {
   }
 }
 
+/** Variável CSS com a altura da pilha: o `main` soma ao próprio `padding-bottom` (index.css). */
+export const PWA_HEIGHT_VAR = '--worki-pwa-h'
+
+/** Publica a altura da pilha enquanto ela existe; some (0) quando desmonta. */
+function usePublishStackHeight(ref: RefObject<HTMLDivElement | null>, active: boolean) {
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const node = ref.current
+    if (!active || !node) {
+      root.style.removeProperty(PWA_HEIGHT_VAR)
+      return
+    }
+    const publish = () => {
+      const h = Math.ceil(node.getBoundingClientRect().height)
+      root.style.setProperty(PWA_HEIGHT_VAR, `${h > 0 ? h + 12 : 0}px`)
+    }
+    publish()
+    const RO = typeof window !== 'undefined' ? window.ResizeObserver : undefined
+    const observer = RO ? new RO(publish) : null
+    observer?.observe(node)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(PWA_HEIGHT_VAR)
+    }
+  }, [ref, active])
+}
+
 const getOnline = () => navigator.onLine
 const getOnlineOnServer = () => true
 
@@ -40,7 +67,7 @@ function IconBadge({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-primary-light text-primary"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary-ink"
     >
       {children}
     </span>
@@ -65,7 +92,8 @@ function FloatingCard({
     <Card
       as="aside"
       padding="none"
-      className={cx('px-3 py-3 shadow-brutal motion-safe:animate-slide-in', className)}
+      tone="highlight"
+      className={cx('px-3 py-3 shadow-overlay motion-safe:animate-slide-in', className)}
       {...rest}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -129,16 +157,21 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
     if (outcome === 'dismissed') dismissInstall()
   }
 
-  if (online && !showUpdate && !showInstall) return null
+  const visible = !online || showUpdate || showInstall
+  const stackRef = useRef<HTMLDivElement>(null)
+  usePublishStackHeight(stackRef, visible)
+
+  if (!visible) return null
 
   return (
-    // Pilha FIXA (`.worki-pwa-stack`, index.css): nunca entra no fluxo, então não empurra nem
-    // redimensiona lateral, cabeçalho, barra inferior ou chat. Posição por breakpoint no CSS.
-    <div className="worki-pwa-stack">
+    // Pilha FIXA (`.worki-pwa-stack`, index.css), mas que RESERVA o próprio espaço: a altura vai
+    // para `--worki-pwa-h` e o `main` soma ao padding de baixo, então o fim da tela nunca fica
+    // escondido atrás dela. No chat ela sobe para o topo (não cobre o campo de mensagem).
+    <div ref={stackRef} className="worki-pwa-stack">
       {!online && (
         <div
           role="status"
-          className="flex items-center gap-2 self-center rounded-2xl border-2 border-black bg-black px-3 py-2 text-xs font-semibold text-white shadow-brutal-sm md:self-start"
+          className="flex items-center gap-2 self-center rounded-xl bg-gray-900 px-3 py-2 text-xs font-semibold text-white shadow-overlay md:self-start"
         >
           <WifiOff aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span>Você está sem internet. Algumas telas podem não carregar.</span>

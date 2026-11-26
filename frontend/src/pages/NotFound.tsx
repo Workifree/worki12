@@ -6,8 +6,8 @@ export default function NotFound() {
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen bg-canvas flex items-center justify-center p-4 sm:p-6 font-sans">
-            <Card padding="lg" className="max-w-md w-full text-center shadow-brutal">
+        <div className="min-h-screen bg-white sm:bg-canvas flex items-start sm:items-center justify-center p-4 pt-8 sm:p-6 font-sans">
+            <Card padding="lg" className="max-w-md w-full text-center max-sm:border-0 max-sm:p-0">
                 <p className="text-7xl font-bold tracking-tight mb-4" aria-hidden="true">404</p>
                 <h1 className="text-2xl font-bold tracking-tight mb-2">Página não encontrada</h1>
                 <p className="text-sm sm:text-base text-gray-600 mb-6">

@@ -110,7 +110,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     href="/termos"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary underline font-bold"
+                    className="flex min-h-11 items-center text-primary-dark underline font-bold"
                 >
                     Ler os Termos de Uso
                 </a>
@@ -118,20 +118,20 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     href="/privacidade"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 block text-primary underline font-bold"
+                    className="flex min-h-11 items-center text-primary-dark underline font-bold"
                 >
                     Ler a Política de Privacidade
                 </a>
 
-                <div className="flex items-start gap-3 mt-5 mb-6">
+                <div className="flex items-center gap-3 mt-4 mb-6">
                     <input
                         type="checkbox"
                         id="tos-checkbox"
-                        className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
+                        className="w-5 h-5 border-ink border-black rounded accent-primary flex-shrink-0"
                         checked={checked}
                         onChange={(e) => setChecked(e.target.checked)}
                     />
-                    <label htmlFor="tos-checkbox" className="text-sm text-gray-800 cursor-pointer">
+                    <label htmlFor="tos-checkbox" className="flex min-h-11 items-center text-sm text-gray-800 cursor-pointer">
                         Li e aceito os Termos de Uso e a Política de Privacidade
                     </label>
                 </div>

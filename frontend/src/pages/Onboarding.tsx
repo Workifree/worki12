@@ -80,17 +80,17 @@ export default function Onboarding() {
             type="button"
             data-copilot="publico.entrada.escolher-freela"
             onClick={() => navigate('/login?type=work')}
-            className="group relative bg-white border-2 border-black rounded-2xl p-6 sm:p-8 text-left transition-all hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,166,81,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+            className="group relative bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 text-left transition-colors hover:border-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >
             <div className="absolute top-4 right-4 bg-primary-dark text-white text-xs font-semibold px-2.5 py-1 rounded-full">
               Para freelas
             </div>
-            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-white transition-colors border-2 border-black">
+            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-white transition-colors">
               <DollarSign size={22} strokeWidth={2.5} aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-1">Quero trabalhar</h3>
             <p className="text-gray-600 text-sm pr-8">Seja dono do seu trabalho. Seu histórico, sua avaliação e seu comprovante de renda — que ninguém tira de você.</p>
-            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-black bg-primary-dark px-4 text-sm font-bold text-white">
+            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary-dark shadow-brutal-xs px-4 text-sm font-bold text-white">
               Entrar como freela <ArrowRight size={18} aria-hidden="true" />
             </span>
           </button>
@@ -100,17 +100,17 @@ export default function Onboarding() {
             type="button"
             data-copilot="publico.entrada.escolher-empresa"
             onClick={() => navigate('/login?type=hire')}
-            className="group relative bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-8 text-left transition-all hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+            className="group relative bg-accent text-white border border-black rounded-2xl p-6 sm:p-8 text-left transition-colors hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >
             <div className="absolute top-4 right-4 bg-white text-black text-xs font-semibold px-2.5 py-1 rounded-full">
               Para empresas
             </div>
-            <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-white group-hover:text-black transition-colors border-2 border-white">
+            <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 group-hover:bg-white group-hover:text-black transition-colors">
               <Briefcase size={22} strokeWidth={2.5} aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-1">Quero contratar</h3>
             <p className="text-gray-300 text-sm pr-8">Monte seu elenco de freelas de confiança. Contrate direto, registre cada turno e controle o gasto — tudo num lugar só.</p>
-            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white px-4 text-sm font-bold text-black">
+            <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-black">
               Entrar como empresa <ArrowRight size={18} aria-hidden="true" />
             </span>
           </button>
@@ -120,7 +120,7 @@ export default function Onboarding() {
       </main>
 
       {/* Como Funciona — honesto, sem números inventados (piloto: convite push) */}
-      <section className="py-16 sm:py-20 px-6 bg-canvas border-y-2 border-black/10">
+      <section className="py-16 sm:py-20 px-6 bg-canvas border-y border-gray-200">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Como funciona</h2>
@@ -132,7 +132,7 @@ export default function Onboarding() {
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* Para Empresas */}
-            <div className="bg-white border-2 border-black rounded-2xl p-6 sm:p-8">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8">
               <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                 <Briefcase size={20} strokeWidth={2.5} aria-hidden="true" /> Para empresas
               </h3>
@@ -168,7 +168,7 @@ export default function Onboarding() {
             </div>
 
             {/* Para Freelas */}
-            <div className="bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-8">
+            <div className="bg-accent text-white rounded-2xl p-6 sm:p-8">
               <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-green-400">
                 <Users size={20} strokeWidth={2.5} aria-hidden="true" /> Para freelas
               </h3>
@@ -207,7 +207,7 @@ export default function Onboarding() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-16 sm:py-20 px-6 bg-primary text-white text-center relative overflow-hidden">
+      <section className="py-16 sm:py-20 px-6 bg-primary-dark text-white text-center relative overflow-hidden">
         <div className="relative z-10 max-w-3xl mx-auto space-y-6">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">Pronto para começar?</h2>
           <p className="text-lg sm:text-xl max-w-xl mx-auto">Monte sua equipe de confiança ou entre pra uma — leva menos de 2 minutos.</p>

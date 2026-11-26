@@ -6,17 +6,14 @@ import { levelProgress } from '../lib/gamification';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
-import {
-    Clock, Star, TrendingUp, Award,
-    ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight, CalendarClock
-} from 'lucide-react';
+import { Star, ChevronRight, AlertCircle, Send, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkerInvites } from '../hooks/useShiftInvites';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { normalizeAvailabilityGrade } from '../lib/availability';
 import { logError } from '../lib/logger';
 import ErroDeCarga from '../components/ErroDeCarga';
-import { Alert, Button, Card, PageHeader, StatusBadge } from '../components/ui';
+import { Alert, Button, Card, ListRow, PageHeader, StatusBadge } from '../components/ui';
 import TodayShiftCard from '../components/TodayShiftCard';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { workerShiftSources, workerTeamSources } from '../lib/realtime/liveSources';
@@ -312,8 +309,11 @@ export default function Dashboard() {
     const hasValidDate = parsedDate instanceof Date && !isNaN(parsedDate.getTime());
     const perfilIncompleto = hasNoDeclaredAvailability || completedQuests < totalQuests;
 
+    const empresasValor = storesLoading ? '…' : erroStores ? '—' : String(myStores.length);
+    const realizados = worker.completed_jobs_count || 0;
+
     return (
-        <div className="flex flex-col gap-8 pb-12 font-sans text-accent max-w-5xl mx-auto w-full">
+        <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-5xl mx-auto w-full">
             <PageMeta title="Início" />
 
             <PageHeader
@@ -328,9 +328,9 @@ export default function Dashboard() {
                 <ErroDeCarga onRetry={tentarDeNovo} mensagem="Parte das suas informações não carregou. Tente de novo." />
             )}
 
-            {/* --- HOJE: presença sem precisar procurar --- */}
+            {/* --- HOJE: o único cartão em foco da tela --- */}
             {temTurnoHoje && (
-                <section aria-label="Hoje" className="flex flex-col gap-4">
+                <section aria-label="Hoje" className="flex flex-col gap-3">
                     {todays.map((t) => (
                         <TodayShiftCard
                             key={t.id}
@@ -358,55 +358,58 @@ export default function Dashboard() {
                 </section>
             )}
 
-            {/* --- PRECISA DA SUA ATENÇÃO (ação pendente, persistente) ---
+            {/* --- PRECISA DA SUA ATENÇÃO (avisos curtos: texto + um botão) ---
                 Pagamento vem ANTES do convite: é o fecho de um trabalho JÁ FEITO (a empresa
                 declarou que pagou; falta o freela confirmar), enquanto o convite é trabalho futuro. */}
             {temAtencao && (
-                <section aria-label="Precisa da sua atenção" className="flex flex-col gap-4">
+                <section aria-label="Precisa da sua atenção" className="flex flex-col gap-3">
                     {pendingReceipts.length > 0 && (
-                        <Card padding="sm" className="shadow-brutal-brand flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="min-w-0">
-                                <span className="inline-flex items-center gap-1.5 bg-primary-light text-primary-dark text-xs font-bold px-3 py-1 rounded-pill mb-2">
-                                    <AlertCircle size={12} /> {valoresInformados ? 'Pagamento para confirmar' : 'Pagamento sem valor'}
-                                </span>
-                                <p className="text-2xl font-bold tabular-nums [overflow-wrap:anywhere]">
+                        <div className="rounded-2xl border border-primary/40 bg-primary-light px-4 py-3">
+                            <p className="flex items-center gap-1.5 text-sm font-semibold text-primary-ink">
+                                <AlertCircle size={14} aria-hidden="true" className="shrink-0" />
+                                {valoresInformados ? 'Pagamento para confirmar' : 'Pagamento sem valor'}
+                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                                <p className="min-w-0 text-xl font-bold tabular-nums [overflow-wrap:anywhere]">
                                     {valoresInformados ? formatBRL(totalReceipts) : 'Valor não informado'}
                                 </p>
-                                <p className="text-sm text-gray-600">
-                                    {pendingReceipts.length === 1
-                                        ? `${primaryReceiptCompany} registrou este pagamento. ${valoresInformados ? 'Confirme que recebeu.' : 'Sem o valor não dá para confirmar: fale com a empresa pelo recibo.'}`
-                                        : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
-                                </p>
+                                <Button
+                                    size="sm"
+                                    variant={temTurnoHoje ? 'secondary' : 'primary'}
+                                    data-copilot="freela.inicio.confirmar-recebimento"
+                                    className="shrink-0"
+                                    onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
+                                >
+                                    {valoresInformados ? 'Confirmar recebimento' : pendingReceipts.length === 1 ? 'Ver recibo' : 'Ver recebimentos'}
+                                </Button>
                             </div>
-                            <Button
-                                variant={temTurnoHoje ? 'secondary' : 'primary'}
-                                data-copilot="freela.inicio.confirmar-recebimento"
-                                className="sm:flex-shrink-0 w-full sm:w-auto"
-                                onClick={() => navigate(pendingReceipts.length === 1 ? `/recibo/${primaryReceipt.job_id}` : '/recebimentos')}
-                            >
-                                {valoresInformados ? 'Confirmar recebimento' : pendingReceipts.length === 1 ? 'Ver recibo' : 'Ver recebimentos'}
-                            </Button>
-                        </Card>
+                            <p className="mt-1 text-xs text-gray-700 line-clamp-2">
+                                {pendingReceipts.length === 1
+                                    ? `${primaryReceiptCompany} registrou este pagamento. ${valoresInformados ? 'Confirme que recebeu.' : 'Sem o valor não dá para confirmar: fale com a empresa pelo recibo.'}`
+                                    : `${pendingReceipts.length} pagamentos registrados aguardando sua confirmação.`}
+                            </p>
+                        </div>
                     )}
 
                     {!invitesLoading && primaryInvite && (
-                        <Card padding="sm" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="min-w-0">
-                                <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 text-xs font-bold px-3 py-1 rounded-pill mb-2">
-                                    <Send size={12} /> Convite pendente
-                                </span>
-                                <h2 className="text-lg font-bold truncate">{primaryInviteTitle}</h2>
-                                <p className="text-sm text-gray-600 truncate">{primaryInviteCompany} está te chamando para um turno.</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-gray-200 bg-white p-4">
+                            <div className="min-w-0 flex-1 basis-48">
+                                <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-600">
+                                    <Send size={14} aria-hidden="true" className="shrink-0" /> Convite pendente
+                                </p>
+                                <h2 className="text-base font-bold truncate">{primaryInviteTitle}</h2>
+                                <p className="text-xs text-gray-600 truncate">{primaryInviteCompany} está te chamando para um turno.</p>
                             </div>
                             <Button
+                                size="sm"
                                 variant={conviteEhPrimario && !temTurnoHoje ? 'primary' : 'secondary'}
                                 data-copilot="freela.inicio.ver-convite"
-                                className="sm:flex-shrink-0 w-full sm:w-auto"
+                                className="shrink-0"
                                 onClick={() => navigate('/my-jobs')}
                             >
                                 Ver Convite{pendingInvites.length > 1 ? `s (${pendingInvites.length})` : ''}
                             </Button>
-                        </Card>
+                        </div>
                     )}
                 </section>
             )}
@@ -419,6 +422,7 @@ export default function Dashboard() {
                     action={(
                         <Button
                             variant="secondary"
+                            size="sm"
                             data-copilot="freela.inicio.cadastrar-pix"
                             onClick={() => navigate('/profile?editar=pix')}
                         >
@@ -430,20 +434,18 @@ export default function Dashboard() {
                 </Alert>
             )}
 
-            {/* --- PRÓXIMO TURNO + GANHOS (a resposta de relance) --- */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {!temTurnoHoje && <Card className="md:col-span-2 flex flex-col">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-primary" /> Próximo turno
-                    </h2>
+            {/* --- PRÓXIMO TURNO (sem turno hoje) --- */}
+            {!temTurnoHoje && (
+                <section aria-labelledby="proximo-turno" className="flex flex-col gap-3">
+                    <h2 id="proximo-turno" className="text-base font-semibold">Próximo turno</h2>
                     {nextJob ? (
-                        <>
-                            <div className="flex items-start gap-4 mb-5">
-                                <div className="flex-shrink-0 w-16 rounded-xl border-2 border-black bg-gray-50 py-2 text-center">
+                        <Card padding="sm" className="flex flex-col gap-3">
+                            <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 w-14 rounded-xl bg-gray-100 py-2 text-center">
                                     {hasValidDate ? (
                                         <>
-                                            <span className="block text-2xl font-bold leading-none tabular-nums">{parsedDate!.getDate()}</span>
-                                            <span className="block mt-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                            <span className="block text-xl font-bold leading-none tabular-nums">{parsedDate!.getDate()}</span>
+                                            <span className="block mt-1 text-xs font-semibold text-gray-600">
                                                 {parsedDate!.toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}
                                             </span>
                                         </>
@@ -452,14 +454,14 @@ export default function Dashboard() {
                                     )}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <span className="inline-block mb-1 bg-primary-light text-primary-dark text-xs font-bold px-2.5 py-0.5 rounded-pill">
-                                        Agendado
-                                    </span>
-                                    <p className="font-bold text-lg leading-tight">{nextJob.job.title}</p>
+                                    <div className="flex items-start justify-between gap-2">
+                                        <p className="min-w-0 font-bold text-base leading-snug line-clamp-2">{nextJob.job.title}</p>
+                                        <StatusBadge tone="success" icon={null} className="shrink-0">Agendado</StatusBadge>
+                                    </div>
                                     {nextJob.job.company?.name && (
-                                        <p className="text-sm text-gray-700">{nextJob.job.company.name}</p>
+                                        <p className="text-sm text-gray-700 truncate">{nextJob.job.company.name}</p>
                                     )}
-                                    <p className="text-sm text-gray-600 mt-1">
+                                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
                                         {nextJob.job.work_start_time
                                             ? `${nextJob.job.work_start_time}${nextJob.job.work_end_time ? ` – ${nextJob.job.work_end_time}` : ''}`
                                             : 'Horário indefinido'}
@@ -469,182 +471,130 @@ export default function Dashboard() {
                             </div>
                             <Button
                                 variant={temAtencao ? 'secondary' : 'primary'}
-                                className="mt-auto w-full sm:w-auto sm:self-start"
+                                className="w-full sm:w-auto sm:self-start"
                                 onClick={() => navigate('/my-jobs')}
                             >
                                 Ver detalhes
                             </Button>
-                        </>
+                        </Card>
                     ) : carregandoNextJob ? (
                         <div className="h-16 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
                     ) : erroNextJob ? (
-                        <div className="text-center py-6 text-red-600 text-sm font-bold bg-red-50 rounded-xl border border-red-200">
+                        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                             Não foi possível carregar.
-                        </div>
+                        </p>
                     ) : (
-                        <div className="text-center py-6 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
+                        <p className="rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-600">
                             Sem próximos turnos marcados.
-                        </div>
+                        </p>
                     )}
-                </Card>}
+                </section>
+            )}
 
-                <Card className={temTurnoHoje ? 'md:col-span-3 flex flex-col' : 'flex flex-col'}>
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <TrendingUp size={18} className="text-primary" /> Ganhos
-                    </h2>
-                    <p className="text-3xl font-bold tabular-nums truncate" title={formatBRL(worker.earnings_total || 0)}>
-                        {formatBRL(worker.earnings_total || 0)}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                        {worker.completed_jobs_count || 0} turno{(worker.completed_jobs_count || 0) === 1 ? '' : 's'} realizado{(worker.completed_jobs_count || 0) === 1 ? '' : 's'}
-                    </p>
-                    <p className="mt-auto pt-4 inline-flex items-center gap-1.5 text-sm text-gray-700">
-                        <Star size={14} className="text-yellow-500" fill="currentColor" aria-hidden="true" />
-                        <span>{nota ? <>Sua nota: <span className="font-bold">{nota}</span></> : 'Ainda sem avaliações'}</span>
-                    </p>
-                </Card>
-            </section>
-
-            {/* --- EMPRESAS + NÍVEL (contexto, sem competir com o que é urgente) --- */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card padding="sm" className="flex flex-col justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
-                            <Building2 size={16} /> Minhas Empresas
-                        </h2>
-                        {storesLoading ? (
-                            <div className="h-9 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
-                        ) : myStores.length > 0 ? (
-                            <>
-                                <p className="text-3xl font-bold tabular-nums">{myStores.length}</p>
-                                <p className="text-sm text-gray-600">
-                                    empresa{myStores.length > 1 ? 's' : ''} confiando no seu trabalho.
-                                </p>
-                            </>
-                        ) : erroStores ? (
-                            <p className="text-sm font-bold text-red-600">Não foi possível carregar suas empresas.</p>
-                        ) : (
-                            <p className="text-sm text-gray-600">Você ainda não tem empresas conectadas.</p>
-                        )}
+            {/* --- FAIXA DE MÉTRICAS: um número por coluna, sem cartão por número --- */}
+            <section aria-label="Seus números" className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 divide-x divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+                    <div className="min-w-0 px-3 py-3">
+                        <p className="text-xs text-gray-600">Ganhos</p>
+                        <p className="mt-0.5 text-base font-bold tabular-nums truncate sm:text-xl" title={formatBRL(worker.earnings_total || 0)}>
+                            {formatBRL(worker.earnings_total || 0)}
+                        </p>
                     </div>
-                    <Button
-                        variant="secondary"
-                        className="w-full sm:w-auto sm:self-start"
+                    <button
+                        type="button"
                         onClick={() => navigate('/carteira')}
-                        iconRight={<ArrowRight size={16} />}
+                        aria-label={`Minhas empresas: ${empresasValor}. Ver empresas`}
+                        className="flex min-h-11 min-w-0 flex-col items-start px-3 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
                     >
-                        Ver empresas
-                    </Button>
-                </Card>
-
-                <Card padding="sm">
-                    <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
-                        <Award size={16} className="text-primary" /> Nível
-                    </h2>
-                    <p className="text-3xl font-bold tabular-nums mb-3">{worker.level || 1}</p>
-                    {progresso && (
-                        <>
+                        <span className="flex items-center gap-0.5 text-xs text-gray-600">
+                            Empresas <ChevronRight size={12} aria-hidden="true" />
+                        </span>
+                        <span className="mt-0.5 text-base font-bold tabular-nums sm:text-xl">{empresasValor}</span>
+                    </button>
+                    <div className="min-w-0 px-3 py-3">
+                        <p className="text-xs text-gray-600">Nível</p>
+                        <p className="mt-0.5 text-base font-bold tabular-nums sm:text-xl">{worker.level || 1}</p>
+                        {progresso && (
                             <div
-                                className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200"
+                                className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden"
                                 role="progressbar"
                                 aria-label="Progresso para o próximo nível"
                                 aria-valuemin={0}
                                 aria-valuemax={100}
                                 aria-valuenow={Math.round(progresso.percent)}
+                                title={progresso.faltam > 0 ? `Faltam ${progresso.faltam} XP para o próximo nível` : 'Nível máximo!'}
                             >
                                 <div className="h-full bg-primary" style={{ width: `${progresso.percent}%` }} />
                             </div>
-                            <p className="text-xs text-gray-600 mt-2">
-                                {progresso.faltam > 0 ? `Faltam ${progresso.faltam} XP para o próximo nível` : 'Nível máximo!'}
-                            </p>
-                        </>
-                    )}
-                </Card>
+                        )}
+                    </div>
+                </div>
+                <p className="inline-flex flex-wrap items-center gap-x-1.5 text-xs text-gray-600">
+                    <span>{realizados} turno{realizados === 1 ? '' : 's'} realizado{realizados === 1 ? '' : 's'}</span>
+                    <span aria-hidden="true">·</span>
+                    <Star size={12} className="text-yellow-500" fill="currentColor" aria-hidden="true" />
+                    <span>{nota ? <>Sua nota: <span className="font-bold text-gray-900">{nota}</span></> : 'Ainda sem avaliações'}</span>
+                </p>
             </section>
 
-            {/* --- COMPLETAR PERFIL (disponibilidade F7 + quests; um bloco só, sem competir com o resto) --- */}
+            {/* --- COMPLETAR PERFIL (disponibilidade F7 + quests) como grupo de lista --- */}
             {perfilIncompleto && (
-                <section aria-label="Complete seu perfil">
-                    <Card padding="sm" className="bg-canvas flex flex-col gap-4">
-                        <h2 className="text-lg font-bold flex items-center gap-2">
-                            <AlertCircle size={18} className="text-primary" /> Complete seu perfil
-                        </h2>
-
+                <section aria-labelledby="complete-perfil" className="flex flex-col gap-3">
+                    <h2 id="complete-perfil" className="text-base font-semibold">Complete seu perfil</h2>
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
                         {/* F7 — R14/A10: visível SÓ enquanto o freela nunca declarou disponibilidade. */}
                         {hasNoDeclaredAvailability && (
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-xl border-2 border-black p-3">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <CalendarClock size={20} className="text-primary flex-shrink-0" />
-                                    <p className="text-sm text-gray-700 min-w-0">
-                                        Declare sua disponibilidade para receber chamados mais certeiros.
-                                    </p>
-                                </div>
-                                <Button variant="secondary" className="w-full sm:w-auto sm:flex-shrink-0" onClick={() => navigate('/profile')}>
-                                    Declarar agora
-                                </Button>
-                            </div>
+                            <li>
+                                <ListRow
+                                    leading={<CalendarClock size={20} aria-hidden="true" className="shrink-0 text-primary-ink" />}
+                                    title="Declarar disponibilidade"
+                                    meta="Declare sua disponibilidade para receber chamados mais certeiros."
+                                    onActivate={() => navigate('/profile')}
+                                />
+                            </li>
                         )}
-
-                        {completedQuests < totalQuests && (
-                            <div className="flex flex-col gap-2">
-                                <p className="text-sm text-gray-600">
-                                    Ganhe <span className="font-bold text-black">XP</span> e passe mais confiança para as empresas.
-                                </p>
-                                {quests.filter(q => !q.done).slice(0, 2).map(quest => (
-                                    <button
-                                        key={quest.id}
-                                        onClick={() => navigate('/profile')}
-                                        className="flex items-center justify-between gap-3 w-full min-h-11 bg-white px-3 py-2 rounded-xl border-2 border-gray-300 hover:border-black transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
-                                    >
-                                        <span className="text-sm font-semibold text-gray-800">{quest.title}</span>
-                                        {quest.xp > 0 ? (
-                                            <span className="text-xs font-bold bg-primary-light text-primary-dark px-2.5 py-1 rounded-pill flex-shrink-0">
-                                                +{quest.xp} XP
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs font-bold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-pill flex-shrink-0">
-                                                Verificação
-                                            </span>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
+                        {completedQuests < totalQuests && quests.filter(q => !q.done).slice(0, 2).map(quest => (
+                            <li key={quest.id}>
+                                <ListRow
+                                    title={quest.title}
+                                    meta={quest.xp > 0 ? `+${quest.xp} XP e mais confiança para as empresas` : 'Verificação da conta'}
+                                    onActivate={() => navigate('/profile')}
+                                />
+                            </li>
+                        ))}
+                    </ul>
                 </section>
             )}
 
-            {/* --- HISTÓRICO RECENTE --- */}
-            <Card as="section">
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                    <CheckCircle2 size={18} /> Histórico recente
-                </h2>
-                <div>
-                    {history.length > 0 ? history.map((h) => (
-                        <button
-                            type="button"
-                            key={h.id}
-                            onClick={() => navigate('/my-jobs')}
-                            className="flex w-full justify-between items-center gap-3 min-h-14 px-2 -mx-2 py-2 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer border-b border-gray-100 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
-                        >
-                            <div className="min-w-0">
-                                <p className="font-semibold text-sm truncate" title={h.job.title}>{h.job.title}</p>
-                                <p className="text-xs text-gray-600">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
-                            </div>
-                            <StatusBadge domain="application" status={h.status} className="flex-shrink-0" />
-                        </button>
-                    )) : carregandoHistory ? (
-                        <div className="h-12 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
-                    ) : erroHistory ? (
-                        <p className="text-sm text-red-600 font-bold text-center py-4">Não foi possível carregar o histórico.</p>
-                    ) : (
-                        <p className="text-sm text-gray-600 text-center py-4">Sem histórico recente.</p>
-                    )}
+            {/* --- HISTÓRICO RECENTE (grupo de lista) --- */}
+            <section aria-labelledby="historico-recente" className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
+                    <h2 id="historico-recente" className="text-base font-semibold">Histórico recente</h2>
+                    <Button variant="ghost" size="sm" className="-mr-2 shrink-0 !px-2" onClick={() => navigate('/my-jobs')}>
+                        Ver tudo
+                    </Button>
                 </div>
-                <Button variant="ghost" fullWidth className="mt-3" onClick={() => navigate('/my-jobs')} iconRight={<ChevronRight size={14} />}>
-                    Ver tudo
-                </Button>
-            </Card>
+                {history.length > 0 ? (
+                    <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        {history.map((h) => (
+                            <li key={h.id}>
+                                <ListRow
+                                    title={<span title={h.job.title}>{h.job.title}</span>}
+                                    meta={new Date(h.created_at).toLocaleDateString('pt-BR')}
+                                    trailing={<StatusBadge domain="application" status={h.status} />}
+                                    onActivate={() => navigate('/my-jobs')}
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                ) : carregandoHistory ? (
+                    <div className="h-12 bg-gray-100 rounded-xl animate-pulse" role="status"><span className="sr-only">Carregando</span></div>
+                ) : erroHistory ? (
+                    <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">Não foi possível carregar o histórico.</p>
+                ) : (
+                    <p className="rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-600">Sem histórico recente.</p>
+                )}
+            </section>
         </div>
     );
 }

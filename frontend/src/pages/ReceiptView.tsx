@@ -327,8 +327,8 @@ export default function ReceiptView() {
             <PageMeta title={isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'} />
 
             {/* Barra de ações — não imprime */}
-            <div className="flex items-center justify-between gap-3 mb-6 print:hidden">
-                <Button variant="ghost" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />}>
+            <div className="flex items-center justify-between gap-2 mb-4 print:hidden">
+                <Button variant="ghost" className="-ml-2 !px-2" onClick={voltar} iconLeft={<ArrowLeft size={16} strokeWidth={3} />}>
                     Voltar
                 </Button>
                 <div className="flex items-center gap-2">
@@ -336,7 +336,8 @@ export default function ReceiptView() {
                     {isWorkerViewer ? <GuideRoleFreela /> : <GuideRoleEmpresa />}
                     <HelpButton variante="icone" />
                     <Button
-                        variant="secondary"
+                        variant="ghost"
+                        className="!px-2"
                         onClick={() => window.print()}
                         aria-label="Imprimir recibo"
                         iconLeft={<Printer size={16} />}
@@ -347,13 +348,13 @@ export default function ReceiptView() {
             </div>
 
             {needsConfirmation && (
-                <Card as="section" tone="highlight" padding="md" aria-label="Confirmar recebimento" className="mb-6 print:border-0 print:p-0 print:shadow-none">
-                    <h2 className="text-lg font-bold print:hidden">
+                <Card as="section" padding="sm" aria-label="Confirmar recebimento" className="mb-6 print:border-0 print:p-0 print:shadow-none">
+                    <h2 className="text-lg font-bold leading-snug print:hidden">
                         {amountMissing
                             ? 'Pagamento sem valor informado'
                             : `Você recebeu ${amountLabel(payment.amount)} de ${company?.name || 'uma empresa'}?`}
                     </h2>
-                    <p className="mt-1 mb-4 text-sm text-gray-700 print:hidden">
+                    <p className="mt-1 mb-3 text-sm text-gray-700 print:hidden">
                         A empresa registrou um pagamento por fora do app. Se recebeu, confirme aqui.
                         Quando há termo do turno, o aceite é feito no mesmo passo.
                     </p>
@@ -364,11 +365,12 @@ export default function ReceiptView() {
             {/* Recibo */}
             <Card
                 data-copilot-private
-                padding="lg"
-                className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-black"
+                padding="md"
+                tone="nested"
+                className="print:shadow-none print:border-black"
             >
-                <div className="text-center border-b-2 border-black pb-6 mb-6">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1">Worki</p>
+                <div className="text-center border-b border-gray-200 pb-4 mb-4 print:border-b-2 print:border-black">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">Worki</p>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                         {isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'}
                     </h1>
@@ -379,7 +381,7 @@ export default function ReceiptView() {
                 </div>
 
                 {isScheduled && payment.scheduled_for && (
-                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+                    <div className="bg-status-warning-bg border border-status-warning-line rounded-xl p-3 mb-4 flex items-center gap-3">
                         <Clock size={20} className="text-yellow-700 flex-shrink-0" />
                         <p className="text-sm font-semibold text-yellow-800">
                             Pagamento agendado para {formatDateOnly(payment.scheduled_for, "dd/MM/yyyy")}
@@ -387,12 +389,12 @@ export default function ReceiptView() {
                     </div>
                 )}
 
-                <div className="mb-6">
+                <div className="mb-4">
                     <span className="block text-xs font-semibold text-gray-600 mb-1">Empresa</span>
                     <p className="font-semibold text-lg">{company?.name || 'Não informado'}</p>
                 </div>
 
-                <div className="bg-gray-50 border-2 border-gray-100 rounded-xl p-4 mb-6">
+                <div className="bg-gray-50 rounded-xl p-4 mb-4">
                     <span className="block text-xs font-semibold text-gray-600 mb-2">Turno</span>
                     <p className="font-semibold">{job?.title || 'Turno'}</p>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mt-2">
@@ -463,12 +465,12 @@ export default function ReceiptView() {
                 </div>
 
                 {/* Valor em destaque (moldura preta); forma e data são apoio (fundo cinza). */}
-                <div className={`grid grid-cols-1 ${isScheduled ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4 mb-6`}>
-                    <div className="border-2 border-black rounded-xl p-4">
+                <div className={`grid grid-cols-2 ${isScheduled ? '' : 'md:grid-cols-3'} gap-3 mb-4`}>
+                    <div className="col-span-2 md:col-span-1 rounded-xl bg-primary-light p-4">
                         <span className="block text-xs font-semibold text-gray-600 mb-1">
                             {isScheduled ? 'Valor previsto' : 'Valor pago'}
                         </span>
-                        <p className="font-bold text-2xl tabular-nums">{amountLabel(payment.amount)}</p>
+                        <p className="font-bold text-2xl tabular-nums [overflow-wrap:anywhere]">{amountLabel(payment.amount)}</p>
                     </div>
                     <div className="bg-gray-50 rounded-xl p-4">
                         <span className="block text-xs font-semibold text-gray-600 mb-1">Forma</span>
@@ -490,7 +492,7 @@ export default function ReceiptView() {
                 )}
 
                 {isScheduled && (
-                    <div className="border-t-2 border-black pt-6 mb-6">
+                    <div className="border-t border-gray-200 pt-4 mb-4">
                         <p className="text-sm text-gray-600 bg-gray-100 px-4 py-3 rounded-xl">
                             Pagamento ainda não realizado — é uma promessa da empresa. A confirmação de
                             recebimento fica disponível quando o pagamento for efetivado.
@@ -506,13 +508,13 @@ export default function ReceiptView() {
                     não paga. */}
                 {!needsConfirmation && termSection}
 
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 border-t-2 border-black pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 border-t border-gray-200 pt-4 print:border-t-2 print:border-black">
                     <span>Registro Nº {shortId}</span>
                     <span>Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
                 </div>
 
-                <div className="mt-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                    <p className="text-xs text-yellow-800">
+                <div className="mt-4 rounded-xl bg-gray-100 px-3 py-2">
+                    <p className="text-xs text-gray-700">
                         {isScheduled
                             ? 'Este comprovante é o respaldo de que a empresa se comprometeu a pagar na data prevista — não é garantia de pagamento nem documento fiscal.'
                             : 'O Worki registra a declaração de pagamento entre as partes; o dinheiro não passou pela plataforma. Não é documento fiscal.'}

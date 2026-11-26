@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Briefcase, Bell, AlertTriangle, RefreshCw, PlayCircle, Share2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertTriangle, ChevronRight, RefreshCw, Share2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useQuery } from '@tanstack/react-query';
@@ -24,6 +24,10 @@ import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { companyShiftSources } from '../../lib/realtime/liveSources';
 
+// Linha de lista clicável (64px), mesma área de toque do `ListRow`.
+const ROW_LINK =
+    'flex min-h-16 items-center gap-3 px-4 py-2 transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black';
 
 export default function CompanyDashboard() {
     const navigate = useNavigate();
@@ -278,10 +282,9 @@ export default function CompanyDashboard() {
             <PageMeta title={pageTitle} />
             {hasTeam && <SectionTabs section="inicio" />}
 
-            <PageHeader title={pageTitle} subtitle={[todayLabel, companyName].filter(Boolean).join(' · ')} action={<CreateShiftLink />} inlineAction />
+            <PageHeader title={pageTitle} subtitle={[todayLabel, companyName].filter(Boolean).join(' · ')} action={<CreateShiftLink secondary={!isErrorShifts && activeShifts.length > 0} />} inlineAction />
 
-            <div className="space-y-8">
-                <GuideChecklist ocultavel />
+            <div className="space-y-6">
                 <BatchEntry />
                 <TrailShortcutCard />
 
@@ -298,31 +301,33 @@ export default function CompanyDashboard() {
                     Turnos = a gestão completa. */}
                 {pendingPayments.length > 0 && (
                     <section aria-label="Precisa de você">
-                        <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
-                            <AlertTriangle size={20} className="text-orange-500" aria-hidden="true" /> Precisa de você ({pendingPayments.length})
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <h2 className="mb-2 text-base font-semibold">Precisa de você ({pendingPayments.length})</h2>
+                        <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
                             {pendingPayments.slice(0, 4).map((row) => (
-                                <Card
-                                    key={`${row.job_id}:${row.worker_id}:${row.tipo}`}
-                                    padding="sm"
-                                    data-copilot="empresa.inicio.resolver-pagamento"
-                                    onActivate={() => navigate(`/company/jobs/${row.job_id}/candidates`)}
-                                    className="min-h-11 border-l-8 border-l-orange-500 text-left"
-                                >
-                                    <p className="font-bold text-sm">
-                                        {row.tipo === 'registrar' ? 'Registrar pagamento' : 'Efetivar pagamento agendado'}
-                                    </p>
-                                    <p className="text-xs text-gray-600 mt-1 truncate">
-                                        {row.tipo === 'registrar'
-                                            ? `${row.freela} · ${row.titulo}`
-                                            : `${row.titulo}${row.venceuEm ? ` · previsto para ${row.venceuEm.split('-').reverse().join('/')}` : ''}`}
-                                    </p>
-                                </Card>
+                                <li key={`${row.job_id}:${row.worker_id}:${row.tipo}`}>
+                                    <Link
+                                        to={`/company/jobs/${row.job_id}/candidates`}
+                                        data-copilot="empresa.inicio.resolver-pagamento"
+                                        className={ROW_LINK}
+                                    >
+                                        <AlertTriangle size={20} className="shrink-0 text-orange-600" aria-hidden="true" />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-semibold">
+                                                {row.tipo === 'registrar' ? 'Registrar pagamento' : 'Efetivar pagamento agendado'}
+                                            </span>
+                                            <span className="block truncate text-xs text-gray-600">
+                                                {row.tipo === 'registrar'
+                                                    ? `${row.freela} · ${row.titulo}`
+                                                    : `${row.titulo}${row.venceuEm ? ` · previsto para ${row.venceuEm.split('-').reverse().join('/')}` : ''}`}
+                                            </span>
+                                        </span>
+                                        <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                                    </Link>
+                                </li>
                             ))}
-                        </div>
+                        </ul>
                         {pendingPayments.length > 4 && (
-                            <p className="text-xs text-gray-600 mt-3">
+                            <p className="mt-2 text-xs text-gray-600">
                                 +{pendingPayments.length - 4} outros — abra cada turno em Turnos para resolver.
                             </p>
                         )}
@@ -336,20 +341,22 @@ export default function CompanyDashboard() {
                         onRetry={() => { void refetchJobs(); void refetchShifts(); }}
                     />
                 ) : kpiPending ? (
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4" role="status" aria-label="Carregando indicadores">
-                        {[0, 1, 2].map((i) => <div key={i} className="h-20 bg-gray-200 rounded-2xl animate-pulse motion-reduce:animate-none" />)}
-                    </div>
+                    <div className="h-[4.5rem] rounded-2xl bg-gray-200 animate-pulse motion-reduce:animate-none" role="status" aria-label="Carregando indicadores" />
                 ) : (
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-3 divide-x divide-gray-200 rounded-2xl bg-gray-100">
                         {[
                             { title: 'Sem freela', value: withoutPeople, to: '/company/jobs?filter=open' },
                             { title: 'Turnos ativos', value: activeJobList.length, to: '/company/jobs?filter=open' },
                             { title: 'Em andamento', value: inProgressCount, to: '/company/jobs?filter=andamento' },
                         ].map((stat) => (
-                            <Card key={stat.title} padding="none" className="p-3" onActivate={() => navigate(stat.to)}>
-                                <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
-                                <p className="text-xs font-semibold text-gray-600">{stat.title}</p>
-                            </Card>
+                            <Link
+                                key={stat.title}
+                                to={stat.to}
+                                className="flex min-h-[4.5rem] min-w-0 flex-col justify-center px-3 py-2 first:rounded-l-2xl last:rounded-r-2xl transition-colors duration-fast hover:bg-gray-200 active:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
+                            >
+                                <span className="text-2xl font-bold leading-none tabular-nums">{stat.value}</span>
+                                <span className="mt-1 text-xs text-gray-700">{stat.title}</span>
+                            </Link>
                         ))}
                     </div>
                 )}
@@ -360,15 +367,15 @@ export default function CompanyDashboard() {
                     { key: 'contratados', title: 'Contratados', rows: shiftsContracted, link: '/company/jobs' },
                 ].filter((group) => group.rows.length > 0).map((group, groupIndex) => (
                     <section key={group.key} aria-label={group.title}>
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                            <h2 className="text-lg font-bold flex items-center gap-2">
-                                <PlayCircle size={20} className="text-gray-600" aria-hidden="true" /> {group.title} ({group.rows.length})
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                            <h2 className="min-w-0 truncate text-base font-semibold">
+                                {group.title} ({group.rows.length})
                             </h2>
-                            <ButtonLink variant="ghost" to={group.link}>
+                            <ButtonLink variant="ghost" size="sm" to={group.link} className="shrink-0 whitespace-nowrap">
                                 Ver todos
                             </ButtonLink>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <ul className="divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white">
                             {group.rows.slice(0, 4).map((app, rowIndex) => {
                                 const worker = Array.isArray(app.worker) ? app.worker[0] : app.worker;
                                 const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
@@ -392,79 +399,65 @@ export default function CompanyDashboard() {
                                 const stepLabel = step.kind === 'view' ? 'Presença e pagamento' : step.label;
 
                                 return (
-                                    <Card
-                                        key={app.id}
-                                        padding="sm"
-                                        className="flex flex-col justify-between gap-3"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className="w-12 h-12 rounded-full bg-gray-200 border-2 border-black overflow-hidden flex-shrink-0 flex items-center justify-center font-bold">
-                                                {worker?.avatar_url ? (
-                                                    <img src={worker.avatar_url} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    worker?.full_name?.[0]?.toUpperCase() ?? 'F'
-                                                )}
+                                    <li key={app.id} className="flex items-center gap-3 px-4 py-3">
+                                        <div className="hidden h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-sm font-bold text-gray-700 sm:flex">
+                                            {worker?.avatar_url ? (
+                                                <img src={worker.avatar_url} alt="" className="h-full w-full object-cover" />
+                                            ) : (
+                                                worker?.full_name?.[0]?.toUpperCase() ?? 'F'
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                                <h3 className="min-w-0 max-w-full truncate text-sm font-semibold">{worker?.full_name || 'Freela'}</h3>
+                                                <StatusBadge tone={estadoPresenca.tone} className="whitespace-nowrap">{estadoPresenca.rotulo}</StatusBadge>
                                             </div>
-                                            <div className="min-w-0 flex-1">
-                                                <h3 className="font-bold text-base line-clamp-2 break-words">{worker?.full_name || 'Freela'}</h3>
-                                                <p className="text-sm font-semibold">{shiftWhen(job?.start_date, job?.work_start_time, job?.work_end_time)}</p>
-                                                <p className="text-xs text-gray-600 line-clamp-2 break-words">
-                                                    {[job?.title || 'Turno', job?.location].filter(Boolean).join(' · ')}
-                                                </p>
-                                                <StatusBadge tone={estadoPresenca.tone} className="mt-1.5">{estadoPresenca.rotulo}</StatusBadge>
-                                            </div>
+                                            <p className="mt-0.5 truncate text-xs text-gray-600">
+                                                {[shiftWhen(job?.start_date, job?.work_start_time, job?.work_end_time), job?.title || 'Turno', job?.location].filter(Boolean).join(' · ')}
+                                            </p>
                                         </div>
                                         <Button
                                             variant={groupIndex === 0 && rowIndex === 0 ? 'dark' : 'secondary'}
-                                            fullWidth
+                                            size="sm"
+                                            className="shrink-0 whitespace-nowrap"
                                             data-copilot={step.kind === 'checkin' ? 'empresa.inicio.registrar-chegada' : step.kind === 'checkout' ? 'empresa.inicio.registrar-saida' : 'empresa.inicio.abrir-presenca'}
                                             onClick={() => navigate(`/company/jobs/${app.job_id}/candidates`)}
                                         >
                                             {stepLabel}
                                         </Button>
-                                    </Card>
+                                    </li>
                                 );
                             })}
-                        </div>
+                        </ul>
                     </section>
                 ))}
+
+                {/* Guia de primeiros passos depois do que pede ação agora (pagamentos e turnos do dia). */}
+                <GuideChecklist ocultavel />
 
                 {/* Indicações recebidas (F10) — atalho mobile, ver comentário no hook acima. Fica
                     visível mesmo com 0 pendentes: é a PORTA para a caixa de entrada, não só um badge. */}
                 {!isEncarregado && (
-                <Card onActivate={() => navigate('/company/indicacoes')}>
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4 min-w-0">
-                            <div className="p-3 rounded-xl bg-primary-light text-primary border-2 border-black flex-shrink-0">
-                                <Share2 size={20} aria-hidden="true" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="font-bold">Indicações recebidas</p>
-                                <p className="text-xs text-gray-600">
-                                    {pendingReferralsCount
-                                        ? `${pendingReferralsCount} freela${pendingReferralsCount > 1 ? 's' : ''} aguardando decisão`
-                                        : 'Freelas indicados por outras empresas'}
-                                </p>
-                            </div>
-                        </div>
-                        {!!pendingReferralsCount && (
-                            <span className="bg-black text-white px-3 py-1 rounded-pill font-bold text-sm tabular-nums flex-shrink-0">
-                                {pendingReferralsCount}
-                            </span>
-                        )}
+                    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                        <ListRow
+                            leading={<Share2 size={20} className="shrink-0 text-gray-700" aria-hidden="true" />}
+                            title="Indicações recebidas"
+                            meta={pendingReferralsCount
+                                ? `${pendingReferralsCount} freela${pendingReferralsCount > 1 ? 's' : ''} aguardando decisão`
+                                : 'Freelas indicados por outras empresas'}
+                            to="/company/indicacoes"
+                            trailing={pendingReferralsCount ? <StatusBadge tone="info">{pendingReferralsCount}</StatusBadge> : undefined}
+                        />
                     </div>
-                </Card>
                 )}
 
                 {/* Recent Jobs Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Job List */}
-                    <section className="lg:col-span-2 space-y-4" aria-label="Turnos recentes">
+                    <section className="lg:col-span-2 space-y-2" aria-label="Turnos recentes">
                         <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-bold flex items-center gap-2">
-                                <Briefcase size={20} aria-hidden="true" /> Turnos recentes
-                            </h2>
-                            <ButtonLink variant="ghost" to="/company/jobs">Ver todos</ButtonLink>
+                            <h2 className="min-w-0 truncate text-base font-semibold">Turnos recentes</h2>
+                            <ButtonLink variant="ghost" size="sm" to="/company/jobs" className="shrink-0 whitespace-nowrap">Ver todos</ButtonLink>
                         </div>
 
                         {isErrorJobs ? (
@@ -478,7 +471,7 @@ export default function CompanyDashboard() {
                                 action={<Button variant="dark" data-copilot="empresa.inicio.criar-turno" onClick={() => navigate('/company/create')}>Criar primeiro turno</Button>}
                             />
                         ) : (
-                            <Card padding="none" className="overflow-hidden">
+                            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
                                 <ul className="divide-y divide-gray-200">
                                     {jobs.slice(0, 3).map((job) => (
                                         <li key={job.id}>
@@ -500,15 +493,13 @@ export default function CompanyDashboard() {
                                         </li>
                                     ))}
                                 </ul>
-                            </Card>
+                            </div>
                         )}
                     </section>
 
                     {/* Activity Feed */}
                     <section className="hidden space-y-4 lg:block" aria-label="Atividade recente">
-                        <h2 className="text-lg font-bold flex items-center gap-2">
-                            <Bell size={20} aria-hidden="true" /> Atividade recente
-                        </h2>
+                        <h2 className="text-base font-semibold">Atividade recente</h2>
                         <Card className="space-y-5">
                             {hasActivityError ? (
                                 <ErrorState

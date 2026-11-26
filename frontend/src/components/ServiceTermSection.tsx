@@ -228,7 +228,7 @@ export default function ServiceTermSection({
 
     if (loading) {
         return (
-            <div className="border-t-2 border-black pt-6 mb-6 print:hidden animate-pulse space-y-3" role="status"><span className="sr-only">Carregando</span>
+            <div className="border-t border-gray-200 pt-4 mb-4 print:hidden animate-pulse space-y-3" role="status"><span className="sr-only">Carregando</span>
                 <div className="h-4 w-40 bg-gray-200 rounded-xl" />
                 <div className="h-24 bg-gray-200 rounded-xl" />
             </div>
@@ -240,9 +240,9 @@ export default function ServiceTermSection({
             {/* Termo — se não existe (pagamento ainda não gerou um, ou RLS não devolveu nada),
                 este bloco não renderiza. A9/A8: nada a exibir, sem quebrar o recibo. */}
             {term && (
-                <div className="border-t-2 border-black pt-6 mb-6 print:border-t-2 print:border-black">
-                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-                        <FileText size={14} /> Termo de Prestação de Serviço
+                <div className="border-t border-gray-200 pt-4 mb-4 print:border-t-2 print:border-black">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-2">
+                        <FileText size={16} aria-hidden="true" /> Termo de Prestação de Serviço
                     </span>
 
                     {/* Documento — tipografia legível, não um parágrafo espremido.
@@ -254,13 +254,13 @@ export default function ServiceTermSection({
                         (sempre visível). O recorte maior é só UX — a garantia real é o gate abaixo.
                         `print:max-h-none` (N7, achado do evaluator): a impressão nunca trunca —
                         documento impresso tem que sair inteiro, aberto ou não na tela. */}
-                    <div className="bg-gray-50 border-2 border-black rounded-xl p-4 md:p-5 mb-4">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 md:p-5 mb-3">
                         {/* Aberto, o termo rola dentro da própria caixa: o aceite e o botão ficam logo abaixo. */}
                         <p
                             tabIndex={showFullText && !isAccepted ? 0 : undefined}
                             data-copilot-private
                             className={`whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-gray-800 print:max-h-none print:overflow-visible ${
-                                isAccepted ? '' : showFullText ? 'max-h-[45vh] overflow-y-auto' : 'max-h-48 overflow-hidden'
+                                isAccepted ? '' : showFullText ? 'max-h-[45vh] overflow-y-auto' : 'max-h-24 overflow-hidden'
                             }`}
                         >
                             {formatCpfForDisplay(term.term_text)}
@@ -281,8 +281,8 @@ export default function ServiceTermSection({
                     </div>
 
                     {isAccepted ? (
-                        <div className="flex items-center gap-2 bg-primary-light text-primary-dark font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
-                            <CheckCircle2 size={18} />
+                        <div className="flex items-center gap-2 bg-primary-light text-primary-ink font-semibold text-sm px-4 py-3 rounded-xl w-fit">
+                            <CheckCircle2 size={18} aria-hidden="true" />
                             Termo aceito em{' '}
                             {format(new Date(term.accepted_at as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                         </div>
@@ -299,7 +299,7 @@ export default function ServiceTermSection({
                                     onChange={(e) => setAgreedToTerm(e.target.checked)}
                                     disabled={!showFullText}
                                     aria-label="Li e concordo com os termos acima"
-                                    className="mt-0.5 w-5 h-5 border-2 border-black rounded accent-primary flex-shrink-0"
+                                    className="mt-0.5 w-5 h-5 rounded accent-primary-dark flex-shrink-0"
                                 />
                                 Li e concordo com os termos acima
                             </label>
@@ -337,7 +337,7 @@ export default function ServiceTermSection({
                                 client: a autoridade sobre "pode assinar?" segue sendo a RPC (o CPF
                                 pode ter acabado de ser cadastrado em outra aba). */}
                             {(lastOutcome === 'missing_cpf' || (!term.accepted_at && lastOutcome === null && term.term_text.includes('CPF: não informado'))) && (
-                                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-start gap-3">
+                                <div className="bg-status-warning-bg border border-status-warning-line rounded-xl p-4 flex items-start gap-3">
                                     <AlertTriangle size={18} className="text-yellow-700 flex-shrink-0 mt-0.5" />
                                     <div>
                                         <p className="font-bold text-yellow-800 text-sm">
@@ -374,22 +374,18 @@ export default function ServiceTermSection({
 
                     {/* Indícios best-effort do aceite — NUNCA "verificado"/"comprovado" (falsificáveis, ver ADR). */}
                     {isAccepted && (term.accepted_ip || term.accepted_user_agent) && (
-                        <p data-copilot-private className="text-xs text-gray-600 mt-3 print:hidden">
-                            Indícios do aceite (não são prova): {term.accepted_ip ? `IP ${term.accepted_ip}` : ''}
-                            {term.accepted_ip && term.accepted_user_agent ? ' · ' : ''}
-                            {term.accepted_user_agent ? `Dispositivo: ${term.accepted_user_agent}` : ''}
-                        </p>
+                        <details className="mt-2 print:hidden">
+                            <summary className="inline-flex min-h-11 cursor-pointer items-center text-xs font-semibold text-gray-600">
+                                Detalhes técnicos do aceite
+                            </summary>
+                            <p data-copilot-private className="text-xs text-gray-600 [overflow-wrap:anywhere]">
+                                Indícios do aceite (não são prova): {term.accepted_ip ? `IP ${term.accepted_ip}` : ''}
+                                {term.accepted_ip && term.accepted_user_agent ? ' · ' : ''}
+                                {term.accepted_user_agent ? `Dispositivo: ${term.accepted_user_agent}` : ''}
+                            </p>
+                        </details>
                     )}
 
-                    {/* Fronteira jurídica — a cláusula equivalente já está DENTRO de term_text (item 4),
-                        mas o aviso na UI é reforço, não substituto (A6). Não usar palavras como
-                        "validado"/"verificado pela Worki"/"documento oficial". */}
-                    <div className="mt-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                        <p className="text-xs font-bold text-yellow-800">
-                            O Worki apenas registra o aceite entre as partes — não é parte deste termo, não valida
-                            e não garante sua validade jurídica.
-                        </p>
-                    </div>
                 </div>
             )}
 
@@ -398,8 +394,8 @@ export default function ServiceTermSection({
                 a confirmação de recebimento até o freela tentar de novo com sucesso, em vez de
                 degradar silenciosamente para "sem termo" (que reabriria o BLOCKER fechado). */}
             {fetchFailed && (
-                <div className="border-t-2 border-black pt-6 mb-6 print:hidden">
-                    <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-3">
+                <div className="border-t border-gray-200 pt-4 mb-4 print:hidden">
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                         <AlertTriangle size={18} className="text-red-700 flex-shrink-0 mt-0.5" />
                         <div className="space-y-2">
                             <p className="font-bold text-red-800 text-sm">
@@ -423,11 +419,11 @@ export default function ServiceTermSection({
                 aceita o termo ANTES de confirmar (gate de leitura é pré-condição). Movida
                 para dentro deste componente (era irmã, embaixo do termo, na página — ordem
                 que deixava o botão de confirmar disponível e desacoplado do termo). */}
-            <div className="border-t-2 border-black pt-6 mb-6">
-                <span className="block text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">Confirmação de recebimento</span>
+            <div className="border-t border-gray-200 pt-4 mb-4">
+                <span className="block text-sm font-semibold text-gray-900 mb-2">Confirmação de recebimento</span>
                 {workerConfirmedAt ? (
-                    <div className="flex items-center gap-2 bg-primary-light text-primary-dark font-bold px-4 py-3 rounded-xl border-2 border-black w-fit">
-                        <CheckCircle size={18} />
+                    <div className="flex items-center gap-2 bg-primary-light text-primary-ink font-semibold text-sm px-4 py-3 rounded-xl w-fit">
+                        <CheckCircle size={18} aria-hidden="true" />
                         Recebimento confirmado em {format(new Date(workerConfirmedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </div>
                 ) : isWorkerViewer ? (
@@ -438,7 +434,7 @@ export default function ServiceTermSection({
                                     type="checkbox"
                                     checked={confirmoRecebimento}
                                     onChange={(e) => setConfirmoRecebimento(e.target.checked)}
-                                    className="mt-1 h-4 w-4 accent-primary"
+                                    className="mt-0.5 h-5 w-5 accent-primary-dark"
                                 />
                                 <span className="text-sm font-semibold text-gray-700">
                                     Confirmo que recebi este valor. Esta confirmação não pode ser desfeita.
@@ -502,6 +498,19 @@ export default function ServiceTermSection({
                     </p>
                 ) : null}
             </div>
+            {term && (
+                <>
+                    {/* Fronteira jurídica — a cláusula equivalente já está DENTRO de term_text (item 4),
+                        mas o aviso na UI é reforço, não substituto (A6). Não usar palavras como
+                        "validado"/"verificado pela Worki"/"documento oficial". */}
+                    <div className="mb-4 rounded-xl bg-gray-100 px-3 py-2">
+                        <p className="text-xs font-semibold text-gray-700">
+                            O Worki apenas registra o aceite entre as partes — não é parte deste termo, não valida
+                            e não garante sua validade jurídica.
+                        </p>
+                    </div>
+                </>
+            )}
         </>
     );
 }

@@ -288,10 +288,10 @@ export default function AcceptTeamInvite() {
   // ── Renderização ───────────────────────────────────────────────────────────────────────────
 
   const frame = (children: ReactNode) => (
-    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white sm:bg-canvas flex items-start sm:items-center justify-center p-4 pt-8">
       <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Worki." noindex />
       <div className="w-full max-w-md">
-        <Card padding="lg" className="shadow-brutal-lg [overflow-wrap:anywhere]">
+        <Card padding="lg" className="[overflow-wrap:anywhere] max-sm:border-0 max-sm:p-0">
           {children}
         </Card>
       </div>
@@ -301,7 +301,7 @@ export default function AcceptTeamInvite() {
   const alerta = (tone: 'error' | 'neutral', title: string, body: string) => (
     <div className="text-center" role="alert">
       <div
-        className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${
+        className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 ${
           tone === 'neutral' ? 'bg-blue-50' : 'bg-gray-100'
         }`}
       >
@@ -319,7 +319,7 @@ export default function AcceptTeamInvite() {
   if (preview === null) {
     return frame(
       <div className="text-center">
-        <div className="w-14 h-14 border-2 border-black rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-5">
+        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-5">
           <Building2 size={28} className="text-blue-600" aria-hidden="true" />
         </div>
         <div className="flex items-center justify-center gap-3 text-gray-600" role="status">
@@ -395,7 +395,7 @@ export default function AcceptTeamInvite() {
 
   const header = (
     <div className="text-center mb-6">
-      <div className="w-14 h-14 border-2 border-black rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+      <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
         <Building2 size={28} className="text-blue-600" aria-hidden="true" />
       </div>
       <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-balance">
@@ -415,7 +415,7 @@ export default function AcceptTeamInvite() {
         type="checkbox"
         checked={acceptedTos}
         onChange={(e) => { setAcceptedTos(e.target.checked); setFormError(undefined); }}
-        className="mt-2 h-7 w-7 shrink-0 rounded border-2 border-black accent-black"
+        className="mt-2 h-7 w-7 shrink-0 rounded border-ink border-black accent-black"
       />
       <label htmlFor="team-invite-tos" className="text-sm text-gray-800 py-3 min-h-11">
         Li e aceito os{' '}
@@ -432,7 +432,7 @@ export default function AcceptTeamInvite() {
   );
 
   const oQueAEmpresaVe = (
-    <p className="rounded-xl border-2 border-gray-200 p-3 text-sm text-gray-700">
+    <p className="rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
       Ao aceitar, você entra na equipe e a empresa passa a ver seu e-mail e o que você fizer em nome dela.
     </p>
   );
@@ -516,8 +516,9 @@ export default function AcceptTeamInvite() {
           <p className="text-sm text-gray-800">
             Enviamos um código para <strong>{email}</strong>. Digite abaixo. Se não chegar, confira o spam.
           </p>
-          <Field label="Código do e-mail" required>
+          <Field label="Código do e-mail">
             <input
+              required
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -555,8 +556,9 @@ export default function AcceptTeamInvite() {
     <>
       {header}
       <form onSubmit={(e) => void sendCode(e)} className="space-y-4" noValidate>
-        <Field label="Seu e-mail" required>
+        <Field label="Seu e-mail">
           <input
+            required
             type="email"
             inputMode="email"
             autoComplete="email"

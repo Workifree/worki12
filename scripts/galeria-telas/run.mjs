@@ -156,7 +156,7 @@ try {
       const local = { ...(cen.convitePwa ? {} : { 'worki:pwa-install-dismissed-at': String(AGORA.getTime()) }), ...(cen.local || {}) };
       if (mundo.sessao) local['sb-galeria-auth-token'] = JSON.stringify({ access_token: mundo.token, refresh_token: 'refresh-falso', token_type: 'bearer', expires_in: 31536000, expires_at: mundo.expira, user: mundo.sessao });
       // Layout: a janela de boas-vindas do guia (uma vez por conta) cobriria toda tela; só ela é dispensada.
-      if (LAYOUT && !cen.mostrarGuia && mundo.sessao) for (const p of ['gestor', 'encarregado', 'freela']) local[`worki:guia:v1:${mundo.sessao.id}:${p}`] = JSON.stringify({ boasVindasVistas: true, concluidos: [], checklistOculto: false });
+      if ((LAYOUT || process.env.GALERIA_SEM_GUIA) && !cen.mostrarGuia && mundo.sessao) for (const p of ['gestor', 'encarregado', 'freela']) local[`worki:guia:v1:${mundo.sessao.id}:${p}`] = JSON.stringify({ boasVindasVistas: true, concluidos: [], checklistOculto: false });
       await context.addInitScript(([l, s]) => {
         if (sessionStorage.getItem('__galeria')) return;
         sessionStorage.setItem('__galeria', '1');

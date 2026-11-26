@@ -1364,7 +1364,7 @@ export default function CompanyJobCandidates() {
             );
         }
         return (
-            <div data-copilot-private className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-primary-light py-1 pl-4 pr-1">
+            <div data-copilot-private className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-primary-light py-1 pl-4 pr-1">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-black">
                     <Wallet size={16} className="shrink-0" />
                     <span className="truncate">{pixKey}</span>
@@ -1561,7 +1561,7 @@ export default function CompanyJobCandidates() {
                                     aria-label={`Ver perfil de ${app.worker?.full_name || 'freela'}`}
                                     className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
-                                    <span className="block h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-black bg-gray-200">
+                                    <span className="block h-12 w-12 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-200">
                                         {app.worker?.avatar_url ? (
                                             <img src={app.worker.avatar_url} alt="" className="h-full w-full object-cover" />
                                         ) : (

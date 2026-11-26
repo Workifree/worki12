@@ -136,11 +136,12 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
   }
   /* Altura ocupada pela barra inferior: a ActionBar gruda logo acima dela. */
   .worki-layout {
-    --worki-nav-h: calc(4rem + 2px + env(safe-area-inset-bottom, 0px));
+    --worki-nav-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
     --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
   }
   :root {
-    --worki-fab-bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+    --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
+    --worki-fab-bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
 }
 
@@ -185,14 +186,37 @@ html { -webkit-tap-highlight-color: transparent; }
 .worki-pwa-stack > * { pointer-events: auto; }
 @media (max-width: 767px) {
   body:has([data-bottom-nav]) .worki-pwa-stack {
-    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
   /* Tela com ActionBar: o convite de instalar espera (não cobre o botão principal); os avisos
      críticos sobem acima dela. */
   body:has(.worki-action-bar) .worki-pwa-stack {
-    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 7rem);
+    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 7rem);
   }
   body:has(.worki-action-bar) .worki-pwa-install { display: none; }
+}
+/* Espaço reservado: a pilha publica a própria altura em --worki-pwa-h (PwaPrompts) e o conteúdo
+   ganha esse respiro no fim, então nada fica preso atrás dela ao rolar até o fim. */
+/* Chat: a pilha sobe para o topo do conteúdo e o chat encolhe a mesma altura (--chat-chrome soma
+   --worki-pwa-h), então nem o cabeçalho da conversa nem o campo "Mensagem" ficam cobertos. O
+   convite de instalar não aparece durante a conversa. */
+body:has(.worki-chat) .worki-pwa-stack {
+  top: calc(var(--worki-header-h, 0px) + 0.75rem);
+  bottom: auto;
+}
+body:has(.worki-chat) .worki-pwa-install { display: none; }
+html .worki-layout main:has(.worki-chat) { padding-top: calc(1rem + var(--worki-pwa-h, 0px)); }
+@media (min-width: 640px) {
+  html .worki-layout main:has(.worki-chat) { padding-top: calc(1.5rem + var(--worki-pwa-h, 0px)); }
+}
+@media (min-width: 768px) {
+  html .worki-layout main:has(.worki-chat) { padding-top: calc(2rem + var(--worki-pwa-h, 0px)); }
+}
+html .worki-layout main {
+  padding-bottom: calc(var(--worki-nav-h, 0px) + 1.5rem + var(--worki-pwa-h, 0px));
+}
+@media (min-width: 768px) {
+  html .worki-layout main { padding-bottom: calc(2rem + var(--worki-pwa-h, 0px)); }
 }
 @media (min-width: 768px) {
   .worki-pwa-stack {
@@ -219,10 +243,10 @@ html { -webkit-tap-highlight-color: transparent; }
 
 /* Chat: ocupa exatamente o que sobra da tela, para o campo e o Enviar ficarem sempre visíveis.
    Celular: cabeçalho (3.5rem + safe-area do topo) + respiro do topo + barra inferior (4rem +
-   borda + safe-area) + folga de 0.5rem. Os avisos PWA são fixos e não entram na conta. */
+   borda + safe-area) + folga de 0.5rem + a altura da pilha de avisos PWA (--worki-pwa-h). */
 .worki-chat {
   --chat-top: 1rem;
-  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 2px + env(safe-area-inset-bottom, 0px));
+  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 1px + env(safe-area-inset-bottom, 0px) + var(--worki-pwa-h, 0px));
   height: calc(100vh - var(--chat-chrome));
   height: calc(100dvh - var(--chat-chrome));
   min-height: 14rem;
@@ -232,11 +256,11 @@ html { -webkit-tap-highlight-color: transparent; }
 }
 @media (max-width: 767px) {
   main:has(.worki-chat) {
-    padding-bottom: calc(4.5rem + 2px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(4.5rem + 1px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 @media (min-width: 768px) {
-  .worki-chat { --chat-chrome: 4rem; }
+  .worki-chat { --chat-chrome: calc(4rem + var(--worki-pwa-h, 0px)); }
 }
 .worki-layout:has(.worki-chat) { min-height: 0; }
 
@@ -339,4 +363,27 @@ dialog.worki-dialog[open] {
     gap: 1.5rem;
   }
   .worki-side-grid:has(> [data-side] > *) > [data-main] { grid-column: span 2 / span 2; }
+}
+
+/* Linha única que rola na horizontal (abas e chips): nunca quebra; esmaece os últimos 24px à
+   direita para sinalizar que há mais, e o respiro final garante que o último item fica nítido. */
+.worki-scroll-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-inline-end: 24px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.worki-scroll-row::-webkit-scrollbar { display: none; }
+
+/* <select> do sistema (Field): sem a aparência nativa, com seta própria à direita. */
+select.worki-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 20px 20px;
 }

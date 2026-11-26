@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import ChatComposerField from '../components/ChatComposerField';
 import { supabase } from '../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, Briefcase, Check, CheckCheck } from 'lucide-react';
+import { MessageSquare, Send, ArrowLeft, Check, CheckCheck } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { MessagesLocationState } from '../lib/shiftChat';
 import { format } from 'date-fns';
@@ -10,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
-import { Button, PageHeader } from '../components/ui'
+import { Button, EmptyState, PageHeader } from '../components/ui'
 import { checkSession } from '../lib/authSession';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { useLatestResponse } from '../hooks/useLatestResponse';
@@ -464,12 +464,13 @@ export default function Messages() {
                 className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
-            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            {/* Celular: lista de borda a borda (sem moldura); a partir de md, painel com borda fina. */}
+            <div className="flex-1 flex min-h-0 bg-white -mx-4 sm:-mx-6 md:mx-0 border-y border-gray-200 md:border md:rounded-2xl overflow-hidden">
 
                 {/* Conversations List */}
-                <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h3>
+                <div className={`w-full md:w-80 md:border-r border-gray-200 flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-sm font-semibold text-gray-900">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
                     </div>
 
                     {erroNaoLidas && (
@@ -484,44 +485,58 @@ export default function Messages() {
                                 <ErroDeCarga onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
                             </div>
                         ) : conversations.length === 0 ? (
-                            <div className="p-6 text-center text-gray-600">
-                                <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
-                                <p className="font-bold">Nenhuma conversa ainda.</p>
-                                <p className="text-sm mt-2">Aceite um convite de turno para iniciar uma conversa.</p>
-                            </div>
+                            <EmptyState
+                                icon={MessageSquare}
+                                title="Nenhuma conversa ainda."
+                                description="Aceite um convite de turno para iniciar uma conversa."
+                            />
                         ) : (
-                            conversations.map(conv => (
-                                <button
-                                    key={conv.id}
-                                    onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-primary' : ''}`}
-                                >
-                                    <div className="flex gap-3 items-start">
-                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            {conv.company_logo ? (
-                                                <img src={conv.company_logo} alt={conv.company_name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <Briefcase size={20} className="text-gray-400" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <h4 className="font-bold text-sm truncate">{conv.company_name}</h4>
-                                                {conv.unread_count > 0 ? (
-                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white tabular-nums">
-                                                        {conv.unread_count}
+                            <ul className="divide-y divide-gray-200">
+                                {conversations.map(conv => {
+                                    const selecionada = selectedConversation?.id === conv.id;
+                                    const quando = conv.last_message_at ? new Date(conv.last_message_at) : null;
+                                    return (
+                                        <li key={conv.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSelectConversation(conv)}
+                                                aria-current={selecionada ? 'true' : undefined}
+                                                className={`flex w-full min-h-16 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selecionada ? 'bg-primary-light' : ''}`}
+                                            >
+                                                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 text-sm font-semibold text-gray-700" aria-hidden="true">
+                                                    {conv.company_logo ? (
+                                                        <img src={conv.company_logo} alt="" className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        (conv.company_name.trim()[0] || 'E').toUpperCase()
+                                                    )}
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-baseline justify-between gap-2">
+                                                        <span className={`truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'font-semibold text-gray-900'}`}>{conv.company_name}</span>
+                                                        {quando && !isNaN(quando.getTime()) && (
+                                                            <span className="shrink-0 text-xs text-gray-600 tabular-nums">
+                                                                {format(quando, quando.toDateString() === new Date().toDateString() ? 'HH:mm' : 'dd/MM', { locale: ptBR })}
+                                                            </span>
+                                                        )}
                                                     </span>
-                                                ) : (
-                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                        {getStatusLabel(conv.status, conv.attendance)}
+                                                    <span className="mt-0.5 flex items-center justify-between gap-2">
+                                                        <span className={`truncate text-xs ${conv.unread_count > 0 ? 'font-semibold text-black' : 'text-gray-600'}`}>{conv.job_title}</span>
+                                                        {conv.unread_count > 0 ? (
+                                                            <span className="shrink-0 rounded-pill bg-red-600 px-2 py-0.5 text-xs font-bold text-white tabular-nums" aria-label={`${conv.unread_count} não lidas`}>
+                                                                {conv.unread_count}
+                                                            </span>
+                                                        ) : (
+                                                            <span className={`shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold ${getStatusColor(conv.status)}`}>
+                                                                {getStatusLabel(conv.status, conv.attendance)}
+                                                            </span>
+                                                        )}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <p className={`text-xs truncate mt-1 ${conv.unread_count > 0 ? 'font-bold text-black' : 'text-gray-600'}`}>{conv.job_title}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))
+                                                </span>
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                         )}
                     </div>
                 </div>
@@ -533,18 +548,18 @@ export default function Messages() {
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-3 sm:p-4 border-b-2 border-black flex items-center gap-2 sm:gap-3">
+                            <div className="px-3 py-2 sm:p-4 border-b border-gray-200 flex items-center gap-2 sm:gap-3">
                                 <button aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
                                     className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 text-sm font-semibold text-gray-700" aria-hidden="true">
                                     {selectedConversation.company_logo ? (
                                         <img src={selectedConversation.company_logo} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        <Briefcase size={20} className="text-gray-400" />
+                                        (selectedConversation.company_name.trim()[0] || 'E').toUpperCase()
                                     )}
                                 </div>
                                 {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
@@ -592,15 +607,15 @@ export default function Messages() {
                         ) : messagesFor !== selectedConversation.id ? (
                                     <p role="status" className="py-12 text-center text-sm font-semibold text-gray-600">Carregando mensagens...</p>
                                 ) : messages.length === 0 ? (
-                                    <div className="text-center py-12 text-gray-600">
-                                        <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
-                                        <p className="font-bold">Nenhuma mensagem ainda.</p>
-                                        <p className="text-sm mt-2">Inicie a conversa enviando uma mensagem.</p>
-                                    </div>
+                                    <EmptyState
+                                        icon={MessageSquare}
+                                        title="Nenhuma mensagem ainda."
+                                        description="Inicie a conversa enviando uma mensagem."
+                                    />
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-primary-dark text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl ${msg.is_mine ? 'bg-primary-dark text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                                                 <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
@@ -639,7 +654,7 @@ export default function Messages() {
                             )}
 
                             {/* Message Input */}
-                            <div className="shrink-0 p-2 sm:p-4 border-t-2 border-black bg-white">
+                            <div className="shrink-0 p-2 sm:p-4 border-t border-gray-200 bg-white">
                                 <form
                                     className="flex items-end gap-2 sm:gap-3"
                                     onSubmit={(e) => {
@@ -677,12 +692,12 @@ export default function Messages() {
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-600">
-                            <div className="text-center">
-                                <MessageSquare size={48} className="mx-auto mb-4 opacity-30" />
-                                <p className="font-bold text-lg text-black">Selecione uma conversa</p>
-                                <p className="text-sm mt-2">Escolha uma conversa à esquerda para ver as mensagens.</p>
-                            </div>
+                        <div className="flex-1 flex items-center justify-center">
+                            <EmptyState
+                                icon={MessageSquare}
+                                title="Selecione uma conversa"
+                                description="Escolha uma conversa à esquerda para ver as mensagens."
+                            />
                         </div>
                     )}
                 </div>

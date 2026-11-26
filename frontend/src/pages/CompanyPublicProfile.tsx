@@ -154,7 +154,7 @@ export default function CompanyPublicProfile() {
         return (
             <div className="max-w-4xl mx-auto pb-24">
                 <PageMeta title="Empresa não encontrada" />
-                <div className="text-center py-16 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+                <div className="text-center py-16 rounded-2xl bg-gray-100">
                     <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
                     <h1 className="text-xl font-bold mb-2">Empresa não encontrada</h1>
                     <p className="text-sm text-gray-600 mb-6">Não conseguimos localizar este perfil.</p>
@@ -183,7 +183,7 @@ export default function CompanyPublicProfile() {
             </Button>
 
             {/* Card principal */}
-            <Card padding="none" className="overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-6">
+            <Card padding="none" tone="nested" className="overflow-hidden mb-6">
                 <div className="h-32 sm:h-48 bg-black relative">
                     {company.cover_url && (
                         <img src={company.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -192,7 +192,7 @@ export default function CompanyPublicProfile() {
 
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8">
                     <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem] [&+h1]:[overflow-wrap:anywhere]">
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-4 border-white ring-1 ring-gray-200 flex items-center justify-center overflow-hidden">
                             {company.logo_url ? (
                                 <img src={company.logo_url} alt={company.name} className="w-full h-full object-cover" />
                             ) : (
@@ -270,11 +270,11 @@ export default function CompanyPublicProfile() {
                     O que esta empresa costuma pedir dos freelas antes do turno.
                 </p>
                 {company.default_briefing ? (
-                    <p className="text-sm sm:text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light border-2 border-primary rounded-xl p-4 font-medium">
+                    <p className="text-sm sm:text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light rounded-xl p-4 font-medium">
                         {company.default_briefing}
                     </p>
                 ) : (
-                    <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+                    <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
                         Esta empresa ainda não definiu um briefing padrão.
                     </p>
                 )}

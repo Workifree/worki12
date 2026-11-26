@@ -70,7 +70,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
       className="flex items-center gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       {/* Logo */}
-      <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+      <div className="w-14 h-14 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
         {company.logo_url ? (
           <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
         ) : (
@@ -138,9 +138,9 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
   const isResponding = respondingId === connection.id;
 
   return (
-    <Card as="article" padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
+    <Card as="article" padding="sm" tone="highlight">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+        <div className="w-11 h-11 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
           {company?.logo_url ? (
             <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
           ) : (
@@ -336,7 +336,7 @@ export default function CarteiraClientes() {
 
       {/* Empty state */}
       {isEmpty && (
-        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+        <div className="text-center py-16 px-4 rounded-2xl bg-gray-100">
           <Users size={40} className="mx-auto mb-4 text-gray-400" />
           <h3 className="text-lg font-bold mb-2">Você ainda não tem empresas</h3>
           <p className="text-sm text-gray-600 max-w-sm mx-auto">

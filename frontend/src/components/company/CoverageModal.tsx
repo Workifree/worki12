@@ -84,7 +84,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
   return (
     <ModalShell labelledBy="coverage-title" onClose={() => { if (!busy) onClose(); }}>
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-black bg-blue-50">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-blue-50">
           <CalendarClock size={20} aria-hidden="true" />
         </div>
         <div>
@@ -107,7 +107,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
                   aria-pressed={from === p.userId}
                   disabled={busy}
                   onClick={() => { setFrom(p.userId); if (to === p.userId) setTo(null); }}
-                  className={`min-h-11 rounded-xl border-2 px-4 text-sm font-bold ${from === p.userId ? 'border-black bg-black text-white' : 'border-gray-300 bg-white hover:border-black'}`}
+                  className={`min-h-11 rounded-xl border-ink px-4 text-sm font-bold ${from === p.userId ? 'border-black bg-black text-white' : 'border-gray-300 bg-white hover:border-black'}`}
                 >
                   {p.label}
                 </button>
@@ -126,7 +126,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
                 aria-pressed={to === p.userId}
                 disabled={busy}
                 onClick={() => setTo(p.userId)}
-                className={`min-h-11 rounded-xl border-2 px-4 text-sm font-bold ${to === p.userId ? 'border-black bg-black text-white' : 'border-gray-300 bg-white hover:border-black'}`}
+                className={`min-h-11 rounded-xl border-ink px-4 text-sm font-bold ${to === p.userId ? 'border-black bg-black text-white' : 'border-gray-300 bg-white hover:border-black'}`}
               >
                 {p.label}
               </button>
@@ -144,7 +144,7 @@ export default function CoverageModal({ companyId, people, fixedFromUserId, onCl
         </div>
 
         {ready && (
-          <p className="rounded-xl border-2 border-black bg-gray-50 p-3 text-sm" role="status">
+          <p className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm" role="status">
             <strong>{toLabel}</strong> cobre os turnos de <strong>{fromLabel}</strong> de {br(startsOn)} a {br(endsOn)}
             {' '}({span} {span === 1 ? 'dia' : 'dias'}). A cobertura termina sozinha em {br(endsOn)}; o responsável registrado nos turnos não muda.
           </p>

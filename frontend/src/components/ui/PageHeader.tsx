@@ -26,8 +26,8 @@ export function PageHeader({ title, subtitle, action, as: Heading = 'h1', flush 
       )}
     >
       <div className="min-w-0">
-        <Heading className="text-2xl sm:text-3xl font-bold tracking-tight text-balance text-black">{title}</Heading>
-        {subtitle && <p className="mt-1 text-sm sm:text-base text-gray-600">{subtitle}</p>}
+        <Heading className="text-2xl font-bold tracking-tight text-balance text-gray-900 md:text-3xl">{title}</Heading>
+        {subtitle && <p className="mt-1 text-sm text-gray-600 md:text-base">{subtitle}</p>}
       </div>
       {action && (
         <div

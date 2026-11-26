@@ -289,7 +289,7 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
 
                 {phase === 'confirm' && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-amber-300 bg-amber-50">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50">
                             <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm font-bold text-amber-800">
                                 <p>Essa alteração vai ser aplicada a partir de hoje em todas as ocorrências futuras desta série
@@ -327,14 +327,14 @@ export default function EditSeriesModal({ job, onClose, onApplied }: EditSeriesM
 
                 {phase === 'result' && result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.updated} turno{result.updated !== 1 ? 's' : ''} atualizado{result.updated !== 1 ? 's' : ''}.
                             </p>
                         </div>
                         {(result.skippedFilled > 0 || result.skippedCalled > 0) && (
-                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
                                 {result.skippedFilled > 0 && (
                                     <p>{result.skippedFilled} turno{result.skippedFilled !== 1 ? 's não foram alterados' : ' não foi alterado'} porque já tem{result.skippedFilled !== 1 ? 'm' : ''} freela confirmado.</p>
                                 )}

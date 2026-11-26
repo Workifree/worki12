@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, LayoutDashboard, Megaphone, Plus, Repeat, Users, X, XCircle } from 'lucide-react';
+import { CalendarClock, CheckSquare, LayoutDashboard, Megaphone, Plus, Repeat, X, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import PassJobsModal, { type PassDestination } from '../../components/company/PassJobsModal';
 import CoverageModal, { type CoveragePerson } from '../../components/company/CoverageModal';
@@ -111,6 +111,8 @@ export default function CompanyToday() {
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Modo seleção: a caixa de marcar só aparece depois de "Selecionar vários" no menu do turno.
+  const [selectMode, setSelectMode] = useState(false);
 
   const [passIds, setPassIds] = useState<string[] | null>(null);
   const [coverOpen, setCoverOpen] = useState(false);
@@ -279,6 +281,7 @@ export default function CompanyToday() {
   const reload = useCallback(() => {
     syncToday();
     setSelected(new Set());
+    setSelectMode(false);
     setLoading(true);
     setReloadKey((k) => k + 1);
   }, [syncToday]);
@@ -288,6 +291,7 @@ export default function CompanyToday() {
     setPersonFilter(person);
     setTagFilter(tag);
     setSelected(new Set());
+    setSelectMode(false);
     setLoading(true);
   };
 
@@ -331,6 +335,16 @@ export default function CompanyToday() {
     (id: string) => operators.find((o) => o.userId === id)?.label ?? people.find((p) => p.userId === id)?.label ?? (id === userId ? 'você' : 'um colega'),
     [operators, people, userId],
   );
+
+  const lineFor = (job: TodayJob): string | null => {
+    const mine =
+      job.responsibleKind === 'self' ||
+      (!!userId && job.responsibleId === userId) ||
+      (gestor && job.responsibleKind === 'gestor');
+    if (!mine) return responsibleLine(job);
+    if (!job.tagName) return null;
+    return job.tagArchived ? `${job.tagName} (arquivada)` : job.tagName;
+  };
 
   const toggleSelected = (jobId: string) =>
     setSelected((prev) => {
@@ -409,12 +423,11 @@ export default function CompanyToday() {
                 {gestor ? 'Cobrir alguém' : 'Cobrir meus turnos'}
               </Button>
             )}
-            {!loading && jobs.length > 0 && <CreateShiftLink />}
+            {!loading && jobs.length > 0 && <CreateShiftLink secondary={!!firstNeedingPeople} />}
           </div>
         }
       />
 
-      <GuideChecklist ocultavel className="mb-6" />
       <BatchEntry className="mb-4" />
       <TrailShortcutCard className="mb-6" />
 
@@ -435,8 +448,9 @@ export default function CompanyToday() {
       )}
 
       {showFilters && (
-        <section aria-label="Filtros" className="mb-6 space-y-3">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Pessoas">
+        <section aria-label="Filtros" className="worki-scroll-row -mx-4 mb-4 flex items-center gap-2 px-4 py-1 sm:mx-0 sm:px-0">
+          {/* Pessoas e etiquetas numa só linha rolável (nunca quebra em 2 ou 3 linhas). */}
+          <div className="flex shrink-0 gap-2" role="group" aria-label="Pessoas">
             <FilterChip pressed={!filtered} onClick={() => changeFilters(null, null)}>Todos</FilterChip>
             {gestor &&
               everyone.map((p) => (
@@ -449,8 +463,9 @@ export default function CompanyToday() {
                 </FilterChip>
               ))}
           </div>
+          {tags.length > 0 && <span aria-hidden="true" className="h-6 w-px shrink-0 bg-gray-300" />}
           {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Etiquetas">
+            <div className="flex shrink-0 gap-2" role="group" aria-label="Etiquetas">
               {tags.map((t) => (
                 <FilterChip key={t.id} pressed={tagFilter === t.id} onClick={() => changeFilters(personFilter, tagFilter === t.id ? null : t.id)}>
                   {t.name}
@@ -463,7 +478,7 @@ export default function CompanyToday() {
 
       {coverages.length > 0 && (
         <section aria-label="Coberturas em andamento" className="mb-6 space-y-2">
-          <h2 className="text-lg font-bold">Coberturas em andamento</h2>
+          <h2 className="text-base font-semibold">Coberturas em andamento</h2>
           {coverages.map((c) => {
             const canEnd = gestor || c.fromUserId === userId || c.toUserId === userId;
             const text = gestor
@@ -472,10 +487,10 @@ export default function CompanyToday() {
                 ? `Você cobre um colega de ${br(c.startsOn)} a ${br(c.endsOn)}`
                 : `Um colega cobre os seus turnos de ${br(c.startsOn)} a ${br(c.endsOn)}`;
             return (
-              <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-status-info-line bg-status-info-bg p-3">
-                <p className="min-w-0 flex-1 text-sm font-bold">{text}. Termina sozinha em {br(c.endsOn)}.</p>
+              <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-status-info-line bg-status-info-bg p-3">
+                <p className="min-w-0 flex-1 text-sm font-semibold">{text}. Termina sozinha em {br(c.endsOn)}.</p>
                 {canEnd && (
-                  <Button variant="secondary" size="md" loading={endingId === c.id} iconLeft={<X size={16} />} onClick={() => { void handleEndCoverage(c); }}>
+                  <Button variant="secondary" size="sm" loading={endingId === c.id} iconLeft={<X size={16} />} onClick={() => { void handleEndCoverage(c); }}>
                     Encerrar
                   </Button>
                 )}
@@ -487,7 +502,7 @@ export default function CompanyToday() {
 
       {loading && (
         <div role="status" aria-label="Carregando os turnos">
-          <SkeletonList count={3} itemClassName="h-28" />
+          <SkeletonList count={3} itemClassName="h-20" />
         </div>
       )}
 
@@ -522,93 +537,93 @@ export default function CompanyToday() {
       )}
 
       {!loading && !loadError && groups.map((group) => (
-        <section key={group.date} aria-label={group.label} className="mb-8">
-          <h2 className="mb-3 text-lg font-bold first-letter:uppercase">{group.label}</h2>
-          <ul className="space-y-3">
+        <section key={group.date} aria-label={group.label} className="mb-6">
+          <h2 className="mb-2 text-base font-semibold first-letter:uppercase">{group.label}</h2>
+          <ul className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
             <BatchList as="li" items={group.jobs} batchOf={(j) => batchOf(j.jobId)} labels={lotes} render={(job) => {
               const passable = canPassJob(job, perms);
               // Dono único não ganha ação nova (R23); sem a RPC no ambiente, o botão não aparece.
               const cancellable = teamEnabled && cancelAvailable && canCancelJob(job, perms, new Date());
               const isSelected = selected.has(job.jobId);
-              const line = responsibleLine(job);
+              const line = teamEnabled ? lineFor(job) : null;
               const state = occupancy(job.slots, job.filled);
               const presenca = `/company/jobs/${job.jobId}/candidates`;
+              const vagas = job.slots !== null
+                ? `${job.filled !== null ? `${job.filled} de ${job.slots}` : `${job.slots}`} ${job.slots === 1 ? 'vaga' : 'vagas'}${job.filled !== null ? (job.slots === 1 ? ' preenchida' : ' preenchidas') : ''}`
+                : null;
               return (
-                <li key={job.jobId}>
-                  <Card padding="sm">
-                    <div className="lg:flex lg:items-center lg:gap-4">
-                      <div className="flex min-w-0 flex-1 items-start gap-1">
-                        {passable && (
-                          <label className="-ml-2 -mt-1 flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSelected(job.jobId)}
-                              aria-label={`Selecionar ${job.title} para passar`}
-                              className="h-6 w-6 accent-black"
-                            />
-                          </label>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
-                          <p className="mt-1 line-clamp-3 break-words text-base font-bold">{job.title}</p>
-                          <p className="mt-0.5 text-sm text-gray-600">
-                            {job.startTime ?? 'Sem horário'}
-                            {job.slots !== null && (
-                              <>
-                                {' · '}
-                                {job.filled !== null ? `${job.filled} de ${job.slots}` : `${job.slots}`} {job.slots === 1 ? 'vaga' : 'vagas'}
-                                {job.filled !== null ? (job.slots === 1 ? ' preenchida' : ' preenchidas') : ''}
-                              </>
-                            )}
-                          </p>
-                          {teamEnabled && (
-                            <p title={line} className="mt-1 flex items-start gap-1.5 text-xs text-gray-600">
-                              <Users size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
-                              <span className="break-words">{line}</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:shrink-0">
-                        {state.needsPeople ? (
-                            <Button
-                              variant={job.jobId === firstNeedingPeople ? 'dark' : 'secondary'}
-                              className="flex-1 lg:flex-none"
-                              data-copilot="empresa.hoje.chamar-freelas"
-                              iconLeft={<Megaphone size={16} />}
-                              onClick={() => navigate(`${presenca}?chamar=1`)}
-                            >
-                              Chamar freelas
-                            </Button>
-                        ) : (
-                          <Button
-                            variant="secondary"
-                            className="flex-1 lg:flex-none"
-                            data-copilot="empresa.hoje.ver-turno"
-                            onClick={() => navigate(presenca)}
-                          >
-                            Ver turno
-                          </Button>
-                        )}
-                        <Menu
-                          label={`Mais opções de ${job.title}`}
-                          menuLabel="Ações do turno"
-                          items={[
-                            state.needsPeople && { label: 'Ver turno', icon: CalendarClock, onSelect: () => navigate(presenca) },
-                            passable && { label: 'Passar para...', icon: Repeat, onSelect: () => setPassIds([job.jobId]) },
-                            cancellable && { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setCancelling(job) },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </Card>
+                <li key={job.jobId} className="flex items-center gap-2 px-3 py-3 sm:px-4">
+                  {selectMode && passable && (
+                    <label className="-my-1 flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(job.jobId)}
+                        aria-label={`Selecionar ${job.title} para passar`}
+                        className="h-5 w-5 accent-black"
+                      />
+                    </label>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 break-words text-sm font-semibold">
+                      <span className="tabular-nums">{job.startTime ?? 'Sem horário'}</span>
+                      {' · '}
+                      <span>{job.title}</span>
+                    </p>
+                    <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                      {vagas && <span>{vagas}</span>}
+                    </p>
+                    {line && (
+                      <p title={line} className="mt-1 truncate text-xs text-gray-600">{line}</p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {state.needsPeople ? (
+                      <Button
+                        variant={job.jobId === firstNeedingPeople ? 'dark' : 'secondary'}
+                        size="sm"
+                        data-copilot="empresa.hoje.chamar-freelas"
+                        iconLeft={<Megaphone size={16} className="max-[359px]:hidden" />}
+                        onClick={() => navigate(`${presenca}?chamar=1`)}
+                      >
+                        Chamar
+                        <span className="sr-only"> freelas</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-copilot="empresa.hoje.ver-turno"
+                        onClick={() => navigate(presenca)}
+                      >
+                        Ver turno
+                      </Button>
+                    )}
+                    <Menu
+                      label={`Mais opções de ${job.title}`}
+                      menuLabel="Ações do turno"
+                      items={[
+                        state.needsPeople && { label: 'Ver turno', icon: CalendarClock, onSelect: () => navigate(presenca) },
+                        passable && { label: 'Passar para...', icon: Repeat, onSelect: () => setPassIds([job.jobId]) },
+                        passable && !selectMode && {
+                          label: 'Selecionar vários',
+                          icon: CheckSquare,
+                          onSelect: () => { setSelectMode(true); setSelected(new Set([job.jobId])); },
+                        },
+                        cancellable && { label: 'Cancelar turno', icon: XCircle, danger: true, onSelect: () => setCancelling(job) },
+                      ]}
+                    />
+                  </div>
                 </li>
               );
             }} />
           </ul>
         </section>
       ))}
+
+      {/* Guia de primeiros passos depois da agenda: a tela de operação abre nos turnos. */}
+      <GuideChecklist ocultavel className="mb-6" />
 
       {truncated && (
         <p className="text-center text-sm text-gray-600">Mostrando os primeiros 500 turnos. Use os filtros para ver o resto.</p>
@@ -651,12 +666,12 @@ export default function CompanyToday() {
         />
       )}
 
-      {selectedVisible.length > 0 && (
+      {selectMode && (
         <ActionBar
           summary={`${selectedVisible.length} ${selectedVisible.length === 1 ? 'turno' : 'turnos'}`}
-          secondary={<Button variant="secondary" onClick={() => setSelected(new Set())}>Limpar seleção</Button>}
+          secondary={<Button variant="secondary" onClick={() => { setSelected(new Set()); setSelectMode(false); }}>Limpar seleção</Button>}
           primary={
-            <Button variant="dark" iconLeft={<Repeat size={16} />} onClick={() => setPassIds(selectedVisible)}>
+            <Button variant="dark" disabled={selectedVisible.length === 0} iconLeft={<Repeat size={16} />} onClick={() => setPassIds(selectedVisible)}>
               Passar para...
             </Button>
           }

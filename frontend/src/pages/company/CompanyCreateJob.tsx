@@ -23,7 +23,7 @@ import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services/shiftOperationService';
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
-import { Alert, Button, Card, Field, PageHeader, ActionBar } from '../../components/ui';
+import { Alert, Button, Field, FilterChip, PageHeader, ActionBar } from '../../components/ui';
 import ErroDeCarga from '../../components/ErroDeCarga';
 import { checkSession, getSessionUserOrThrow } from '../../lib/authSession';
 import type { ReactNode } from 'react';
@@ -39,20 +39,17 @@ import { listPresenceChecks } from '../../services/presenceService';
 // Dom(0)..Sáb(6) — mesma convenção de `job_series.weekdays` (spec R1).
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-// Secao do formulario: card + titulo + campos com ritmo fixo (gap-4).
+// Grupo do formulario: a pagina E o formulario (sem cartao dentro de cartao). Titulo 16 + campos com gap-4.
+const GROUP_CLASS = 'border-t border-gray-200 pt-6 first:border-t-0 first:pt-0';
 function FormSection({ title, children }: { title: string; children: ReactNode }) {
     return (
-        <Card as="section" aria-label={title}>
-            <h2 className="text-lg font-bold">{title}</h2>
+        <section aria-label={title} className={GROUP_CLASS}>
+            <h2 className="text-base font-semibold">{title}</h2>
             <div className="mt-4 flex flex-col gap-4">{children}</div>
-        </Card>
+        </section>
     );
 }
 
-// Chips de dia da semana (toggle). Nao sao botoes de acao: so o estado muda.
-const CHIP_BASE = 'h-11 rounded-xl border-2 border-black text-sm font-bold transition-colors';
-const CHIP_ON = 'bg-black text-white';
-const CHIP_OFF = 'bg-white text-black hover:bg-gray-100';
 
 type CampoDoTurno =
     | 'title' | 'category' | 'description' | 'start_date' | 'work_start_time' | 'work_end_time'
@@ -664,7 +661,7 @@ export default function CompanyCreateJob() {
                                     onClick={() => { void fetchJobData(mo.id, 'repetir'); }}
                                     data-copilot="empresa.turno-criar.usar-modelo"
                                     // No desktop, no máximo duas linhas curtas antes do formulário.
-                                    className={`min-h-11 w-56 shrink-0 rounded-xl border-2 border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto ${indice > 3 ? 'sm:hidden' : ''}`}
+                                    className={`min-h-11 w-56 shrink-0 rounded-xl border-ink border-black bg-white px-4 py-2.5 text-left transition-colors hover:bg-gray-50 sm:w-auto ${indice > 3 ? 'sm:hidden' : ''}`}
                                 >
                                     <span className="block truncate text-sm font-bold">{mo.title}</span>
                                     <span className="block truncate text-xs text-gray-600">
@@ -801,7 +798,7 @@ export default function CompanyCreateJob() {
                     {/* Escala Recorrente (F3) — so na criacao; edicao de ocorrencia isolada nao vira serie.
                         Recolhido por padrao: a maioria dos turnos e unico. */}
                     {!isEditing && (
-                        <div className="rounded-xl border-2 border-dashed border-gray-300 p-4">
+                        <div className="rounded-xl border border-dashed border-gray-300 p-4">
                             <label htmlFor="job-repeat" className="flex min-h-11 cursor-pointer select-none items-start gap-3">
                                 <input
                                     type="checkbox"
@@ -855,16 +852,15 @@ export default function CompanyCreateJob() {
                                                 tabIndex={-1}
                                             >
                                                 {WEEKDAY_LABELS.map((label, day) => (
-                                                    <button
+                                                    <FilterChip
                                                         key={day}
-                                                        type="button"
                                                         onClick={() => toggleWeekday(day)}
-                                                        aria-pressed={weekdays.includes(day)}
+                                                        pressed={weekdays.includes(day)}
                                                         aria-label={WEEKDAY_FULL_LABELS[day]}
-                                                        className={`w-11 ${CHIP_BASE} ${weekdays.includes(day) ? CHIP_ON : CHIP_OFF}`}
+                                                        className="w-12 !px-0"
                                                     >
                                                         {label}
-                                                    </button>
+                                                    </FilterChip>
                                                 ))}
                                             </div>
                                             {erroDe('weekdays') && (
@@ -886,7 +882,7 @@ export default function CompanyCreateJob() {
                                     {/* Pre-visualizacao ao vivo (R8) */}
                                     <p
                                         role="status"
-                                        className={`rounded-xl border-2 p-3 text-sm ${overCap ? 'border-red-300 bg-red-50 font-bold text-red-700' : 'border-black bg-white font-medium'}`}
+                                        className={`rounded-xl border p-3 text-sm ${overCap ? 'border-red-300 bg-red-50 font-bold text-red-700' : 'border-black bg-white font-medium'}`}
                                     >
                                         {occurrenceDates.length === 0 ? (
                                             <span className="text-gray-600">Defina os dias e o período para ver quantos turnos serão criados.</span>
@@ -905,7 +901,7 @@ export default function CompanyCreateJob() {
                 </FormSection>
 
                 {presencaLigada && (
-                    <Card as="section" aria-label="Presença">
+                    <section aria-label="Presença" className={GROUP_CLASS}>
                         <PresencePolicyFields
                             value={presenca.policy}
                             onChange={presenca.setPolicy}
@@ -913,7 +909,7 @@ export default function CompanyCreateJob() {
                             frozen={presencaCongelada}
                             siteError={tentouEnviar ? presenca.siteError : undefined}
                         />
-                    </Card>
+                    </section>
                 )}
 
                 <FormSection title="Valor">
@@ -965,7 +961,7 @@ export default function CompanyCreateJob() {
                     </Button>
 
                     {mostrarOpcionais && (
-                        <Card id="job-opcionais" className="mt-4">
+                        <div id="job-opcionais" className="mt-4">
                             <div className="flex flex-col gap-4">
                                 <Field label="Requisitos (opcional)">
                                     <textarea
@@ -1008,7 +1004,7 @@ export default function CompanyCreateJob() {
                                     />
                                 </Field>
                             </div>
-                        </Card>
+                        </div>
                     )}
                 </section>
 
@@ -1049,7 +1045,7 @@ export default function CompanyCreateJob() {
                     dismissable={false}
                     className="text-center"
                 >
-                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border-2 border-black bg-primary-light">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gray-200 bg-primary-light">
                             <Repeat size={24} className="text-primary" />
                         </div>
                         <h2 id="serie-criada-titulo" className="mb-2 text-2xl font-bold tracking-tight">Série criada!</h2>
@@ -1109,7 +1105,7 @@ export default function CompanyCreateJob() {
                         )}
 
                         {!teamLoading && !teamError && teamMembers.length === 0 && (
-                            <div className="rounded-2xl border-2 border-dashed border-gray-300 py-8 text-center text-gray-600">
+                            <div className="rounded-2xl border border-dashed border-gray-300 py-8 text-center text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-40" />
                                 <p className="text-sm font-bold">Seu elenco está vazio.</p>
                                 <p className="mt-1 text-xs">O turno já foi criado. Adicione freelas em <strong>Meu Elenco</strong> para poder chamar.</p>
@@ -1141,8 +1137,8 @@ export default function CompanyCreateJob() {
                                     const avatarUrl = member.worker.avatar_url ?? member.worker.photo_url ?? null;
                                     const isInviting = invitingWorkerId === member.worker.id;
                                     return (
-                                        <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border-2 border-gray-200 p-3">
-                                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border-2 border-black bg-gray-100">
+                                        <div key={member.connection.id} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
+                                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
                                                 {avatarUrl ? (
                                                     <img src={avatarUrl} alt={member.worker.full_name} className="h-full w-full object-cover" />
                                                 ) : (

@@ -25,7 +25,7 @@ export function ActionBar({ primary, secondary, summary, stacked = false, classN
   return (
     <div
       className={cx(
-        'worki-action-bar sticky bottom-[var(--worki-nav-h,0px)] z-30 -mx-4 mt-6 border-t-2 border-black bg-white px-4 py-3',
+        'worki-action-bar sticky bottom-[var(--worki-nav-h,0px)] z-30 -mx-4 mt-6 border-t border-gray-200 bg-white px-4 py-3',
         'pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)-var(--worki-nav-h,0px)))]',
         'sm:-mx-6 sm:px-6 md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:pb-0',
         className,

@@ -66,7 +66,7 @@ function ReceivedCard({ item }: { item: WorkerReferralCard }) {
     <Card as="article" className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100 border-2 border-black overflow-hidden flex items-center justify-center">
+          <div className="w-14 h-14 shrink-0 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center">
             {item.card.avatar_url ? (
               <img src={item.card.avatar_url} alt={item.card.full_name} className="w-full h-full object-cover" />
             ) : (
@@ -279,7 +279,7 @@ export default function CompanyReferrals() {
             <ErrorState title="Não foi possível carregar suas indicações." onRetry={() => void loadSent()} />
           )}
           {!loadingSent && !erroSent && sent.length === 0 && (
-            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
+            <div className="p-8 text-center">
               <p className="text-sm font-semibold text-gray-600">Você ainda não indicou nenhum freela.</p>
             </div>
           )}

@@ -151,4 +151,10 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     expect(within(inicio).getByText('Início')).toHaveClass('max-[1099px]:sr-only');
     expect(inicio).toHaveAttribute('title', 'Início');
   });
+
+  it('links da navegação têm alvo de toque >= 44px (min-h-11), também no rail', () => {
+    renderSidebar('/dashboard', 'worker');
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' });
+    for (const link of within(nav).getAllByRole('link')) expect(link).toHaveClass('min-h-11');
+  });
 });

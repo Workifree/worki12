@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getPasswordStrength } from '../lib/validation';
 import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
-import { Alert, Button, Card, Field, FilterChip } from '../components/ui';
+import { Alert, Button, Field } from '../components/ui';
+import { AuthShell } from '../components/AuthShell';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
 import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 import { safeInternalPath } from '../lib/safeRedirect';
@@ -268,39 +268,49 @@ export default function Login() {
         }
     };
 
+    const papelAtivo = 'flex-1 min-h-11 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black';
+
+    const rodape = (
+        <>
+            <div className="border-t border-gray-200 pt-3 text-center text-sm text-gray-600">
+                {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}{' '}
+                <button
+                    type="button"
+                    onClick={() => {
+                        setIsSignUp(!isSignUp);
+                        setError(null);
+                        setSuccessMessage(null);
+                        setRoleMismatch(null);
+                        setAguardandoEmail(false);
+                    }}
+                    className="inline-flex items-center min-h-11 px-1 underline decoration-2 underline-offset-2 font-bold text-black hover:text-primary-dark transition-colors"
+                >
+                    {isSignUp ? 'Fazer Login' : 'Cadastre-se'}
+                </button>
+            </div>
+
+            <nav aria-label="Links institucionais" className="mt-1 flex flex-wrap justify-center gap-x-2 text-sm text-gray-600">
+                <Link to="/sobre" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Sobre a Worki</Link>
+                <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 px-2 hover:text-black transition-colors">Termos</Link>
+                <Link to="/privacidade" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Privacidade</Link>
+                <Link to="/licencas" className="inline-flex items-center min-h-11 px-2 hover:text-black transition-colors">Licenças</Link>
+                <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 px-2 hover:text-black transition-colors">Ajuda</Link>
+            </nav>
+        </>
+    );
+
     return (
-        <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
-                    ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
+        <AuthShell
+            backTo="/"
+            title={isSignUp
+                ? (isHire ? 'Criar conta de empresa' : 'Criar conta de freela')
+                : (isHire ? 'Entrar como empresa' : 'Entrar como freela')}
+            subtitle={isSignUp
+                ? 'Preencha os dados para se cadastrar.'
+                : (isHire ? SUBTITULO_EMPRESA : 'Seus turnos, presença e recibos.')}
+            footer={rodape}
+        >
             <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
-
-            {/* Voltar no fluxo: nunca cobre o título, nem a 320px. */}
-            <Button
-                variant="secondary"
-                size="md"
-                onClick={() => navigate('/')}
-                iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
-                className="self-start mb-4"
-            >
-                Voltar
-            </Button>
-
-            {/* Main Card */}
-            <Card
-                padding="lg"
-                className={`w-full max-w-md ${isHire ? 'shadow-brutal-brand' : 'shadow-brutal-lg'}`}
-            >
-                <div className="text-center mb-6">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-                        {isSignUp
-                            ? (isHire ? 'Criar conta de empresa' : 'Criar conta de freela')
-                            : (isHire ? 'Entrar como empresa' : 'Entrar como freela')}
-                    </h1>
-                    <p className="text-sm sm:text-base text-gray-600">
-                        {isSignUp
-                            ? 'Preencha os dados para se cadastrar.'
-                            : (isHire ? SUBTITULO_EMPRESA : 'Seus turnos, presença e recibos.')}
-                    </p>
-                </div>
 
                 {tipoDeConvite && !aguardandoEmail && (
                     <Alert tone="info" title="Você recebeu um convite" className="mb-4">
@@ -312,20 +322,34 @@ export default function Login() {
                 )}
 
                 {!tipoDeConvite && !aguardandoEmail && (
-                    <div role="group" aria-label="Tipo de conta" className="mb-4 flex justify-center gap-2">
-                        <FilterChip pressed={!isHire} onClick={() => escolherPapel('work')}>Sou freela</FilterChip>
-                        <FilterChip pressed={isHire} onClick={() => escolherPapel('hire')}>Sou empresa</FilterChip>
+                    <div role="group" aria-label="Tipo de conta" className="mb-5 flex gap-1 rounded-xl bg-gray-100 p-1">
+                        <button
+                            type="button"
+                            aria-pressed={!isHire}
+                            onClick={() => escolherPapel('work')}
+                            className={`${papelAtivo} ${!isHire ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-black'}`}
+                        >
+                            Sou freela
+                        </button>
+                        <button
+                            type="button"
+                            aria-pressed={isHire}
+                            onClick={() => escolherPapel('hire')}
+                            className={`${papelAtivo} ${isHire ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-black'}`}
+                        >
+                            Sou empresa
+                        </button>
                     </div>
                 )}
 
                 {reason === 'session_expired' && !error && !successMessage && (
-                    <div role="status" className="mb-4 p-3 bg-yellow-50 border-2 border-yellow-400 text-yellow-900 rounded-xl text-sm font-medium">
+                    <div role="status" className="mb-4 p-3 bg-yellow-50 border border-yellow-400 text-yellow-900 rounded-xl text-sm font-medium">
                         Sua sessão expirou. Faça login novamente para continuar.
                     </div>
                 )}
 
                 {error && (
-                    <div role="alert" className="mb-4 p-3 bg-red-50 border-2 border-red-500 text-red-700 rounded-xl text-sm font-medium">
+                    <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-500 text-red-700 rounded-xl text-sm font-medium">
                         {error}
                         {error.startsWith('Por favor, verifique seu email') && (
                             <Button variant="secondary" fullWidth className="mt-2" loading={reenvio === 'enviando'} onClick={() => void reenviarConfirmacao()}>
@@ -336,7 +360,7 @@ export default function Login() {
                 )}
 
                 {roleMismatch && (
-                    <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl text-sm font-medium space-y-3">
+                    <div className="mb-4 p-4 bg-amber-50 border border-amber-400 text-amber-900 rounded-xl text-sm font-medium space-y-3">
                         <p>
                             Este e-mail já está cadastrado como <strong className="font-bold">{roleLabel(roleMismatch.actualType)}</strong>.
                             {' '}Não é possível entrar como {roleLabel(explicitType)} com esta conta.
@@ -353,7 +377,7 @@ export default function Login() {
                 )}
 
                 {successMessage && (
-                    <div role="status" className="mb-4 p-3 bg-green-50 border-2 border-green-500 text-green-800 rounded-xl text-sm font-medium">
+                    <div role="status" className="mb-4 p-3 bg-green-50 border border-green-500 text-green-800 rounded-xl text-sm font-medium">
                         {successMessage}
                     </div>
                 )}
@@ -454,31 +478,6 @@ export default function Login() {
                 </form>
                 )}
 
-                <div className="mt-4 pt-4 border-t-2 border-gray-100 text-center text-sm text-gray-600">
-                    {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}{' '}
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setIsSignUp(!isSignUp);
-                            setError(null);
-                            setSuccessMessage(null);
-                            setRoleMismatch(null);
-                            setAguardandoEmail(false);
-                        }}
-                        className="inline-flex items-center min-h-11 px-1 underline decoration-2 underline-offset-2 font-bold text-black hover:text-primary transition-colors"
-                    >
-                        {isSignUp ? 'Fazer Login' : 'Cadastre-se'}
-                    </button>
-                </div>
-
-                <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
-                    <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
-                    <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
-                    <Link to="/licencas" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Licenças</Link>
-                    <Link to="/ajuda" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Ajuda</Link>
-                </nav>
-            </Card>
-        </div>
+        </AuthShell>
     );
 }

@@ -170,7 +170,7 @@ export function Menu({ label, menuLabel, items, triggerVariant = 'ghost', classN
           role="menu"
           aria-label={menuLabel ?? label}
           onKeyDown={onKeyDown}
-          className="fixed bottom-auto right-auto z-[60] m-0 w-60 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border-2 border-black bg-white p-0 text-left shadow-brutal"
+          className="fixed bottom-auto right-auto z-[60] m-0 w-60 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white p-0 text-left shadow-overlay"
         >
           {visible.map((item, index) => (
             <button

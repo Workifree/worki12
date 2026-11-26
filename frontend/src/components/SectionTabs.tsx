@@ -20,17 +20,18 @@ const LABELS: Record<SectionId, string> = {
  * para caber a 320px sem rolagem, alvo de 44px. `NavLink` aplica `aria-current="page"`.
  */
 export default function SectionTabs({ section, role = 'company', className = 'mb-6' }: SectionTabsProps) {
-    const activeClass = role === 'company' ? 'bg-black text-white border-black' : 'bg-primary-dark text-white border-black';
+    // Aba ativa por sublinhado de 2px + peso (não pílula cheia).
+    const activeClass = role === 'company' ? 'border-black text-black' : 'border-primary-dark text-primary';
     return (
-        <nav aria-label={LABELS[section]} className={`flex gap-1 sm:gap-2 border-b-2 border-black print:hidden ${className}`}>
+        <nav aria-label={LABELS[section]} className={`flex gap-1 sm:gap-4 border-b border-gray-200 print:hidden ${className}`}>
             {SECTION_TABS[section].map((tab) => (
                 <NavLink
                     key={tab.path}
                     to={tab.path}
                     end
                     className={({ isActive }) =>
-                        `min-h-11 min-w-0 flex-1 sm:flex-none inline-flex items-center justify-center whitespace-nowrap rounded-t-xl border-2 border-b-0 px-2 sm:px-5 text-[13px] sm:text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${
-                            isActive ? activeClass : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-black'
+                        `-mb-px min-h-11 min-w-0 flex-1 sm:flex-none inline-flex items-center justify-center whitespace-nowrap border-b-2 px-2 sm:px-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${
+                            isActive ? `${activeClass} font-bold` : 'border-transparent font-semibold text-gray-600 hover:text-black'
                         }`
                     }
                 >

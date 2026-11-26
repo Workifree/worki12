@@ -114,13 +114,13 @@ export default function ProfileReviews({
             ) : failed ? (
                 <ErroDeCarga onRetry={() => setReloadKey((k) => k + 1)} mensagem="Não foi possível carregar as avaliações." />
             ) : reviews.length === 0 ? (
-                <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+                <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
                     Ainda sem avaliações. Elas aparecem aqui após turnos concluídos.
                 </p>
             ) : (
                 <div className="space-y-3">
                     {reviews.map((r) => (
-                        <div key={r.id} className="border-2 border-gray-200 rounded-xl p-4">
+                        <div key={r.id} className="border border-gray-200 rounded-xl p-4">
                             <div className="flex items-center justify-between gap-3 mb-1">
                                 <span className="font-bold text-sm truncate">{r.reviewer_name}</span>
                                 <div className="flex items-center gap-0.5 flex-shrink-0">

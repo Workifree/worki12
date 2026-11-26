@@ -246,7 +246,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                         )}
 
                         {!teamLoading && !teamError && teamMembers.length === 0 && (
-                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-600">
+                            <div className="text-center py-8 border border-dashed border-gray-200 rounded-2xl text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
                                 <p className="font-bold text-sm">Seu elenco está vazio.</p>
                             </div>
@@ -263,9 +263,9 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                         ? weeksOverThreshold(targets, riskThreshold, existingByWeek)
                                         : [];
                                     return (
-                                        <div key={member.connection.id} className="p-3 rounded-xl border-2 border-gray-200 hover:border-black transition-colors">
+                                        <div key={member.connection.id} className="p-3 rounded-xl border border-gray-200 hover:border-black transition-colors">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+                                                <div className="w-10 h-10 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
                                                     {avatarUrl ? (
                                                         <img src={avatarUrl} alt={member.worker.full_name} className="w-full h-full object-cover" />
                                                     ) : (
@@ -338,14 +338,14 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
 
                 {result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.invited} chamado{result.invited !== 1 ? 's' : ''} disparado{result.invited !== 1 ? 's' : ''}.
                             </p>
                         </div>
                         {result.failed > 0 && (
-                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-600">
                                 {result.failed} turno{result.failed !== 1 ? 's' : ''} não recebeu convite — tente convidar manualmente na agenda.
                             </div>
                         )}

@@ -45,8 +45,8 @@ interface StatusCardProps {
 /** Moldura única dos estados da página. */
 function StatusCard({ icon, iconClassName, title, children }: StatusCardProps) {
   return (
-    <Card padding="lg" className="text-center shadow-brutal-lg [overflow-wrap:anywhere]">
-      <div className={`w-14 h-14 border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-5 ${iconClassName}`}>
+    <Card padding="lg" className="text-center [overflow-wrap:anywhere] max-sm:border-0 max-sm:p-0">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 ${iconClassName}`}>
         {icon}
       </div>
       <h1 className="text-2xl font-bold tracking-tight mb-2 text-balance">{title}</h1>
@@ -233,7 +233,7 @@ export default function InviteAccept() {
   const company = companyName ?? 'a empresa';
 
   return (
-    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white sm:bg-canvas flex items-start sm:items-center justify-center p-4 pt-8">
       <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Worki." noindex />
 
       <div className="w-full max-w-md">
@@ -267,7 +267,7 @@ export default function InviteAccept() {
                   ? `Confira se é mesmo ${inviterName} quem te enviou o link. Nada é aceito sem o seu toque.`
                   : 'Não foi possível mostrar o nome da empresa antes do aceite. Só continue se você sabe quem te enviou. Nada é aceito sem o seu toque.'}
             </p>
-            <div className="mb-4 rounded-xl border-2 border-gray-200 p-4 text-left text-sm">
+            <div className="mb-4 rounded-xl border border-gray-200 p-4 text-left text-sm">
               {isWorkerLink ? (
                 <>
                   <p className="font-bold mb-1">O que acontece</p>

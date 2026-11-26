@@ -9,7 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { WalletService } from '../../services/walletService';
 import { validateCPF, validateCNPJ, formatCpfCnpj } from '../../lib/validation';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, Field, PageHeader } from '../../components/ui';
+import { ActionBar, Button, Field, PageHeader } from '../../components/ui';
 import { logError } from '../../lib/logger'
 import { checkSession } from '../../lib/authSession';
 import ErroDeCarga from '../../components/ErroDeCarga';
@@ -187,7 +187,7 @@ export default function CompanyOnboarding() {
     ).filter(Boolean);
 
     return (
-        <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-6 sm:py-10 font-sans">
+        <div className="min-h-screen bg-white sm:bg-canvas flex flex-col items-center px-4 pt-4 sm:py-10 font-sans">
             <PageMeta title="Criar Conta" />
 
             <div className="w-full max-w-2xl">
@@ -236,7 +236,7 @@ export default function CompanyOnboarding() {
                 </div>
 
                 {/* Form Card */}
-                <Card padding="lg" className="shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="sm:rounded-2xl sm:border sm:border-gray-200 sm:bg-white sm:p-8">
 
                     <form onSubmit={handleNext} noValidate className="space-y-6">
 
@@ -246,7 +246,7 @@ export default function CompanyOnboarding() {
                                 <h2 className="text-lg font-bold">Sobre a empresa</h2>
 
                                 <div className="space-y-4">
-                                    <Field label="Nome da empresa" error={erros.name} required>
+                                    <Field label="Nome da empresa" error={erros.name}>
                                         <input
                                             type="text"
                                             required
@@ -259,7 +259,7 @@ export default function CompanyOnboarding() {
                                         />
                                     </Field>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="CNPJ ou CPF" required error={erros.cnpj}>
+                                        <Field label="CNPJ ou CPF" error={erros.cnpj}>
                                             <input
                                                 type="text"
                                                 required
@@ -272,7 +272,7 @@ export default function CompanyOnboarding() {
                                                 placeholder="00.000.000/0001-00 ou 000.000.000-00"
                                             />
                                         </Field>
-                                        <Field label="Tipo de empresa" error={erros.companyType} required>
+                                        <Field label="Tipo de empresa" error={erros.companyType}>
                                             <select
                                                 required
                                                 value={formData.companyType}
@@ -288,7 +288,7 @@ export default function CompanyOnboarding() {
                                         </Field>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Field label="Setor" error={erros.industry} required>
+                                        <Field label="Setor" error={erros.industry}>
                                             <select
                                                 required
                                                 value={formData.industry}
@@ -302,7 +302,7 @@ export default function CompanyOnboarding() {
                                                 ))}
                                             </select>
                                         </Field>
-                                        <Field label="Cidade" error={erros.city} required>
+                                        <Field label="Cidade" error={erros.city}>
                                             <input
                                                 type="text"
                                                 required
@@ -329,7 +329,7 @@ export default function CompanyOnboarding() {
                                         <legend className="text-sm font-bold mb-2">Como você monta seus turnos?</legend>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                             {['Turnos pontuais (eventos/picos)', 'Escala recorrente (mesma equipe)', 'Reforço de fim de semana', 'Cobertura de faltas'].map(opt => (
-                                                <label key={opt} className={`border-2 rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.hiringGoal === opt ? 'border-black bg-gray-100 text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                <label key={opt} className={`border-ink rounded-xl min-h-11 px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 text-sm font-semibold ${formData.hiringGoal === opt ? 'border-black bg-gray-100 text-black' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input
                                                         type="radio"
                                                         name="goal"
@@ -352,17 +352,18 @@ export default function CompanyOnboarding() {
                                         <legend className="text-sm font-bold mb-2">Turnos por mês (estimativa)</legend>
                                         <div className="flex gap-2" data-invalid={erros.hiringVolume ? 'true' : undefined} tabIndex={-1}>
                                             {['1-5', '6-20', '20+'].map(opt => (
-                                                <label key={opt} className={`min-w-0 flex-1 border-2 rounded-xl min-h-11 px-1 sm:px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
+                                                <label key={opt} className={`min-w-0 flex-1 border-ink rounded-xl min-h-11 px-1 sm:px-3 py-3 cursor-pointer transition-colors flex flex-col items-center justify-center text-center focus-within:ring-2 focus-within:ring-black focus-within:ring-offset-2 ${formData.hiringVolume === opt ? 'border-black bg-black text-white' : 'border-gray-300 hover:border-black text-gray-700'}`}>
                                                     <input type="radio" name="volume" aria-invalid={erros.hiringVolume ? true : undefined} aria-describedby={erros.hiringVolume ? 'volume-error' : undefined} value={opt} aria-label={`${opt} turnos por mês`} checked={formData.hiringVolume === opt} onChange={e => setFormData({ ...formData, hiringVolume: e.target.value })} className="sr-only" />
                                                     <span className="text-lg font-bold">{opt}</span>
-                                                    <span className="text-xs uppercase tracking-wide opacity-70">Turnos</span>
+                                                    <span className="text-xs opacity-80">turnos</span>
                                                 </label>
                                             ))}
                                         </div>
                                         {erros.hiringVolume && <p id="volume-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erros.hiringVolume}</p>}
                                     </fieldset>
 
-                                    <div className="flex items-start gap-3">
+                                    {/* Linha inteira clicável, 44px; os links da frase também têm 44px de altura. */}
+                                    <div className="flex min-h-11 items-start gap-3">
                                         <input
                                             type="checkbox"
                                             id="tos"
@@ -370,13 +371,13 @@ export default function CompanyOnboarding() {
                                             aria-describedby={erros.tos ? 'tos-error' : undefined}
                                             checked={tosAccepted}
                                             onChange={e => setTosAccepted(e.target.checked)}
-                                            className="w-5 h-5 border-2 border-black rounded accent-primary mt-0.5 flex-shrink-0"
+                                            className="mt-3 h-5 w-5 flex-shrink-0 rounded border-ink border-black accent-primary"
                                         />
-                                        <label htmlFor="tos" className="text-sm text-gray-700">
+                                        <label htmlFor="tos" className="min-h-11 py-2.5 text-sm leading-6 text-gray-700">
                                             Li e aceito os{' '}
-                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Termos de Uso</a>
+                                            <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Termos de Uso</a>
                                             {' '}e a{' '}
-                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-block py-2">Política de Privacidade</a>
+                                            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary-dark underline font-bold inline-flex min-h-11 items-center align-middle">Política de Privacidade</a>
                                         </label>
                                     </div>
                                     {erros.tos && <p id="tos-error" role="alert" className="mt-2 text-xs font-bold text-red-600">{erros.tos}</p>}
@@ -388,7 +389,7 @@ export default function CompanyOnboarding() {
                             <p
                                 role="status"
                                 aria-live="polite"
-                                className="text-sm text-gray-700 bg-gray-50 border-2 border-gray-200 rounded-xl p-3"
+                                className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl p-3"
                             >
                                 Falta: {pendencias.join(', ')}.
                             </p>
@@ -400,33 +401,28 @@ export default function CompanyOnboarding() {
                             </p>
                         )}
 
-                        <div className="pt-5 flex flex-wrap gap-2 justify-between items-center border-t-2 border-gray-100">
-                            {step > 1 ? (
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => setStep(step - 1)}
-                                    iconLeft={<ArrowLeft size={18} />}
-                                >
+                        <ActionBar
+                            secondary={step > 1 ? (
+                                <Button variant="secondary" onClick={() => setStep(step - 1)} iconLeft={<ArrowLeft size={18} />}>
                                     Voltar
                                 </Button>
-                            ) : (
-                                <div />
-                            )}
-
-                            <Button
-                                type="submit"
-                                variant="dark"
-                                size="lg"
-                                loading={loading}
-                                data-copilot="empresa.cadastro.avancar"
-                                iconRight={<ArrowRight size={18} />}
-                            >
-                                {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
-                            </Button>
-                        </div>
+                            ) : undefined}
+                            primary={
+                                <Button
+                                    type="submit"
+                                    variant="dark"
+                                    loading={loading}
+                                    data-copilot="empresa.cadastro.avancar"
+                                    iconRight={<ArrowRight size={18} />}
+                                    size="lg"
+                                                                    >
+                                    {step === TOTAL_STEPS ? 'Finalizar' : 'Próximo'}
+                                </Button>
+                            }
+                        />
 
                     </form>
-                </Card>
+                </div>
             </div>
         </div>
     );

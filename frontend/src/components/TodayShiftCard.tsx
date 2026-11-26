@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, LogIn, LogOut, MessageCircle, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, LogIn, LogOut, MessageCircle, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger';
@@ -8,7 +8,7 @@ import { formatBRL } from '../lib/currency';
 import { attendanceGuardMessage, checkinWindow, checkinWindowMessage, saoPauloDay } from '../lib/checkinWindow';
 import { openShiftConversation } from '../lib/shiftChat';
 import { hasArrived, hasLeftShift, isOnShift, type PresenceStamps } from '../lib/shiftPresence';
-import { Alert, Button, Card, StatusBadge } from './ui';
+import { Button, Card, IconButton, Menu, StatusBadge } from './ui';
 import LocalDoTurno from './LocalDoTurno';
 import { Dialog } from './ui/Dialog';
 import { PresenceCheckFlow } from './presence/PresenceCheckFlow';
@@ -132,46 +132,83 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
         }
     };
 
+    // Situação da chegada numa linha (antes era uma caixa de aviso inteira).
+    const chegada = shift.worker_checkin_at
+        ? shift.company_checkin_confirmed_at
+            ? { texto: 'Empresa confirmou chegada', cor: 'text-primary-ink', Icone: CheckCircle2 }
+            : { texto: 'Aguardando confirmação da empresa', cor: 'text-status-warning-fg', Icone: Clock }
+        : shift.company_checkin_confirmed_at
+            ? { texto: 'Empresa registrou sua chegada', cor: 'text-status-info-fg', Icone: CheckCircle2 }
+            : null;
+
     return (
-        <Card as="article" padding="sm" className="flex flex-col gap-3 shadow-brutal-brand">
+        <Card as="article" padding="sm" className="flex flex-col gap-2">
             <div className="min-w-0">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-lg font-bold">{heading}</h2>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {startsToday && <StatusBadge tone="warning" icon={Clock}>É hoje</StatusBadge>}
+                {/* Cabeçalho: rótulo + selos à esquerda; conversa e menu à direita (alvos de 44px). */}
+                <div className="-mr-2 -mt-2 flex items-start justify-between gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-2.5">
+                        <h2 className="text-sm font-semibold text-gray-600">{heading}</h2>
+                        {/* "Ao vivo" já diz que é hoje. */}
+                        {startsToday && !onShift && <StatusBadge tone="warning" icon={Clock}>É hoje</StatusBadge>}
                         {onShift ? (
                             <StatusBadge tone="success" icon={null}>Ao vivo</StatusBadge>
                         ) : (
                             <StatusBadge tone="info" icon={null}>Agendado</StatusBadge>
                         )}
                     </div>
+                    <div className="flex shrink-0 items-center">
+                        <IconButton
+                            aria-label="Falar com a empresa"
+                            title="Falar com a empresa"
+                            data-copilot="freela.turno.falar-empresa"
+                            onClick={() => void chat()}
+                            disabled={chatting}
+                            aria-busy={chatting || undefined}
+                        >
+                            <MessageCircle size={20} />
+                        </IconButton>
+                        {onCancel && shift.status === 'hired' && !arrived && (
+                            <Menu
+                                label="Mais opções do turno"
+                                items={[{
+                                    label: 'Cancelar turno',
+                                    icon: XCircle,
+                                    danger: true,
+                                    onSelect: onCancel,
+                                    'data-copilot': 'freela.turnos.cancelar',
+                                    'data-copilot-risk': 'D',
+                                }]}
+                            />
+                        )}
+                    </div>
                 </div>
-                <h3 className="mt-3 text-base font-bold break-words [overflow-wrap:anywhere]">{shift.title}</h3>
-                <p className="text-sm text-gray-700 break-words [overflow-wrap:anywhere]">{shift.companyName}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700">
-                    <span className="inline-flex items-center gap-1.5 tabular-nums">
+                <h3 className="text-base font-bold leading-snug line-clamp-2 [overflow-wrap:anywhere]">{shift.title}</h3>
+                <p className="text-sm text-gray-700 truncate">{shift.companyName}</p>
+                <p className="flex min-w-0 flex-wrap items-center gap-x-3 text-sm text-gray-700">
+                    <span className="inline-flex items-center gap-1 tabular-nums">
                         <Clock size={14} aria-hidden="true" /> {hours}
                     </span>
-                    <span className="font-bold tabular-nums text-primary-dark">
+                    <span className="font-bold tabular-nums text-primary-ink">
                         {shift.pay && shift.pay > 0 ? formatBRL(shift.pay) : 'Valor não informado'}
                     </span>
-                </div>
-                <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-700 [overflow-wrap:anywhere]">
+                </p>
+                <p className="flex min-w-0 items-center gap-1.5 text-sm text-gray-700 [overflow-wrap:anywhere]">
                     <LocalDoTurno location={shift.location} />
                 </p>
             </div>
 
-            {steps && <JobLifecycleStepper steps={steps} />}
+            {/* A linha do tempo completa só a partir de `sm`; no celular, a linha de situação e o botão dizem o passo. */}
+            {steps && <div className="hidden sm:block"><JobLifecycleStepper steps={steps} /></div>}
 
-            <div className="flex flex-col gap-3">
-                {shift.worker_checkin_at ? (
-                    <Alert tone={shift.company_checkin_confirmed_at ? 'success' : 'warning'}>
-                        {shift.company_checkin_confirmed_at ? 'Empresa confirmou chegada' : 'Aguardando confirmação da empresa'}
-                    </Alert>
-                ) : shift.company_checkin_confirmed_at ? (
-                    <Alert tone="info">Empresa registrou sua chegada</Alert>
-                ) : (
-                    <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
+                {chegada && (
+                    <p role="status" className={`flex items-center gap-1.5 text-sm font-semibold ${chegada.cor}`}>
+                        <chegada.Icone size={16} aria-hidden="true" className="shrink-0" />
+                        {chegada.texto}
+                    </p>
+                )}
+                {!chegada && (
+                    <div className="flex flex-col gap-1">
                         <Button
                             size="lg"
                             fullWidth
@@ -185,7 +222,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                         >
                             Registrar chegada
                         </Button>
-                        <p id={hintId} className="text-sm text-gray-600">{checkinWindowMessage(window)}</p>
+                        <p id={hintId} className="text-xs text-gray-600">{checkinWindowMessage(window)}</p>
                     </div>
                 )}
 
@@ -202,32 +239,6 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
                         Registrar saída
                     </Button>
                 )}
-
-                <div className="flex flex-wrap gap-2 [&>*]:flex-1">
-                <Button
-                    variant="secondary"
-                    className="!px-3"
-                    data-copilot="freela.turno.falar-empresa"
-                    onClick={() => void chat()}
-                    loading={chatting}
-                    iconLeft={<MessageCircle size={18} />}
-                >
-                    Falar com a empresa
-                </Button>
-
-                {onCancel && shift.status === 'hired' && !arrived && (
-                    <Button
-                        variant="dangerOutline"
-                        className="!px-3"
-                        data-copilot="freela.turnos.cancelar"
-                        data-copilot-risk="D"
-                        onClick={onCancel}
-                        iconLeft={<XCircle size={18} />}
-                    >
-                        Cancelar turno
-                    </Button>
-                )}
-                </div>
 
                 {onShift && (
                     <p className="text-xs text-gray-600">

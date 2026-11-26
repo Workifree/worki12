@@ -9,7 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
 import { fillMissingWorkers } from '../../services/workerCardsService';
-import { Button, PageHeader } from '../../components/ui'
+import { Button, IconButton, PageHeader } from '../../components/ui'
 import ErroDeCarga from '../../components/ErroDeCarga'
 import { checkSession } from '../../lib/authSession'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
@@ -500,11 +500,11 @@ export default function CompanyMessages() {
                 className={selectedConversation ? '!mb-4 max-md:sr-only' : '!mb-4'}
             />
 
-            <div className="flex-1 flex min-h-0 bg-white border-2 border-black rounded-2xl overflow-hidden max-md:-mx-4 sm:max-md:-mx-6 max-md:rounded-none max-md:border-x-0 md:shadow-brutal">
+            <div className="flex-1 flex min-h-0 bg-white overflow-hidden max-md:-mx-4 sm:max-md:-mx-6 max-md:border-t max-md:border-gray-200 md:rounded-2xl md:border md:border-gray-200">
 
-                <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h2 className="text-sm font-bold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
+                <div className={`w-full md:w-80 md:border-r md:border-gray-200 flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="px-4 py-2 border-b border-gray-200">
+                        <h2 className="text-sm font-semibold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -523,19 +523,19 @@ export default function CompanyMessages() {
                                 <button
                                     key={conv.id}
                                     onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
+                                    className={`w-full min-h-16 px-4 py-3 text-left border-b border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selectedConversation?.id === conv.id ? 'bg-gray-100' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
-                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                        <div className="w-10 h-10 rounded-full bg-gray-100 text-sm font-bold text-gray-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             {conv.worker_avatar ? (
                                                 <img src={conv.worker_avatar} alt={conv.worker_name} className="w-full h-full object-cover" />
                                             ) : (
-                                                <User size={20} className="text-gray-400" />
+                                                <span aria-hidden="true">{conv.worker_name?.trim()?.[0]?.toUpperCase() || <User size={20} className="text-gray-400" />}</span>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline gap-2">
-                                                <h3 className="font-bold text-sm truncate">{conv.worker_name}</h3>
+                                                <h3 className="font-semibold text-sm truncate">{conv.worker_name}</h3>
                                                 {conv.last_message_at && !conv.no_messages && (
                                                     <span className="shrink-0 text-xs text-gray-600 tabular-nums">{formatWhen(conv.last_message_at)}</span>
                                                 )}
@@ -571,13 +571,14 @@ export default function CompanyMessages() {
                 <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
-                            <div className="p-3 sm:p-4 border-b-2 border-black flex items-center gap-2 sm:gap-3">
-                                <button aria-label="Voltar para a lista de conversas"
+                            <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center gap-2 sm:gap-3">
+                                <IconButton
+                                    aria-label="Voltar para a lista de conversas"
                                     onClick={() => setSelectedConversation(null)}
-                                    className="md:hidden h-11 w-11 -ml-2 flex items-center justify-center shrink-0 hover:bg-gray-100 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                                    className="md:hidden -ml-2 shrink-0"
                                 >
                                     <ArrowLeft size={20} />
-                                </button>
+                                </IconButton>
                                 <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shrink-0">
                                     {selectedConversation.worker_avatar ? (
                                         <img src={selectedConversation.worker_avatar} alt="" className="w-full h-full object-cover" />
@@ -626,7 +627,7 @@ export default function CompanyMessages() {
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl ${msg.is_mine ? 'bg-blue-700 text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                                                 <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de

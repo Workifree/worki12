@@ -15,20 +15,23 @@ export interface ListRowProps {
   className?: string
 }
 
-const AREA = 'flex min-h-[4.5rem] min-w-0 flex-1 items-center gap-3 px-3 py-2'
+const AREA = 'flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-2'
 const PRESS =
   'transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black'
 
-/** Linha de lista densa (72px ou mais). Agrupe em `<ul className="divide-y divide-gray-200">`. */
+/**
+ * Linha de lista densa (64px ou mais: avatar 40 + 12 + texto). Agrupe num `Card tone="flat"` ou
+ * `<ul className="divide-y divide-gray-200">`. Clicável ganha chevron.
+ */
 export function ListRow({ leading, title, meta, trailing, to, onActivate, className }: ListRowProps) {
   const body = (
     <>
       {leading}
       <span className="min-w-0 flex-1 text-left">
-        <span className="line-clamp-2 break-words text-sm font-bold text-black">{title}</span>
-        {meta && <span className="mt-0.5 block text-xs text-gray-600">{meta}</span>}
+        <span className="line-clamp-2 break-words text-sm font-semibold text-gray-900">{title}</span>
+        {meta && <span className="mt-0.5 block truncate text-[13px] leading-snug text-gray-600">{meta}</span>}
       </span>
-      {(to || onActivate) && <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-gray-400" />}
+      {(to || onActivate) && <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-gray-500" />}
     </>
   )
   return (
@@ -44,7 +47,7 @@ export function ListRow({ leading, title, meta, trailing, to, onActivate, classN
       ) : (
         <div className={AREA}>{body}</div>
       )}
-      {trailing && <div className="flex shrink-0 items-center gap-2 pr-3">{trailing}</div>}
+      {trailing && <div className="flex shrink-0 items-center gap-2 pr-4">{trailing}</div>}
     </div>
   )
 }
