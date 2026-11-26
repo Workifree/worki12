@@ -394,7 +394,7 @@ export function ShiftCallModal({
               devolução da decisão, nunca conclusão jurídica (R7). Nunca desabilita o disparo
               (A7) — mesma área do aviso de vagas incompletas, os dois podem coexistir. */}
           {riskyByCount.length > 0 && (
-            <div className="flex items-start gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50">
+            <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50">
               <AlertTriangle size={16} className="text-yellow-700 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-yellow-800 space-y-1">
                 {riskyByCount.map(({ count, names }) => (
@@ -450,7 +450,7 @@ export function ShiftCallModal({
           declarado pela empresa. Uma linha, sem filtrar/desabilitar ninguém na lista abaixo —
           a decisão de quem chamar continua inteiramente da empresa. */}
       {job.certification_requirement && (
-        <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+        <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border-2 border-blue-200 rounded-xl p-3 mb-4">
           <Award size={14} className="flex-shrink-0 mt-0.5" />
           <span>
             Este turno pede: {job.certification_requirement}. É só um aviso — não filtra nem
@@ -508,7 +508,7 @@ export function ShiftCallModal({
                 onClick={isEmpty ? undefined : () => toggleListChip(list.id)}
                 disabled={dispatching || isEmpty}
                 aria-pressed={isActive}
-                className={`min-h-11 max-w-full py-1.5 px-4 rounded-pill border-ink border-black font-semibold text-sm text-left leading-tight flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                className={`min-h-11 max-w-full py-1.5 px-4 rounded-pill border-2 border-black font-semibold text-sm text-left leading-tight flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                   isEmpty
                     ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-500'
                     : isActive
@@ -537,7 +537,7 @@ export function ShiftCallModal({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome ou função"
             disabled={dispatching}
-            className="w-full h-11 border-ink border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+            className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
           />
         </div>
         <Button
@@ -583,7 +583,7 @@ export function ShiftCallModal({
       )}
 
       {!loadingTeam && !teamError && available.length === 0 && (
-        <div className="text-center py-8 px-4 border border-dashed border-gray-300 rounded-2xl text-gray-600">
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <Users size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">
             {members.length === 0 ? 'Nenhum freela apareceu no seu elenco.' : 'Ninguém disponível no elenco para este turno.'}
@@ -626,7 +626,7 @@ export function ShiftCallModal({
           return (
             <label
               key={member.worker.id}
-              className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-ink cursor-pointer transition-colors ${
+              className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
                 isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
               }`}
             >
@@ -637,7 +637,7 @@ export function ShiftCallModal({
                 disabled={dispatching}
                 className="w-5 h-5 accent-black flex-shrink-0"
               />
-              <div className="w-9 h-9 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
                 {member.worker.avatar_url ? (
                   <img
                     src={member.worker.avatar_url}

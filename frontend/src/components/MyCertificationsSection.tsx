@@ -244,7 +244,7 @@ export default function MyCertificationsSection() {
       )}
 
       {!loading && !erroCarga && certifications.length === 0 && (
-        <div className="flex flex-col items-start gap-3 bg-gray-100 rounded-xl p-4">
+        <div className="flex flex-col items-start gap-3 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4">
           <p className="text-sm text-gray-600">
             Você ainda não cadastrou nenhuma certificação.
           </p>
@@ -258,13 +258,13 @@ export default function MyCertificationsSection() {
             const expired = isCertificationExpired(cert.expires_at);
             const verified = !!cert.verified_by_company_id && !!cert.verified_at;
             return (
-              <div key={cert.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <div key={cert.id} className="bg-gray-50 border-2 border-gray-100 rounded-xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm min-w-0 [overflow-wrap:anywhere]">{cert.title}</h4>
                       {expired && (
-                        <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-xs font-semibold">
+                        <span className="bg-red-100 text-red-700 border border-red-300 rounded-pill px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
                           Vencida
                         </span>
                       )}
@@ -417,7 +417,7 @@ export default function MyCertificationsSection() {
             ) : (
               // Regra 1: aviso ANTES de salvar — editar conteúdo derruba a conferência (DS2).
               <div className="space-y-4">
-                <div className="flex items-start gap-3 p-3 rounded-xl border border-status-warning-line bg-status-warning-bg">
+                <div className="flex items-start gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50">
                   <AlertTriangle size={20} className="text-yellow-700 flex-shrink-0 mt-0.5" />
                   <p className="text-sm font-semibold text-yellow-800">
                     Editar esta certificação vai remover a conferência de {editingVerifierName}.
@@ -452,7 +452,7 @@ export default function MyCertificationsSection() {
             locked={deleting}
             className="max-w-sm text-center"
         >
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 border-2 border-red-300 text-red-600 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} />
             </div>
             <h3 id="cert-delete-title" className="text-lg font-bold mb-2">Excluir certificação?</h3>

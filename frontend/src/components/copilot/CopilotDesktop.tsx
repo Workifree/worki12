@@ -1,8 +1,9 @@
-/** Computador: barra de comando no centro e, ao executar, painel flutuante (arrastável, minimizável). */
-import { useRef, useState } from 'react'
-import { Minus, Sparkles, Square, X } from 'lucide-react'
-import { IconButton } from '../ui/IconButton'
-import { Composer, IdleBody, Orb, PendingCard, StepFeed, StopButton } from './CopilotParts'
+/** Computador: pílula flutuante no topo que vira a barra de comando (morph); ao executar, a pílula de status; o painel só quando o agente precisa de você. */
+import { useRef } from 'react'
+import { X } from 'lucide-react'
+import { Composer, IdleBody, PendingCard, StepFeed, StopButton } from './CopilotParts'
+import { Orb, TriggerBody } from './Trigger'
+import { PillButton } from './PillButton'
 import type { CopilotViewProps } from './copilotView'
 import { useAvoidTarget, type Box } from '../../hooks/copilot/useAvoidTarget'
 import { useDialogBehavior } from '../../hooks/copilot/useDialogBehavior'
@@ -32,7 +33,7 @@ function Palette(view: CopilotViewProps) {
   const ready = view.availability === 'ready' && view.consent
   return (
     <div
-      className="fixed inset-0 z-[1] flex items-center justify-center bg-black/25 p-4"
+      className="wk-scrim fixed inset-0 z-[1] flex items-start justify-center p-3 pt-[16vh]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) view.close()
       }}
@@ -43,33 +44,41 @@ function Palette(view: CopilotViewProps) {
         aria-modal="true"
         aria-label="Copiloto do Worki"
         data-copilot-palette=""
-        className="wk-glass wk-rise flex max-h-[min(82dvh,720px)] w-[min(680px,100%)] flex-col overflow-hidden rounded-2xl text-black"
+        className="wk-glass wk-rise relative flex max-h-[min(78dvh,680px)] w-[min(440px,100%)] flex-col overflow-hidden"
       >
-        <header className="flex items-center gap-2 px-5 pb-1 pt-4">
-          <Orb />
-          <h2 className="flex-1 text-base font-bold">Como posso ajudar?</h2>
-          <IconButton aria-label="Fechar o copiloto" onClick={view.close}>
-            <X size={20} />
-          </IconButton>
-        </header>
-        {ready && (
-          <div className="px-4 pb-3 pt-1">
-            <Composer
-              large
-              value={view.draft}
-              onChange={view.setDraft}
-              onSend={view.send}
-              placeholder={view.agent.followUp ? 'Responda aqui' : 'Como posso ajudar?'}
-              shortcutHint
-            />
-          </div>
-        )}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-1">
+        <div className="wk-cmd__line" aria-hidden="true" />
+        <div className={`wk-cmd__row ${ready ? 'wk-cmd__row--top' : ''}`}>
+          <Orb working />
+          {ready ? (
+            <>
+              <h2 className="sr-only">Como posso ajudar?</h2>
+              <div className="min-w-0 flex-1">
+                <Composer
+                  large
+                  bare
+                  value={view.draft}
+                  onChange={view.setDraft}
+                  onSend={view.send}
+                  onEmptyEnter={() => view.suggestions[0] && view.send(view.suggestions[0])}
+                  placeholder={view.agent.followUp ? 'Responda aqui' : 'Como posso ajudar?'}
+                  shortcutHint
+                />
+              </div>
+            </>
+          ) : (
+            <h2 className="flex-1 text-[14px] font-bold">Como posso ajudar?</h2>
+          )}
+          <PillButton tone="ghost" aria-label="Fechar o copiloto" onClick={view.close} className="w-11 !px-0">
+            <X size={18} aria-hidden="true" />
+          </PillButton>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           <IdleBody view={view} />
         </div>
         {ready && (
-          <p className="border-t border-black/10 px-5 py-2 text-xs text-gray-600">
-            <kbd className="font-semibold">Esc</kbd> fecha · <kbd className="font-semibold">Ctrl K</kbd> abre de qualquer tela
+          <p className="wk-cmd__foot">
+            <span>↵ enviar</span>
+            <span>Esc fechar</span>
           </p>
         )}
       </section>
@@ -77,36 +86,47 @@ function Palette(view: CopilotViewProps) {
   )
 }
 
+type PillSlot = 'top' | 'bottom'
+const PILL_SLOTS: readonly PillSlot[] = ['top', 'bottom']
+const PILL_W = 520
+
+/**
+ * Trabalhando: a pílula de status do laboratório (orbe, passo com shimmer e Parar), fixa no topo e centralizada,
+ * no lugar da pílula de gatilho. Desce para a base quando o agente precisa mexer embaixo dela. O painel
+ * maior só aparece quando o agente espera por você (confirmar, tocar ou responder).
+ */
 function Working(view: CopilotViewProps) {
   const { agent } = view
   const panel = useRef<HTMLElement>(null)
-  const [minimized, setMinimized] = useState(false)
+  const pill = useRef<HTMLElement>(null)
   const drag = useDraggable(panel)
   const pendingElement = agent.pending && agent.pending.kind !== 'ask' ? agent.pending.element : null
   const target = agent.acting ?? pendingElement ?? agent.spot
   const corner = useAvoidTarget(target, panel, CORNERS, cornerBox)
+  const slot = useAvoidTarget<PillSlot>(target, pill, PILL_SLOTS, (candidate, size) => ({
+    left: (window.innerWidth - size.width) / 2,
+    top: candidate === 'top' ? 12 : window.innerHeight - size.height - 24,
+    width: size.width,
+    height: size.height,
+  } satisfies Box))
   const needsPerson = !!agent.pending
-
-  // Pedido de confirmação, de toque ou pergunta: o painel abre sozinho.
-  if (needsPerson && minimized) setMinimized(false)
 
   // Esc para a tarefa: o atalho mora no CopilotPanel (vale no PC e no celular, na primeira tecla).
 
   const current = agent.steps.at(-1) ?? 'Olhando a tela'
 
-  if (minimized && !needsPerson) {
+  if (!needsPerson) {
     return (
       <section
+        ref={pill}
         aria-label="Copiloto trabalhando"
-        className="wk-glass wk-rise fixed bottom-6 left-1/2 z-[1] flex w-[min(520px,calc(100vw-32px))] -translate-x-1/2 items-center gap-3 rounded-2xl py-2 pl-3 pr-2 text-black"
+        className={`wk-glass wk-pill wk-rise fixed inset-x-0 z-[1] mx-auto flex items-center ${slot === 'top' ? 'top-3' : 'bottom-6'}`}
+        style={{ width: `min(${PILL_W}px, calc(100vw - 20px))` }}
       >
         <Orb working />
-        <p role="status" aria-live="polite" className="min-w-0 flex-1 truncate text-sm font-semibold">
-          {current}
-        </p>
-        <IconButton aria-label="Expandir o painel do copiloto" onClick={() => setMinimized(false)}>
-          <Square size={16} />
-        </IconButton>
+        <div className="min-w-0 flex-1 text-[13px]">
+          <StepFeed steps={[current]} />
+        </div>
         <StopButton onStop={agent.stop} />
       </section>
     )
@@ -115,32 +135,29 @@ function Working(view: CopilotViewProps) {
   return (
     <section
       ref={panel}
-      aria-label="Copiloto trabalhando"
-      className={`wk-glass wk-rise fixed z-[1] flex max-h-[calc(100dvh-96px)] w-[min(400px,calc(100vw-32px))] flex-col overflow-hidden rounded-[28px] text-black ${CORNER_CLASS[corner]}`}
+      aria-label="Copiloto aguardando você"
+      className={`wk-glass wk-rise fixed z-[1] flex max-h-[calc(100dvh-96px)] w-[min(400px,calc(100vw-32px))] flex-col overflow-hidden ${CORNER_CLASS[corner]}`}
       style={{ transform: `translate3d(${drag.offset.x}px, ${drag.offset.y}px, 0)` }}
     >
       <header
         {...drag.handleProps}
-        className="flex cursor-grab touch-none select-none items-center gap-2 px-4 pb-1 pt-3 active:cursor-grabbing"
+        className="wk-cmd__row cursor-grab touch-none select-none active:cursor-grabbing"
         title="Arraste para mover"
       >
         <Orb working />
-        <h2 className="flex-1 text-sm font-bold">Copiloto trabalhando</h2>
-        <IconButton aria-label="Minimizar o painel do copiloto" onClick={() => setMinimized(true)} disabled={needsPerson}>
-          <Minus size={18} />
-        </IconButton>
+        <h2 className="flex-1 text-[14px] font-bold">Preciso de você</h2>
       </header>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pb-2 pt-1">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pb-2 pt-3">
         <StepFeed steps={agent.steps} />
         {agent.pending && (
-          <div className="rounded-2xl bg-white/80 p-3 ring-1 ring-black/10">
+          <div className="wk-field p-3">
             <PendingCard pending={agent.pending} role={view.role} armDelayMs={view.confirmArmDelayMs} />
           </div>
         )}
       </div>
       <div className="flex items-center gap-3 px-4 pb-4 pt-2">
-        <StopButton onStop={agent.stop} className="flex-1" />
-        <span className="text-xs text-gray-600">ou aperte Esc</span>
+        <StopButton onStop={agent.stop} block />
+        <span className="shrink-0 text-[11px] text-[#6b7280]">ou aperte Esc</span>
       </div>
     </section>
   )
@@ -148,15 +165,9 @@ function Working(view: CopilotViewProps) {
 
 function Launcher({ onOpen }: { onOpen: () => void }) {
   return (
-    <button
-      type="button"
-      aria-label="Abrir o copiloto"
-      onClick={onOpen}
-      className="wk-glass fixed bottom-5 left-1/2 z-[1] flex min-h-12 -translate-x-1/2 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
-    >
-      <Sparkles size={18} aria-hidden="true" />
-      Como posso ajudar?
-      <kbd className="rounded-md border border-gray-300 px-1.5 py-0.5 text-xs text-gray-600">Ctrl K</kbd>
+    // Voando no topo, centralizada, como a busca do laboratório: o clique ou Ctrl+K a transformam na barra (morph).
+    <button type="button" aria-label="Abrir o copiloto" aria-haspopup="dialog" onClick={onOpen} className="wk-trigger fixed left-1/2 top-3 z-[1] -translate-x-1/2">
+      <TriggerBody />
     </button>
   )
 }

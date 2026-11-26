@@ -59,7 +59,7 @@ function Steps({ steps, circleClass }: StepsProps) {
       {steps.map((item) => (
         <div key={item.step} className="flex flex-col items-center text-center">
           <div
-            className={`w-12 h-12 text-white rounded-full flex items-center justify-center text-lg font-bold mb-4 ${circleClass}`}
+            className={`w-12 h-12 text-white rounded-full border-2 border-black flex items-center justify-center text-lg font-bold mb-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${circleClass}`}
           >
             {item.step}
           </div>
@@ -86,7 +86,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <button
             onClick={() => navigate('/')}
-            className="inline-flex items-center min-h-11 pr-3 text-2xl font-bold tracking-tight hover:text-primary transition-colors"
+            className="inline-flex items-center min-h-11 pr-3 text-2xl font-black tracking-tighter hover:text-primary transition-colors"
           >
             Worki
           </button>

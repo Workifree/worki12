@@ -156,13 +156,13 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nome ou função"
           disabled={saving}
-          className="w-full h-11 border-ink border-gray-900 focus:ring-2 focus:ring-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
+          className="w-full h-11 border-2 border-gray-300 focus:border-black rounded-xl pl-9 pr-3 text-sm outline-none transition-colors disabled:opacity-50"
         />
       </div>
 
       {/* Checklist do elenco */}
       {teamMembers.length === 0 && (
-        <div className="text-center py-8 px-4 text-gray-600">
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <ListChecks size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">Nenhum freela aceito no elenco ainda.</p>
           <p className="text-xs mt-1">Você pode salvar a lista vazia e adicionar membros depois.</p>
@@ -180,7 +180,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
         return (
           <label
             key={member.worker.id}
-            className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-ink cursor-pointer transition-colors ${
+            className={`flex items-center gap-3 min-h-14 p-3 mb-2 rounded-xl border-2 cursor-pointer transition-colors ${
               isSelected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
             }`}
           >
@@ -191,7 +191,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
               disabled={saving}
               className="w-5 h-5 accent-black flex-shrink-0"
             />
-            <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
               {member.worker.avatar_url ? (
                 <img
                   src={member.worker.avatar_url}

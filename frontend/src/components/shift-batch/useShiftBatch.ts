@@ -3,24 +3,29 @@ import { supabase } from '../../lib/supabase';
 import { logError } from '../../lib/logger';
 import { todayInBrazil } from '../../lib/dateUtils';
 import {
-    EMPTY_ROW_DEFAULTS, batchFingerprint, copyJobs, createRow, emptyTemplate, hasBlockingIssue,
-    lastWeekRange, lastWeekendRange, mergeDrafts, newId, resolveSeries, sortRows, templateFromJob,
-    validateBatch, type RowDefaults, type ShiftDraftBatch, type ShiftDraftRow, type ShiftDraftSource,
+    EMPTY_ROW_DEFAULTS, batchFingerprint, createRow, emptyTemplate, hasBlockingIssue,
+    mergeDrafts, newId, resolveSeries, sortRows, templateFromJob,
+    validateBatch, type RowDefaults, type SavedShiftTemplate, type ShiftDraftBatch, type ShiftDraftRow, type ShiftDraftSource,
     type SourceJob,
 } from '../../lib/shiftDrafts';
-import { batchFromParse, parseShiftText } from '../../lib/shiftTextParser';
 import {
     batchDraftKey, clearShiftDraft, loadShiftDraft, saveShiftDraft, type SentBatch, type StoredShiftDraft,
 } from '../../lib/shiftDraftStorage';
 import {
-    buildCallPlan, countPublishedBatch, dispatchCall, getModelJob, listJobsBetween, listPreviousWorkerIds,
-    listRecentModels, publishBatch, type CallPlanItem, type CallResult,
+    buildCallPlan, countPublishedBatch, dispatchCall, getModelJob, listRecentModels, publishBatch, type CallPlanItem, type CallResult,
 } from '../../services/shiftBatchService';
 import { listTags, type CompanyTag } from '../../services/shiftOperationService';
+import { listShiftTemplates, saveShiftTemplate } from '../../services/shiftTemplateService';
 import type { PublishedBatch } from './BatchDone';
 import type { EditorMode } from './BatchEditor';
 
 export type BatchStep = 'start' | 'edit' | 'review' | 'done';
+
+/** Dentro do começo: o hub com as três ideias, a área de modelos ou o histórico. */
+export type StartView = 'hub' | 'models' | 'history';
+
+/** Quantos turnos do histórico a tela "Repetir um turno anterior" busca. */
+const HISTORY_LIMIT = 30;
 
 export interface ShiftBatchOptions {
     companyId: string;
@@ -31,8 +36,6 @@ export interface ShiftBatchOptions {
     /** Entrada do copiloto: SÓ abre a revisão. Não existe caminho que publique sozinho. */
     initialDraft?: ShiftDraftBatch | null;
     onPublished?: (jobIds: string[]) => void;
-    /** Abre direto a cópia do período (atalho "Copiar fim de semana"). Só leva à revisão. */
-    startCopy?: 'weekend' | 'week' | null;
     /** Pendência de fora do rascunho (ex.: local da presença). Preenchida, não publica. */
     blockPublish?: string | null;
 }
@@ -52,7 +55,7 @@ function adopt(draft: ShiftDraftBatch): ShiftDraftBatch {
     };
 }
 
-export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, initialDraft, onPublished, startCopy: startCopyRange, blockPublish }: ShiftBatchOptions) {
+export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, initialDraft, onPublished, blockPublish }: ShiftBatchOptions) {
     const [external] = useState(() => (initialDraft ? adopt(initialDraft) : null));
     const [step, setStep] = useState<BatchStep>(external ? 'review' : 'start');
     const [draft, setDraft] = useState<ShiftDraftBatch | null>(external);
@@ -61,20 +64,32 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
     const [editingKey, setEditingKey] = useState<string | null>(null);
     const [reviewFromEditor, setReviewFromEditor] = useState(false);
     const [notices, setNotices] = useState<string[]>([]);
-    const [textIssues, setTextIssues] = useState<string[]>([]);
-    const [suggestedIds, setSuggestedIds] = useState<string[]>([]);
 
+    /** Modelos guardados pela empresa (null = carregando). */
+    const [templates, setTemplates] = useState<SavedShiftTemplate[] | null>(null);
+    const [templatesAttempt, setTemplatesAttempt] = useState(0);
+    /** Rascunho descartado, para "Desfazer" por alguns segundos. */
+    const [discarded, setDiscarded] = useState<StoredShiftDraft | null>(null);
+    /** Nome do modelo a guardar ao publicar (null = não guardar). */
+    const [saveModelName, setSaveModelName] = useState<string | null>(null);
+    /** O rascunho nasceu de um modelo guardado: não faz sentido guardar de novo. */
+    const [fromSavedId, setFromSavedId] = useState<string | null>(null);
+    const [modelSaved, setModelSaved] = useState<'saved' | 'duplicate' | 'limit' | 'error' | null>(null);
+
+    /** Histórico (turnos anteriores): só é buscado quando a tela de histórico abre. */
+    const [startView, setStartView] = useState<StartView>('hub');
     const [models, setModels] = useState<SourceJob[] | null>(null);
     const [modelsError, setModelsError] = useState(false);
     const [modelsAttempt, setModelsAttempt] = useState(0);
     const [tags, setTags] = useState<CompanyTag[]>([]);
     const [defaultBriefing, setDefaultBriefing] = useState('');
     const [startError, setStartError] = useState<string | null>(null);
-    const [copying, setCopying] = useState<'weekend' | 'week' | null>(null);
 
     const [storageKey, setStorageKey] = useState<string | null>(null);
     const [stored, setStored] = useState<StoredShiftDraft | null>(null);
     const sentRef = useRef<SentBatch | null>(null);
+    /** Modelo do turno ao abrir o editor: sem data, sem mais linhas e sem mudança, não há o que guardar. */
+    const baselineRef = useRef('');
 
     const [publishing, setPublishing] = useState(false);
     const publishLock = useRef(false);
@@ -87,6 +102,10 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
 
     const today = todayInBrazil();
 
+    /** Rascunho com conteúdo: alguma data, mais de uma linha ou o turno editado. Abrir e voltar não cria rascunho. */
+    const isMeaningful = (batch: ShiftDraftBatch) =>
+        batch.rows.some((r) => r.date) || batch.rows.length > 1 || JSON.stringify(batch.template) !== baselineRef.current;
+
     /** Qualquer mudança no rascunho apaga os erros do envio anterior. */
     const updateDraft = useCallback((next: ShiftDraftBatch) => {
         setDraft(next);
@@ -96,21 +115,28 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
 
     const open = useCallback((next: ShiftDraftBatch, target: 'edit' | 'review', nextMode: EditorMode) => {
         sentRef.current = null;
+        baselineRef.current = JSON.stringify(next.template);
         updateDraft(next);
         setDefaults(defaultsOf(next.rows[0]));
         setMode(nextMode);
         setEditingKey(null);
         setReviewFromEditor(false);
         setNotices([]);
-        setTextIssues([]);
-        setSuggestedIds([]);
         setStartError(null);
+        setSaveModelName(null);
+        setFromSavedId(null);
+        setModelSaved(null);
         setStep(target);
     }, [updateDraft]);
 
     const openModel = useCallback((job: SourceJob, source: ShiftDraftSource = 'template') => {
         const { template, defaults: rowDefaults } = templateFromJob(job);
         open({ client_batch_id: newId(), source, template, rows: [createRow('', rowDefaults)] }, 'edit', 'single');
+    }, [open]);
+
+    const openSaved = useCallback((saved: SavedShiftTemplate) => {
+        open({ client_batch_id: newId(), source: 'template', template: { ...saved.template }, rows: [createRow('', saved.defaults)] }, 'edit', 'single');
+        setFromSavedId(saved.id);
     }, [open]);
 
     useEffect(() => {
@@ -132,14 +158,18 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
 
     useEffect(() => {
         if (!storageKey || !draft || step === 'done' || step === 'start') return;
+        if (!isMeaningful(draft) && !sentRef.current) return;
         saveShiftDraft(storageKey, { batch: draft, sent: sentRef.current });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- isMeaningful só lê refs e o próprio rascunho
     }, [storageKey, draft, step]);
 
+    const historyOpen = step === 'start' && startView === 'history';
     useEffect(() => {
+        if (!historyOpen) return;
         let active = true;
         void (async () => {
             try {
-                const list = await listRecentModels();
+                const list = await listRecentModels(HISTORY_LIMIT);
                 if (active) { setModels(list); setModelsError(false); }
             } catch (err) {
                 logError('shiftBatch.models', err);
@@ -147,7 +177,32 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
             }
         })();
         return () => { active = false; };
-    }, [modelsAttempt]);
+    }, [historyOpen, modelsAttempt]);
+
+    // Só o hub mostra a contagem de modelos; voltar a ele (a área de modelos pode ter criado, editado ou
+    // excluído) reconsulta. Nas outras etapas não há por que buscar.
+    const atHub = step === 'start' && startView === 'hub';
+    useEffect(() => {
+        if (!atHub) return;
+        let active = true;
+        void (async () => {
+            try {
+                const list = await listShiftTemplates(companyId);
+                if (active) setTemplates(list);
+            } catch (err) {
+                logError('shiftBatch.templates', err);
+                if (active) setTemplates((list) => list ?? []);
+            }
+        })();
+        return () => { active = false; };
+    }, [companyId, templatesAttempt, atHub]);
+
+    // "Desfazer" some sozinho: depois disso o rascunho/modelo está de fato fora.
+    useEffect(() => {
+        if (!discarded) return;
+        const id = window.setTimeout(() => setDiscarded(null), 15000);
+        return () => window.clearTimeout(id);
+    }, [discarded]);
 
     useEffect(() => {
         if (!tagsEnabled) return;
@@ -192,48 +247,19 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
         'edit', 'single',
     );
 
-    const startFromText = (text: string) => {
-        const parsed = parseShiftText(text, { today });
-        const batch = batchFromParse(parsed);
-        if (!batch) {
-            setTextIssues(parsed.unknown.length ? parsed.unknown : ['Não entendi o texto.']);
-            return;
-        }
-        open(withBriefing(batch), 'review', 'multi');
-        setNotices([...parsed.unknown, ...parsed.notes]);
+    /** Descarta o rascunho guardado; "Desfazer" o devolve (a tela mostra por alguns segundos). */
+    const discardDraft = () => {
+        if (!stored) return;
+        if (storageKey) clearShiftDraft(storageKey);
+        setDiscarded(stored);
+        setStored(null);
     };
-
-    const startCopy = async (range: 'weekend' | 'week') => {
-        setCopying(range);
-        setStartError(null);
-        try {
-            const { from, to } = range === 'weekend' ? lastWeekendRange(today) : lastWeekRange(today);
-            const jobs = await listJobsBetween(from, to);
-            const allTags = tagsEnabled ? await listTags(companyId, true) : [];
-            const copy = copyJobs(jobs, 7, new Set(allTags.filter((t) => t.archivedAt).map((t) => t.id)));
-            if (!copy) {
-                setStartError(range === 'weekend'
-                    ? 'Não há turnos no fim de semana passado para repetir.'
-                    : 'Não há turnos na semana passada para repetir.');
-                return;
-            }
-            open({ client_batch_id: newId(), source: 'copy_week', template: copy.template, rows: copy.rows }, 'review', 'multi');
-            setSuggestedIds(await listPreviousWorkerIds(jobs.map((j) => j.id)));
-        } catch (err) {
-            logError('shiftBatch.copy', err);
-            setStartError('Não conseguimos carregar os turnos para copiar. Tente de novo.');
-        } finally {
-            setCopying(null);
-        }
+    const undoDiscard = () => {
+        if (!discarded) return;
+        if (storageKey) saveShiftDraft(storageKey, discarded);
+        setStored(discarded);
+        setDiscarded(null);
     };
-
-    const autoCopied = useRef(false);
-    useEffect(() => {
-        if (!startCopyRange || external || autoCopied.current) return;
-        autoCopied.current = true;
-        void startCopy(startCopyRange);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez, na entrada pelo atalho
-    }, [startCopyRange]);
 
     const resume = () => {
         if (!stored) return;
@@ -242,7 +268,8 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
     };
 
     const backToStart = () => {
-        if (draft) setStored({ batch: draft, sent: sentRef.current });
+        if (draft && (isMeaningful(draft) || sentRef.current)) setStored({ batch: draft, sent: sentRef.current });
+        setStartView('hub');
         setStep('start');
     };
 
@@ -326,6 +353,20 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
             sentRef.current = null;
             if (storageKey) clearShiftDraft(storageKey);
             setStored(null);
+            // Guardar como modelo: depois de publicar, e nunca impede nem desfaz a publicação.
+            setModelSaved(null);
+            if (saveModelName !== null && !fromSavedId) {
+                const modelName = saveModelName.trim() || draft.template.title.trim() || 'Meu modelo';
+                void saveShiftTemplate(companyId, modelName, draft.template, defaultsOf(rows[0]))
+                    .then((r) => {
+                        setModelSaved(r.ok ? 'saved' : r.reason);
+                        if (r.ok) setTemplatesAttempt((a) => a + 1);
+                    })
+                    .catch((err) => {
+                        logError('shiftBatch.saveTemplate', err);
+                        setModelSaved('error');
+                    });
+            }
             const plan = buildCallPlan(rows, result.jobIds, invitees);
             doneCall.current = draft.call;
             setResults({});
@@ -349,17 +390,19 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
     const reset = () => {
         setDone(null);
         setDraft(null);
+        setStartView('hub');
         setStep('start');
         setModelsAttempt((a) => a + 1);
     };
 
     return {
         today, step, draft, mode, setMode, defaults, setDefaults, editingKey, reviewFromEditor,
-        notices, textIssues, suggestedIds, models, modelsError,
-        retryModels: () => setModelsAttempt((a) => a + 1),
-        tags, startError, copying, stored, publishing, errorMessage, rowErrors, done, results, sending,
+        notices, startView, setStartView, models, modelsError, retryModels: () => setModelsAttempt((a) => a + 1),
+        templates, discarded, discardDraft, undoDiscard,
+        saveModelName, setSaveModelName, fromSavedId, modelSaved, openSaved,
+        tags, startError, stored, publishing, errorMessage, rowErrors, done, results, sending,
         directPublish: draft ? DIRECT_SOURCES.includes(draft.source) : false,
-        updateDraft, openModel, startBlank, startFromText, startCopy, resume, backToStart, editRow,
+        updateDraft, openModel, startBlank, resume, backToStart, editRow,
         review, backToEditor: () => setStep('edit'), publish, retryCall: (item: CallPlanItem) => void send(item, true), reset,
     };
 }

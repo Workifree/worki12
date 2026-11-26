@@ -1,6 +1,6 @@
-import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Megaphone, CalendarClock, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Megaphone, Clock, Calendar, CalendarClock, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
 import { useToast } from '../../contexts/ToastContext';
@@ -21,10 +21,9 @@ import CancelSeriesModal from '../../components/company/CancelSeriesModal';
 import InviteSeriesModal, { type InviteSeriesTarget } from '../../components/company/InviteSeriesModal';
 import type { RecurrenceType } from '../../types';
 import { rotuloDeUmDia } from '../../lib/weekdayLabels';
-import { Button, ButtonLink, DialogActions, DialogHeader, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, StatusBadge, FIELD_CONTROL_CLASS } from '../../components/ui';
+import { Button, ButtonLink, Card, DialogActions, DialogHeader, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, SlotBadge, StatusBadge, FIELD_CONTROL_CLASS } from '../../components/ui';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
 import BatchList from '../../components/company/BatchList';
-import BatchEntry from '../../components/company/BatchEntry';
 import { batchLabels } from '../../components/company/batchGroups';
 import { isLoteEnabled } from '../../lib/features';
 import { isJobConcluded, isShiftInProgress } from '../../lib/shiftProgress';
@@ -178,6 +177,8 @@ interface Job {
     requirements?: string;
     briefing?: string | null;
     slots?: number;
+    /** Vagas preenchidas (contratado, em andamento ou concluído): o "4/5" do contador. */
+    filled?: number;
     /** Só vem (via `select('*')`) depois da migration do lote. */
     creation_batch_id?: string | null;
 }
@@ -247,29 +248,14 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
     const gapLabel = urgentGap ? `Sem freela · ${bucketKey === 'today' ? 'hoje' : 'amanhã'}` : 'Sem freela';
     const presenca = `/company/jobs/${job.id}/candidates`;
 
-    const freelaState = job.freela
-        ? job.freela.state === 'confirmed' ? (job.inProgress ? 'Em andamento' : 'Contratado') : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'
-        : null;
-
     return (
-        <li className={`flex items-center gap-3 px-3 py-3 sm:px-4 ${ended ? 'opacity-80' : ''}`}>
-            <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 break-words text-sm font-semibold">
-                    {timeRange && <span className="tabular-nums">{timeRange} · </span>}
-                    <span>{job.title}</span>
-                </p>
-                <p className="mt-0.5 truncate text-xs text-gray-600">
-                    {[
-                        job.start_date && !isNearTerm ? <span key="d" className="first-letter:uppercase">{formatDateOnly(job.start_date, "EEE, dd/MM")}</span> : null,
-                        job.freela ? <span key="f" className="font-semibold text-gray-800">{job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}</span> : null,
-                        freelaState ? <span key="s">{freelaState}</span> : null,
-                        job.location ? <span key="l">{job.location}</span> : null,
-                    ].filter(Boolean).map((part, i) => (
-                        <Fragment key={i}>{i > 0 && ' · '}{part}</Fragment>
-                    ))}
-                </p>
-                {((job.status !== 'open' || job.concluded) || missingFreela || job.series_id) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <Card padding="sm" className={ended ? 'opacity-80' : ''}>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] lg:items-center">
+
+                <div className="min-w-0">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <h3 className="break-words text-base font-bold">{job.title}</h3>
+                        {job.filled !== undefined && job.status !== 'deleted' && <SlotBadge filled={job.filled} total={job.slots ?? 1} />}
                         {/* Turno aberto e o normal — so o desvio ganha selo. */}
                         {(job.status !== 'open' || job.concluded) && (
                             <StatusBadge domain="job" status={job.concluded ? 'completed' : job.status} />
@@ -281,62 +267,92 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
                             </StatusBadge>
                         )}
                     </div>
-                )}
-            </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                        {timeRange && (
+                            <span className="flex items-center gap-1 font-bold tabular-nums text-black">
+                                <Clock size={14} aria-hidden="true" /> {timeRange}
+                            </span>
+                        )}
+                        {job.start_date && !isNearTerm && (
+                            <span className="flex items-center gap-1 first-letter:uppercase">
+                                <Calendar size={14} aria-hidden="true" /> {formatDateOnly(job.start_date, "EEE, dd/MM")}
+                            </span>
+                        )}
+                        {job.location && <span className="min-w-0 truncate">{job.location}</span>}
+                    </div>
+                </div>
 
-            <div className="flex shrink-0 items-center gap-1">
-                {missingFreela ? (
-                    <Button
-                        variant={primary ? 'dark' : 'secondary'}
-                        size="sm"
-                        data-copilot="empresa.turnos.chamar-freelas"
-                        iconLeft={<Megaphone size={16} />}
-                        onClick={() => navigate(`${presenca}?chamar=1`)}
-                    >
-                        Chamar
-                        <span className="sr-only"> freelas</span>
-                    </Button>
-                ) : job.freela?.state === 'confirmed' ? (
-                    <ButtonLink variant="secondary" size="sm" to={presenca} data-copilot="empresa.turnos.marcar-presenca">
-                        Presença
-                    </ButtonLink>
+                {job.freela ? (
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-black bg-gray-100">
+                            {job.freela.avatarUrl ? (
+                                <img src={job.freela.avatarUrl} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-black text-sm font-bold text-white">
+                                    {job.freela.name[0]?.toUpperCase()}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex min-w-0 flex-col">
+                            <span className="truncate text-sm font-bold">
+                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
+                            </span>
+                            <span className="text-xs text-gray-600">
+                                {job.freela.state === 'confirmed' ? (job.inProgress ? 'Em andamento' : 'Contratado') : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}
+                            </span>
+                        </div>
+                    </div>
                 ) : (
-                    <ButtonLink variant="ghost" size="sm" to={presenca} data-copilot="empresa.turnos.ver-turno">
-                        Ver turno
-                    </ButtonLink>
+                    <span className="hidden lg:block" />
                 )}
 
-                <Menu
-                    label="Mais opções do turno"
-                    menuLabel="Ações do turno"
-                    items={[
-                        { label: 'Presença e pagamento', icon: Users, onSelect: () => navigate(presenca) },
-                        { label: 'Ver detalhes', icon: Eye, onSelect: () => navigate(`/company/jobs/${job.id}`) },
-                        // Repetir reaproveita o turno inteiro; a empresa só escolhe a data nova.
-                        { label: 'Repetir turno', icon: Copy, onSelect: () => navigate(`/company/create?repetir=${job.id}`) },
-                        !ended && { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${job.id}/edit`) },
-                        !!job.series_id && { label: 'Convidar para a série', icon: Repeat, onSelect: () => onInviteSeries(job.series_id!) },
-                        !!job.series_id && { label: 'Editar os futuros', icon: Edit2, onSelect: () => onEditSeries(job) },
-                        !ended && {
-                            label: job.status === 'open' ? 'Pausar' : 'Reativar',
-                            icon: job.status === 'open' ? PauseCircle : PlayCircle,
-                            onSelect: () => handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open'),
-                        },
-                        !!job.series_id && { label: 'Encerrar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
-                        { label: job.hasPeople ? 'Cancelar turno' : 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
-                    ]}
-                />
+                <div className="flex items-center gap-2 lg:justify-end">
+                    {missingFreela ? (
+                        <Button
+                            variant={primary ? 'dark' : 'secondary'}
+                            className="flex-1 lg:flex-none"
+                            data-copilot="empresa.turnos.chamar-freelas"
+                            iconLeft={<Megaphone size={16} />}
+                            onClick={() => navigate(`${presenca}?chamar=1`)}
+                        >
+                            Chamar freelas
+                        </Button>
+                    ) : job.freela?.state === 'confirmed' ? (
+                        <ButtonLink variant="secondary" className="flex-1 lg:flex-none" to={presenca} data-copilot="empresa.turnos.marcar-presenca">
+                            Marcar presença
+                        </ButtonLink>
+                    ) : (
+                        <ButtonLink variant="secondary" className="flex-1 lg:flex-none" to={presenca} data-copilot="empresa.turnos.ver-turno">
+                            Ver turno
+                        </ButtonLink>
+                    )}
+
+                    <Menu
+                        label="Mais opções do turno"
+                        menuLabel="Ações do turno"
+                        items={[
+                            { label: 'Presença e pagamento', icon: Users, onSelect: () => navigate(presenca) },
+                            { label: 'Ver detalhes', icon: Eye, onSelect: () => navigate(`/company/jobs/${job.id}`) },
+                            // Repetir reaproveita o turno inteiro; a empresa só escolhe a data nova.
+                            { label: 'Repetir turno', icon: Copy, onSelect: () => navigate(`/company/create?repetir=${job.id}`) },
+                            !ended && { label: 'Editar', icon: Edit2, onSelect: () => navigate(`/company/jobs/${job.id}/edit`) },
+                            !!job.series_id && { label: 'Convidar para a série', icon: Repeat, onSelect: () => onInviteSeries(job.series_id!) },
+                            !!job.series_id && { label: 'Editar os futuros', icon: Edit2, onSelect: () => onEditSeries(job) },
+                            !ended && {
+                                label: job.status === 'open' ? 'Pausar' : 'Reativar',
+                                icon: job.status === 'open' ? PauseCircle : PlayCircle,
+                                onSelect: () => handleStatusChange(job.id, job.status === 'open' ? 'paused' : 'open'),
+                            },
+                            !!job.series_id && { label: 'Encerrar a série', icon: XCircle, danger: true, onSelect: () => onCancelSeries(job.series_id!) },
+                            { label: job.hasPeople ? 'Cancelar turno' : 'Excluir', icon: Trash2, danger: true, onSelect: () => setDeleteJobId(job.id) },
+                        ]}
+                    />
+                </div>
+
             </div>
-        </li>
+        </Card>
     );
 }
-
-// Cabeçalho recolhível ("Anteriores" e "Encerrados"): o mesmo desenho nos dois.
-const COLLAPSE_HEAD =
-    'flex min-h-11 w-full cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-1 text-sm font-semibold text-gray-600 ' +
-    'hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black [&::-webkit-details-marker]:hidden';
-const JOB_LIST = 'divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white';
-const COUNT_PILL = 'rounded-pill bg-gray-200 px-2 py-0.5 text-xs font-semibold tabular-nums text-gray-700';
 
 export default function CompanyJobs() {
     const navigate = useNavigate();
@@ -463,6 +479,7 @@ export default function CompanyJobs() {
                     freela: summarizeFreela(byJob[job.id] || []),
                     inProgress: (byJob[job.id] || []).some(isShiftInProgress),
                     hasPeople: (byJob[job.id] || []).some((a) => ['invited', 'hired', 'in_progress', 'completed'].includes(a.status)),
+                    filled: (byJob[job.id] || []).filter((a) => ['hired', 'in_progress', 'completed'].includes(a.status)).length,
                     concluded: job.status === 'open' && isJobConcluded(job.slots, byJob[job.id]),
                     seriesRecurrenceType: job.series_id ? (seriesTypeById[job.series_id] ?? null) : null,
                 }));
@@ -602,10 +619,9 @@ export default function CompanyJobs() {
                 action={<CreateShiftLink />}
                 inlineAction
             />
-            <BatchEntry className="mb-4" />
 
             {/* Busca + filtros: uma linha de controles, o ativo em preto */}
-            <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
                 <div className="relative md:max-w-xs md:flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                     <input
@@ -614,12 +630,12 @@ export default function CompanyJobs() {
                         aria-label="Buscar turnos"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className={`${FIELD_CONTROL_CLASS} !h-11 pl-10`}
+                        className={`${FIELD_CONTROL_CLASS} pl-10`}
                     />
                 </div>
-                <div className="worki-scroll-row -mx-4 flex gap-2 py-1 pl-4 pr-6 md:mx-0 md:pl-0" role="group" aria-label="Filtrar turnos">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1" role="group" aria-label="Filtrar turnos">
                     {FILTERS.map(({ key, label }) => (
-                        <FilterChip key={key} pressed={filter === key} onClick={() => changeFilter(key)} >
+                        <FilterChip key={key} pressed={filter === key} onClick={() => changeFilter(key)} className="!px-3">
                             {label}
                         </FilterChip>
                     ))}
@@ -627,9 +643,9 @@ export default function CompanyJobs() {
             </div>
 
             {/* Agenda por dia */}
-            <div className="space-y-6">
+            <div className="space-y-8">
                 {loading ? (
-                    <SkeletonList count={4} itemClassName="h-20" />
+                    <SkeletonList count={4} itemClassName="h-28" />
                 ) : erroCarga && jobs.length === 0 ? (
                     <ErrorState title="Não conseguimos carregar seus turnos." onRetry={() => { setErroCarga(false); setLoading(true); void fetchJobs(); }} />
                 ) : filteredJobs.length === 0 ? (
@@ -657,22 +673,21 @@ export default function CompanyJobs() {
                     dayBuckets.map((bucket) => (
                         <div key={bucket.key}>
                             {bucket.key === 'past' ? (
-                                <Button
-                                    variant="ghost"
+                                <button
                                     onClick={() => setPastExpanded(v => !v)}
                                     aria-expanded={pastExpanded}
-                                    className={`${COLLAPSE_HEAD} mb-2 !px-1`}
+                                    className="-mx-4 mb-3 flex min-h-11 w-full items-center justify-between gap-2 border-b-2 border-black/10 bg-canvas/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0"
                                 >
-                                    <span className="flex items-center gap-2">
+                                    <span className="flex items-center gap-2 text-sm font-bold text-gray-600">
                                         {bucket.label}
-                                        <span className={COUNT_PILL}>{bucket.jobs.length}</span>
+                                        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">{bucket.jobs.length}</span>
                                     </span>
-                                    {pastExpanded ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
-                                </Button>
+                                    {pastExpanded ? <ChevronUp size={18} className="text-gray-600" /> : <ChevronDown size={18} className="text-gray-600" />}
+                                </button>
                             ) : (
-                                <div className="mb-2 flex items-center gap-2 px-1">
-                                    <h2 className="text-base font-semibold">{bucket.label}</h2>
-                                    <span className={COUNT_PILL}>{bucket.jobs.length}</span>
+                                <div className="-mx-4 mb-3 flex items-center gap-2 border-b-2 border-black/10 bg-canvas/95 px-4 py-2 backdrop-blur-sm md:mx-0 md:px-0">
+                                    <h2 className="text-sm font-bold text-gray-600">{bucket.label}</h2>
+                                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">{bucket.jobs.length}</span>
                                 </div>
                             )}
 
@@ -683,22 +698,14 @@ export default function CompanyJobs() {
                                 const visible = showAll ? bucket.jobs : bucket.jobs.filter((j) => !isJobEnded(j)).sort((a, b) => dayRank(a) - dayRank(b));
                                 const ended = showAll ? [] : bucket.jobs.filter(isJobEnded);
                                 return (
-                                    <div className="space-y-2">
-                                        {visible.length > 0 && (
-                                            <ul className={JOB_LIST}>
-                                                <BatchList as="li" items={visible} batchOf={(job) => job.creation_batch_id} labels={lotes} render={(job) => renderRow(job, bucket.key)} />
-                                            </ul>
-                                        )}
+                                    <div className="space-y-3">
+                                        <BatchList items={visible} batchOf={(job) => job.creation_batch_id} labels={lotes} render={(job) => renderRow(job, bucket.key)} />
                                         {ended.length > 0 && (
                                             <details className="group">
-                                                <summary className={COLLAPSE_HEAD}>
-                                                    <span className="flex items-center gap-2">
-                                                        Encerrados
-                                                        <span className={COUNT_PILL}>{ended.length}</span>
-                                                    </span>
-                                                    <ChevronDown size={18} aria-hidden="true" className="group-open:rotate-180" />
+                                                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-gray-600">
+                                                    Encerrados ({ended.length})
                                                 </summary>
-                                                <ul className={`${JOB_LIST} mt-2`}>{ended.map((job) => renderRow(job, bucket.key))}</ul>
+                                                <div className="mt-2 space-y-3">{ended.map((job) => renderRow(job, bucket.key))}</div>
                                             </details>
                                         )}
                                     </div>

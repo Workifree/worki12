@@ -33,7 +33,7 @@ import PageMeta from '../../components/PageMeta';
 import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
-import { DialogActions, Avatar, Button, Card, ErrorState, Field, Menu, PageHeader } from '../../components/ui';
+import { DialogActions, Button, Card, ErrorState, Field, PageHeader } from '../../components/ui';
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
@@ -442,19 +442,16 @@ export default function CompanyTeamMembers() {
           )}
           {awaiting.length > 0 && (
             <section aria-labelledby="equipe-confirmar" className="mb-6 space-y-3">
-              <h2 id="equipe-confirmar" className="text-base font-semibold">Precisa da sua confirmação</h2>
+              <h2 id="equipe-confirmar" className="text-xl font-bold">Precisa da sua confirmação</h2>
               {awaiting.map((m) => (
                 <Card
                   key={m.memberId}
-                  className="border-yellow-500"
+                  className="border-yellow-500 shadow-[6px_6px_0px_0px_rgba(234,179,8,1)]"
                   aria-label={`${m.displayName ?? 'Pessoa'} aguardando confirmação`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Avatar name={m.displayName} size="md" />
-                    <p className="min-w-0 text-base font-semibold">
-                      {m.displayName ?? 'Alguém'} entrou. É a pessoa certa?
-                    </p>
-                  </div>
+                  <p className="text-lg font-bold">
+                    {m.displayName ?? 'Alguém'} entrou. É a pessoa certa?
+                  </p>
                   <p className="text-sm text-gray-700 mt-1">
                     Entrou como {ROLE_LABEL[m.role]}
                     {m.acceptedEmail ? <> com o e-mail <strong className="break-all">{m.acceptedEmail}</strong></> : null}. Enquanto você
@@ -463,10 +460,10 @@ export default function CompanyTeamMembers() {
                   {formatSaoPaulo(m.confirmationExpiresAt) && (
                     <p className="text-sm font-bold mt-2">Confirme até {formatSaoPaulo(m.confirmationExpiresAt)}.</p>
                   )}
-                  {/* Regra 6: vermelho cheio só no diálogo final; aqui, contornado pequeno. */}
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Button
                       variant="dark"
+                      size="lg"
                       onClick={() => openConfirm(m)}
                       loading={busyId === m.memberId}
                       iconLeft={<Check size={18} />}
@@ -474,11 +471,11 @@ export default function CompanyTeamMembers() {
                       Confirmar
                     </Button>
                     <Button
-                      variant="dangerOutline"
-                      size="sm"
+                      variant="danger"
+                      size="lg"
                       onClick={() => setRejecting(m)}
                       disabled={busyId === m.memberId}
-                      iconLeft={<UserX size={16} />}
+                      iconLeft={<UserX size={18} />}
                     >
                       Não é essa pessoa
                     </Button>
@@ -501,87 +498,85 @@ export default function CompanyTeamMembers() {
             </Card>
           ) : (
             others.length > 0 && (
-              <section aria-labelledby="equipe-lista">
-                <h2 id="equipe-lista" className="mb-3 text-base font-semibold">Pessoas</h2>
-                {/* Grupo de lista: uma linha por pessoa, uma ação visível e o resto no menu. */}
-                <ul className="divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+              <section aria-labelledby="equipe-lista" className="space-y-3">
+                <h2 id="equipe-lista" className="text-xl font-bold">Pessoas</h2>
+                <ul className="space-y-3">
                   {others.map((m) => {
                     const badge = STATE_BADGE[m.state];
                     const pending = m.state === 'invited' || m.state === 'invite_expired';
                     const busy = busyId === m.memberId;
-                    const nome = m.displayName ?? 'Sem nome';
                     return (
-                      <li key={m.memberId} className="px-4 py-3">
-                        {/* Linha: avatar · nome (1 linha) · papel e estado (1 linha) · menu à direita. */}
-                        <div className="flex min-h-10 items-center gap-3">
-                          <Avatar name={nome} size="md" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-gray-900">{nome}</p>
-                            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                              <span>{ROLE_LABEL[m.role]}</span>
-                              <span className={`shrink-0 whitespace-nowrap rounded-pill px-2 py-0.5 font-semibold ${badge.className}`}>{badge.label}</span>
-                            </div>
+                      <li key={m.memberId}>
+                        <Card>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-lg font-bold">{m.displayName ?? 'Sem nome'}</p>
+                            <span className="rounded-pill bg-gray-100 text-gray-700 px-3 py-1 text-xs font-bold">
+                              {ROLE_LABEL[m.role]}
+                            </span>
+                            <span className={`rounded-pill px-3 py-1 text-xs font-bold ${badge.className}`}>
+                              {badge.label}
+                            </span>
                           </div>
+                          {m.acceptedEmail && !pending && (
+                            <p className="text-sm text-gray-600 mt-1 break-all">{m.acceptedEmail}</p>
+                          )}
+                          {m.state === 'pending_expired' && (
+                            <p className="text-xs text-gray-600 mt-2">
+                              O prazo de 72 horas para confirmar acabou. Envie um novo convite.
+                            </p>
+                          )}
                           {pending && (
-                            <Menu
-                              label={`Mais opções de ${nome}`}
-                              items={[
-                                { label: 'Revogar convite', icon: X, onSelect: () => void handleRevoke(m), danger: true },
-                              ]}
-                            />
+                            <p className="text-xs text-gray-600 mt-2">
+                              Gerar um novo link faz o link atual deixar de valer.
+                            </p>
                           )}
-                          {m.state === 'active' && m.userId && (
-                            <Menu
-                              label={`Mais opções de ${nome}`}
-                              items={[
-                                { label: 'Remover da equipe', icon: UserX, onSelect: () => void openRemove(m), danger: true },
-                              ]}
-                            />
-                          )}
-                        </div>
-                        {/* Ajuda e ação secundária em largura total, alinhadas ao texto (40 + 12 px). */}
-                        {(m.acceptedEmail && !pending) || m.state === 'pending_expired' || pending ? (
-                          <div className="mt-1 pl-[52px]">
-                            {m.acceptedEmail && !pending && (
-                              <p className="truncate text-xs text-gray-600" title={m.acceptedEmail}>{m.acceptedEmail}</p>
-                            )}
-                            {m.state === 'pending_expired' && (
-                              <p className="text-xs text-gray-600">
-                                O prazo de 72 horas para confirmar acabou. Envie um novo convite.
-                              </p>
-                            )}
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {pending && (
-                              <p className="text-xs text-gray-600">
-                                Gerar um novo link faz o link atual deixar de valer.
-                              </p>
-                            )}
-                            {pending && (
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                className="mt-2"
-                                aria-label="Gerar novo link"
-                                onClick={() => void handleResend(m)}
-                                loading={busy}
-                                iconLeft={<Send size={14} />}
-                              >
-                                Novo link
-                              </Button>
+                              <>
+                                <Button
+                                  variant="dark"
+                                  size="lg"
+                                  onClick={() => void handleResend(m)}
+                                  loading={busy}
+                                  iconLeft={<Send size={16} />}
+                                >
+                                  Gerar novo link
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="lg"
+                                  onClick={() => void handleRevoke(m)}
+                                  disabled={busy}
+                                  iconLeft={<X size={16} />}
+                                >
+                                  Revogar convite
+                                </Button>
+                              </>
                             )}
                             {m.state === 'pending_expired' && (
                               <Button
-                                variant="secondary"
-                                size="sm"
-                                className="mt-2"
+                                variant="dark"
+                                size="lg"
                                 onClick={() => void handleInviteAgain(m)}
                                 loading={busy}
-                                iconLeft={<Send size={14} />}
+                                iconLeft={<Send size={16} />}
                               >
                                 Convidar de novo
                               </Button>
                             )}
+                            {m.state === 'active' && m.userId && (
+                              <Button
+                                variant="secondary"
+                                size="lg"
+                                onClick={() => void openRemove(m)}
+                                loading={busy}
+                                iconLeft={<UserX size={16} />}
+                              >
+                                Remover da equipe
+                              </Button>
+                            )}
                           </div>
-                        ) : null}
+                        </Card>
                       </li>
                     );
                   })}
@@ -589,7 +584,6 @@ export default function CompanyTeamMembers() {
               </section>
             )
           )}
-
 
           {/* R20/R24: etiquetas só depois que existe equipe (divulgação progressiva). */}
           {companyId && members.length > 0 && <TagsPanel companyId={companyId} />}
@@ -608,15 +602,14 @@ export default function CompanyTeamMembers() {
                     type="button"
                     onClick={closeInvite}
                     aria-label="Fechar"
-                    className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-gray-100"
+                    className="min-h-11 min-w-11 flex items-center justify-center rounded-xl border-2 border-transparent hover:bg-gray-100"
                   >
                     <X size={20} />
                   </button>
                 </div>
 
-                <Field label="Nome da pessoa" hint="Do jeito que você a chama." error={inviteNameError}>
+                <Field label="Nome da pessoa" required hint="Do jeito que você a chama." error={inviteNameError}>
                   <input
-                    required
                     type="text"
                     name="invitee-name"
                     data-autofocus
@@ -631,7 +624,7 @@ export default function CompanyTeamMembers() {
                   <legend className="text-sm font-bold mb-2">Papel</legend>
                   <div
                     aria-label="Papel Encarregado"
-                    className="rounded-2xl border border-blue-200 bg-blue-50 p-4"
+                    className="rounded-2xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]"
                   >
                     <p className="font-bold">Encarregado</p>
                     <p className="text-sm text-gray-700 mt-1">
@@ -668,20 +661,20 @@ export default function CompanyTeamMembers() {
                     type="button"
                     onClick={closeInvite}
                     aria-label="Fechar"
-                    className="min-h-11 min-w-11 flex items-center justify-center rounded-xl hover:bg-gray-100"
+                    className="min-h-11 min-w-11 flex items-center justify-center rounded-xl border-2 border-transparent hover:bg-gray-100"
                   >
                     <X size={20} />
                   </button>
                 </div>
                 {share.reused && (
-                  <p role="status" className="rounded-xl border border-yellow-300 bg-yellow-50 p-3 text-sm font-bold">
+                  <p role="status" className="rounded-xl border-2 border-black bg-yellow-100 p-3 text-sm font-bold">
                     Já havia um convite pendente com esse nome (ou um muito parecido). Este é o mesmo link.
                   </p>
                 )}
                 <p className="text-sm text-gray-700">
                   Envie o link para <strong>{share.displayName}</strong>. O link vale por 14 dias e é só dessa pessoa.
                 </p>
-                <p data-copilot-private className="break-all rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
+                <p data-copilot-private className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
                   {shareLink}
                 </p>
                 <Button variant="dark" size="lg" fullWidth onClick={openWhatsApp} iconLeft={<MessageCircle size={18} />}>
@@ -750,26 +743,25 @@ export default function CompanyTeamMembers() {
         <ModalShell labelledBy="confirmar-titulo" onClose={() => { if (!confirmBusy) setConfirming(null); }}>
           <form onSubmit={(e) => void submitConfirm(e)} className="space-y-4" noValidate>
             <h2 id="confirmar-titulo" className="text-2xl font-bold">Confirmar acesso</h2>
-            <dl className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm space-y-2">
+            <dl className="rounded-xl border-2 border-black bg-gray-50 p-3 text-sm space-y-2">
               <div>
-                <dt className="text-xs font-semibold text-gray-600">Nome no convite</dt>
+                <dt className="text-xs font-bold uppercase text-gray-600">Nome no convite</dt>
                 <dd className="font-bold">{confirming.displayName ?? 'Sem nome'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold text-gray-600">E-mail verificado</dt>
+                <dt className="text-xs font-bold uppercase text-gray-600">E-mail verificado</dt>
                 <dd className="font-bold break-all">{confirming.acceptedEmail ?? 'Não informado'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold text-gray-600">Aceitou em (horário de São Paulo)</dt>
+                <dt className="text-xs font-bold uppercase text-gray-600">Aceitou em (horário de São Paulo)</dt>
                 <dd className="font-bold tabular-nums">{formatSaoPaulo(confirming.acceptedAt) ?? 'Não informado'}</dd>
               </div>
             </dl>
             <p className="text-sm text-gray-800">
               Só confirme se você reconhece esse e-mail e esse horário. Para confirmar, digite o nome do convite.
             </p>
-            <Field label="Digite o nome da pessoa" error={confirmError ?? undefined}>
+            <Field label="Digite o nome da pessoa" required error={confirmError ?? undefined}>
               <input
-                required
                 type="text"
                 data-autofocus
                 autoComplete="off"

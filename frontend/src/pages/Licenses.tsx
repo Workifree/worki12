@@ -65,7 +65,7 @@ export default function Licenses() {
               <pre
                 tabIndex={0}
                 aria-label="Texto das licenças de código aberto"
-                className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words border border-gray-200 rounded-xl bg-white p-3 text-xs leading-relaxed"
+                className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words border-2 border-black rounded-xl bg-white p-3 text-xs leading-relaxed"
               >
                 {state.text}
               </pre>

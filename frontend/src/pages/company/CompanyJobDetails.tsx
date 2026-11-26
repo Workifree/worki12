@@ -308,7 +308,7 @@ export default function CompanyJobDetails() {
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-6 border-t-2 border-gray-100 pt-6 lg:grid-cols-3">
-                    <aside className="h-fit rounded-xl border border-gray-200 bg-gray-50 p-2 lg:order-2">
+                    <aside className="h-fit rounded-xl border-2 border-gray-200 bg-gray-50 p-2 lg:order-2">
                         {erroFreelas ? (
                             <ErrorState title="Não conseguimos conferir os freelas deste turno." onRetry={() => { void fetchApplications(); }} />
                         ) : filled === null ? (

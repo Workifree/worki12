@@ -20,7 +20,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
     const navItems = toBottomNav(isCompany ? getCompanyNav(companyNav) : getWorkerNav());
 
     return (
-        <nav data-bottom-nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 z-50 w-full border-t border-gray-200 bg-white pb-safe">
+        <nav data-bottom-nav aria-label="Menu de navegação" className="md:hidden fixed bottom-0 left-0 z-50 w-full border-t-2 border-black bg-white pb-safe">
             <div className="flex h-16 items-stretch">
                 {navItems.map((item) => {
                     const isActive = isNavActive(pathname, item);

@@ -20,7 +20,7 @@ export function DialogHeader({
   return (
     <div className="mb-4 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 id={titleId} className="text-lg font-semibold text-balance text-gray-900">
+        <h2 id={titleId} className="text-lg font-bold text-balance text-black">
           {title}
         </h2>
         {subtitle && <div className="mt-1 text-sm text-gray-600">{subtitle}</div>}

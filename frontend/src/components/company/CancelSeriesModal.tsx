@@ -116,7 +116,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
 
                 {phase === 'confirm' && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border border-red-300 bg-red-50">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-red-300 bg-red-50">
                             <AlertTriangle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm font-bold text-red-800">
                                 <p>A série para de gerar novos turnos e, a partir de hoje, as ocorrências futuras <strong>sem
@@ -166,7 +166,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
 
                 {phase === 'result' && result && (
                     <div className="space-y-4">
-                        <div className="flex items-start gap-3 p-4 rounded-xl border border-primary bg-primary-light">
+                        <div className="flex items-start gap-3 p-4 rounded-xl border-2 border-primary bg-primary-light">
                             <CheckCircle2 size={20} className="text-primary flex-shrink-0 mt-0.5" />
                             <p className="text-sm font-bold text-primary-dark">
                                 {result.cancelled} turno{result.cancelled !== 1 ? 's' : ''} cancelado{result.cancelled !== 1 ? 's' : ''}.
@@ -174,7 +174,7 @@ export default function CancelSeriesModal({ seriesId, onClose, onCancelled }: Ca
                             </p>
                         </div>
                         {(result.skippedFilled > 0 || result.skippedCalled > 0) && (
-                            <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
+                            <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50 space-y-1 text-sm font-bold text-gray-600">
                                 {result.skippedFilled > 0 && (
                                     <p>{result.skippedFilled} turno{result.skippedFilled !== 1 ? 's' : ''} com freela confirmado {result.skippedFilled !== 1 ? 'não foram cancelados' : 'não foi cancelado'} — dispense manualmente se necessário.</p>
                                 )}

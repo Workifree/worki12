@@ -161,7 +161,7 @@ export default function InviteTakeover() {
   };
 
   const companyAvatar = (
-    <div className="w-12 h-12 rounded-xl border border-gray-200 overflow-hidden bg-gray-100 flex-shrink-0">
+    <div className="w-12 h-12 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
       {companyLogo ? (
         <img src={companyLogo} alt={companyName} className="w-full h-full object-cover" />
       ) : (
@@ -183,13 +183,13 @@ export default function InviteTakeover() {
       layer={MODAL_LAYER.invite}
       initialFocus="panel"
       overlayClassName="!bg-black/70"
-      className={isSos ? 'relative border-status-warning-line' : 'relative'}
+      className={isSos ? 'relative border-status-warning-line' : 'relative !shadow-[6px_6px_0px_0px_rgba(0,166,81,1)]'}
     >
         <IconButton onClick={dismiss} aria-label="Fechar aviso de convite" className="absolute top-3 right-3">
           <X size={20} />
         </IconButton>
 
-        <span className="inline-block bg-primary-light text-primary-ink text-xs font-semibold px-3 py-1 rounded-pill mb-4">
+        <span className="inline-block bg-primary-light text-primary-dark text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-pill border border-green-200 mb-4">
           {isSos ? 'Urgência (SOS)' : 'Convite de turno'}
         </span>
 
@@ -241,14 +241,14 @@ export default function InviteTakeover() {
             <DollarSign size={14} /> {budget ? formatBRL(budget) : 'Valor não informado'}
           </span>
           {location && (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+            <span className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
               <LocalDoTurno location={location} size={14} />
             </span>
           )}
         </div>
 
         {briefing && (
-          <div className="bg-gray-50 rounded-xl p-3 mb-6">
+          <div className="bg-gray-50 border-l-4 border-black rounded-r-xl p-3 mb-6">
             <p className="text-xs font-semibold text-gray-600 mb-1">Briefing</p>
             <p className="text-sm text-gray-700 line-clamp-4">{briefing}</p>
           </div>

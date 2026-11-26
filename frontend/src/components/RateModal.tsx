@@ -61,7 +61,7 @@ export default function RateModal({ isOpen, onClose, onSubmit, targetName, targe
                 </div>
 
                 <div className="flex flex-col items-center text-center mb-6">
-                    <div className="w-20 h-20 rounded-full bg-gray-100 ring-1 ring-gray-200 overflow-hidden mb-3">
+                    <div className="w-20 h-20 rounded-full bg-gray-200 border-2 border-black overflow-hidden mb-3">
                         {targetPhotoUrl ? (
                             <img src={targetPhotoUrl} alt={targetName} className="w-full h-full object-cover" />
                         ) : (

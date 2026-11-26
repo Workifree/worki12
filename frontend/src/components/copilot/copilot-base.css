@@ -1,0 +1,66 @@
+/*
+ * Base do copiloto, carregada já no cabeçalho do app (o painel completo vem sob demanda):
+ * tokens do laboratório visual, orbe e o gatilho "Pergunte ao Worki". Igual a
+ * scripts/copiloto-vfx-demo/index.html. Só transform e opacity se movem.
+ */
+:root {
+  --wk-ink: #0f1720; --wk-ink2: #4b5563; --wk-ink3: #6b7280; --wk-line: #e3e6eb;
+  --wk-edge: rgba(15, 23, 32, 0.14); --wk-edge-strong: rgba(15, 23, 32, 0.32);
+  --wk-blue: #2563eb; --wk-green: #00a651; --wk-violet: #7c3aed; --wk-amber: #f59e0b;
+  --wk-spectrum: #2563eb 0%, #7c3aed 26%, #00a651 54%, #2563eb 76%, #f59e0b 87%, #2563eb 97%, #2563eb 100%;
+  --wk-ease-out: cubic-bezier(0.22, 0.9, 0.24, 1);
+  --wk-ease-io: cubic-bezier(0.45, 0, 0.15, 1);
+}
+
+
+/* orbe do copiloto: espectro azul/violeta/verde com brilho e halo; gira (3,6 s) e respira (3,2 s) só enquanto trabalha */
+@keyframes wk-orbspin { to { transform: rotate(360deg); } }
+@keyframes wk-orbbreathe { 0%, 100% { transform: scale(0.82); opacity: 0.45; } 50% { transform: scale(1.12); opacity: 0.85; } }
+.wk-orb { position: relative; width: 20px; height: 20px; flex: none; }
+.wk-orb--sm { width: 16px; height: 16px; }
+.wk-orb__core { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, var(--wk-spectrum)); background: conic-gradient(in oklab from 0deg, var(--wk-spectrum)); will-change: transform; }
+.wk-orb__core::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, rgba(255, 255, 255, 0.25) 62%, rgba(255, 255, 255, 0)); }
+.wk-orb__halo { position: absolute; inset: -6px; border-radius: 50%; background: radial-gradient(closest-side, rgba(124, 58, 237, 0.35), rgba(37, 99, 235, 0.14) 55%, transparent); will-change: transform, opacity; opacity: 0.7; }
+.wk-orb--bare .wk-orb__halo { display: none; }
+.wk-orb--done .wk-orb__core { background: var(--wk-green); animation: none; }
+.wk-orb--done .wk-orb__halo { animation: none; opacity: 0; }
+
+
+/* botão "Perguntar ao Worki" (a barra fechada) */
+.wk-trigger {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--wk-edge); background: rgba(255, 255, 255, 0.82); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); color: var(--wk-ink); border-radius: 999px;
+  padding: 7px 12px 7px 10px; font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 22px -6px rgba(15, 23, 32, 0.22), 0 1px 4px rgba(15, 23, 32, 0.08); white-space: nowrap; min-height: 44px;
+}
+.wk-trigger kbd { font: inherit; font-size: 10.5px; border: 1px solid var(--wk-line); border-radius: 6px; padding: 0 5px; color: var(--wk-ink3); }
+
+/* Gatilho flutuante: pílula branca de 2px com brilho do espectro em volta (anel que gira + halo que respira) */
+/* quem usa a classe define o posicionamento (fixed ou relative): os filhos do brilho dependem de um pai posicionado */
+.wk-trigger__ring {
+  position: absolute; inset: -3px; border-radius: 999px; padding: 1.5px; overflow: hidden; pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; opacity: 0.9;
+}
+.wk-trigger__sweep {
+  position: absolute; left: 50%; top: 50%; width: 640px; height: 640px; margin: -320px 0 0 -320px;
+  background: conic-gradient(from 0deg, var(--wk-spectrum)); background: conic-gradient(in oklab from 0deg, var(--wk-spectrum));
+  transform: rotate(24deg); will-change: transform;
+}
+.wk-trigger__halo {
+  position: absolute; inset: -4px; border-radius: 999px; pointer-events: none; opacity: 0.55;
+  box-shadow: 0 0 22px 2px rgba(124, 58, 237, 0.3), 0 0 10px rgba(37, 99, 235, 0.34); will-change: opacity;
+}
+.wk-trigger__txt { display: inline-flex; align-items: baseline; gap: 6px; }
+.wk-trigger__txt small { font-size: 12.5px; font-weight: 600; color: var(--wk-ink3); }
+@keyframes wk-trigsweep { to { transform: rotate(384deg); } }
+@keyframes wk-trigpulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+@media (prefers-reduced-motion: no-preference) {
+  .wk-orb:not(.wk-orb--done) .wk-orb__core { animation: wk-orbspin 3.6s linear infinite; }
+  .wk-orb:not(.wk-orb--done) .wk-orb__halo { animation: wk-orbbreathe 3.2s ease-in-out infinite; }
+  .wk-trigger__sweep { animation: wk-trigsweep 7s linear infinite; }
+  .wk-trigger__halo { animation: wk-trigpulse 3.6s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-orb__core, .wk-orb__halo { animation: none !important; }
+}
+html.is-hidden .wk-orb *, html.is-hidden .wk-trigger * { animation-play-state: paused !important; }
+@media (prefers-contrast: more), (forced-colors: active) { .wk-trigger__ring, .wk-trigger__halo { display: none; } }

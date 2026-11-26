@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import ErroDeCarga from '../components/ErroDeCarga';
 import { useNavigate } from 'react-router-dom';
-import { Star, MapPin, CheckCircle2, XCircle, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
+import { Building2, Star, MapPin, CheckCircle2, XCircle, Users, Clock, LogOut, Share2, Check, Copy } from 'lucide-react';
 import PageMeta from '../components/PageMeta';
-import { Avatar, Button, Card, Menu, PageHeader } from '../components/ui';
+import { Button, Card, Menu, PageHeader } from '../components/ui';
 import SectionTabs from '../components/SectionTabs';
 import { useWorkerStores } from '../hooks/useTeamConnections';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
@@ -70,7 +70,15 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
       className="flex items-center gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
     >
       {/* Logo */}
-      <Avatar kind="company" size="md" name={name} src={company.logo_url} />
+      <div className="w-14 h-14 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+        {company.logo_url ? (
+          <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-black text-white font-bold text-xl">
+            {name[0]?.toUpperCase() ?? '?'}
+          </div>
+        )}
+      </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">
@@ -92,7 +100,7 @@ function StoreCard({ store, onLeave, leaving }: StoreCardProps) {
             </span>
           )}
           {company.address && (
-            <span className="inline-flex items-center gap-1 text-xs text-gray-600 max-w-full">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-pill max-w-full">
               <MapPin size={12} className="flex-shrink-0" /> <span className="truncate">{company.address}</span>
             </span>
           )}
@@ -130,9 +138,17 @@ function PendingCard({ connection, onAccept, onDecline, respondingId }: PendingC
   const isResponding = respondingId === connection.id;
 
   return (
-    <Card as="article" padding="sm" tone="highlight">
+    <Card as="article" padding="sm" className="shadow-[4px_4px_0px_0px_rgba(0,166,81,1)]">
       <div className="flex items-center gap-3 mb-4">
-        <Avatar kind="company" name={name} src={company?.logo_url} />
+        <div className="w-11 h-11 rounded-xl border-2 border-black overflow-hidden bg-gray-100 flex-shrink-0">
+          {company?.logo_url ? (
+            <img src={company.logo_url} alt={name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Building2 size={20} className="text-gray-600" />
+            </div>
+          )}
+        </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-600">Convite de</p>
           <p className="font-bold truncate">{name}</p>
@@ -320,7 +336,7 @@ export default function CarteiraClientes() {
 
       {/* Empty state */}
       {isEmpty && (
-        <div className="text-center py-16 px-4 rounded-2xl bg-gray-100">
+        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
           <Users size={40} className="mx-auto mb-4 text-gray-400" />
           <h3 className="text-lg font-bold mb-2">Você ainda não tem empresas</h3>
           <p className="text-sm text-gray-600 max-w-sm mx-auto">

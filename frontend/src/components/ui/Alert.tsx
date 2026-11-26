@@ -18,10 +18,10 @@ export interface AlertProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
 export function Alert({ tone = 'info', title, action, className, children, ...rest }: AlertProps) {
   const Icon = ICON[tone]
   return (
-    <div className={cx('flex items-start gap-3 rounded-xl border p-3', TONE_CLASS[tone], className)} {...rest}>
+    <div className={cx('flex items-start gap-3 rounded-xl border-2 p-3', TONE_CLASS[tone], className)} {...rest}>
       <Icon size={20} aria-hidden="true" className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
-        {title && <p className="text-sm font-semibold">{title}</p>}
+        {title && <p className="text-sm font-bold">{title}</p>}
         {children && <div className="text-sm">{children}</div>}
         {action && <div className="mt-2">{action}</div>}
       </div>

@@ -192,7 +192,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
       )}
 
       {!loadingJobs && !loadFailed && jobs.length === 0 && (
-        <div className="text-center py-8 px-4 border border-dashed border-gray-300 rounded-2xl text-gray-600">
+        <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <CalendarX2 size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">Nenhum turno elegível para convidar agora.</p>
           <p className="text-xs mt-1">Crie um turno aberto, com data futura e sem este freela, para poder convidar.</p>
@@ -218,7 +218,7 @@ export function InviteToShiftModal({ member, onClose, onInvited }: InviteToShift
                 onClick={() => setSelectedJobId(job.id)}
                 disabled={isInviting}
                 aria-pressed={selected}
-                className={`w-full text-left min-h-11 p-3 rounded-xl border-ink transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                className={`w-full text-left min-h-11 p-3 rounded-xl border-2 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
                   selected ? 'border-black bg-primary-light' : 'border-gray-200 hover:border-black'
                 }`}
               >

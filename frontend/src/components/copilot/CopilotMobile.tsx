@@ -3,9 +3,10 @@
  * pílula compacta embaixo, acima da barra de navegação, para não cobrir o que o agente toca.
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Sparkles, X } from 'lucide-react'
-import { IconButton } from '../ui/IconButton'
-import { Composer, IdleBody, Orb, PendingCard, StepFeed, StopButton } from './CopilotParts'
+import { X } from 'lucide-react'
+import { Composer, IdleBody, PendingCard, StepFeed, StopButton } from './CopilotParts'
+import { Orb } from './Trigger'
+import { PillButton } from './PillButton'
 import type { CopilotViewProps } from './copilotView'
 import { useAvoidTarget, type Box } from '../../hooks/copilot/useAvoidTarget'
 import { useDialogBehavior } from '../../hooks/copilot/useDialogBehavior'
@@ -53,13 +54,13 @@ function Sheet(view: CopilotViewProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[1] bg-black/30" onMouseDown={(event) => event.target === event.currentTarget && view.close()}>
+    <div className="wk-scrim fixed inset-0 z-[1]" onMouseDown={(event) => event.target === event.currentTarget && view.close()}>
       <section
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label="Copiloto do Worki"
-        className="wk-solid wk-sheet absolute inset-x-0 flex flex-col overflow-hidden rounded-t-2xl rounded-b-none text-black"
+        className="wk-panel wk-sheet absolute inset-x-0 flex flex-col overflow-hidden !rounded-b-none border-b-0"
         style={{
           bottom: keyboard,
           maxHeight: `min(88dvh, calc(100dvh - ${keyboard}px - 8px))`,
@@ -74,25 +75,27 @@ function Sheet(view: CopilotViewProps) {
           className="touch-none select-none pb-1 pt-2"
           aria-hidden="true"
         >
-          <div className="mx-auto h-1.5 w-11 rounded-full bg-black/25" />
+          <div className="mx-auto h-1.5 w-11 rounded-full bg-[#0f1720]/25" />
         </div>
-        <header className="flex items-center gap-2 px-4 pb-1">
-          <Orb />
-          <h2 className="flex-1 text-base font-bold">Como posso ajudar?</h2>
-          <IconButton aria-label="Fechar o copiloto" onClick={view.close}>
-            <X size={20} />
-          </IconButton>
+        <div className="wk-cmd__line !rounded-b-none" aria-hidden="true" />
+        <header className="wk-cmd__row">
+          <Orb working />
+          <h2 className="flex-1 text-[14px] font-bold">Como posso ajudar?</h2>
+          <PillButton tone="ghost" aria-label="Fechar o copiloto" onClick={view.close} className="w-11 !px-0">
+            <X size={18} aria-hidden="true" />
+          </PillButton>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3 pt-1">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           <IdleBody view={view} />
         </div>
         {ready && (
-          <div className="border-t border-black/10 bg-white/70 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" style={keyboard ? { paddingBottom: 8 } : undefined}>
+          <div className="border-t border-[#e3e6eb] bg-[#fafbfc] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" style={keyboard ? { paddingBottom: 8 } : undefined}>
             <Composer
               value={view.draft}
               onChange={view.setDraft}
               onSend={view.send}
               autoFocus={false}
+              onEmptyEnter={() => view.suggestions[0] && view.send(view.suggestions[0])}
               placeholder={view.agent.followUp ? 'Responda aqui' : 'Como posso ajudar?'}
             />
           </div>
@@ -130,11 +133,11 @@ function Working(view: CopilotViewProps) {
       <section
         ref={ref}
         aria-label="Copiloto aguardando você"
-        className="wk-solid wk-rise fixed inset-x-2 z-[1] flex max-h-[62dvh] flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl p-4 text-black"
+        className="wk-panel wk-rise fixed inset-x-2 z-[1] flex max-h-[62dvh] flex-col gap-3 overflow-y-auto overscroll-contain p-4"
         style={style}
       >
         <PendingCard pending={agent.pending} role={view.role} armDelayMs={view.confirmArmDelayMs} />
-        <StopButton onStop={agent.stop} className="w-full" />
+        <StopButton onStop={agent.stop} block />
       </section>
     )
   }
@@ -143,11 +146,11 @@ function Working(view: CopilotViewProps) {
     <section
       ref={ref}
       aria-label="Copiloto trabalhando"
-      className="wk-solid wk-rise fixed inset-x-2 z-[1] flex items-center gap-3 rounded-2xl py-2 pl-3 pr-2 text-black"
+      className="wk-solid wk-pill wk-rise fixed inset-x-2 z-[1] flex items-center"
       style={style}
     >
       <Orb working />
-      <div className="min-w-0 flex-1 text-sm">
+      <div className="min-w-0 flex-1 text-[13px]">
         <StepFeed steps={current ? [current] : []} compact />
       </div>
       <StopButton onStop={agent.stop} />
@@ -157,14 +160,14 @@ function Working(view: CopilotViewProps) {
 
 function Launcher({ onOpen }: { onOpen: () => void }) {
   return (
-    // Aba na borda, no meio da tela: um botão flutuante no rodapé cobriria a barra de ações.
+    // Aba na borda, no meio da tela (só quando não há a pílula do cabeçalho): um botão no rodapé cobriria a barra de ações.
     <button
       type="button"
       aria-label="Abrir o copiloto"
       onClick={onOpen}
-      className="wk-solid fixed right-0 top-[58%] z-[1] flex h-14 w-11 items-center justify-center rounded-l-2xl border-r-0 text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+      className="wk-trigger fixed right-0 top-[58%] z-[1] !min-h-14 !w-11 !justify-center !rounded-l-[18px] !rounded-r-none !border-r-0 !p-0"
     >
-      <Sparkles size={22} aria-hidden="true" />
+      <Orb small bare working />
     </button>
   )
 }
@@ -172,5 +175,5 @@ function Launcher({ onOpen }: { onOpen: () => void }) {
 export function CopilotMobile(view: CopilotViewProps) {
   if (view.agent.running) return <Working {...view} />
   if (view.open) return <Sheet {...view} />
-  return view.showLauncher ? <Launcher onOpen={view.openIt} /> : null
+  return view.showLauncher && view.mobileLauncher ? <Launcher onOpen={view.openIt} /> : null
 }

@@ -8,7 +8,7 @@ import ProfileReviews from '../components/ProfileReviews';
 import { logError } from '../lib/logger';
 import { toSafeWebsiteHref } from '../lib/websiteUrl';
 import { useToast } from '../contexts/ToastContext';
-import { Avatar, Button, Card } from '../components/ui';
+import { Button, Card } from '../components/ui';
 
 interface CompanyPublicData {
     id: string;
@@ -154,7 +154,7 @@ export default function CompanyPublicProfile() {
         return (
             <div className="max-w-4xl mx-auto pb-24">
                 <PageMeta title="Empresa não encontrada" />
-                <div className="text-center py-16 rounded-2xl bg-gray-100">
+                <div className="text-center py-16 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50">
                     <Building2 size={48} className="mx-auto mb-4 text-gray-300" />
                     <h1 className="text-xl font-bold mb-2">Empresa não encontrada</h1>
                     <p className="text-sm text-gray-600 mb-6">Não conseguimos localizar este perfil.</p>
@@ -183,7 +183,7 @@ export default function CompanyPublicProfile() {
             </Button>
 
             {/* Card principal */}
-            <Card padding="none" tone="nested" className="overflow-hidden mb-6">
+            <Card padding="none" className="overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-6">
                 <div className="h-32 sm:h-48 bg-black relative">
                     {company.cover_url && (
                         <img src={company.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -192,7 +192,13 @@ export default function CompanyPublicProfile() {
 
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8">
                     <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem] [&+h1]:[overflow-wrap:anywhere]">
-                        <Avatar kind="company" size="lg" name={company.name} src={company.logo_url} className="ring-4 ring-white sm:h-24 sm:w-24" />
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden">
+                            {company.logo_url ? (
+                                <img src={company.logo_url} alt={company.name} className="w-full h-full object-cover" />
+                            ) : (
+                                <Building2 size={48} className="text-gray-300" />
+                            )}
+                        </div>
                     </div>
 
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{company.name}</h1>
@@ -206,7 +212,7 @@ export default function CompanyPublicProfile() {
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex min-h-11 items-center gap-1.5 rounded-xl text-gray-900 underline decoration-gray-400 underline-offset-2 hover:decoration-black"
+                                className="flex min-h-11 items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 underline decoration-blue-300 underline-offset-2"
                             >
                                 <MapPin size={16} /> {company.address}
                             </a>
@@ -264,11 +270,11 @@ export default function CompanyPublicProfile() {
                     O que esta empresa costuma pedir dos freelas antes do turno.
                 </p>
                 {company.default_briefing ? (
-                    <p className="text-sm sm:text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light rounded-xl p-4 font-medium">
+                    <p className="text-sm sm:text-base leading-relaxed text-accent whitespace-pre-wrap bg-primary-light border-2 border-primary rounded-xl p-4 font-medium">
                         {company.default_briefing}
                     </p>
                 ) : (
-                    <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
+                    <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
                         Esta empresa ainda não definiu um briefing padrão.
                     </p>
                 )}

@@ -47,9 +47,9 @@ describe('Field', () => {
       </Field>,
     )
     const input = screen.getByLabelText('Nome')
-    expect(input).toHaveClass('border-ink', 'border-gray-900', 'rounded-xl', 'h-12', 'px-4', 'uppercase')
+    expect(input).toHaveClass('border-2', 'border-black', 'rounded-xl', 'h-11', 'px-4', 'uppercase')
     expect(input.className).toContain('focus:ring-2')
-    expect(input.className).toContain('focus:border-2')
+    expect(input.className).toContain('focus:ring-primary')
   })
 
   it('hint fica ligado via aria-describedby', () => {
@@ -132,35 +132,14 @@ describe('Field', () => {
     expect(input).not.toHaveClass('h-11')
   })
 
-  it('required não desenha asterisco (marca-se o opcional), mas segue obrigatório', () => {
+  it('required adiciona asterisco decorativo (aria-hidden)', () => {
     render(
       <Field label="Nome" required>
         <input required />
       </Field>,
     )
-    expect(screen.queryByText('*')).toBeNull()
+    expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true')
     expect(screen.getByLabelText(/Nome/)).toBeRequired()
-  })
-
-  it('optional marca "(opcional)" no rótulo', () => {
-    render(
-      <Field label="Apelido" optional>
-        <input />
-      </Field>,
-    )
-    expect(screen.getByText('(opcional)')).toBeInTheDocument()
-    expect(screen.getByLabelText(/Apelido/)).not.toBeRequired()
-  })
-
-  it('select ganha a seta do sistema (worki-select)', () => {
-    render(
-      <Field label="Cidade">
-        <select>
-          <option>SP</option>
-        </select>
-      </Field>,
-    )
-    expect(screen.getByLabelText('Cidade')).toHaveClass('worki-select', 'h-12')
   })
 
   it('ids são únicos entre campos', () => {

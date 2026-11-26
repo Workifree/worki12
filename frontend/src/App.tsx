@@ -127,7 +127,7 @@ function App() {
             <BrowserRouter>
               <GuideProvider>
               <PwaPrompts />
-              <CopilotRoot showLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
+              <CopilotRoot mobileLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
               <RouteFocus />
               <ToastRouteDismiss />
               <Suspense fallback={<PageLoader />}>

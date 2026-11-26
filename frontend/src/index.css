@@ -136,12 +136,12 @@ html:has(dialog.worki-dialog[open]) { overflow: hidden; }
   }
   /* Altura ocupada pela barra inferior: a ActionBar gruda logo acima dela. */
   .worki-layout {
-    --worki-nav-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
+    --worki-nav-h: calc(4rem + 2px + env(safe-area-inset-bottom, 0px));
     --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
   }
   :root {
     --worki-header-h: calc(3.5rem + env(safe-area-inset-top, 0px));
-    --worki-fab-bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+    --worki-fab-bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
 }
 
@@ -186,12 +186,12 @@ html { -webkit-tap-highlight-color: transparent; }
 .worki-pwa-stack > * { pointer-events: auto; }
 @media (max-width: 767px) {
   body:has([data-bottom-nav]) .worki-pwa-stack {
-    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
   /* Tela com ActionBar: o convite de instalar espera (não cobre o botão principal); os avisos
      críticos sobem acima dela. */
   body:has(.worki-action-bar) .worki-pwa-stack {
-    bottom: calc(4rem + 1px + env(safe-area-inset-bottom, 0px) + 7rem);
+    bottom: calc(4rem + 2px + env(safe-area-inset-bottom, 0px) + 7rem);
   }
   body:has(.worki-action-bar) .worki-pwa-install { display: none; }
 }
@@ -246,7 +246,7 @@ html .worki-layout main {
    borda + safe-area) + folga de 0.5rem + a altura da pilha de avisos PWA (--worki-pwa-h). */
 .worki-chat {
   --chat-top: 1rem;
-  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 1px + env(safe-area-inset-bottom, 0px) + var(--worki-pwa-h, 0px));
+  --chat-chrome: calc(3.5rem + env(safe-area-inset-top, 0px) + var(--chat-top) + 4.5rem + 2px + env(safe-area-inset-bottom, 0px) + var(--worki-pwa-h, 0px));
   height: calc(100vh - var(--chat-chrome));
   height: calc(100dvh - var(--chat-chrome));
   min-height: 14rem;
@@ -256,7 +256,7 @@ html .worki-layout main {
 }
 @media (max-width: 767px) {
   main:has(.worki-chat) {
-    padding-bottom: calc(4.5rem + 1px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(4.5rem + 2px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 @media (min-width: 768px) {

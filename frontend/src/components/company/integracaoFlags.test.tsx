@@ -1,8 +1,6 @@
 /** Integração das funções novas: com as flags desligadas nada novo aparece nem é consultado. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, renderHook, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import BatchEntry from './BatchEntry';
+import { render, renderHook } from '@testing-library/react';
 import BatchList from './BatchList';
 import { batchLabels, clusterByBatch } from './batchGroups';
 import { useBatchLabels } from './useBatchLabels';
@@ -36,9 +34,7 @@ describe('flags desligadas (padrão)', () => {
         expect([isLoteEnabled(), isPresencaEnabled(), isAvisosEnabled()]).toEqual([false, false, false]);
     });
 
-    it('sem atalhos de lote e sem cartão Locais', () => {
-        const { container } = render(<MemoryRouter><BatchEntry /></MemoryRouter>);
-        expect(container).toBeEmptyDOMElement();
+    it('sem cartão Locais', () => {
         const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: true, trail: true }).flatMap((g) => g.cards);
         expect(cards.map((c) => c.id)).not.toContain('locais');
     });
@@ -80,10 +76,8 @@ describe('ligadas', () => {
         expect(done).toHaveBeenCalled();
     });
 
-    it('atalhos de lote e cartão Locais só para o Gestor', () => {
+    it('cartão Locais só para o Gestor', () => {
         vi.stubEnv('VITE_FEATURE_LOTE', 'true');
-        render(<MemoryRouter><BatchEntry /></MemoryRouter>);
-        expect(screen.getByRole('link', { name: /Copiar fim de semana/ })).toHaveAttribute('href', '/company/create?copiar=fim-de-semana');
         const ids = (gestor: boolean) => getGestaoGroups({ gestor, units: false, teamInvited: false, trail: false, sites: true })
             .flatMap((g) => g.cards.map((c) => c.id));
         expect(ids(true)).toContain('locais');

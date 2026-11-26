@@ -38,7 +38,7 @@ function useTermsGateOpen(enabled: boolean): boolean {
 }
 
 export type CopilotRootProps = Partial<
-  Pick<CopilotPanelProps, 'onOpenGuide' | 'showLauncher' | 'services' | 'overrides' | 'confirmArmDelayMs'>
+  Pick<CopilotPanelProps, 'onOpenGuide' | 'showLauncher' | 'mobileLauncher' | 'services' | 'overrides' | 'confirmArmDelayMs'>
 > & {
   /** Sobrepõe a flag de build (testes). */
   enabled?: boolean
@@ -57,7 +57,10 @@ function useOpenRequests(enabled: boolean) {
     const onKey = (event: KeyboardEvent) => {
       if (!isOpenShortcut(event) || event.defaultPrevented) return
       event.preventDefault()
-      requestOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.4 })
+      // Com o atalho, a gota nasce na pílula (ou no botão de ajuda) em vez de um ponto qualquer da página.
+      const pill = Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o copiloto"],button[aria-label="Ajuda e copiloto"]')).find((node) => node.getBoundingClientRect().width > 0)
+      const box = pill?.getBoundingClientRect()
+      requestOpen(box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight * 0.4 })
     }
     window.addEventListener(OPEN_EVENT, onOpen)
     window.addEventListener('keydown', onKey)

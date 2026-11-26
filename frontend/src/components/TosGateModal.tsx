@@ -110,7 +110,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     href="/termos"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex min-h-11 items-center text-primary-dark underline font-bold"
+                    className="flex min-h-11 items-center text-primary underline font-bold"
                 >
                     Ler os Termos de Uso
                 </a>
@@ -118,7 +118,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     href="/privacidade"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex min-h-11 items-center text-primary-dark underline font-bold"
+                    className="flex min-h-11 items-center text-primary underline font-bold"
                 >
                     Ler a Política de Privacidade
                 </a>
@@ -127,7 +127,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                     <input
                         type="checkbox"
                         id="tos-checkbox"
-                        className="w-5 h-5 border-ink border-black rounded accent-primary flex-shrink-0"
+                        className="w-5 h-5 border-2 border-black rounded accent-primary flex-shrink-0"
                         checked={checked}
                         onChange={(e) => setChecked(e.target.checked)}
                     />

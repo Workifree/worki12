@@ -204,14 +204,14 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
           ))}
         </div>
       ) : failed ? (
-        <div className="bg-gray-100 rounded-xl p-4 text-center">
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
           <p className="text-sm text-gray-600 mb-3">Não foi possível carregar os selos agora.</p>
           <Button variant="dark" onClick={() => void load()}>
             Tentar de novo
           </Button>
         </div>
       ) : badges.length === 0 ? (
-        <p className="text-sm text-gray-600 bg-gray-100 rounded-xl p-4 text-center">
+        <p className="text-sm text-gray-600 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
           Ainda sem selos. Eles aparecem aqui depois do primeiro turno concluído em uma empresa.
         </p>
       ) : (
@@ -228,7 +228,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                   navigate(`${profileBase}/${badge.company_id}`);
                 }
               }}
-              className={`text-left border border-gray-200 rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-colors hover:bg-gray-50 min-h-11 ${
+              className={`text-left border-2 border-black rounded-xl p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 min-h-11 ${
                 badge.hidden ? 'opacity-60 bg-gray-50' : 'bg-white'
               }`}
             >
@@ -236,11 +236,11 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                 <img
                   src={badge.company_logo_url}
                   alt={`Logo de ${badge.company_name}`}
-                  className="w-11 h-11 rounded-xl border border-gray-200 object-cover flex-shrink-0"
+                  className="w-11 h-11 rounded-xl border-2 border-black object-cover flex-shrink-0"
                 />
               ) : (
                 <div
-                  className="w-11 h-11 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-sm flex-shrink-0"
+                  className="w-11 h-11 rounded-xl border-2 border-black bg-black text-white flex items-center justify-center font-bold text-sm flex-shrink-0"
                   aria-hidden="true"
                 >
                   {initialsFrom(badge.company_name)}
@@ -271,7 +271,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
                     e.stopPropagation();
                     void handleToggleBadge(badge.company_id, badge.hidden);
                   }}
-                  className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border-ink border-black transition-colors ${
+                  className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border-2 border-black transition-colors ${
                     savingCompanyId === badge.company_id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'
                   }`}
                 >

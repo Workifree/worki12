@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const service = vi.hoisted(() => ({
@@ -8,9 +8,34 @@ const service = vi.hoisted(() => ({
     countPublishedBatch: vi.fn(),
     listRecentModels: vi.fn(),
     listExistingShifts: vi.fn(),
-    listJobsBetween: vi.fn(),
-    listPreviousWorkerIds: vi.fn(),
     getModelJob: vi.fn(),
+}));
+
+const templates = vi.hoisted(() => ({
+    listShiftTemplates: vi.fn(),
+    saveShiftTemplate: vi.fn(),
+    setShiftTemplateArchived: vi.fn(),
+}));
+vi.mock('../../services/shiftTemplateService', () => templates);
+
+const savedModel = vi.hoisted(() => ({
+    id: 't1', name: 'Garçom sábado',
+    template: {
+        category: 'garcom', title: 'Garçom sábado', description: 'Salão', requirements: '', briefing: '',
+        certification_requirement: null, location: '', budget_type: 'daily', has_lunch: false, tag_id: null,
+    },
+    defaults: { start_time: '18:00', end_time: '23:00', slots: 3, budget: 150 },
+}));
+
+// A área de modelos tem testes próprios: aqui basta saber que o fluxo a monta e recebe o modelo escolhido.
+vi.mock('./TemplatesScreen', () => ({
+    TemplatesScreen: ({ companyId, onUse, onBack }: { companyId: string; onUse: (t: unknown) => void; onBack: () => void }) => (
+        <div>
+            <p>Área de modelos de {companyId}</p>
+            <button type="button" onClick={() => onUse(savedModel)}>Usar Garçom sábado</button>
+            <button type="button" onClick={onBack}>Voltar</button>
+        </div>
+    ),
 }));
 
 vi.mock('../../services/shiftBatchService', async (importOriginal) => ({
@@ -44,37 +69,60 @@ vi.mock('../../services/linkRiskService', () => ({
 }));
 
 import { ShiftBatchFlow } from './ShiftBatchFlow';
+import { createRow, emptyTemplate, type ShiftDraftBatch } from '../../lib/shiftDrafts';
+import { batchFromParse, parseShiftText } from '../../lib/shiftTextParser';
+import { todayInBrazil } from '../../lib/dateUtils';
+import { batchDraftKey, saveShiftDraft } from '../../lib/shiftDraftStorage';
 
 const model = {
     id: 'j0', title: 'Garçom evento', category: 'garcom', description: 'Salão', budget: 150, budget_type: 'daily',
     start_date: '2026-01-01T15:00:00Z', work_start_time: '18:00', work_end_time: '23:00', slots: 1,
 };
 
-const renderFlow = () =>
+const saved = savedModel;
+
+const renderFlow = (initialDraft?: ShiftDraftBatch | null) =>
     render(
         <MemoryRouter>
-            <ShiftBatchFlow companyId="emp" isGestor tagsEnabled={false} />
+            <ShiftBatchFlow companyId="emp" isGestor tagsEnabled={false} initialDraft={initialDraft} />
         </MemoryRouter>,
     );
 
-const typeText = (value: string) => {
-    fireEvent.change(screen.getByLabelText('Colar ou digitar'), { target: { value } });
-    fireEvent.click(screen.getByRole('button', { name: 'Montar turnos do texto' }));
+/** Entrada do copiloto: o texto vira rascunho e o fluxo abre direto na revisão. */
+const renderReview = (text: string) => {
+    const batch = batchFromParse(parseShiftText(text, { today: todayInBrazil() }));
+    if (!batch) throw new Error('texto de teste não entendido');
+    return renderFlow(batch);
 };
+
+/** Hub, Repetir um turno anterior, toque no turno. */
+const repeatFromHistory = async (name: RegExp = /Garçom evento/) => {
+    fireEvent.click(await screen.findByRole('button', { name: /Repetir um turno anterior/ }));
+    fireEvent.click(await screen.findByRole('button', { name }));
+};
+
+const storeDraft = () =>
+    saveShiftDraft(batchDraftKey('u1', 'emp'), {
+        batch: { client_batch_id: 'b1', source: 'form', template: { ...emptyTemplate('garcom'), title: 'Meu rascunho' }, rows: [createRow('2026-02-01')] },
+        sent: null,
+    });
 
 beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     service.listRecentModels.mockResolvedValue([model]);
     service.listExistingShifts.mockResolvedValue([]);
+    templates.listShiftTemplates.mockResolvedValue([]);
+    templates.saveShiftTemplate.mockResolvedValue({ ok: true, template: saved });
+    templates.setShiftTemplateArchived.mockResolvedValue(true);
 });
 
 describe('ShiftBatchFlow', () => {
-    it('rápido: modelo, data e Publicar; duplo toque chama a publicação uma vez', async () => {
+    it('rápido: turno anterior, data e Publicar; duplo toque chama a publicação uma vez', async () => {
         let release: (value: unknown) => void = () => {};
         service.publishBatch.mockReturnValue(new Promise((resolve) => { release = resolve; }));
         renderFlow();
-        fireEvent.click(await screen.findByRole('button', { name: /Garçom evento/ }));
+        await repeatFromHistory();
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
         const publish = screen.getByRole('button', { name: 'Publicar' });
         fireEvent.click(publish);
@@ -87,38 +135,28 @@ describe('ShiftBatchFlow', () => {
 
     it('sem data, o toque explica o que falta e não publica', async () => {
         renderFlow();
-        fireEvent.click(await screen.findByRole('button', { name: /Garçom evento/ }));
+        await repeatFromHistory();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(screen.getByRole('alert').textContent).toContain('Falta: data.');
         expect(service.publishBatch).not.toHaveBeenCalled();
     });
 
-    it('A9: texto só abre a revisão; nada é publicado sem o toque', async () => {
-        renderFlow();
-        typeText('amanhã e depois de amanhã 18-23h 3 garçons 150');
+    it('A9: rascunho de fora (copiloto) só abre a revisão; nada é publicado sem o toque', async () => {
+        renderReview('amanhã e depois de amanhã 18-23h 3 garçons 150');
         expect(await screen.findByRole('button', { name: 'Publicar 2' })).toBeTruthy();
         expect(screen.getByRole('heading', { name: '2 turnos · 6 vagas' })).toBeTruthy();
         expect(service.publishBatch).not.toHaveBeenCalled();
     });
 
-    it('texto não entendido fica no começo com o motivo', async () => {
-        renderFlow();
-        typeText('tal dia lá');
-        expect(screen.getByRole('alert').textContent).toContain('Não entendi');
-        expect(screen.queryByRole('button', { name: /^Publicar \d/ })).toBeNull();
-    });
-
     it('A1: linhas iguais são juntadas à vista e "Separar" desfaz', async () => {
-        renderFlow();
-        typeText('amanhã 18-23h 3 garçons 150; amanhã 18-23h 2 garçons 150');
+        renderReview('amanhã 18-23h 3 garçons 150; amanhã 18-23h 2 garçons 150');
         expect(await screen.findByText('2 linhas iguais foram juntadas: 1 turno com 5 vagas.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Separar' }));
         expect(screen.getByRole('button', { name: 'Publicar 2' })).toBeTruthy();
     });
 
     it('A5: sem saída a revisão bloqueia o Publicar', async () => {
-        renderFlow();
-        typeText('amanhã 18h 3 garçons 150');
+        renderReview('amanhã 18h 3 garçons 150');
         const button = await screen.findByRole('button', { name: 'Publicar 1' });
         expect((button as HTMLButtonElement).disabled).toBe(true);
         expect(screen.getByText('Falta: saída.')).toBeTruthy();
@@ -128,8 +166,7 @@ describe('ShiftBatchFlow', () => {
         service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1', 'n2', 'n3'] });
         service.dispatchCall.mockImplementation(async (item: { job_id: string }) =>
             item.job_id === 'n2' ? { item, status: 'failed', error: 'cota' } : { item, status: 'sent' });
-        renderFlow();
-        typeText('amanhã 18-23h 1 garçom 150; amanhã 9-12h 1 garçom 150; amanhã 13-17h 1 garçom 150');
+        renderReview('amanhã 18-23h 1 garçom 150; amanhã 9-12h 1 garçom 150; amanhã 13-17h 1 garçom 150');
         fireEvent.click(await screen.findByRole('button', { name: 'Lista: Garçons' }));
         fireEvent.click(screen.getByRole('button', { name: 'Publicar 3' }));
         expect(await screen.findByText('Chamados: 2 enviados · 1 falhou')).toBeTruthy();
@@ -146,8 +183,7 @@ describe('ShiftBatchFlow', () => {
     it('resposta perdida: repetir usa o mesmo id; editar confere o envio anterior antes de criar outro', async () => {
         service.publishBatch.mockResolvedValue({ ok: false, uncertain: true, errors: [], message: 'Sem resposta' });
         service.countPublishedBatch.mockResolvedValue(2);
-        renderFlow();
-        typeText('amanhã 18-23h 1 garçom 150; amanhã 9-12h 1 garçom 150');
+        renderReview('amanhã 18-23h 1 garçom 150; amanhã 9-12h 1 garçom 150');
         const publish = await screen.findByRole('button', { name: 'Publicar 2' });
         const sentIds = () => service.publishBatch.mock.calls.map((c) => c[1].client_batch_id);
 
@@ -161,8 +197,7 @@ describe('ShiftBatchFlow', () => {
 
         // Edita (tira uma linha) e tenta publicar: o lote anterior existe, então para e avisa.
         fireEvent.click(screen.getAllByRole('button', { name: /^Editar/ })[0]);
-        fireEvent.click(screen.getAllByRole('button', { name: /Opções do turno/ })[0]);
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Remover' }));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remover turno' })[0]);
         fireEvent.click(screen.getByRole('button', { name: 'Revisar' }));
         fireEvent.click(screen.getByRole('button', { name: 'Publicar 1' }));
         expect(await screen.findByText(/o envio anterior criou 2 turno/)).toBeTruthy();
@@ -175,17 +210,153 @@ describe('ShiftBatchFlow', () => {
         expect(sentIds()[2]).not.toBe(sentIds()[0]);
     });
 
-    it('calendário: várias datas viram linhas e a barra soma', async () => {
+    it('vários turnos se faz no editor em lista: "Adicionar outro turno" soma na barra', async () => {
         renderFlow();
-        fireEvent.click(await screen.findByRole('button', { name: /Garçom evento/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Várias datas' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Próximo mês' }));
-        const grid = screen.getByRole('group', { name: /^Datas de/ });
-        const days = within(grid).getAllByRole('button');
-        fireEvent.click(days[4]);
-        fireEvent.click(days[5]);
-        fireEvent.click(days[6]);
-        expect(screen.getByRole('button', { name: 'Revisar (3)' })).toBeTruthy();
-        expect(screen.getByText(/3 turnos · 3 vagas · R\$\s450,00 previstos/)).toBeTruthy();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Adicionar outro turno' }));
+        expect(screen.getByRole('button', { name: 'Revisar (2)' })).toBeTruthy();
+    });
+
+    describe('começo: o hub escolhe entre três ideias', () => {
+        it('mostra três cartões, na ordem, e nada de texto livre, busca ou "Mais formas"', async () => {
+            templates.listShiftTemplates.mockResolvedValue([saved]);
+            renderFlow();
+            const cards = await screen.findAllByRole('button', { name: /Criar turno|Usar um modelo|Repetir um turno anterior/ });
+            expect(cards.map((c) => c.textContent)).toEqual([
+                expect.stringContaining('Criar turno'),
+                expect.stringContaining('Usar um modelo'),
+                expect.stringContaining('Repetir um turno anterior'),
+            ]);
+            expect(screen.getByText('Do zero, sem modelo. Preencha e lance na hora.')).toBeTruthy();
+            expect(screen.getByText('Pegue um do histórico e ajuste só data e horário.')).toBeTruthy();
+            expect(await screen.findByText('1 modelo')).toBeTruthy();
+            expect(screen.queryByText('Mais formas de começar')).toBeNull();
+            expect(screen.queryByLabelText('Colar ou digitar')).toBeNull();
+            expect(screen.queryByRole('button', { name: /Repetir (a semana|o fim de semana)/ })).toBeNull();
+            expect(screen.queryByRole('searchbox')).toBeNull();
+            expect(service.listRecentModels).not.toHaveBeenCalled();
+        });
+
+        it('Criar turno abre o editor do zero', async () => {
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /^Criar turno/ }));
+            expect(await screen.findByRole('button', { name: 'Publicar' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Adicionar outro turno' })).toBeTruthy();
+        });
+
+        it('Usar um modelo abre a área de modelos; escolher um abre o editor e dá para publicar', async () => {
+            service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Usar um modelo/ }));
+            expect(screen.getByText('Área de modelos de emp')).toBeTruthy();
+            expect(screen.queryByRole('button', { name: /^Criar turno/ })).toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: 'Usar Garçom sábado' }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Amanhã/ }));
+            fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+            expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+            // veio de um modelo: não oferece guardar de novo
+            expect(templates.saveShiftTemplate).not.toHaveBeenCalled();
+        });
+
+        it('Voltar da área de modelos devolve ao hub', async () => {
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Usar um modelo/ }));
+            fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
+            expect(await screen.findByRole('button', { name: /^Criar turno/ })).toBeTruthy();
+            expect(screen.queryByText('Área de modelos de emp')).toBeNull();
+        });
+
+        it('histórico: lista cartões com horário e valor; toque abre o editor com os dados e data vazia', async () => {
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Repetir um turno anterior/ }));
+            expect(await screen.findByRole('heading', { name: 'Repetir um turno anterior' })).toBeTruthy();
+            expect(screen.getByText('Toque em um turno para repetir. Você ajusta só a data e o horário.')).toBeTruthy();
+            expect(service.listRecentModels).toHaveBeenCalledWith(30);
+            expect(await screen.findByText(/01\/01 · 18:00–23:00 · R\$/)).toBeTruthy();
+            fireEvent.click(screen.getByRole('button', { name: /Garçom evento/ }));
+            expect(await screen.findByRole('button', { name: 'Publicar' })).toBeTruthy();
+            expect((screen.getByLabelText('Data') as HTMLInputElement).value).toBe('');
+            expect(screen.getByText('Garçom evento')).toBeTruthy();
+        });
+
+        it('histórico: erro com "Tentar de novo" e depois vazio', async () => {
+            service.listRecentModels.mockRejectedValueOnce(new Error('rede')).mockResolvedValue([]);
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Repetir um turno anterior/ }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Tentar de novo' }));
+            expect(await screen.findByText(/Os turnos que você publicar aparecem aqui/)).toBeTruthy();
+        });
+
+        it('histórico: busca só com mais de 5 turnos', async () => {
+            const many = Array.from({ length: 6 }, (_, i) => ({ ...model, id: `j${i}`, title: `Turno ${i}` }));
+            service.listRecentModels.mockResolvedValue(many);
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Repetir um turno anterior/ }));
+            fireEvent.change(await screen.findByLabelText('Buscar nos turnos anteriores'), { target: { value: 'turno 4' } });
+            expect(screen.getAllByRole('button', { name: /^Turno \d/ })).toHaveLength(1);
+        });
+
+        it('Voltar do histórico e do editor retornam ao hub', async () => {
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: /Repetir um turno anterior/ }));
+            fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
+            expect(await screen.findByRole('button', { name: /^Criar turno/ })).toBeTruthy();
+
+            await repeatFromHistory();
+            await screen.findByRole('button', { name: 'Publicar' });
+            fireEvent.click(screen.getByRole('button', { name: /Voltar|Sair/ }));
+            expect(await screen.findByRole('button', { name: /^Criar turno/ })).toBeTruthy();
+            expect(screen.queryByRole('heading', { name: 'Repetir um turno anterior' })).toBeNull();
+        });
+
+        it('rascunho: Continuar ou Descartar; descartar some e dá "Desfazer"', async () => {
+            storeDraft();
+            renderFlow();
+            expect(await screen.findByText('Meu rascunho · 1 turno')).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Continuar' })).toBeTruthy();
+            fireEvent.click(screen.getByRole('button', { name: 'Descartar rascunho' }));
+            expect(screen.queryByText('Meu rascunho · 1 turno')).toBeNull();
+            expect(screen.getAllByRole('status').map((n) => n.textContent).join(' ')).toContain('Rascunho descartado');
+            expect(localStorage.getItem(batchDraftKey('u1', 'emp'))).toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: 'Desfazer descarte do rascunho' }));
+            expect(await screen.findByText('Meu rascunho · 1 turno')).toBeTruthy();
+            expect(localStorage.getItem(batchDraftKey('u1', 'emp'))).not.toBeNull();
+        });
+
+        it('rascunho: Continuar abre o editor', async () => {
+            storeDraft();
+            renderFlow();
+            fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }));
+            expect(await screen.findByRole('button', { name: 'Publicar' })).toBeTruthy();
+        });
+    });
+
+    it('Guardar como modelo: guarda depois de publicar e avisa', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('checkbox', { name: /Guardar como modelo/ }));
+        expect((screen.getByLabelText('Nome do modelo') as HTMLInputElement).value).toBe('Garçom evento');
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(await screen.findByText(/Modelo guardado/)).toBeTruthy();
+        expect(templates.saveShiftTemplate).toHaveBeenCalledWith(
+            'emp', 'Garçom evento',
+            expect.objectContaining({ title: 'Garçom evento', category: 'garcom' }),
+            expect.objectContaining({ start_time: '18:00', end_time: '23:00', budget: 150 }),
+        );
+    });
+
+    it('Guardar como modelo: falha não desfaz a publicação', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        templates.saveShiftTemplate.mockResolvedValue({ ok: false, reason: 'duplicate' });
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('checkbox', { name: /Guardar como modelo/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        expect(await screen.findByText(/Já existe um modelo com esse nome/)).toBeTruthy();
     });
 });

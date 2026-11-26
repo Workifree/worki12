@@ -30,9 +30,9 @@ export default function CompanyCreateBatch() {
     return (
         <div className="mx-auto max-w-3xl">
             <Button variant="ghost" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="-ml-3 mb-2">
-                Sair
+                Fechar
             </Button>
-            <PageHeader title="Criar turnos" subtitle="Um ou vários de uma vez. Nada é publicado sem o seu toque." />
+            <PageHeader title="Criar turno" subtitle="Escolha como começar. Nada é publicado sem o seu toque." />
 
             {!resolved && <SkeletonList count={3} itemClassName="h-16" />}
             {resolved && error && <ErrorState onRetry={invalidateCompanyScope} />}
@@ -50,7 +50,6 @@ export default function CompanyCreateBatch() {
                     tagsEnabled={company.team_enabled === true || company.role === 'encarregado'}
                     repeatJobId={searchParams.get('repetir')}
                     initialDraft={initialDraft}
-                    startCopy={searchParams.get('copiar') === 'fim-de-semana' ? 'weekend' : null}
                     blockPublish={presencaLigada && presenca.siteError ? 'Escolha o local da presença antes de publicar.' : null}
                     extra={presencaLigada ? (
                         <PresencePolicyFields value={presenca.policy} onChange={presenca.setPolicy} sites={presenca.sites} siteError={presenca.siteError} />

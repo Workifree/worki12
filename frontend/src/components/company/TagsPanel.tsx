@@ -84,7 +84,7 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
         {loading ? (
           <div className="h-12 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
         ) : loadFailed ? (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-yellow-50 p-3">
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-yellow-50 p-3">
             <p className="text-sm font-semibold">Não foi possível carregar as etiquetas.</p>
             <Button variant="secondary" size="md" onClick={() => { void reload(); }}>Tentar de novo</Button>
           </div>
@@ -93,7 +93,7 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
         ) : (
           <ul className="flex flex-col gap-2">
             {tags.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3">
+              <li key={t.id} className="flex items-center justify-between gap-3 rounded-xl border-2 border-black p-3">
                 <span className="min-w-0 truncate text-sm font-bold">{t.name}</span>
                 <Button variant="secondary" size="md" disabled={busy} aria-label={`Arquivar etiqueta ${t.name}`} iconLeft={<Archive size={16} />} onClick={() => { void archive(t); }}>
                   Arquivar

@@ -1,16 +1,16 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 
-export type PillTone = 'dark' | 'green' | 'light' | 'ghost' | 'danger'
+export type PillTone = 'primary' | 'dark' | 'light' | 'ghost'
 
+/** Receitas do laboratório visual: `.btn`, `.btn--primary`, `seg` pressionado (tinta) e fantasma. Estilos em copilot.css. */
 const TONES: Record<PillTone, string> = {
-  dark: 'bg-black text-white hover:bg-gray-800',
-  green: 'bg-primary-dark text-white hover:bg-black',
-  light: 'bg-white text-black ring-1 ring-inset ring-black/15 hover:bg-gray-50',
-  ghost: 'bg-transparent text-black hover:bg-black/5',
-  danger: 'bg-red-600 text-white shadow-md shadow-red-600/30 hover:bg-red-700',
+  primary: 'wk-btn wk-btn--primary',
+  dark: 'wk-btn wk-btn--ink',
+  light: 'wk-btn',
+  ghost: 'min-h-11 rounded-[10px] border-0 bg-transparent px-3 text-[13px] font-semibold text-[#0f1720] hover:bg-[#eef3ff]',
 }
 
-/** Botão do copiloto: botão `rounded-xl` do sistema (sem a moldura brutalista), alvo de toque de 48px. */
+/** Botão do copiloto, com alvo de toque de 44px ou mais. */
 export function PillButton({
   tone = 'light',
   icon,
@@ -22,7 +22,7 @@ export function PillButton({
   return (
     <button
       type={type}
-      className={`inline-flex min-h-12 select-none items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold leading-tight transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 ${TONES[tone]} ${className}`}
+      className={`inline-flex select-none items-center justify-center gap-2 leading-tight transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 ${TONES[tone]} ${className}`}
       {...rest}
     >
       {icon}

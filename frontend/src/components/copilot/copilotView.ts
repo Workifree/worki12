@@ -12,6 +12,8 @@ export interface CopilotViewProps {
   close: () => void
   openIt: () => void
   showLauncher: boolean
+  /** Aba lateral de abrir no celular. O app a desliga: lá o gatilho é a pílula "Ajuda" do cabeçalho. */
+  mobileLauncher: boolean
   availability: Availability
   consent: boolean
   accept: () => void
