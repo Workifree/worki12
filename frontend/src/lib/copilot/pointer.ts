@@ -208,13 +208,48 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
 
   const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
-  /** Traz o alvo para a janela SEM rolagem suave (o CSS da página pode ser `smooth`) e espera a posição assentar. */
+  /** Quem rola o alvo: o ancestral rolável mais próximo ou a janela. */
+  const scrollParent = (el: HTMLElement): HTMLElement | null => {
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY
+      if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n
+    }
+    return null
+  }
+
+  /** Rolagem lenta e humana (aceleração e freada suaves), sem depender do `scroll-behavior` da página. */
+  const glideScroll = async (parent: HTMLElement | null, dy: number, signal: AbortSignal) => {
+    const duration = clamp(500 + Math.abs(dy) * 0.5, 650, 1500) * scale
+    const from = parent ? parent.scrollTop : window.scrollY
+    const t0 = performance.now()
+    while (!signal.aborted) {
+      await frame()
+      const p = clamp((performance.now() - t0) / duration, 0, 1)
+      const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
+      const y = from + dy * eased
+      if (parent) parent.scrollTop = y
+      else window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior })
+      if (p >= 1) break
+    }
+  }
+
+  /**
+   * Traz o alvo para a área útil devagar, como uma pessoa: esconde o halo, rola com calma, e para um
+   * instante "olhando" antes de seguir. Alvo já à vista: não rola.
+   */
   const settleInView = async (element: HTMLElement, signal: AbortSignal) => {
     const rect = element.getBoundingClientRect()
-    if (rect.top >= 56 && rect.bottom <= window.innerHeight - 72) return
-    element.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior })
-    if (scale === 0) return
-    // Posição estável por 2 quadros seguidos (no máximo ~500 ms): halo e ponto de toque saem do lugar certo.
+    if (rect.top >= 72 && rect.bottom <= window.innerHeight - 96) return
+    halo.classList.remove('is-on')
+    say.classList.remove('is-on')
+    if (instant()) {
+      element.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior })
+      return
+    }
+    const dy = rect.top + rect.height / 2 - window.innerHeight * 0.45
+    await glideScroll(scrollParent(element), dy, signal)
+    if (signal.aborted) return
+    // Espera a posição assentar (no máximo ~500 ms) e uma pausa curta de "olhar" para o alvo.
     let last = element.getBoundingClientRect().top
     let steady = 0
     for (let i = 0; i < 30 && steady < 2 && !signal.aborted; i++) {
@@ -223,6 +258,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       steady = Math.abs(top - last) < 0.5 ? steady + 1 : 0
       last = top
     }
+    await wait(320 * scale, signal)
   }
 
   /** Digita na pré-visualização do balão, letra a letra; o campo de verdade é escrito de uma vez, depois. */
@@ -264,7 +300,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
         await wait(320 * scale, signal)
       } else if (request.action === 'click') {
         // Laboratório: o cursor aperta 90 ms depois de chegar; o dedo, 60 ms (com a ondulação 40 ms depois e o alvo cedendo 120 ms depois).
-        await wait((instant() ? 160 : finger ? 60 : 90) * scale, signal)
+        await wait((instant() ? 160 : finger ? 150 : 200) * scale, signal)
         if (signal.aborted) return
         const motion = !instant() && typeof body.animate === 'function'
         if (motion) {

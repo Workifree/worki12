@@ -258,6 +258,29 @@ export default function CopilotPanel({
     [start, running, mode],
   )
 
+  /** Mostra os efeitos sem IA: brilho, gota, e o cursor/dedo clicando em até 3 botões da tela (só imagem: nada é clicado de verdade). */
+  const demo = useCallback(() => {
+    close()
+    void (async () => {
+      await new Promise((r) => window.setTimeout(r, 450))
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const targets = Array.from(document.querySelectorAll<HTMLElement>('main button, main a, nav a, aside a'))
+        .filter((el) => {
+          const r = el.getBoundingClientRect()
+          return !el.closest('[data-copilot-ui]') && r.width > 24 && r.height > 18 && r.top > 40 && r.bottom < vh - 60 && r.left >= 0 && r.right <= vw
+        })
+        .slice(0, 3)
+      vfx.current?.activate({ x: vw / 2, y: vh / 2 })
+      vfx.current?.drop({ x: vw / 2, y: vh / 2 })
+      const stop = new AbortController()
+      for (const el of targets) await pointer.current?.act(el, { action: 'click' }, stop.signal)
+      pointer.current?.hide()
+      vfx.current?.deactivate()
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const close = useCallback(() => {
     clearHighlight()
     morph('close', () => setOpen(false), origin)
@@ -290,6 +313,7 @@ export default function CopilotPanel({
     confirmArmDelayMs,
     showLog,
     setShowLog,
+    demo,
   }
 
   return createPortal(device === 'mobile' ? <CopilotMobile {...view} /> : <CopilotDesktop {...view} />, host)

@@ -73,12 +73,16 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
         return { rows: sortRows(merged.rows), merges: merged.merges };
     }, [draft]);
 
-    const callData = useCallData(step === 'review');
+    const callData = useCallData(step === 'review' || step === 'edit');
     const call = draft?.call ?? { mode: 'none' as const };
     const eligible = new Set(callData.members.map((m) => m.worker.id));
     const invitees = (row: ShiftDraftRow) =>
         resolveInvitees(row, draft?.call, (id) => callData.lists.find((l) => l.id === id)?.memberIds ?? [], eligible);
-    const pairs = step === 'review' ? rows.map((row) => ({ row, workerIds: invitees(row) })) : [];
+    const pairs = step === 'review' || step === 'edit' ? rows.map((row) => ({ row, workerIds: invitees(row) })) : [];
+    /** Elenco carregado e com gente: escolher quem vai trabalhar é obrigatório. Vazio ou com erro: publica aberto. */
+    const inviteCheck = !callData.loading && !callData.error && callData.members.length > 0
+        ? { teamSize: callData.members.length, countFor: (row: ShiftDraftRow) => invitees(row).length }
+        : undefined;
     const nameOf = (id: string) => callData.members.find((m) => m.worker.id === id)?.worker.full_name || 'Freela';
     const busy = useRowBusy(options.companyId, pairs);
     const risks = useBatchLinkRisk(options.companyId, pairs);
@@ -106,11 +110,24 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
             today,
             existingShifts: existing,
             busy: busy.map((b) => ({ row_key: b.row_key, worker_name: nameOf(b.worker_id) })),
+            invite: inviteCheck,
         })
         : [];
     const series = draft && options.isGestor ? resolveSeries(draft.template, rows, draft.series, today) : null;
     const waitingTeam = callData.loading && (call.mode !== 'none' || rows.some((r) => r.invite_worker_ids?.length));
     const duplicates = issues.filter((i) => i.kind === 'probable_duplicate');
+    const peopleChosen = new Set(rows.flatMap((r) => invitees(r))).size;
+    const riskWarnings = risks.map((r) => `${nameOf(r.worker_id)}: ${r.count} turnos na semana de ${dayLabel(r.week)}, contando este lote.`);
+    const callSectionNode = draft && (
+        <CallSection
+            call={call}
+            onChange={(next) => flow.updateDraft({ ...draft, call: next })}
+            data={callData}
+            onPickPeople={() => setPicking('all')}
+            suggestedCount={0}
+            chosenCount={peopleChosen}
+        />
+    );
     const pickingRow = picking && picking !== 'all' ? rows.find((r) => r.key === picking) : undefined;
 
     return (
@@ -174,14 +191,19 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                         tags={options.tagsEnabled ? flow.tags : []}
                         canRepeat={options.isGestor}
                         directPublish={flow.directPublish}
-                        publishing={flow.publishing}
+                        publishing={flow.publishing || callData.loading}
                         errorMessage={flow.errorMessage ?? Object.values(flow.rowErrors)[0] ?? null}
-                        onPublish={() => { void flow.publish(() => []); }}
+                        onPublish={() => { void flow.publish(invitees, inviteCheck); }}
                         onReview={flow.review}
                         onBack={leaveEditor}
                         initialEditingKey={flow.editingKey}
                         saveModelName={flow.fromSavedId ? undefined : flow.saveModelName}
                         onSaveModelName={flow.setSaveModelName}
+                        inviteCheck={inviteCheck}
+                        callSection={callSectionNode}
+                        riskWarnings={riskWarnings}
+                        onRowPeople={setPicking}
+                        inviteCount={(row) => invitees(row).length}
                     />
                 </>
             )}
@@ -195,7 +217,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     onSeparate={(keys) => flow.updateDraft({ ...draft, rows: separateRows(draft.rows, keys) })}
                     onEditRow={flow.editRow}
                     onBack={flow.reviewFromEditor ? flow.backToEditor : leaveEditor}
-                    onPublish={() => { void flow.publish(invitees); }}
+                    onPublish={() => { void flow.publish(invitees, inviteCheck); }}
                     publishing={flow.publishing || waitingTeam}
                     errorMessage={flow.errorMessage}
                     rowErrors={flow.rowErrors}
@@ -205,20 +227,12 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     canCall={callData.members.length > 0}
                     inviteCount={(row) => invitees(row).length}
                     onRowPeople={setPicking}
-                    callSection={
-                        <CallSection
-                            call={call}
-                            onChange={(next) => flow.updateDraft({ ...draft, call: next })}
-                            data={callData}
-                            onPickPeople={() => setPicking('all')}
-                            suggestedCount={0}
-                        />
-                    }
-                    riskWarnings={risks.map((r) => `${nameOf(r.worker_id)}: ${r.count} turnos na semana de ${dayLabel(r.week)}, contando este lote.`)}
+                    callSection={callSectionNode}
+                    riskWarnings={riskWarnings}
                 />
             )}
 
-            {picking && draft && step === 'review' && (
+            {picking && draft && (step === 'review' || step === 'edit') && (
                 <PeopleDialog
                     title={pickingRow ? `Freelas de ${dayLabel(pickingRow.date)} ${pickingRow.start_time}` : 'Chamar para todos os turnos'}
                     members={callData.members}
@@ -229,7 +243,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     onClose={() => setPicking(null)}
                     onSave={(ids) => {
                         if (!pickingRow) {
-                            flow.updateDraft({ ...draft, call: { ...call, mode: ids.length ? 'workers' : 'none', worker_ids: ids } });
+                            flow.updateDraft({ ...draft, call: { ...call, mode: call.list_id && call.mode === 'list' ? 'list' : ids.length ? 'workers' : 'none', worker_ids: ids } });
                         } else {
                             // A linha pode ser a junção de várias: a escolha vale para todas as origens.
                             const sources = merges.find((m) => m.key === pickingRow.key)?.sourceKeys ?? [pickingRow.key];

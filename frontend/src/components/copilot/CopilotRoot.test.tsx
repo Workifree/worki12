@@ -148,7 +148,7 @@ describe('conversa', () => {
     ask('como salvo?')
     await screen.findByText('Toque em "Salvar lista".', {}, { timeout: 8000 })
     const target = screen.getByRole('button', { name: 'Salvar lista' })
-    expect(target).toHaveAttribute('data-copilot-highlight')
+    await waitFor(() => expect(target).toHaveAttribute('data-copilot-highlight'))
     expect(tap).not.toHaveBeenCalled()
     humanClick(target)
     await screen.findByText('Muito bem.', {}, { timeout: 8000 })

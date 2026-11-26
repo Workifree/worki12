@@ -6,7 +6,7 @@ import {
     EMPTY_ROW_DEFAULTS, batchFingerprint, createRow, emptyTemplate, hasBlockingIssue,
     mergeDrafts, newId, resolveSeries, sortRows, templateFromJob,
     validateBatch, type RowDefaults, type SavedShiftTemplate, type ShiftDraftBatch, type ShiftDraftRow, type ShiftDraftSource,
-    type SourceJob,
+    type SourceJob, type ValidationContext,
 } from '../../lib/shiftDrafts';
 import {
     batchDraftKey, clearShiftDraft, loadShiftDraft, saveShiftDraft, type SentBatch, type StoredShiftDraft,
@@ -296,7 +296,7 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
     };
 
     /** Só é chamada por um toque em "Publicar". */
-    const publish = async (invitees: (row: ShiftDraftRow) => string[]) => {
+    const publish = async (invitees: (row: ShiftDraftRow) => string[], inviteCheck?: ValidationContext['invite']) => {
         if (!draft || publishLock.current) return;
         if (blockPublish) {
             setErrorMessage(blockPublish);
@@ -309,7 +309,7 @@ export function useShiftBatch({ companyId, isGestor, tagsEnabled, repeatJobId, i
         try {
             const rows = sortRows(mergeDrafts(draft.template, draft.rows).rows);
             const now = todayInBrazil();
-            if (hasBlockingIssue(validateBatch({ ...draft, rows }, { today: now }))) {
+            if (hasBlockingIssue(validateBatch({ ...draft, rows }, { today: now, invite: inviteCheck }))) {
                 setErrorMessage('Há pendências no rascunho. Corrija antes de publicar.');
                 setStep('review');
                 return;

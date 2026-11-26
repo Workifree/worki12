@@ -3,7 +3,7 @@ import {
     crossesMidnight, dayLabel, effectiveShift, isValidDate, isValidTime, quickDateOptions,
     type ShiftBudgetType, type ShiftDraftRow, type ShiftDraftTemplate,
 } from '../../lib/shiftDrafts';
-import { Card, Field, FilterChip, IconButton, StatusBadge } from '../ui';
+import { Button, Card, Field, FilterChip, IconButton, StatusBadge } from '../ui';
 import { NumberInput } from './NumberInput';
 
 const BUDGET_LABEL: Record<ShiftBudgetType, string> = {
@@ -18,7 +18,7 @@ const BUDGET_LABEL: Record<ShiftBudgetType, string> = {
  * aria-invalid): o texto do que falta vive no aviso "Antes de continuar", uma vez só.
  */
 export function ShiftRowCard({
-    row, template, today, showProblems, canRemove, dateRef, onChange, onEditDetails, onDuplicate, onRemove,
+    row, template, today, showProblems, canRemove, dateRef, onChange, onEditDetails, onDuplicate, onRemove, onPeople, peopleCount,
 }: {
     row: ShiftDraftRow;
     template: ShiftDraftTemplate;
@@ -32,6 +32,9 @@ export function ShiftRowCard({
     onEditDetails: () => void;
     onDuplicate: () => void;
     onRemove: () => void;
+    /** Escolha de pessoas só deste turno (substitui a geral). Ausente = sem elenco ou turno único. */
+    onPeople?: () => void;
+    peopleCount?: number;
 }) {
     const shift = effectiveShift(template, row);
     const day = isValidDate(row.date) ? dayLabel(row.date) : 'sem data';
@@ -90,6 +93,13 @@ export function ShiftRowCard({
                     )}
                 </div>
             </div>
+            {onPeople && (
+                <div className="mt-2">
+                    <Button variant="ghost" onClick={onPeople} aria-label={`Freelas do turno de ${day}`}>
+                        Freelas deste turno{row.invite_worker_ids?.length ? ` · ${peopleCount ?? row.invite_worker_ids.length}` : ' · igual aos outros'}
+                    </Button>
+                </div>
+            )}
             {crossesMidnight(row.start_time, row.end_time) && (
                 <p className="mt-2 text-xs font-bold text-gray-600">Termina {row.end_time} do dia seguinte.</p>
             )}

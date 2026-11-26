@@ -70,6 +70,13 @@ const ALVOS_SEM_EFEITO: ReadonlySet<string> = new Set([
   'empresa.turno-lote.calendario',
   'empresa.turno-lote.varias-datas',
   'empresa.turno-lote.revisar',
+  // "Quem vai trabalhar": só monta o rascunho. O envio dos chamados acontece em Publicar (com cartão).
+  'empresa.turno-lote.quem-trabalha',
+  'empresa.turno-lote.chamar-pessoas',
+  'empresa.turno-lote.lista',
+  'empresa.turno-lote.pessoa',
+  'empresa.turno-lote.pessoas-salvar',
+  'empresa.turno-lote.pessoas-voltar',
 ])
 
 export const alvoSemEfeito = (alvo: string): boolean => ALVOS_SEM_EFEITO.has(alvo)

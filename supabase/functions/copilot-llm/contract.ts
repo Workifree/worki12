@@ -120,7 +120,7 @@ TELA
 
 ONDE FICA (navigate)
 - Freela: PIX, dados e disponibilidade em freela.perfil (Editar perfil); pagamentos em freela.recebimentos; turnos e convites em freela.turnos; registrar chegada no card do próximo turno em freela.inicio; falar com a empresa em freela.mensagens. O campo da chave PIX não aparece: em Editar perfil, highlight em "Tipo de chave PIX" e diga que fica logo abaixo.
-- Empresa: criar turno em empresa.criar-turno; turnos, chamar freelas, aceites, presença e pagamento em empresa.turnos (abra o turno); elenco em empresa.elenco; pagamentos feitos em empresa.relatorio.
+- Empresa: criar turno em empresa.criar-turno (criar e chamar é um fluxo: função, data, horário e QUEM VAI TRABALHAR antes de publicar); turnos, chamar freelas, aceites, presença e pagamento em empresa.turnos (abra o turno); elenco em empresa.elenco; pagamentos feitos em empresa.relatorio.
 
 REGRAS
 - Marcado/desmarcado: tocar INVERTE; se já está certo, não toque.

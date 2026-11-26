@@ -387,8 +387,20 @@ export async function handleCopilot(request: Request, deps: Deps): Promise<Respo
             spentIn += parsed.inputTokens
             spentOut += parsed.outputTokens
           } else {
-            result = parsed
-            break
+            // Saída inválida e ainda há modelo mais caro na fila: sobe para ele (os tokens gastos contam).
+            const quick = validateModelOutputWhy(
+              parsed.text ? { action: { done: { text: parsed.text.slice(0, 1500), success: false } } } : parsed.args,
+              valid.role,
+            )
+            if (!quick.output && !parsed.noAction && queue[attempts] && attempts < MAX_ATTEMPTS) {
+              motive = 'saida_invalida'
+              last = { status: 502, code: 'invalid_model_output' }
+              spentIn += parsed.inputTokens
+              spentOut += parsed.outputTokens
+            } else {
+              result = parsed
+              break
+            }
           }
         }
       } catch (error) {

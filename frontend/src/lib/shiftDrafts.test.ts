@@ -117,6 +117,16 @@ describe('validateBatch', () => {
     expect(hasBlockingIssue(validate([row({ end_time: '18:00' })]))).toBe(true);
   });
 
+  it('quem vai trabalhar: sem ninguém escolhido bloqueia uma vez; elenco vazio ou escolha feita libera', () => {
+    const rows = [row(), row({ key: 'k2', date: '2026-12-05' })];
+    expect(validate(rows)).toEqual([]); // sem contexto: nada a exigir
+    const withInvite = (teamSize: number, countFor: () => number) =>
+      validate(rows, { invite: { teamSize, countFor } }).filter((i) => i.kind === 'missing_workers');
+    expect(withInvite(3, () => 0)).toEqual([expect.objectContaining({ row_key: '', blocking: true, detail: 'Falta: escolher quem vai trabalhar.' })]);
+    expect(withInvite(0, () => 0)).toEqual([]);
+    expect(withInvite(3, () => 2)).toEqual([]);
+  });
+
   it('diz o que falta', () => {
     expect(validate([row({ end_time: '', budget: 0 })])[0].detail).toBe('Falta: saída, valor.');
   });

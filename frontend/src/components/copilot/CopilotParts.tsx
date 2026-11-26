@@ -1,6 +1,6 @@
 /** Peças que PC e celular compartilham. Nenhuma toca a página: só a interface do copiloto. */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { BookOpen, Check, ChevronDown, CornerDownLeft, History, ListChecks, Send, Sparkles } from 'lucide-react'
+import { BookOpen, Check, Wand2, ChevronDown, CornerDownLeft, History, ListChecks, Send, Sparkles } from 'lucide-react'
 import { Orb } from './Trigger'
 import { getMotionMode, setMotionMode, type MotionMode } from '../../lib/copilot/motion'
 import { PillButton } from './PillButton'
@@ -423,6 +423,12 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
               onClick={closeThen(view.onOpenGuide)}
             />
           )}
+          <HelpRow
+            icon={<Wand2 size={13} />}
+            title="Ver os efeitos"
+            detail="Cursor, toque, ondulação, pulo e brilho, sem usar IA"
+            onClick={view.demo}
+          />
           {hasSteps && (
             <HelpRow
               icon={<ListChecks size={13} />}

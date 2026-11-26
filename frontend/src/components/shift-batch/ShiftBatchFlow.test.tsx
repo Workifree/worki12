@@ -69,6 +69,7 @@ vi.mock('../../services/linkRiskService', () => ({
 }));
 
 import { ShiftBatchFlow } from './ShiftBatchFlow';
+import { TeamConnectionService } from '../../services/teamConnectionService';
 import { createRow, emptyTemplate, type ShiftDraftBatch } from '../../lib/shiftDrafts';
 import { batchFromParse, parseShiftText } from '../../lib/shiftTextParser';
 import { todayInBrazil } from '../../lib/dateUtils';
@@ -101,6 +102,9 @@ const repeatFromHistory = async (name: RegExp = /Garçom evento/) => {
     fireEvent.click(await screen.findByRole('button', { name }));
 };
 
+/** No editor, "Quem vai trabalhar" é obrigatório: escolhe a lista do elenco. */
+const pickList = async () => fireEvent.click(await screen.findByRole('button', { name: 'Lista: Garçons' }));
+
 const storeDraft = () =>
     saveShiftDraft(batchDraftKey('u1', 'emp'), {
         batch: { client_batch_id: 'b1', source: 'form', template: { ...emptyTemplate('garcom'), title: 'Meu rascunho' }, rows: [createRow('2026-02-01')] },
@@ -112,6 +116,7 @@ beforeEach(() => {
     localStorage.clear();
     service.listRecentModels.mockResolvedValue([model]);
     service.listExistingShifts.mockResolvedValue([]);
+    service.dispatchCall.mockImplementation(async (item: unknown) => ({ item, status: 'sent' }));
     templates.listShiftTemplates.mockResolvedValue([]);
     templates.saveShiftTemplate.mockResolvedValue({ ok: true, template: saved });
     templates.setShiftTemplateArchived.mockResolvedValue(true);
@@ -124,18 +129,65 @@ describe('ShiftBatchFlow', () => {
         renderFlow();
         await repeatFromHistory();
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        await pickList();
         const publish = screen.getByRole('button', { name: 'Publicar' });
         fireEvent.click(publish);
         fireEvent.click(publish);
         expect(service.publishBatch).toHaveBeenCalledTimes(1);
         release({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
         expect(await screen.findByText('1 turno publicado')).toBeTruthy();
-        expect(screen.getByRole('link', { name: 'Chamar' }).getAttribute('href')).toBe('/company/jobs/n1/candidates?chamar=1');
+        await waitFor(() => expect(service.dispatchCall).toHaveBeenCalledTimes(1));
+    });
+
+    it('sem escolher quem vai trabalhar, Publicar não segue e explica; escolhendo a lista, publica e chama', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        service.dispatchCall.mockImplementation(async (item: unknown) => ({ item, status: 'sent' }));
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        expect(await screen.findByText('Ninguém escolhido ainda.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(screen.getByRole('alert').textContent).toContain('Falta: escolher quem vai trabalhar.');
+        expect(service.publishBatch).not.toHaveBeenCalled();
+        await pickList();
+        expect(screen.getByText('1 pessoa escolhida')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        await waitFor(() => expect(service.dispatchCall).toHaveBeenCalledTimes(1));
+        expect(service.dispatchCall.mock.calls[0][0]).toEqual(expect.objectContaining({ job_id: 'n1', worker_ids: ['w1'] }));
+    });
+
+    it('elenco vazio: explica que o turno fica aberto e publica sem chamar', async () => {
+        vi.mocked(TeamConnectionService.listTeamMembers).mockResolvedValueOnce([]);
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        expect(await screen.findByText(/Seu elenco está vazio: o turno fica aberto/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        expect(service.dispatchCall).not.toHaveBeenCalled();
+    });
+
+    it('pessoas escolhidas no diálogo valem para publicar e chamar', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        service.dispatchCall.mockImplementation(async (item: unknown) => ({ item, status: 'sent' }));
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Escolher pessoas' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Ana/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Escolher \(1\)/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        await waitFor(() => expect(service.dispatchCall).toHaveBeenCalledTimes(1));
+        expect(service.dispatchCall.mock.calls[0][0].worker_ids).toEqual(['w1']);
     });
 
     it('sem data, o toque explica o que falta e não publica', async () => {
         renderFlow();
         await repeatFromHistory();
+        await screen.findByText('Ninguém escolhido ainda.');
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(screen.getByRole('alert').textContent).toContain('Falta: data.');
         expect(service.publishBatch).not.toHaveBeenCalled();
@@ -184,6 +236,7 @@ describe('ShiftBatchFlow', () => {
         service.publishBatch.mockResolvedValue({ ok: false, uncertain: true, errors: [], message: 'Sem resposta' });
         service.countPublishedBatch.mockResolvedValue(2);
         renderReview('amanhã 18-23h 1 garçom 150; amanhã 9-12h 1 garçom 150');
+        await pickList();
         const publish = await screen.findByRole('button', { name: 'Publicar 2' });
         const sentIds = () => service.publishBatch.mock.calls.map((c) => c[1].client_batch_id);
 
@@ -253,6 +306,7 @@ describe('ShiftBatchFlow', () => {
             expect(screen.queryByRole('button', { name: /^Criar turno/ })).toBeNull();
             fireEvent.click(screen.getByRole('button', { name: 'Usar Garçom sábado' }));
             fireEvent.click(await screen.findByRole('button', { name: /^Amanhã/ }));
+            await pickList();
             fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
             expect(await screen.findByText('1 turno publicado')).toBeTruthy();
             // veio de um modelo: não oferece guardar de novo
@@ -339,6 +393,7 @@ describe('ShiftBatchFlow', () => {
         fireEvent.click(screen.getByRole('checkbox', { name: /Guardar como modelo/ }));
         expect((screen.getByLabelText('Nome do modelo') as HTMLInputElement).value).toBe('Garçom evento');
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        await pickList();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(await screen.findByText(/Modelo guardado/)).toBeTruthy();
         expect(templates.saveShiftTemplate).toHaveBeenCalledWith(
@@ -355,6 +410,7 @@ describe('ShiftBatchFlow', () => {
         await repeatFromHistory();
         fireEvent.click(screen.getByRole('checkbox', { name: /Guardar como modelo/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        await pickList();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(await screen.findByText('1 turno publicado')).toBeTruthy();
         expect(await screen.findByText(/Já existe um modelo com esse nome/)).toBeTruthy();

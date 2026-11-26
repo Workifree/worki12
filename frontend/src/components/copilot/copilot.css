@@ -159,7 +159,7 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root * { animation-play-state:
 }
 
 /* ---------- ponteiro virtual: seta (PC) e dedo (celular), só transform ---------- */
-.wk-ptr-root { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 0.16s ease; contain: layout style; }
+.wk-ptr-root { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.16s ease; }
 .wk-ptr-root.is-on { opacity: 1; }
 .wk-ptr { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
 .wk-ptr__y { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }

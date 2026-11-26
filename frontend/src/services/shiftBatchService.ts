@@ -223,8 +223,11 @@ export function resolveInvitees(
 ): string[] {
   let ids: string[] = [];
   if (row.invite_worker_ids?.length) ids = row.invite_worker_ids;
-  else if (call?.mode === 'workers') ids = call.worker_ids ?? [];
-  else if (call?.mode === 'list' && call.list_id) ids = listMemberIds(call.list_id);
+  else if (call && call.mode !== 'none') {
+    // Lista e pessoas somam: "Garçons" mais um nome avulso.
+    if (call.mode === 'list' && call.list_id) ids = listMemberIds(call.list_id);
+    ids = [...ids, ...(call.worker_ids ?? [])];
+  }
   return [...new Set(ids)].filter((id) => eligible.has(id));
 }
 

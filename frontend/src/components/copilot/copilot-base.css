@@ -64,3 +64,14 @@ html[data-copilot-motion='reduced'] .wk-orb__core, html[data-copilot-motion='red
 }
 html.is-hidden .wk-orb *, html.is-hidden .wk-trigger * { animation-play-state: paused !important; }
 @media (prefers-contrast: more), (forced-colors: active) { .wk-trigger__ring, .wk-trigger__halo { display: none; } }
+
+/* Pílula do cabeçalho no celular (estilo Gemini no estilo Worki): fina, borda preta de 2px, sombra dura, faísca colorida.
+   Sem anel nem halo: o destaque é o orbe. O alvo de toque segue com 44px por uma área invisível. */
+.wk-trigger--header {
+  min-height: 34px; padding: 4px 12px 4px 9px; gap: 6px; font-size: 13px; font-weight: 800;
+  border: 2px solid #000; border-radius: 999px; background: #fff; box-shadow: 2px 2px 0 0 #000;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.wk-trigger--header::after { content: ''; position: absolute; inset: -6px -4px; }
+.wk-trigger--header .wk-trigger__ring, .wk-trigger--header .wk-trigger__halo { display: none; }
+.wk-trigger--header:active { transform: translate(2px, 2px); box-shadow: none; }
