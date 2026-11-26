@@ -1,0 +1,22 @@
+/* Pílula de status viva do laboratório (E2: janela deslizante, só transform). */
+.wk-spill{position:relative;display:inline-flex;max-width:100%;align-items:center;gap:6px;border:2px solid #0f1720;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap}
+.wk-spill[data-tone=warning]{background:#ffe9b8;color:#8a5a00}
+.wk-spill[data-tone=success]{background:#d7f5e4;color:#0b6b3a}
+.wk-spill[data-tone=info]{background:#e3edff;color:#1d4fd0}
+.wk-spill[data-tone=neutral]{background:#fff;color:#4b5563}
+.wk-spill[data-tone=danger]{background:#fde2e2;color:#9b1c1c}
+.wk-spill__dot{width:8px;height:8px;flex:none;border-radius:50%;background:currentColor}
+.wk-spill__shim{position:relative;display:inline-block;overflow:hidden}
+.wk-spill__win{position:absolute;left:0;top:0;bottom:0;width:calc(var(--w,80px)*.5);overflow:hidden;pointer-events:none;opacity:0;will-change:transform;
+ -webkit-mask-image:linear-gradient(90deg,transparent,#000 38%,#000 62%,transparent);mask-image:linear-gradient(90deg,transparent,#000 38%,#000 62%,transparent)}
+.wk-spill__txt{position:absolute;left:0;top:0;width:var(--w,80px);color:#0f1720;will-change:transform}
+@media (prefers-reduced-motion:no-preference){
+ .wk-spill[data-live] .wk-spill__dot{animation:wk-spill-breathe 1.6s ease-in-out infinite}
+ .wk-spill[data-live] .wk-spill__win{opacity:1;animation:wk-spill-win 2.4s linear infinite}
+ .wk-spill[data-live] .wk-spill__txt{animation:wk-spill-txt 2.4s linear infinite}
+}
+html[data-copilot-motion=reduced] .wk-spill__dot,html[data-copilot-motion=reduced] .wk-spill__win,html[data-copilot-motion=reduced] .wk-spill__txt{animation:none!important}
+html[data-copilot-motion=reduced] .wk-spill__win{opacity:0!important}
+@keyframes wk-spill-breathe{0%,100%{transform:scale(.8);opacity:.5}50%{transform:scale(1.15);opacity:1}}
+@keyframes wk-spill-win{from{transform:translateX(calc(var(--w,80px)*-.5))}to{transform:translateX(var(--w,80px))}}
+@keyframes wk-spill-txt{from{transform:translateX(calc(var(--w,80px)*.5))}to{transform:translateX(calc(var(--w,80px)*-1))}}

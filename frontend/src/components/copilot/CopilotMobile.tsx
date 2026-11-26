@@ -60,7 +60,8 @@ function Sheet(view: CopilotViewProps) {
         role="dialog"
         aria-modal="true"
         aria-label="Copiloto do Worki"
-        className="wk-panel wk-sheet absolute inset-x-0 flex flex-col overflow-hidden !rounded-b-none border-b-0"
+        data-copilot-palette=""
+        className="wk-panel wk-sheet absolute inset-x-0 flex flex-col overflow-hidden overscroll-contain !rounded-b-none border-b-0"
         style={{
           bottom: keyboard,
           maxHeight: `min(88dvh, calc(100dvh - ${keyboard}px - 8px))`,
@@ -80,12 +81,19 @@ function Sheet(view: CopilotViewProps) {
         <div className="wk-cmd__line !rounded-b-none" aria-hidden="true" />
         <header className="wk-cmd__row">
           <Orb working />
-          <h2 className="flex-1 text-[14px] font-bold">Como posso ajudar?</h2>
+          <h2 className="flex-1 text-[15px] font-bold">
+            Copiloto Worki <span className="wk-trigger__ia">IA</span>
+          </h2>
           <PillButton tone="ghost" aria-label="Fechar o copiloto" onClick={view.close} className="w-11 !px-0">
             <X size={18} aria-hidden="true" />
           </PillButton>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 text-[15px]">
+          {ready && (
+            <p className="mb-2 line-clamp-2 text-[15px] font-semibold leading-snug">
+              Sou uma IA. Quer que eu faça alguma coisa? Ex.: criar um turno para amanhã.
+            </p>
+          )}
           <IdleBody view={view} />
         </div>
         {ready && (
@@ -96,7 +104,7 @@ function Sheet(view: CopilotViewProps) {
               onSend={view.send}
               autoFocus={false}
               onEmptyEnter={() => view.suggestions[0] && view.send(view.suggestions[0])}
-              placeholder={view.agent.followUp ? 'Responda aqui' : 'Como posso ajudar?'}
+              placeholder={view.agent.followUp ? 'Responda aqui' : 'Ex.: criar um turno para amanhã'}
             />
           </div>
         )}
@@ -137,7 +145,7 @@ function Working(view: CopilotViewProps) {
         style={style}
       >
         <PendingCard pending={agent.pending} role={view.role} armDelayMs={view.confirmArmDelayMs} />
-        <StopButton onStop={agent.stop} block />
+        <StopButton onStop={agent.stop} block touch />
       </section>
     )
   }
@@ -146,6 +154,7 @@ function Working(view: CopilotViewProps) {
     <section
       ref={ref}
       aria-label="Copiloto trabalhando"
+      data-copilot-working=""
       className="wk-solid wk-pill wk-rise fixed inset-x-2 z-[1] flex items-center"
       style={style}
     >
@@ -153,7 +162,7 @@ function Working(view: CopilotViewProps) {
       <div className="min-w-0 flex-1 text-[13px]">
         <StepFeed steps={current ? [current] : []} compact />
       </div>
-      <StopButton onStop={agent.stop} />
+      <StopButton onStop={agent.stop} touch />
     </section>
   )
 }

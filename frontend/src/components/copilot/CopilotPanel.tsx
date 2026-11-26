@@ -14,6 +14,7 @@ import { useTopLayerHost } from '../../hooks/copilot/useTopLayerHost'
 import { useDeviceMode } from '../../lib/copilot/device'
 import { prefersReducedMotion } from '../../lib/copilot/motion'
 import { OPEN_EVENT, type OpenDetail } from '../../lib/copilot/openEvent'
+import { createInputBlock } from '../../lib/copilot/inputBlock'
 import { createVirtualPointer, type VirtualPointer } from '../../lib/copilot/pointer'
 import type { CopilotRole } from '../../lib/copilot/routes'
 import { clearHistory, readHistory, rememberRequest, suggestionsFor } from '../../lib/copilot/suggestions'
@@ -110,6 +111,13 @@ export default function CopilotPanel({
   // do ponteiro. Em captura na janela: nenhuma folha, campo ou tela fica com a tecla antes. Parar é
   // sempre seguro, então qualquer Esc (até sintético) vale.
   const { running: isRunning, stop: stopAgent } = agent
+  // Enquanto a IA age, a pessoa não toca na página: camada de bloqueio (só o Parar e o cartão ficam por cima).
+  useEffect(() => {
+    if (!isRunning) return
+    const block = createInputBlock(host)
+    block.on()
+    return () => block.off()
+  }, [isRunning, host])
   useEffect(() => {
     if (!isRunning) return
     const onKey = (event: KeyboardEvent) => {
@@ -156,8 +164,8 @@ export default function CopilotPanel({
 
   const canMorph = useCallback(() => {
     const doc = document as unknown as { startViewTransition?: unknown }
-    return device === 'desktop' && typeof doc.startViewTransition === 'function' && !prefersReducedMotion()
-  }, [device])
+    return typeof doc.startViewTransition === 'function' && !prefersReducedMotion()
+  }, [])
 
   /**
    * Abrir: o nome de transição está no botão ANTES (estado antigo) e na barra DEPOIS.

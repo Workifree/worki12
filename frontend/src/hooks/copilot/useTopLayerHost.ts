@@ -16,7 +16,7 @@ export function useTopLayerHost(): HTMLElement {
     node.setAttribute('data-testid', 'copilot-host')
     // Neutraliza o estilo padrão de popover (centralizado, com borda e fundo).
     node.style.cssText =
-      'position:fixed;inset:auto;top:0;left:0;width:0;height:0;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:85'
+      'position:fixed;inset:auto;top:0;left:0;width:0;height:0;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483647'
     return node
   })
 

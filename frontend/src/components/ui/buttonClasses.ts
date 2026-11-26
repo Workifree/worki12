@@ -10,7 +10,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const BASE =
   'inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm leading-tight select-none ' +
-  'transition-[transform,box-shadow,background-color,color] duration-fast ease-standard active:duration-press ' +
+  'transition-[transform,box-shadow,background-color,color] duration-fast ease-[cubic-bezier(.34,1.56,.64,1)] active:duration-press active:ease-out ' +
   'motion-reduce:transition-none motion-reduce:transform-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
   'focus-visible:ring-black disabled:cursor-not-allowed disabled:opacity-50'

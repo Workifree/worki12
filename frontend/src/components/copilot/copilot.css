@@ -61,6 +61,7 @@
 .wk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wk-stop { border: 1px solid var(--wk-edge-strong); background: #fff; color: var(--wk-ink); border-radius: 999px; font-size: 11.5px; font-weight: 700; padding: 3px 10px; cursor: pointer; min-height: 28px; position: relative; flex: none; }
 .wk-stop::after { content: ''; position: absolute; inset: -8px -4px; } /* área de toque de 44px sem mudar o desenho */
+.wk-stop--touch { min-height: 44px; min-width: 76px; font-size: 14px; padding: 6px 16px; }
 .wk-stop--block { flex: 1 1 auto; min-height: 44px; font-size: 13px; }
 .wk-seg { display: inline-flex; border: 1px solid var(--wk-edge-strong); border-radius: 10px; overflow: hidden; background: #fff; width: 100%; }
 .wk-seg button { flex: 1; border: 0; background: transparent; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 44px; color: var(--wk-ink); }
@@ -82,15 +83,6 @@
 .wk-cmd__line { animation: wk-linein 0.3s 0.1s both; }
 .wk-shim { animation: wk-stepin 0.26s var(--wk-ease-out) both; }
 
-/* shimmer do passo atual: janela deslizante (duas transform opostas), sem background-clip */
-.wk-shim { position: relative; display: inline-block; max-width: 100%; white-space: nowrap; color: var(--wk-ink3); vertical-align: bottom; }
-.wk-shim__win {
-  position: absolute; inset: 0 auto 0 0; width: calc(var(--w, 0px) * 0.5); overflow: hidden; opacity: 0; pointer-events: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
-}
-.wk-shim__txt { position: absolute; left: 0; top: 0; width: var(--w, 0px); color: var(--wk-ink); }
-
 @keyframes wk-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 .wk-dots span { display: inline-block; width: 4px; height: 4px; margin: 0 1px; border-radius: 9999px; background: currentColor; animation: wk-dots 1.2s infinite; }
 .wk-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -102,7 +94,7 @@
 @property --alpha { syntax: '<number>'; inherits: true; initial-value: 0.78; }
 /* Como o laboratório: aparece em 700 ms, apaga em 300 ms (EASE_IO); troca de nível em 700 ms; a gota usa 800 ms com atraso de 280 ms e apaga em 900 ms */
 .wk-glow {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none; contain: strict;
+  position: fixed; inset: 0; z-index: 20; pointer-events: none; contain: strict;
   opacity: 0; transition: opacity 0.3s var(--wk-ease-io), --g 0.7s var(--wk-ease-io), --alpha 0.7s var(--wk-ease-io), --lw 0.7s var(--wk-ease-io);
   --g: 30px; --lw: 2px; --alpha: 0.78;
 }
@@ -150,7 +142,7 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root * { animation-play-state:
 /* halo de pressão (240 px) e a gota de 16 px, iguais ao laboratório (.dr__press, .dr__drop) */
 .wk-press { position: absolute; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; background: radial-gradient(closest-side, rgba(37, 99, 235, 0.17), rgba(124, 58, 237, 0.06) 58%, transparent); will-change: transform, opacity; }
 .wk-bead { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 12%, #7fb0ff 42%, #2563eb 100%); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12); will-change: transform, opacity; }
-.wk-drop { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; }
+.wk-drop { position: fixed; inset: 0; z-index: 20; overflow: hidden; pointer-events: none; contain: strict; }
 .wk-drop__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .wk-drop__svg circle { will-change: transform, opacity; }
 .wk-ring {
@@ -159,7 +151,7 @@ html.is-hidden .wk-glow *, html.is-hidden .wk-ptr-root * { animation-play-state:
 }
 
 /* ---------- ponteiro virtual: seta (PC) e dedo (celular), só transform ---------- */
-.wk-ptr-root { position: fixed; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.16s ease; }
+.wk-ptr-root { position: fixed; inset: 0; z-index: 21; pointer-events: none; opacity: 0; transition: opacity 0.16s ease; }
 .wk-ptr-root.is-on { opacity: 1; }
 .wk-ptr { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
 .wk-ptr__y { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
@@ -219,17 +211,10 @@ html[data-copilot-motion='reduced'] .wk-ptr-halo.is-on { animation: none; }
 html[data-copilot-motion='reduced'] .wk-ptr-say.is-typing::after { animation: none; }
 html[data-copilot-motion='reduced'] .wk-ptr-root.is-pressed .wk-ptr__inner { transform: none; }
 }
-@media all {
-  .wk-shim__win { opacity: 1; will-change: transform; animation: wk-win 2.4s linear infinite; }
-  .wk-shim__txt { will-change: transform; animation: wk-txt 2.4s linear infinite; }
-}
-@keyframes wk-win { from { transform: translateX(calc(var(--w, 0px) * -0.5)); } to { transform: translateX(var(--w, 0px)); } }
-@keyframes wk-txt { from { transform: translateX(calc(var(--w, 0px) * 0.5)); } to { transform: translateX(calc(var(--w, 0px) * -1)); } }
-
 /* ---------- barra de comando no PC: View Transition (fallback: wk-rise, 260 ms) ---------- */
 html[data-wk-vt]::view-transition-old(root), html[data-wk-vt]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 html[data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.34s; animation-timing-function: var(--wk-ease-out); }
-html[data-wk-vt] .wk-rise { animation: none; }
+html[data-wk-vt] .wk-rise, html[data-wk-vt] .wk-sheet { animation: none; }
 html[data-copilot-motion='reduced'][data-wk-vt]::view-transition-group(wk-cmd-vt) { animation-duration: 0.01s; }
 
 /* O foco do laboratório (contorno azul) substitui os anéis do Tailwind dentro do copiloto */
