@@ -3,6 +3,9 @@
  * para o cabeçalho poder usá-las sem puxar o painel completo (que carrega sob demanda).
  */
 import './copilot-base.css'
+import { applyMotionMode } from '../../lib/copilot/motion'
+
+applyMotionMode()
 
 /** Bolinha do copiloto (laboratório): espectro com brilho e halo; gira e respira só enquanto `working`. */
 export function Orb({ working = false, done = false, small = false, bare = false }: { working?: boolean; done?: boolean; small?: boolean; bare?: boolean }) {

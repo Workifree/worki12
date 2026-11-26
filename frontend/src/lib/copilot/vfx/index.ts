@@ -38,12 +38,13 @@ export interface VfxOptions {
   mobile?: boolean
 }
 
-/** 'full' | 'lite'. Aparelho fraco, economia de dados ou 2 núcleos ou menos: brilho estático. */
+/**
+ * 'full' | 'lite'. Igual ao laboratório: efeito completo em qualquer aparelho. Só a economia de dados
+ * explícita (saveData) pede o brilho estático; movimento reduzido já é tratado à parte.
+ */
 export function pickFxTier(): 'full' | 'lite' {
-  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } }
-  if (nav.connection?.saveData) return 'lite'
-  if ((nav.deviceMemory ?? 8) <= 2 || (nav.hardwareConcurrency ?? 8) <= 4) return 'lite'
-  return 'full'
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean } }
+  return nav.connection?.saveData ? 'lite' : 'full'
 }
 
 const html = () => document.documentElement
@@ -53,7 +54,7 @@ export function createGlowVfx(host: HTMLElement, options: VfxOptions = {}): Vfx 
   const root = document.createElement('div')
   root.className = 'wk-glow'
   root.setAttribute('data-on', 'false')
-  root.setAttribute('data-level', 'med')
+  root.setAttribute('data-level', mobile ? 'high' : 'med')
   root.setAttribute('data-device', mobile ? 'mobile' : 'desktop')
   for (const [name, value] of [[UI_ATTR, ''], ['data-copilot-vfx', 'glow'], ['data-page-agent-ignore', 'true'], ['aria-hidden', 'true'], ['inert', '']]) {
     root.setAttribute(name, value)
@@ -152,7 +153,8 @@ export function createGlowVfx(host: HTMLElement, options: VfxOptions = {}): Vfx 
     // Raio até o canto mais distante, sem teto (laboratório: R = hypot(max(x, w − x), max(y, h − y))).
     const radius = Math.hypot(Math.max(origin.x, w - origin.x), Math.max(origin.y, h - origin.y))
     // PC com aparelho capaz: SVG. Celular e `lite`: CSS, sem filtro.
-    if (!mobile && pickFxTier() === 'full') {
+    // Gota SVG com ondulação (feDisplacementMap) no PC e no celular, como o laboratório.
+    if (pickFxTier() === 'full') {
       svgRings(origin, radius)
       return
     }
@@ -174,6 +176,7 @@ export function createGlowVfx(host: HTMLElement, options: VfxOptions = {}): Vfx 
     }
   }
 
+  const baseLevel: VfxLevel = mobile ? 'high' : 'med'
   const level = (value: VfxLevel) => root.setAttribute('data-level', value)
 
   /** Brilho ligado pelo agente (o da gota não pode apagá-lo). */
@@ -201,7 +204,7 @@ export function createGlowVfx(host: HTMLElement, options: VfxOptions = {}): Vfx 
     clearLater()
     const reduced = prefersReducedMotion()
     if (reduced) {
-      level('med')
+      level(baseLevel)
       root.setAttribute('data-fade', 'quick')
       if (!agentOn) root.setAttribute('data-on', 'true')
       dropOn = true
@@ -239,7 +242,7 @@ export function createGlowVfx(host: HTMLElement, options: VfxOptions = {}): Vfx 
       if (typeof halo.animate === 'function') halo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, fill: 'forwards' }).onfinish = () => halo.remove()
       else halo.remove()
     }
-    level('med')
+    level(baseLevel)
     later(() => {
       dropOn = false
       if (agentOn) return
