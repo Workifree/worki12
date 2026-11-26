@@ -8,7 +8,7 @@ import ProfileReviews from '../components/ProfileReviews';
 import { logError } from '../lib/logger';
 import { toSafeWebsiteHref } from '../lib/websiteUrl';
 import { useToast } from '../contexts/ToastContext';
-import { Button, Card } from '../components/ui';
+import { Avatar, Button, Card } from '../components/ui';
 
 interface CompanyPublicData {
     id: string;
@@ -192,13 +192,7 @@ export default function CompanyPublicProfile() {
 
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8">
                     <div className="relative -top-12 mb-[-2.5rem] sm:mb-[-2rem] [&+h1]:[overflow-wrap:anywhere]">
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 aspect-square bg-white rounded-2xl border-4 border-white ring-1 ring-gray-200 flex items-center justify-center overflow-hidden">
-                            {company.logo_url ? (
-                                <img src={company.logo_url} alt={company.name} className="w-full h-full object-cover" />
-                            ) : (
-                                <Building2 size={48} className="text-gray-300" />
-                            )}
-                        </div>
+                        <Avatar kind="company" size="lg" name={company.name} src={company.logo_url} className="ring-4 ring-white sm:h-24 sm:w-24" />
                     </div>
 
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{company.name}</h1>
@@ -212,7 +206,7 @@ export default function CompanyPublicProfile() {
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 underline decoration-blue-300 underline-offset-2"
+                                className="flex min-h-11 items-center gap-1.5 rounded-xl text-gray-900 underline decoration-gray-400 underline-offset-2 hover:decoration-black"
                             >
                                 <MapPin size={16} /> {company.address}
                             </a>

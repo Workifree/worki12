@@ -1,7 +1,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { EVENTO_CONVITES } from '../hooks/useShiftInvites';
-import { formatBRL } from '../lib/currency';
+import { formatBRL, formatBRLCompact } from '../lib/currency';
 import { levelProgress } from '../lib/gamification';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -311,6 +311,11 @@ export default function Dashboard() {
 
     const empresasValor = storesLoading ? '…' : erroStores ? '—' : String(myStores.length);
     const realizados = worker.completed_jobs_count || 0;
+    // Ganhos: a coluna (1,6fr) comporta ~11 caracteres a 320 e ~12 a 360 (medido na galeria).
+    const ganhosValor = worker.earnings_total || 0;
+    const ganhosCompleto = formatBRL(ganhosValor);
+    const ganhosCurtoAte: 'sm' | '360' | null =
+        Math.abs(ganhosValor) >= 100_000 ? 'sm' : Math.abs(ganhosValor) >= 10_000 ? '360' : null;
 
     return (
         <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-5xl mx-auto w-full">
@@ -493,11 +498,15 @@ export default function Dashboard() {
 
             {/* --- FAIXA DE MÉTRICAS: um número por coluna, sem cartão por número --- */}
             <section aria-label="Seus números" className="flex flex-col gap-2">
-                <div className="grid grid-cols-3 divide-x divide-gray-200 rounded-2xl border border-gray-200 bg-white">
-                    <div className="min-w-0 px-3 py-3">
-                        <p className="text-xs text-gray-600">Ganhos</p>
-                        <p className="mt-0.5 text-base font-bold tabular-nums truncate sm:text-xl" title={formatBRL(worker.earnings_total || 0)}>
-                            {formatBRL(worker.earnings_total || 0)}
+                <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] divide-x divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+                    {/* Dinheiro NUNCA trunca: valor completo; forma curta só onde a coluna não comporta. */}
+                    <div className="min-w-0 px-3 py-3" role="group" aria-label={`Ganhos: ${ganhosCompleto}`} title={ganhosCompleto}>
+                        <p className="text-xs text-gray-600" aria-hidden="true">Ganhos</p>
+                        <p aria-hidden="true" className="mt-0.5 whitespace-nowrap font-bold tabular-nums leading-tight text-[clamp(15px,4.6vw,20px)]">
+                            <span className={ganhosCurtoAte === 'sm' ? 'hidden sm:inline' : ganhosCurtoAte === '360' ? 'hidden min-[360px]:inline' : undefined}>{ganhosCompleto}</span>
+                            {ganhosCurtoAte && (
+                                <span className={ganhosCurtoAte === 'sm' ? 'sm:hidden' : 'min-[360px]:hidden'}>{formatBRLCompact(ganhosValor)}</span>
+                            )}
                         </p>
                     </div>
                     <button
@@ -509,11 +518,11 @@ export default function Dashboard() {
                         <span className="flex items-center gap-0.5 text-xs text-gray-600">
                             Empresas <ChevronRight size={12} aria-hidden="true" />
                         </span>
-                        <span className="mt-0.5 text-base font-bold tabular-nums sm:text-xl">{empresasValor}</span>
+                        <span className="mt-0.5 font-bold tabular-nums leading-tight text-[clamp(15px,4.6vw,20px)]">{empresasValor}</span>
                     </button>
                     <div className="min-w-0 px-3 py-3">
                         <p className="text-xs text-gray-600">Nível</p>
-                        <p className="mt-0.5 text-base font-bold tabular-nums sm:text-xl">{worker.level || 1}</p>
+                        <p className="mt-0.5 font-bold tabular-nums leading-tight text-[clamp(15px,4.6vw,20px)]">{worker.level || 1}</p>
                         {progresso && (
                             <div
                                 className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden"

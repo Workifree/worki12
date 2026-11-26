@@ -10,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../contexts/ToastContext';
 import { logError } from '../lib/logger'
 import ErroDeCarga from '../components/ErroDeCarga'
-import { Button, EmptyState, PageHeader } from '../components/ui'
+import { Avatar, Button, EmptyState, PageHeader } from '../components/ui'
 import { checkSession } from '../lib/authSession';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { useLatestResponse } from '../hooks/useLatestResponse';
@@ -503,13 +503,7 @@ export default function Messages() {
                                                 aria-current={selecionada ? 'true' : undefined}
                                                 className={`flex w-full min-h-16 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selecionada ? 'bg-primary-light' : ''}`}
                                             >
-                                                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 text-sm font-semibold text-gray-700" aria-hidden="true">
-                                                    {conv.company_logo ? (
-                                                        <img src={conv.company_logo} alt="" className="h-full w-full object-cover" />
-                                                    ) : (
-                                                        (conv.company_name.trim()[0] || 'E').toUpperCase()
-                                                    )}
-                                                </span>
+                                                <Avatar kind="company" name={conv.company_name} src={conv.company_logo} />
                                                 <span className="min-w-0 flex-1">
                                                     <span className="flex items-baseline justify-between gap-2">
                                                         <span className={`truncate text-sm ${conv.unread_count > 0 ? 'font-bold text-black' : 'font-semibold text-gray-900'}`}>{conv.company_name}</span>
@@ -555,13 +549,7 @@ export default function Messages() {
                                 >
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 text-sm font-semibold text-gray-700" aria-hidden="true">
-                                    {selectedConversation.company_logo ? (
-                                        <img src={selectedConversation.company_logo} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        (selectedConversation.company_name.trim()[0] || 'E').toUpperCase()
-                                    )}
-                                </div>
+                                <Avatar kind="company" name={selectedConversation.company_name} src={selectedConversation.company_logo} />
                                 {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
                                     ("Saída confirmada") esmagava o nome e o título do turno. */}
                                 <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">

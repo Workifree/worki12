@@ -59,7 +59,7 @@ function Sheet(view: CopilotViewProps) {
         role="dialog"
         aria-modal="true"
         aria-label="Copiloto do Worki"
-        className="wk-solid wk-sheet absolute inset-x-0 flex flex-col overflow-hidden rounded-t-[28px] rounded-b-none text-black"
+        className="wk-solid wk-sheet absolute inset-x-0 flex flex-col overflow-hidden rounded-t-2xl rounded-b-none text-black"
         style={{
           bottom: keyboard,
           maxHeight: `min(88dvh, calc(100dvh - ${keyboard}px - 8px))`,
@@ -79,7 +79,7 @@ function Sheet(view: CopilotViewProps) {
         <header className="flex items-center gap-2 px-4 pb-1">
           <Orb />
           <h2 className="flex-1 text-base font-bold">Como posso ajudar?</h2>
-          <IconButton aria-label="Fechar o copiloto" onClick={view.close} className="rounded-full">
+          <IconButton aria-label="Fechar o copiloto" onClick={view.close}>
             <X size={20} />
           </IconButton>
         </header>
@@ -130,7 +130,7 @@ function Working(view: CopilotViewProps) {
       <section
         ref={ref}
         aria-label="Copiloto aguardando você"
-        className="wk-solid wk-rise fixed inset-x-2 z-[1] flex max-h-[62dvh] flex-col gap-3 overflow-y-auto overscroll-contain rounded-[28px] p-4 text-black"
+        className="wk-solid wk-rise fixed inset-x-2 z-[1] flex max-h-[62dvh] flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl p-4 text-black"
         style={style}
       >
         <PendingCard pending={agent.pending} role={view.role} armDelayMs={view.confirmArmDelayMs} />
@@ -143,7 +143,7 @@ function Working(view: CopilotViewProps) {
     <section
       ref={ref}
       aria-label="Copiloto trabalhando"
-      className="wk-solid wk-rise fixed inset-x-2 z-[1] flex items-center gap-3 rounded-full py-2 pl-3 pr-2 text-black"
+      className="wk-solid wk-rise fixed inset-x-2 z-[1] flex items-center gap-3 rounded-2xl py-2 pl-3 pr-2 text-black"
       style={style}
     >
       <Orb working />

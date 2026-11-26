@@ -99,9 +99,11 @@ function PaymentCard({ item, onOpen }: PaymentCardProps) {
                 <CompanyLogo url={company?.logo_url} name={companyName} />
                 <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold line-clamp-2 [overflow-wrap:anywhere]">{jobTitle}</p>
-                    <p className="text-xs text-gray-600 truncate">
-                        {companyName}
-                        {job?.start_date ? ` · turno de ${formatDateOnly(job.start_date, 'dd/MM')}` : ''}
+                    <p className="flex min-w-0 items-baseline gap-1 text-xs text-gray-600">
+                        <span className="min-w-0 truncate">{companyName}</span>
+                        {job?.start_date && (
+                            <span className="shrink-0 whitespace-nowrap font-semibold text-gray-800">· turno de {formatDateOnly(job.start_date, 'dd/MM')}</span>
+                        )}
                     </p>
                     <PaymentMeta item={item} />
                 </div>
@@ -131,9 +133,11 @@ function PaymentRow({ item, onOpen }: PaymentCardProps) {
             <CompanyLogo url={company?.logo_url} name={companyName} />
             <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-gray-900 truncate">{jobTitle}</span>
-                <span className="block text-xs text-gray-600 truncate">
-                    {companyName}
-                    {job?.start_date ? ` · turno de ${formatDateOnly(job.start_date, 'dd/MM')}` : ''}
+                <span className="flex min-w-0 items-baseline gap-1 text-xs text-gray-600">
+                    <span className="min-w-0 truncate">{companyName}</span>
+                    {job?.start_date && (
+                        <span className="shrink-0 whitespace-nowrap font-semibold text-gray-800">· turno de {formatDateOnly(job.start_date, 'dd/MM')}</span>
+                    )}
                 </span>
                 <PaymentMeta item={item} />
             </span>

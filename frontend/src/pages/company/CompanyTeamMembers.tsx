@@ -33,7 +33,7 @@ import PageMeta from '../../components/PageMeta';
 import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
-import { DialogActions, Button, Card, ErrorState, Field, Menu, PageHeader } from '../../components/ui';
+import { DialogActions, Avatar, Button, Card, ErrorState, Field, Menu, PageHeader } from '../../components/ui';
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
@@ -442,16 +442,19 @@ export default function CompanyTeamMembers() {
           )}
           {awaiting.length > 0 && (
             <section aria-labelledby="equipe-confirmar" className="mb-6 space-y-3">
-              <h2 id="equipe-confirmar" className="text-xl font-bold">Precisa da sua confirmação</h2>
+              <h2 id="equipe-confirmar" className="text-base font-semibold">Precisa da sua confirmação</h2>
               {awaiting.map((m) => (
                 <Card
                   key={m.memberId}
                   className="border-yellow-500"
                   aria-label={`${m.displayName ?? 'Pessoa'} aguardando confirmação`}
                 >
-                  <p className="text-lg font-bold">
-                    {m.displayName ?? 'Alguém'} entrou. É a pessoa certa?
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <Avatar name={m.displayName} size="md" />
+                    <p className="min-w-0 text-base font-semibold">
+                      {m.displayName ?? 'Alguém'} entrou. É a pessoa certa?
+                    </p>
+                  </div>
                   <p className="text-sm text-gray-700 mt-1">
                     Entrou como {ROLE_LABEL[m.role]}
                     {m.acceptedEmail ? <> com o e-mail <strong className="break-all">{m.acceptedEmail}</strong></> : null}. Enquanto você
@@ -460,10 +463,10 @@ export default function CompanyTeamMembers() {
                   {formatSaoPaulo(m.confirmationExpiresAt) && (
                     <p className="text-sm font-bold mt-2">Confirme até {formatSaoPaulo(m.confirmationExpiresAt)}.</p>
                   )}
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Regra 6: vermelho cheio só no diálogo final; aqui, contornado pequeno. */}
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
                     <Button
                       variant="dark"
-                      size="lg"
                       onClick={() => openConfirm(m)}
                       loading={busyId === m.memberId}
                       iconLeft={<Check size={18} />}
@@ -471,11 +474,11 @@ export default function CompanyTeamMembers() {
                       Confirmar
                     </Button>
                     <Button
-                      variant="danger"
-                      size="lg"
+                      variant="dangerOutline"
+                      size="sm"
                       onClick={() => setRejecting(m)}
                       disabled={busyId === m.memberId}
-                      iconLeft={<UserX size={18} />}
+                      iconLeft={<UserX size={16} />}
                     >
                       Não é essa pessoa
                     </Button>
@@ -508,61 +511,24 @@ export default function CompanyTeamMembers() {
                     const busy = busyId === m.memberId;
                     const nome = m.displayName ?? 'Sem nome';
                     return (
-                      <li key={m.memberId} className="flex min-h-16 items-center gap-3 px-4 py-3">
-                        <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-700">
-                          {nome[0]?.toUpperCase() ?? '?'}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-gray-900">{nome}</p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                            <span>{ROLE_LABEL[m.role]}</span>
-                            <span className={`rounded-pill px-2 py-0.5 font-semibold ${badge.className}`}>{badge.label}</span>
+                      <li key={m.memberId} className="px-4 py-3">
+                        {/* Linha: avatar · nome (1 linha) · papel e estado (1 linha) · menu à direita. */}
+                        <div className="flex min-h-10 items-center gap-3">
+                          <Avatar name={nome} size="md" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-gray-900">{nome}</p>
+                            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                              <span>{ROLE_LABEL[m.role]}</span>
+                              <span className={`shrink-0 whitespace-nowrap rounded-pill px-2 py-0.5 font-semibold ${badge.className}`}>{badge.label}</span>
+                            </div>
                           </div>
-                          {m.acceptedEmail && !pending && (
-                            <p className="mt-0.5 truncate text-xs text-gray-600" title={m.acceptedEmail}>{m.acceptedEmail}</p>
-                          )}
-                          {m.state === 'pending_expired' && (
-                            <p className="mt-1 text-xs text-gray-600">
-                              O prazo de 72 horas para confirmar acabou. Envie um novo convite.
-                            </p>
-                          )}
                           {pending && (
-                            <p className="mt-1 text-xs text-gray-600">
-                              Gerar um novo link faz o link atual deixar de valer.
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {pending && (
-                            <>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                aria-label="Gerar novo link"
-                                onClick={() => void handleResend(m)}
-                                loading={busy}
-                                iconLeft={<Send size={14} />}
-                              >
-                                Novo link
-                              </Button>
-                              <Menu
-                                label={`Mais opções de ${nome}`}
-                                items={[
-                                  { label: 'Revogar convite', icon: X, onSelect: () => void handleRevoke(m), danger: true },
-                                ]}
-                              />
-                            </>
-                          )}
-                          {m.state === 'pending_expired' && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => void handleInviteAgain(m)}
-                              loading={busy}
-                              iconLeft={<Send size={14} />}
-                            >
-                              Convidar de novo
-                            </Button>
+                            <Menu
+                              label={`Mais opções de ${nome}`}
+                              items={[
+                                { label: 'Revogar convite', icon: X, onSelect: () => void handleRevoke(m), danger: true },
+                              ]}
+                            />
                           )}
                           {m.state === 'active' && m.userId && (
                             <Menu
@@ -573,6 +539,49 @@ export default function CompanyTeamMembers() {
                             />
                           )}
                         </div>
+                        {/* Ajuda e ação secundária em largura total, alinhadas ao texto (40 + 12 px). */}
+                        {(m.acceptedEmail && !pending) || m.state === 'pending_expired' || pending ? (
+                          <div className="mt-1 pl-[52px]">
+                            {m.acceptedEmail && !pending && (
+                              <p className="truncate text-xs text-gray-600" title={m.acceptedEmail}>{m.acceptedEmail}</p>
+                            )}
+                            {m.state === 'pending_expired' && (
+                              <p className="text-xs text-gray-600">
+                                O prazo de 72 horas para confirmar acabou. Envie um novo convite.
+                              </p>
+                            )}
+                            {pending && (
+                              <p className="text-xs text-gray-600">
+                                Gerar um novo link faz o link atual deixar de valer.
+                              </p>
+                            )}
+                            {pending && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="mt-2"
+                                aria-label="Gerar novo link"
+                                onClick={() => void handleResend(m)}
+                                loading={busy}
+                                iconLeft={<Send size={14} />}
+                              >
+                                Novo link
+                              </Button>
+                            )}
+                            {m.state === 'pending_expired' && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => void handleInviteAgain(m)}
+                                loading={busy}
+                                iconLeft={<Send size={14} />}
+                              >
+                                Convidar de novo
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
                       </li>
                     );
                   })}

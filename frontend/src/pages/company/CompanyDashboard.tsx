@@ -412,8 +412,12 @@ export default function CompanyDashboard() {
                                                 <h3 className="min-w-0 max-w-full truncate text-sm font-semibold">{worker?.full_name || 'Freela'}</h3>
                                                 <StatusBadge tone={estadoPresenca.tone} className="whitespace-nowrap">{estadoPresenca.rotulo}</StatusBadge>
                                             </div>
-                                            <p className="mt-0.5 truncate text-xs text-gray-600">
-                                                {[shiftWhen(job?.start_date, job?.work_start_time, job?.work_end_time), job?.title || 'Turno', job?.location].filter(Boolean).join(' · ')}
+                                            {/* Horário em negrito e inteiro (quebra linha, nunca corta); título e local truncam. */}
+                                            <p className="mt-0.5 text-xs font-semibold text-gray-800">
+                                                {shiftWhen(job?.start_date, job?.work_start_time, job?.work_end_time)}
+                                            </p>
+                                            <p className="truncate text-xs text-gray-600">
+                                                {[job?.title || 'Turno', job?.location].filter(Boolean).join(' · ')}
                                             </p>
                                         </div>
                                         <Button

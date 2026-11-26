@@ -349,11 +349,13 @@ export default function ReceiptView() {
 
             {needsConfirmation && (
                 <Card as="section" padding="sm" aria-label="Confirmar recebimento" className="mb-6 print:border-0 print:p-0 print:shadow-none">
-                    <h2 className="text-lg font-bold leading-snug print:hidden">
+                    {/* Não é heading: o h1 da página é o título do recibo, logo abaixo. A seção já
+                        tem nome acessível ("Confirmar recebimento"). */}
+                    <p className="text-lg font-bold leading-snug print:hidden">
                         {amountMissing
                             ? 'Pagamento sem valor informado'
                             : `Você recebeu ${amountLabel(payment.amount)} de ${company?.name || 'uma empresa'}?`}
-                    </h2>
+                    </p>
                     <p className="mt-1 mb-3 text-sm text-gray-700 print:hidden">
                         A empresa registrou um pagamento por fora do app. Se recebeu, confirme aqui.
                         Quando há termo do turno, o aceite é feito no mesmo passo.

@@ -241,7 +241,7 @@ export default function InviteTakeover() {
             <DollarSign size={14} /> {budget ? formatBRL(budget) : 'Valor não informado'}
           </span>
           {location && (
-            <span className="flex items-center gap-1.5 text-xs font-semibold bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
               <LocalDoTurno location={location} size={14} />
             </span>
           )}

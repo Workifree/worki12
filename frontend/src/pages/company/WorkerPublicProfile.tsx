@@ -12,7 +12,7 @@ import WorkerCertificationsPanel from '../../components/company/WorkerCertificat
 import CompanyBadges from '../../components/CompanyBadges';
 import type { TeamConnectionStatus } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
-import { Button, Card, ErrorState } from '../../components/ui';
+import { Avatar, Button, Card, ErrorState } from '../../components/ui';
 import { InviteToShiftModal } from '../../components/team/InviteToShiftModal';
 import type { TeamMember } from '../../types';
 import { useCanUseCompanyChat } from '../../hooks/useCanUseCompanyChat';
@@ -310,13 +310,7 @@ export default function WorkerPublicProfile() {
                 <div className="px-5 sm:px-8 pb-6 sm:pb-8 relative">
                     {/* Avatar */}
                     <div className="absolute -top-14 left-5 sm:-top-16 sm:left-8">
-                        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-black overflow-hidden flex items-center justify-center">
-                            {profile.photo_url ? (
-                                <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="text-4xl text-white font-bold">{profile.full_name?.[0]}</span>
-                            )}
-                        </div>
+                        <Avatar size="lg" name={profile.full_name} src={profile.photo_url} className="h-28 w-28 text-4xl ring-4 ring-white sm:h-32 sm:w-32" />
                     </div>
 
                     {/* Basic Info */}

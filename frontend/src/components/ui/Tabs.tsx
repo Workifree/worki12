@@ -45,9 +45,13 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, panelId, 
             aria-selected={selected}
             aria-controls={panelId}
             tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(tab.id)}
+            onClick={(e) => {
+              onChange(tab.id)
+              // Aba parcialmente escondida pela rolagem entra inteira na vista ao ser escolhida.
+              e.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+            }}
             className={cx(
-              '-mb-px inline-flex min-h-11 flex-auto shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm',
+              '-mb-px inline-flex min-h-11 flex-auto shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 text-sm min-[360px]:px-3',
               'transition-colors duration-fast active:bg-gray-100',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black',
               selected ? 'border-black font-semibold text-black' : 'border-transparent font-medium text-gray-600 hover:text-black',

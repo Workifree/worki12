@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import ChatComposerField from '../../components/ChatComposerField';
 import { supabase } from '../../lib/supabase';
-import { MessageSquare, Send, ArrowLeft, User, Check, CheckCheck, Briefcase } from 'lucide-react';
+import { MessageSquare, Send, ArrowLeft, Check, CheckCheck, Briefcase } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -9,7 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getMyCompanies } from '../../services/companyScopeService';
 import { logError } from '../../lib/logger'
 import { fillMissingWorkers } from '../../services/workerCardsService';
-import { Button, IconButton, PageHeader } from '../../components/ui'
+import { Avatar, Button, IconButton, PageHeader } from '../../components/ui'
 import ErroDeCarga from '../../components/ErroDeCarga'
 import { checkSession } from '../../lib/authSession'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
@@ -526,13 +526,7 @@ export default function CompanyMessages() {
                                     className={`w-full min-h-16 px-4 py-3 text-left border-b border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selectedConversation?.id === conv.id ? 'bg-gray-100' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
-                                        <div className="w-10 h-10 rounded-full bg-gray-100 text-sm font-bold text-gray-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            {conv.worker_avatar ? (
-                                                <img src={conv.worker_avatar} alt={conv.worker_name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <span aria-hidden="true">{conv.worker_name?.trim()?.[0]?.toUpperCase() || <User size={20} className="text-gray-400" />}</span>
-                                            )}
-                                        </div>
+                                        <Avatar name={conv.worker_name} src={conv.worker_avatar} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline gap-2">
                                                 <h3 className="font-semibold text-sm truncate">{conv.worker_name}</h3>
@@ -579,13 +573,7 @@ export default function CompanyMessages() {
                                 >
                                     <ArrowLeft size={20} />
                                 </IconButton>
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-                                    {selectedConversation.worker_avatar ? (
-                                        <img src={selectedConversation.worker_avatar} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <User size={20} className="text-gray-400" />
-                                    )}
-                                </div>
+                                <Avatar name={selectedConversation.worker_name} src={selectedConversation.worker_avatar} />
                                 {/* Abaixo de `sm` o selo vai para baixo do nome: ao lado, um rótulo longo
                                     ("Saída confirmada") esmagava o nome e o título do turno. */}
                                 <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -627,7 +615,7 @@ export default function CompanyMessages() {
                                 ) : (
                                     messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl ${msg.is_mine ? 'bg-blue-700 text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl ${msg.is_mine ? 'bg-black text-white rounded-tr-md' : 'bg-white border border-gray-200 rounded-tl-md'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                                                 <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de

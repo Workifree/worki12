@@ -1,4 +1,5 @@
 
+import { BrandMark, BrandStripe } from '../../components/BrandMark';
 import { useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { focusFirstInvalid } from '../../lib/formErrors';
@@ -413,10 +414,13 @@ export default function WorkerOnboarding() {
     return (
         <div className="min-h-screen bg-white sm:bg-canvas flex flex-col items-center px-4 pt-4 sm:py-10 font-sans text-accent">
             <PageMeta title="Criar Conta" />
+            {/* Um acento de marca por tela: faixa verde de 4px + selo "W." */}
+            <BrandStripe role="work" className="fixed inset-x-0 top-0 z-10" />
 
             <div className="w-full max-w-2xl">
-                {/* Exit button */}
-                <div className="flex justify-end mb-2">
+                {/* Marca à esquerda, saída à direita */}
+                <div className="flex items-center justify-between gap-3 mb-2">
+                    <BrandMark role="work" />
                     <button
                         onClick={async () => {
                             if (!saidaArmada) {

@@ -83,7 +83,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
 
     const getIcon = (type: string) => {
         switch (type) {
-            case 'message': return <MessageSquare size={16} className="text-blue-500" />;
+            case 'message': return <MessageSquare size={16} className="text-gray-700" />;
             case 'payment': return <CreditCard size={16} className="text-green-500" />;
             case 'status_change': return <Info size={16} className="text-yellow-500" />; // Or check-circle
             case 'system': return <AlertCircle size={16} className="text-gray-500" />;
@@ -101,7 +101,7 @@ export default function NotificationBell({ className = "" }: { className?: strin
                 aria-haspopup="true"
                 aria-expanded={isOpen}
             >
-                <Bell size={22} className={unreadCount > 0 ? (userType === 'hire' ? "text-blue-600" : "text-primary") : "currentColor"} aria-hidden="true" />
+                <Bell size={22} className={unreadCount > 0 ? (userType === 'hire' ? "text-black" : "text-primary-dark") : "currentColor"} aria-hidden="true" />
                 {unreadCount > 0 && (
                     <span className="absolute top-0.5 right-0.5 h-5 w-5 bg-red-600 text-white text-xs font-bold tabular-nums rounded-full flex items-center justify-center border-2 border-white">
                         {unreadCount > 9 ? '9+' : unreadCount}

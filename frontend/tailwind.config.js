@@ -22,6 +22,7 @@ export default {
                     ink: '#006b33', // texto e ícone verdes: 6,66:1 no branco; 5,95:1 no primary-light
                 },
                 accent: '#111111', // Brutalist Black
+                company: '#2563EB', // azul da empresa: SÓ acento (faixa de marca), nunca CTA nem texto
                 border: 'rgba(0, 0, 0, 0.1)', // Subtle border
                 canvas: '#F4F4F0', // fundo do app
                 // Status semântico (lib/statusLabels.ts). Pares fg/bg entre 6,6:1 e 9,4:1.

@@ -32,7 +32,7 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                             aria-label={label}
                             aria-current={isActive ? 'page' : undefined}
                             className={`
-                 group flex min-h-11 min-w-11 flex-auto flex-col items-center justify-center gap-1 px-0.5
+                 group flex min-h-11 min-w-11 flex-1 basis-0 flex-col items-center justify-center gap-1 px-px
                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black
                  ${isActive
                                     ? (isCompany ? 'text-blue-700' : 'text-primary-ink')
@@ -46,9 +46,15 @@ export default function BottomNav({ type = 'worker' }: BottomNavProps) {
                             >
                                 <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
                             </span>
-                            {/* `truncate` é rede de segurança a 320px: "Recebimentos" precisa caber. */}
-                            <span className={`max-w-full truncate text-xs leading-none tracking-tight ${isActive ? 'font-bold' : 'font-semibold'}`}>
-                                {label}
+                            {/* Células iguais (flex-1 basis-0): 64px a 320. Abaixo de 360px o item com
+                                `tinyLabel` troca o rótulo visível; `truncate` fica só como rede. */}
+                            <span className={`max-w-full truncate whitespace-nowrap text-xs leading-none tracking-tighter ${isActive ? 'font-bold' : 'font-semibold'}`}>
+                                {item.tinyLabel ? (
+                                    <>
+                                        <span aria-hidden="true" className="min-[360px]:hidden">{item.tinyLabel}</span>
+                                        <span className="hidden min-[360px]:inline">{label}</span>
+                                    </>
+                                ) : label}
                             </span>
                         </Link>
                     );

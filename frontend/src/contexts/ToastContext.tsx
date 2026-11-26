@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import { useTopDialogElement } from '../hooks/useModalDismiss';
 import { pushToast, toastDuration } from '../lib/toastTiming';
@@ -11,11 +12,15 @@ interface Toast {
     id: string;
     message: string;
     type: ToastType;
+    /** Contador de navegação no momento em que o aviso nasceu. */
+    bornAtNav: number;
 }
 
 interface ToastContextType {
     addToast: (message: string, type?: ToastType) => void;
     removeToast: (id: string) => void;
+    /** Chamado por <ToastRouteDismiss /> a cada troca de rota. */
+    notifyRouteChange?: () => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -115,9 +120,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, []);
 
+    const navCount = useRef(0);
+
     const addToast = useCallback((message: string, type: ToastType = 'info') => {
         const id = Math.random().toString(36).substring(2, 9);
-        setToasts((prev) => pushToast(prev, { id, message, type }));
+        setToasts((prev) => pushToast(prev, { id, message, type, bornAtNav: navCount.current }));
+    }, []);
+
+    // Aviso dado logo antes de navegar ("Turno criado!" → candidatos) sobrevive à PRIMEIRA troca
+    // de rota, que é a continuação do gesto; na seguinte, já fala de outra tela e sai.
+    const notifyRouteChange = useCallback(() => {
+        navCount.current += 1;
+        const limite = navCount.current - 1;
+        setToasts((prev) => {
+            const next = prev.filter((t) => t.bornAtNav >= limite);
+            return next.length === prev.length ? prev : next;
+        });
     }, []);
 
     // No topo (abaixo do cabeçalho) no celular: a base da tela é da barra inferior, do botão
@@ -136,11 +154,30 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     );
 
     return (
-        <ToastContext.Provider value={{ addToast, removeToast }}>
+        <ToastContext.Provider value={{ addToast, removeToast, notifyRouteChange }}>
             {children}
             {topDialog ? createPortal(viewport, topDialog) : viewport}
         </ToastContext.Provider>
     );
+}
+
+/**
+ * Montado dentro do <BrowserRouter> (o provider fica fora dele): avisa o provider a cada troca
+ * de `pathname`, para avisos de telas anteriores não ficarem pendurados.
+ */
+export function ToastRouteDismiss() {
+    const { pathname } = useLocation();
+    const ctx = useContext(ToastContext);
+    const notify = ctx?.notifyRouteChange;
+    const first = useRef(true);
+    useEffect(() => {
+        if (first.current) {
+            first.current = false;
+            return;
+        }
+        notify?.();
+    }, [pathname, notify]);
+    return null;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

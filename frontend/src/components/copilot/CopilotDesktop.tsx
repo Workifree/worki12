@@ -43,12 +43,12 @@ function Palette(view: CopilotViewProps) {
         aria-modal="true"
         aria-label="Copiloto do Worki"
         data-copilot-palette=""
-        className="wk-glass wk-rise flex max-h-[min(82dvh,720px)] w-[min(680px,100%)] flex-col overflow-hidden rounded-[28px] text-black"
+        className="wk-glass wk-rise flex max-h-[min(82dvh,720px)] w-[min(680px,100%)] flex-col overflow-hidden rounded-2xl text-black"
       >
         <header className="flex items-center gap-2 px-5 pb-1 pt-4">
           <Orb />
-          <h2 className="flex-1 text-sm font-bold">Copiloto do Worki</h2>
-          <IconButton aria-label="Fechar o copiloto" onClick={view.close} className="rounded-full">
+          <h2 className="flex-1 text-base font-bold">Como posso ajudar?</h2>
+          <IconButton aria-label="Fechar o copiloto" onClick={view.close}>
             <X size={20} />
           </IconButton>
         </header>
@@ -105,13 +105,13 @@ function Working(view: CopilotViewProps) {
     return (
       <section
         aria-label="Copiloto trabalhando"
-        className="wk-glass wk-rise fixed bottom-6 left-1/2 z-[1] flex w-[min(520px,calc(100vw-32px))] -translate-x-1/2 items-center gap-3 rounded-full py-2 pl-3 pr-2 text-black"
+        className="wk-glass wk-rise fixed bottom-6 left-1/2 z-[1] flex w-[min(520px,calc(100vw-32px))] -translate-x-1/2 items-center gap-3 rounded-2xl py-2 pl-3 pr-2 text-black"
       >
         <Orb working />
         <p role="status" aria-live="polite" className="min-w-0 flex-1 truncate text-sm font-semibold">
           {current}
         </p>
-        <IconButton aria-label="Expandir o painel do copiloto" onClick={() => setMinimized(false)} className="rounded-full">
+        <IconButton aria-label="Expandir o painel do copiloto" onClick={() => setMinimized(false)}>
           <Square size={16} />
         </IconButton>
         <StopButton onStop={agent.stop} />
@@ -133,7 +133,7 @@ function Working(view: CopilotViewProps) {
       >
         <Orb working />
         <h2 className="flex-1 text-sm font-bold">Copiloto trabalhando</h2>
-        <IconButton aria-label="Minimizar o painel do copiloto" onClick={() => setMinimized(true)} disabled={needsPerson} className="rounded-full">
+        <IconButton aria-label="Minimizar o painel do copiloto" onClick={() => setMinimized(true)} disabled={needsPerson}>
           <Minus size={18} />
         </IconButton>
       </header>
@@ -159,7 +159,7 @@ function Launcher({ onOpen }: { onOpen: () => void }) {
       type="button"
       aria-label="Abrir o copiloto"
       onClick={onOpen}
-      className="wk-glass fixed bottom-5 left-1/2 z-[1] flex min-h-12 -translate-x-1/2 items-center gap-2 rounded-full px-4 text-sm font-semibold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+      className="wk-glass fixed bottom-5 left-1/2 z-[1] flex min-h-12 -translate-x-1/2 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
     >
       <Sparkles size={18} aria-hidden="true" />
       Como posso ajudar?

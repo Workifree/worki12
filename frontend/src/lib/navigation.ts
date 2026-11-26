@@ -18,6 +18,11 @@ export interface NavItem {
     label: string;
     /** Rótulo da barra inferior, quando o da lateral não cabe. */
     shortLabel?: string;
+    /**
+     * Rótulo visível só abaixo de 360px, quando nem o curto cabe na célula de 64px. O nome
+     * acessível (aria-label) continua sendo o curto/completo.
+     */
+    tinyLabel?: string;
     icon: LucideIcon;
     path: string;
     /** Padrões de rota (react-router) em que o item fica ativo. */
@@ -92,7 +97,7 @@ const WORKER_NAV: readonly NavItem[] = [
     // "Meus Turnos", não "Convites": o rótulo descreve o DESTINO (information scent).
     { id: 'turnos', label: 'Meus Turnos', shortLabel: 'Turnos', icon: Inbox, path: '/my-jobs', matches: ['/my-jobs'] },
     { id: 'empresas', label: 'Empresas', icon: Contact, path: '/carteira', matches: [...tabPaths('empresas'), '/empresa/:id'] },
-    { id: 'recebimentos', label: 'Recebimentos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
+    { id: 'recebimentos', label: 'Recebimentos', tinyLabel: 'Recibos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
     { id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/messages', matches: ['/messages'] },
 ];
 

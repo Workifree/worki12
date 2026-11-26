@@ -301,6 +301,7 @@ export default function Login() {
 
     return (
         <AuthShell
+            role={isHire ? 'hire' : 'work'}
             backTo="/"
             title={isSignUp
                 ? (isHire ? 'Criar conta de empresa' : 'Criar conta de freela')

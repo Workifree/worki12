@@ -856,6 +856,9 @@ export default function MyJobs() {
                     requestAnimationFrame(() => document.getElementById('meus-turnos-painel')?.scrollIntoView?.({ block: 'nearest' }));
                 }}
                 panelId="meus-turnos-painel"
+                // No celular a linha vai até a borda da tela (o esmaecimento fica na borda, não no
+                // meio de "Agendados"); do sm em diante volta à coluna.
+                className="-mx-4 pl-4 sm:mx-0 sm:pl-0"
             />
 
             {/* Content */}

@@ -13,7 +13,11 @@ const BASE =
   'transition-[transform,box-shadow,background-color,color] duration-fast ease-standard active:duration-press ' +
   'motion-reduce:transition-none motion-reduce:transform-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
-  'focus-visible:ring-black disabled:cursor-not-allowed disabled:opacity-50'
+  'focus-visible:ring-black'
+
+// Desabilitado: UM estilo para toda variante (sem verde-claro que parece quebrado).
+const DISABLED =
+  'disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-500 disabled:shadow-none'
 
 // Primário: borda 1,5px + sombra curta (`brutal-xs`) que "afunda" no toque. É o ÚNICO com sombra.
 const RAISED =
@@ -48,6 +52,8 @@ export interface ButtonClassOptions {
   size?: ButtonSize
   fullWidth?: boolean
   uppercase?: boolean
+  /** Carregando não é "indisponível": mantém a cor da variante. */
+  loading?: boolean
   className?: string
 }
 
@@ -56,10 +62,12 @@ export function buttonClasses({
   size = 'md',
   fullWidth = false,
   uppercase = false,
+  loading = false,
   className,
 }: ButtonClassOptions = {}): string {
   return cx(
     BASE,
+    !loading && DISABLED,
     VARIANTS[variant],
     SIZES[size],
     fullWidth && 'w-full',

@@ -101,15 +101,16 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
 
       <div className="min-w-0 flex-1">
         {restricted ? (
-          <h3 className="truncate text-sm font-semibold text-gray-900">{worker.full_name}</h3>
+          <h3 className="line-clamp-2 text-sm font-semibold text-gray-900 [overflow-wrap:anywhere]">{worker.full_name}</h3>
         ) : (
-          <h3 className="truncate text-sm font-semibold text-gray-900">
+          <h3 className="text-sm font-semibold text-gray-900">
+            {/* Alvo de 44px na largura inteira da coluna; nome quebra em até 2 linhas em vez de cortar. */}
             <button
               type="button"
               onClick={goToProfile}
-              className="max-w-full truncate text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black rounded"
+              className="flex min-h-11 w-full items-center rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
             >
-              {worker.full_name}
+              <span className="line-clamp-2 [overflow-wrap:anywhere]">{worker.full_name}</span>
             </button>
           </h3>
         )}

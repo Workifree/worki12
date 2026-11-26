@@ -100,7 +100,8 @@ export default function BonusTrail({ api = BonusTrailService }: BonusTrailProps)
   const s = snapshot;
   const count = milestoneCount(s.milestones);
   const lastDay = lastTrailDay(s.endsAt);
-  let subtitle = 'Conclua marcos e receba bônus por PIX.';
+  // Programa desligado (bonus_program_settings.enabled=false → status 'disabled'): não prometer bônus.
+  let subtitle = s.status === 'disabled' ? 'Programa de marcos da operação.' : 'Conclua marcos e receba bônus por PIX.';
   if (s.status === 'active' && lastDay) subtitle = `Sua trilha vai até ${lastDay}.`;
   if (s.status === 'ended') subtitle = lastDay ? `Sua trilha terminou em ${lastDay}.` : 'Sua trilha terminou.';
 

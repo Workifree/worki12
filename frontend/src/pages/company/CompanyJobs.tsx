@@ -617,7 +617,7 @@ export default function CompanyJobs() {
                         className={`${FIELD_CONTROL_CLASS} !h-11 pl-10`}
                     />
                 </div>
-                <div className="worki-scroll-row -mx-4 flex gap-2 px-4 py-1 md:mx-0 md:px-0" role="group" aria-label="Filtrar turnos">
+                <div className="worki-scroll-row -mx-4 flex gap-2 py-1 pl-4 pr-6 md:mx-0 md:pl-0" role="group" aria-label="Filtrar turnos">
                     {FILTERS.map(({ key, label }) => (
                         <FilterChip key={key} pressed={filter === key} onClick={() => changeFilter(key)} >
                             {label}

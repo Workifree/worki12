@@ -1,3 +1,4 @@
+import { BrandMark, BrandStripe } from '../../components/BrandMark';
 import { useState, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { focusFirstInvalid } from '../../lib/formErrors';
@@ -189,8 +190,11 @@ export default function CompanyOnboarding() {
     return (
         <div className="min-h-screen bg-white sm:bg-canvas flex flex-col items-center px-4 pt-4 sm:py-10 font-sans">
             <PageMeta title="Criar Conta" />
+            {/* Um acento de marca por tela: faixa azul de 4px + selo "W." */}
+            <BrandStripe role="hire" className="fixed inset-x-0 top-0 z-10" />
 
             <div className="w-full max-w-2xl">
+                <BrandMark role="hire" className="mb-4" />
                 {erroSessao && (
                     <div className="mb-4">
                         <ErroDeCarga

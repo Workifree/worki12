@@ -243,9 +243,14 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                                 {isVerified ? 'Verificado' : 'Não verificado'}
                             </span>
                         )) : (
-                            <span className="truncate text-xs font-medium leading-tight text-gray-600">
-                                {`Nível ${workerData?.level || 1} · ${workerData?.xp || 0} XP`}
-                            </span>
+                            // Sem dado ainda: esqueleto, nunca "Nível 1 · 0 XP" inventado.
+                            workerData ? (
+                                <span className="truncate text-xs font-medium leading-tight text-gray-600">
+                                    {`Nível ${workerData.level || 1} · ${workerData.xp || 0} XP`}
+                                </span>
+                            ) : (
+                                <span aria-hidden="true" className="mt-0.5 block h-3 w-20 rounded bg-gray-200 motion-safe:animate-pulse" />
+                            )
                         )}
                     </span>
                 </NavLink>

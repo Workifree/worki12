@@ -28,7 +28,7 @@ function getIcon(type: string, title: string) {
     if (/cancel|estorn|recus|dispens/i.test(title)) return <XCircle size={20} aria-hidden="true" className="text-red-700" />;
     if (/preenchida|aceit|confirm/i.test(title) && type !== 'payment') return <CheckCircle2 size={20} aria-hidden="true" className="text-primary-ink" />;
     switch (type) {
-        case 'message': return <MessageSquare size={20} aria-hidden="true" className="text-blue-700" />;
+        case 'message': return <MessageSquare size={20} aria-hidden="true" className="text-gray-700" />;
         case 'payment': return <CreditCard size={20} aria-hidden="true" className="text-primary-ink" />;
         case 'status_change': return <Info size={20} aria-hidden="true" className="text-status-warning-fg" />;
         case 'system': return <AlertCircle size={20} aria-hidden="true" className="text-gray-600" />;
@@ -197,7 +197,7 @@ export default function Notifications() {
                                     <button
                                         type="button"
                                         onClick={() => void handleGroupClick(group)}
-                                        className={`flex w-full gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-blue-50' : 'bg-white'}`}
+                                        className={`flex w-full gap-3 px-4 py-3 text-left transition-colors duration-fast hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${unread ? 'bg-gray-50' : 'bg-white'}`}
                                     >
                                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
                                             {getIcon(n.type, n.title)}
@@ -217,7 +217,7 @@ export default function Notifications() {
                                             <span
                                                 role="img"
                                                 aria-label="Não lida"
-                                                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${userType === 'hire' ? 'bg-blue-600' : 'bg-primary'}`}
+                                                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${userType === 'hire' ? 'bg-black' : 'bg-primary'}`}
                                             />
                                         )}
                                     </button>

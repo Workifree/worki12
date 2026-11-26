@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { cx } from './ui/cx'
+import { BrandMark, BrandStripe, type BrandRole } from './BrandMark'
 
 export interface AuthShellProps {
   /** Título da tela (h1). */
@@ -16,6 +17,8 @@ export interface AuthShellProps {
   footer?: ReactNode
   children: ReactNode
   className?: string
+  /** Papel em foco: dá a cor da faixa de marca (verde freela, azul empresa). */
+  role?: BrandRole
 }
 
 /**
@@ -33,9 +36,11 @@ export function AuthShell({
   footer,
   children,
   className,
+  role = 'work',
 }: AuthShellProps) {
   return (
     <div className="min-h-screen bg-white sm:bg-canvas">
+      <BrandStripe role={role} />
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-6 pt-2 sm:justify-center sm:py-10">
         {backTo && (
           <div className="mb-2">
@@ -55,6 +60,7 @@ export function AuthShell({
           )}
         >
           <header className="mb-6">
+            <BrandMark role={role} className="mb-4" />
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">{title}</h1>
             {subtitle && <p className="mt-1 text-sm text-gray-600 sm:text-base">{subtitle}</p>}
           </header>

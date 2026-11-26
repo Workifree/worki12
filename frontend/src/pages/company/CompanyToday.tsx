@@ -448,7 +448,7 @@ export default function CompanyToday() {
       )}
 
       {showFilters && (
-        <section aria-label="Filtros" className="worki-scroll-row -mx-4 mb-4 flex items-center gap-2 px-4 py-1 sm:mx-0 sm:px-0">
+        <section aria-label="Filtros" className="worki-scroll-row -mx-4 mb-4 flex items-center gap-2 py-1 pl-4 pr-6 sm:mx-0 sm:pl-0">
           {/* Pessoas e etiquetas numa só linha rolável (nunca quebra em 2 ou 3 linhas). */}
           <div className="flex shrink-0 gap-2" role="group" aria-label="Pessoas">
             <FilterChip pressed={!filtered} onClick={() => changeFilters(null, null)}>Todos</FilterChip>
@@ -623,7 +623,8 @@ export default function CompanyToday() {
       ))}
 
       {/* Guia de primeiros passos depois da agenda: a tela de operação abre nos turnos. */}
-      <GuideChecklist ocultavel className="mb-6" />
+      {/* Um lugar por papel: o Gestor vê no Início; aqui só quem não é Gestor. */}
+      {!gestor && <GuideChecklist ocultavel className="mb-6" />}
 
       {truncated && (
         <p className="text-center text-sm text-gray-600">Mostrando os primeiros 500 turnos. Use os filtros para ver o resto.</p>

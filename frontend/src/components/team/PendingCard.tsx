@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Clock } from 'lucide-react';
 import type { TeamConnection } from '../../types';
 import { roleLabel } from '../../lib/statusLabels';
+import { Avatar } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Subcomponent: card de conexão pendente
@@ -31,9 +32,7 @@ export function PendingCard({ connection, restricted = false }: PendingCardProps
         onKeyDown={restricted ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToProfile(); } }}
         className="flex min-h-16 w-full items-center gap-3 px-4 py-3 transition-colors [&[role=button]]:cursor-pointer [&[role=button]]:hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black"
       >
-        <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
-          {name[0]?.toUpperCase() ?? '?'}
-        </div>
+        <Avatar name={name} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{name}</p>
           {workerData?.primary_role && (

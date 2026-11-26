@@ -165,7 +165,7 @@ describe('barra de comando e duas experiências', () => {
     })
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
     const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
-    expect(within(dialog).getByRole('heading', { name: 'Copiloto do Worki' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('heading', { name: 'Como posso ajudar?' })).toBeInTheDocument()
     // Esc fecha e devolve o foco.
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())

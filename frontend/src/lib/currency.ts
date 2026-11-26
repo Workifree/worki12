@@ -23,3 +23,16 @@ export function formatWorkedTime(hours: number | null | undefined, fallback = 'S
     const wholeHours = `${h.toLocaleString('pt-BR')}h`;
     return m === 0 ? wholeHours : `${wholeHours} ${m}min`;
 }
+
+/**
+ * Forma curta para faixa estreita: "R$ 2,3 mil", "R$ 1,2 mi". Só para EXIBIÇÃO quando a largura
+ * não comporta o valor completo; o valor completo (`formatBRL`) deve ir em aria-label/title.
+ */
+export function formatBRLCompact(amount: number | null | undefined): string {
+    const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
+    const abs = Math.abs(value);
+    const fmt = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    if (abs >= 1_000_000) return `R$ ${fmt(value / 1_000_000)} mi`;
+    if (abs >= 1_000) return `R$ ${fmt(value / 1_000)} mil`;
+    return formatBRL(value);
+}

@@ -50,6 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         size,
         fullWidth,
         uppercase,
+        loading,
         // Carregando não é "indisponível": quase opaco e cursor de espera.
         className: loading ? `disabled:cursor-wait disabled:opacity-80 ${className ?? ''}` : className,
       })}

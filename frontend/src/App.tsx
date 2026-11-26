@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, ToastRouteDismiss } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
@@ -129,6 +129,7 @@ function App() {
               <PwaPrompts />
               <CopilotRoot showLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
               <RouteFocus />
+              <ToastRouteDismiss />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public Routes */}

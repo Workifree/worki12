@@ -37,7 +37,7 @@ export function ModeSwitch({ mode, onChange }: { mode: CopilotMode; onChange: (m
     ['do', 'Faça pra mim'],
   ]
   return (
-    <div role="radiogroup" aria-label="Como o copiloto ajuda" className="grid grid-cols-2 gap-1 rounded-full bg-gray-100 p-1">
+    <div role="radiogroup" aria-label="Como o copiloto ajuda" className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
       {options.map(([value, label]) => (
         <button
           key={value}
@@ -45,7 +45,7 @@ export function ModeSwitch({ mode, onChange }: { mode: CopilotMode; onChange: (m
           role="radio"
           aria-checked={mode === value}
           onClick={() => onChange(value)}
-          className={`min-h-11 rounded-full px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${
+          className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${
             mode === value ? 'bg-black text-white shadow-sm' : 'text-gray-700 hover:bg-white'
           }`}
         >
@@ -82,7 +82,7 @@ export function Composer({
   return (
     <div>
       <form
-        className={`flex items-center gap-2 rounded-full bg-white pl-4 pr-1.5 ring-1 ring-black/15 focus-within:ring-2 focus-within:ring-black ${large ? 'min-h-14' : 'min-h-12'}`}
+        className={`flex items-center gap-2 rounded-xl bg-white pl-4 pr-1.5 ring-1 ring-black/15 focus-within:ring-2 focus-within:ring-black ${large ? 'min-h-14' : 'min-h-12'}`}
         onSubmit={(event) => {
           event.preventDefault()
           onSend(value)
@@ -112,7 +112,7 @@ export function Composer({
         {shortcutHint && !value && (
           <kbd className="hidden shrink-0 rounded-md border border-gray-300 px-1.5 py-0.5 text-xs font-semibold text-gray-600 sm:block">Esc</kbd>
         )}
-        <IconButton aria-label="Enviar pedido" variant="secondary" type="submit" disabled={!value.trim()} className="rounded-full border-0 bg-black text-white enabled:hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500">
+        <IconButton aria-label="Enviar pedido" variant="secondary" type="submit" disabled={!value.trim()} className="border-0 bg-black text-white enabled:hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-500">
           <Send size={20} />
         </IconButton>
       </form>
@@ -137,7 +137,7 @@ export function Chips({ items, onPick, label }: { items: readonly string[]; onPi
           <button
             type="button"
             onClick={() => onPick(item)}
-            className="min-h-11 rounded-full border border-black/15 bg-white px-4 text-left text-sm font-semibold text-black hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+            className="min-h-11 rounded-xl border border-black/15 bg-white px-4 text-left text-sm font-semibold text-black hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
           >
             {item}
           </button>
@@ -233,7 +233,7 @@ function AskForm({ onAnswer }: { onAnswer: (text: string) => void }) {
         autoComplete="off"
         placeholder="Escreva sua resposta"
         onChange={(event) => setAnswer(event.target.value)}
-        className="min-h-12 min-w-0 flex-1 rounded-full border-0 bg-white px-4 text-base ring-1 ring-black/15 focus:outline-none focus:ring-2 focus:ring-black"
+        className="min-h-12 min-w-0 flex-1 rounded-xl border-0 bg-white px-4 text-base ring-1 ring-black/15 focus:outline-none focus:ring-2 focus:ring-black"
       />
       <PillButton type="submit" tone="dark">
         Responder

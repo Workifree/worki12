@@ -118,10 +118,11 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     renderSidebar('/profile', 'worker');
 
     expect(itens()).toEqual(['Início', 'Meus Turnos', 'Empresas', 'Recebimentos', 'Mensagens']);
-    const perfil = screen.getByRole('link', { name: /Nível 1/ });
+    const perfil = screen.getAllByRole('link').find((a) => a.getAttribute('href') === '/profile') as HTMLElement;
     expect(perfil).toHaveAttribute('href', '/profile');
     expect(perfil).toHaveAttribute('aria-current', 'page');
-    expect(within(perfil).getByText(/0 XP/)).toBeInTheDocument();
+    // Sem o dado do freela (mock devolve null), nada de "Nível 1 · 0 XP" fabricado: só esqueleto.
+    expect(within(perfil).queryByText(/XP/)).not.toBeInTheDocument();
   });
 
   it('rodapé de uma linha: Perfil, Ajuda e Sair ficam no menu "..." (teclado e rótulo)', async () => {
