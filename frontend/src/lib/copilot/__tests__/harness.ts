@@ -97,6 +97,16 @@ export function humanClick(element: Element) {
   }
 }
 
+/** Tecla de uma pessoa (a guarda barra tecla sintética enquanto a tarefa roda). */
+export function humanKey(element: Element, init: KeyboardEventInit) {
+  human = true
+  try {
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+  } finally {
+    human = false
+  }
+}
+
 export interface FakeUI extends CopilotUI {
   cards: ConfirmCard[]
   handoffs: string[]

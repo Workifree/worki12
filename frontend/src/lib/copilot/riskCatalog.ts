@@ -53,3 +53,17 @@ const ALVOS_D: ReadonlySet<string> = new Set([
 ])
 
 export const alvoEhRiscoD = (alvo: string): boolean => ALVOS_D.has(alvo)
+
+/**
+ * Âncoras que só mudam o que aparece (abrem um passo, montam um rascunho local, mostram o calendário).
+ * Não gravam nem avisam ninguém: passam sem cartão. Nada aqui pode publicar, chamar ou convidar.
+ */
+const ALVOS_SEM_EFEITO: ReadonlySet<string> = new Set([
+  'empresa.turno-lote.do-zero',
+  'empresa.turno-lote.ler-texto',
+  'empresa.turno-lote.calendario',
+  'empresa.turno-lote.varias-datas',
+  'empresa.turno-lote.revisar',
+])
+
+export const alvoSemEfeito = (alvo: string): boolean => ALVOS_SEM_EFEITO.has(alvo)

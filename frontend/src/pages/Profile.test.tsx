@@ -148,6 +148,17 @@ describe('Profile - Renderizacao', () => {
     renderComponent()
     await waitFor(() => { expect(screen.getByText('Maria Silva')).toBeInTheDocument() })
   })
+
+  it('D-12: telefone sai mascarado, com "Mostrar" igual a CPF e PIX', async () => {
+    setupMocks()
+    renderComponent()
+    const botao = await screen.findByRole('button', { name: 'Mostrar telefone' })
+    expect(screen.queryByText('11999999999')).not.toBeInTheDocument()
+    expect(screen.getByText('•••••••9999')).toBeInTheDocument()
+    fireEvent.click(botao)
+    expect(screen.getByText('11999999999')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ocultar telefone' })).toBeInTheDocument()
+  })
 })
 
 describe('Profile — modal de exclusão de conta', () => {

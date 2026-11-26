@@ -464,8 +464,8 @@ export default function Login() {
 
                     {isSignUp && (
                         <p className="text-center text-xs text-gray-600">
-                            Antes de usar, você lê e aceita os <Link to="/termos" className="font-bold underline">Termos de Uso</Link> e a{' '}
-                            <Link to="/privacidade" className="font-bold underline">Política de Privacidade</Link>.
+                            Antes de usar, você lê e aceita os <Link to="/termos" className="py-4 font-bold underline">Termos de Uso</Link> e a{' '}
+                            <Link to="/privacidade" className="py-4 font-bold underline">Política de Privacidade</Link>.
                         </p>
                     )}
 

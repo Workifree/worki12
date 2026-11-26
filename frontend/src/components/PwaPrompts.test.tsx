@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import PwaPrompts from './PwaPrompts'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
+import companyLayoutSrc from '../layouts/CompanyLayout.tsx?raw'
+import mainLayoutSrc from '../layouts/MainLayout.tsx?raw'
+import PwaPrompts, { PWA_SESSION_START_KEY } from './PwaPrompts'
 import { INSTALL_DISMISS_KEY } from '../lib/pwa'
 
 // Store controlável no lugar do estado real do navegador. Os helpers puros de `lib/pwa`
@@ -225,16 +227,53 @@ describe('PwaPrompts', () => {
       expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
     })
 
-    it('antes do atraso inicial; depois dele, aparece', () => {
+    it('só depois de 20s de uso na sessão E nunca na primeira tela carregada', () => {
       vi.useFakeTimers()
-      renderAt('/dashboard', 6000)
+      window.sessionStorage.clear()
+      function Ir() {
+        const navigate = useNavigate()
+        return <button onClick={() => navigate('/my-jobs')}>ir</button>
+      }
+      render(
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Ir />
+          <PwaPrompts installDelayMs={20000} />
+        </MemoryRouter>,
+      )
       act(() => pwaMock.set({ installAvailable: true }))
+      act(() => {
+        vi.advanceTimersByTime(19000)
+      })
       expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
 
+      // 20s passaram, mas ainda é a primeira tela da página: nada.
       act(() => {
-        vi.advanceTimersByTime(6000)
+        vi.advanceTimersByTime(1500)
       })
+      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
 
+      fireEvent.click(screen.getByRole('button', { name: 'ir' }))
+      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+    })
+
+    it('a contagem de 20s é da sessão: recarregar não zera', () => {
+      vi.useFakeTimers()
+      window.sessionStorage.setItem(PWA_SESSION_START_KEY, String(Date.now() - 25000))
+      function Ir() {
+        const navigate = useNavigate()
+        return <button onClick={() => navigate('/my-jobs')}>ir</button>
+      }
+      render(
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Ir />
+          <PwaPrompts installDelayMs={20000} />
+        </MemoryRouter>,
+      )
+      act(() => pwaMock.set({ installAvailable: true }))
+      act(() => {
+        vi.advanceTimersByTime(0)
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'ir' }))
       expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
     })
   })
@@ -284,6 +323,42 @@ describe('PwaPrompts', () => {
       rect.mockRestore()
     })
 
+    it('D-9: a reserva acompanha a pilha quando ela cresce (instalar + sem internet) e é somada ao padding do main', async () => {
+      // ResizeObserver controlável: a pilha abre com o convite e depois ganha o aviso de offline.
+      let notify: (() => void) | null = null
+      class FakeRO {
+        constructor(cb: () => void) {
+          notify = cb
+        }
+        observe() {}
+        disconnect() {}
+      }
+      vi.stubGlobal('ResizeObserver', FakeRO)
+      let altura = 114
+      const rect = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(() => ({ height: altura, width: 366, top: 0, left: 0, right: 366, bottom: altura, x: 0, y: 0, toJSON: () => ({}) }))
+      pwaMock.set({ installAvailable: true })
+      renderAt('/company/jobs')
+      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(document.documentElement.style.getPropertyValue('--worki-pwa-h')).toBe('126px')
+
+      altura = 170
+      act(() => notify?.())
+      expect(document.documentElement.style.getPropertyValue('--worki-pwa-h')).toBe('182px')
+
+      // A variável só reserva espaço se o CSS do main a somar ao padding de baixo (index.css).
+      // Lido do disco: no Vitest o CSS importado vem vazio (css desligado); o Vitest roda a partir de frontend/.
+      const fs = await vi.importActual<{ readFileSync: (p: string, enc: 'utf8') => string }>('node:fs')
+      const indexCss = fs.readFileSync('src/index.css', 'utf8')
+      expect(indexCss).toMatch(/\.worki-layout main\s*\{\s*padding-bottom:\s*calc\([^)]*var\(--worki-pwa-h/)
+      for (const [layout, src] of [['CompanyLayout', companyLayoutSrc], ['MainLayout', mainLayoutSrc]]) {
+        expect(src, layout).toMatch(/className="worki-layout[ "][\s\S]*<main /)
+      }
+      rect.mockRestore()
+      vi.unstubAllGlobals()
+    })
+
     it('com offline, atualização e instalação juntas, tudo cabe na mesma pilha', () => {
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
       const { container } = renderAt()
@@ -292,6 +367,53 @@ describe('PwaPrompts', () => {
       expect(container.querySelectorAll('.worki-pwa-stack')).toHaveLength(1)
       expect(screen.getByText(/sem internet/i)).toBeInTheDocument()
       expect(screen.getByText('Nova versão disponível')).toBeInTheDocument()
+    })
+  })
+
+  describe('celular (< 640px): linhas compactas', () => {
+    beforeEach(() => {
+      vi.stubGlobal('matchMedia', (q: string) => ({
+        matches: q === '(max-width: 639px)',
+        media: q,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }))
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('convite é UMA linha de 56px (h-14) com Instalar e dispensar de 44px; texto completo na folha', () => {
+      pwaMock.set({ installAvailable: true })
+      renderAt('/company/jobs')
+      const linha = screen.getByLabelText('Instalar o Worki')
+      expect(linha).toHaveClass('h-14')
+      expect(linha).not.toHaveTextContent('Abra seus turnos')
+      const dispensar = screen.getByRole('button', { name: 'Agora não' })
+      expect(dispensar).toHaveClass('h-11', 'w-11')
+      expect(screen.getByRole('button', { name: 'Instalar' })).toHaveClass('h-11')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Instalar' }))
+      expect(screen.getByText(/Abra seus turnos direto da tela inicial/)).toBeInTheDocument()
+      pwaMock.promptInstall.mockResolvedValue('accepted')
+      fireEvent.click(screen.getByRole('button', { name: 'Instalar agora' }))
+      expect(pwaMock.promptInstall).toHaveBeenCalledTimes(1)
+    })
+
+    it('iPhone: a folha traz o passo a passo e "Entendi" dispensa', () => {
+      pwaMock.isIosSafari.mockReturnValue(true)
+      renderAt('/dashboard')
+      fireEvent.click(screen.getByRole('button', { name: 'Instalar' }))
+      expect(screen.getByText(/Adicionar à Tela de Início/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
+    })
+
+    it('aviso sem internet é uma linha de 40px (h-10) com texto curto', () => {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+      renderAt()
+      const aviso = screen.getByRole('status')
+      expect(aviso).toHaveClass('h-10')
+      expect(aviso).toHaveTextContent(/Sem internet/)
     })
   })
 })

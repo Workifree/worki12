@@ -1,5 +1,5 @@
 /** Computador: barra de comando no centro e, ao executar, painel flutuante (arrastável, minimizável). */
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Minus, Sparkles, Square, X } from 'lucide-react'
 import { IconButton } from '../ui/IconButton'
 import { Composer, IdleBody, Orb, PendingCard, StepFeed, StopButton } from './CopilotParts'
@@ -90,14 +90,7 @@ function Working(view: CopilotViewProps) {
   // Pedido de confirmação, de toque ou pergunta: o painel abre sozinho.
   if (needsPerson && minimized) setMinimized(false)
 
-  // Esc para a tarefa: atalho de quem não está com o mouse na mão.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && event.isTrusted) agent.stop()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [agent])
+  // Esc para a tarefa: o atalho mora no CopilotPanel (vale no PC e no celular, na primeira tecla).
 
   const current = agent.steps.at(-1) ?? 'Olhando a tela'
 

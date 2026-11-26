@@ -3,7 +3,7 @@ import { render, screen, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createActionGuard } from '../guard'
 import { observePage } from '../observe'
-import { classifyClick, classifyFill } from '../risk'
+import { classifyClick, classifyFill, selectIsFormField } from '../risk'
 import { NAV_DESTINATIONS, judgeUrl, pathPolicy, routePattern } from '../routes'
 import { DESTINATIONS } from '../../../../../supabase/functions/copilot-llm/contract.ts'
 import { goTo, humanClick, isHuman } from './harness'
@@ -91,6 +91,52 @@ describe('classificação', () => {
     expect(level(<a data-t="" href="/company/jobs/12/candidates">Presença e pagamento</a>)).toBe('safe')
     expect(level(<button type="button" role="tab" data-t="">Abertos</button>)).toBe('safe')
     expect(level(<button type="button" data-t="">Fechar</button>)).toBe('safe')
+  })
+
+  it('D-4: navegar, abrir passo e escolher valor de formulário passam sem cartão', () => {
+    // Escolha de data/opção (chips com aria-pressed num grupo), rádio e caixa de formulário.
+    expect(level(<div role="group"><button type="button" aria-pressed="false" data-t="">Amanhã</button></div>)).toBe('safe')
+    expect(level(<form><input type="checkbox" data-t="" aria-label="Turno noturno" /></form>)).toBe('safe')
+    expect(level(<fieldset><input type="radio" data-t="" aria-label="Por dia" /></fieldset>)).toBe('safe')
+    expect(level(<div role="listbox"><div role="option" aria-selected="false" data-t="">Garçom</div></div>)).toBe('safe')
+    expect(level(<form><select data-t="" aria-label="Função"><option>Garçom</option></select></form>)).toBe('safe')
+    // Abas, links, passos e âncoras que só abrem um passo.
+    expect(level(<div role="tablist"><button type="button" role="tab" data-t="">Concluídos</button></div>)).toBe('safe')
+    expect(level(<a data-t="" href="/company/jobs">Meus turnos</a>)).toBe('safe')
+    expect(level(<button type="button" data-t="">Próximo mês</button>)).toBe('safe')
+    expect(level(<button type="button" data-t="" data-copilot="empresa.turno-lote.do-zero">Criar do zero</button>)).toBe('safe')
+    expect(level(<button type="button" data-t="" aria-expanded="false">Detalhes</button>)).toBe('safe')
+  })
+
+  it('D-4: lista solta grava na hora (pede cartão); lista entre outros campos é formulário', () => {
+    const { container, unmount } = render(
+      <div>
+        <section>
+          <label>Função<select id="f"><option>Garçom</option></select></label>
+          <label>Valor<input id="v" /></label>
+        </section>
+        <header><select id="u" aria-label="Unidade"><option>Centro</option></select></header>
+      </div>,
+    )
+    expect(selectIsFormField(container.querySelector('#f')!)).toBe(true)
+    expect(selectIsFormField(container.querySelector('#u')!)).toBe(false)
+    unmount()
+  })
+
+  it.each(['Publicar 3 turnos', 'Chamar pessoas', 'Convidar para o Elenco', 'Salvar', 'Enviar'])(
+    'D-4: "%s" ainda pede cartão',
+    (name) => {
+      expect(level(<button type="button" data-t="">{name}</button>)).toBe('confirm')
+      // Mesmo com cara de chip dentro de um grupo: verbo de efeito vence a "escolha".
+      expect(level(<div role="group"><button type="button" aria-pressed="false" data-t="">{name}</button></div>)).toBe('confirm')
+    },
+  )
+
+  it('D-4: envio de formulário pede cartão; D continua entregue mesmo como escolha', () => {
+    expect(level(<form><input aria-label="Título" /><button data-t="">Criar turno</button></form>)).toBe('confirm')
+    expect(level(<form><button type="button" aria-pressed="false" data-t="">Aceitar</button></form>)).toBe('forbidden')
+    expect(level(<form><input type="checkbox" data-t="" aria-label="Li e aceito os Termos" /></form>)).toBe('forbidden')
+    expect(level(<div role="group"><button type="button" data-t="" aria-pressed="false" data-copilot="freela.perfil.sos">Ok</button></div>)).toBe('forbidden')
   })
 
   it('link externo e área privada são bloqueados', () => {

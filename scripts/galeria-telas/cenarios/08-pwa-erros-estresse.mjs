@@ -1,5 +1,5 @@
 import { grupoDe, aria } from '../lib/cenario.mjs';
-import { ID, id, em, dia, NOME_LONGO, EMPRESA_LONGA, TITULO_LONGO, PALAVRA_SEM_ESPACO, pessoasDaEquipe } from '../fixtures/world.mjs';
+import { AGORA, ID, id, em, dia, NOME_LONGO, EMPRESA_LONGA, TITULO_LONGO, PALAVRA_SEM_ESPACO, pessoasDaEquipe } from '../fixtures/world.mjs';
 
 const pw = grupoDe('pwa-offline');
 const er = grupoDe('erros');
@@ -13,6 +13,8 @@ const SW_FALSO = () => {
   const falso = { controller: {}, addEventListener() {}, register: async () => ({ waiting: { postMessage() {} }, addEventListener() {}, update: async () => {} }) };
   Object.defineProperty(navigator, 'serviceWorker', { configurable: true, get: () => falso });
 };
+const SESSAO_ANTIGA = { 'worki:pwa-sessao-inicio': String(AGORA.getTime() - 60000) };
+const irPara = (rota) => ({ avaliar: `(() => { history.pushState({}, '', ${JSON.stringify(rota)}); window.dispatchEvent(new PopStateEvent('popstate')); })()` });
 const quebra = (arquivo) => (m) => { m.modulos = { [arquivo]: "export default function Quebrada() { throw new Error('galeria: erro simulado de renderização'); }" }; };
 
 // --- estresse: textos longos e listas grandes ---
@@ -52,9 +54,10 @@ const telas = [
 ];
 
 export default [
-  pw('instalar-android', 'freela', '/dashboard', 'beforeinstallprompt após 6s', { convitePwa: true, passos: [dispararInstalacao, { esperar: 6500 }], espera: 'Instale o Worki' }),
-  pw('instalar-iphone', 'freela', '/dashboard', 'Safari iOS após 6s', { convitePwa: true, ua: IPHONE, passos: [{ esperar: 6500 }], espera: 'Instale o Worki no iPhone' }),
-  pw('instalar-empresa', 'empresa', '/company/dashboard', 'convite sobre o painel da empresa', { convitePwa: true, passos: [dispararInstalacao, { esperar: 6500 }], espera: 'Instale o Worki' }),
+  // Convite: 20s de uso na sessão (sessionStorage "antigo") e nunca na 1ª tela (navega pelo roteador).
+  pw('instalar-android', 'freela', '/my-jobs', 'beforeinstallprompt após 20s de sessão, 2ª tela', { convitePwa: true, session: SESSAO_ANTIGA, passos: [dispararInstalacao, irPara('/dashboard'), { esperar: 800 }], espera: 'Instale o Worki' }),
+  pw('instalar-iphone', 'freela', '/my-jobs', 'Safari iOS: linha compacta + folha com o passo a passo', { convitePwa: true, session: SESSAO_ANTIGA, ua: IPHONE, viewports: ['390', '320'], passos: [irPara('/dashboard'), { esperar: 800 }, { clicar: /^Instalar$/ }], espera: 'Adicionar à Tela de Início' }),
+  pw('instalar-empresa', 'empresa', '/company/jobs', 'convite sobre o painel da empresa', { convitePwa: true, session: SESSAO_ANTIGA, passos: [dispararInstalacao, irPara('/company/dashboard'), { esperar: 800 }], espera: 'Instale o Worki' }),
   pw('atualizar', 'freela', '/dashboard', 'service worker novo esperando', { init: SW_FALSO, passos: [{ avaliar: "import('/src/lib/pwa.ts').then((m) => m.registerServiceWorker(true))" }, { esperar: 800 }], espera: 'Nova versão disponível' }),
   pw('faixa-sem-internet-freela', 'freela', '/dashboard', 'navigator.onLine=false', { passos: [{ offline: true }], espera: 'sem internet' }),
   pw('faixa-sem-internet-empresa', 'empresa', '/company/jobs', 'navigator.onLine=false', { passos: [{ offline: true }], espera: 'sem internet' }),

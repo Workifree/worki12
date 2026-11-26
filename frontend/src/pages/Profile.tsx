@@ -1117,7 +1117,13 @@ export default function Profile() {
                 <ProfileSection title="Identidade" meta={cpfJaCadastrado ? 'Telefone, CPF e especialidades' : 'Falta o CPF'}>
                     <div className="space-y-6">
                         <dl data-copilot-private className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                            <DataRow label="Telefone">{profile.phone || 'Não informado'}</DataRow>
+                            <DataRow label="Telefone">
+                                {profile.phone ? (
+                                    <DadoMascarado rotulo="telefone" valor={profile.phone} mascarado={mascararTelefone(profile.phone)} />
+                                ) : (
+                                    'Não informado'
+                                )}
+                            </DataRow>
                             <DataRow label="CPF">
                                 {cpfJaCadastrado ? (
                                     <>
@@ -1507,6 +1513,13 @@ function ProfileSection({ title, meta, children }: { title: string; meta?: strin
 function mascararCpf(formatado: string): string {
     const m = formatado.match(/^(\d{3})\.(\d{3})\.(\d{3})-(\d{2})$/);
     return m ? `•••.${m[2]}.${m[3]}-••` : formatado.replace(/\d(?=.{4})/g, '•');
+}
+
+/** Telefone: mantém só os 4 últimos dígitos ("(••) •••••-4321"); pontuação fica. */
+function mascararTelefone(telefone: string): string {
+    const total = (telefone.match(/\d/g) || []).length;
+    let visto = 0;
+    return telefone.trim().replace(/\d/g, (d) => (++visto > total - 4 ? d : '•'));
 }
 
 /** Chave PIX: mostra só os 4 últimos caracteres. */

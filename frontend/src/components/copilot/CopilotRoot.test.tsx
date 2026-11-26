@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSimulatedStack, click, done, goTo, humanClick, installDomStubs, isHuman, type Brain } from '../../lib/copilot/__tests__/harness'
+import { createSimulatedStack, click, done, goTo, humanClick, installDomStubs, isHuman, humanKey, type, type Brain } from '../../lib/copilot/__tests__/harness'
 import { Dialog } from '../ui/Dialog'
 import { requestOpen } from '../../lib/copilot/openEvent'
 import { GuiaContext, type GuiaContextValue } from '../../hooks/useGuide'
@@ -154,6 +154,92 @@ describe('conversa', () => {
     await screen.findByText('Muito bem.', {}, { timeout: 8000 })
     expect(tap).toHaveBeenCalledTimes(1)
     expect(target).not.toHaveAttribute('data-copilot-highlight')
+  })
+})
+
+describe('D-5: foco no cartão de confirmação', () => {
+  it('o foco vai para o cartão, Tab não escapa e, ao fechar, volta para fora do cartão', async () => {
+    setup(({ step, find }) => (step === 0 ? click(find(/Salvar lista/)) : done()), {}, true, <button type="button">Salvar lista</button>)
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('salve a lista')
+    const card = await screen.findByRole('alertdialog', {}, { timeout: 8000 })
+    const nao = within(card).getByRole('button', { name: 'Não fazer' })
+    const sim = within(card).getByRole('button', { name: 'Confirmar' })
+    await waitFor(() => expect(document.activeElement).toBe(nao))
+    // Tab no último volta ao primeiro; Shift+Tab no primeiro vai ao último.
+    sim.focus()
+    humanKey(sim, { key: 'Tab' })
+    expect(document.activeElement).toBe(nao)
+    humanKey(nao, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(sim)
+    humanClick(nao)
+    await screen.findByText(/Parei|não confirm/i, {}, { timeout: 8000 })
+    expect(card.isConnected && card.contains(document.activeElement)).toBe(false)
+  })
+})
+
+describe('D-6: Esc para na primeira tecla', () => {
+  it('Esc logo depois de enviar já para (nada é tocado)', async () => {
+    const save = vi.fn()
+    setup(({ find }) => click(find(/Salvar lista/)), { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'mobile' } }, true, <button type="button" onClick={save}>Salvar lista</button>)
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('salve a lista')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await screen.findByText('Parei, como você pediu.', {}, { timeout: 8000 })
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('Esc durante a digitação (ponteiro animando) para na primeira tecla e nada é escrito', async () => {
+    const onInput = vi.fn()
+    setup(
+      ({ find }) => type(find(/Título/), 'ZZ-TESTE'),
+      { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 1, deviceMode: 'desktop' } },
+      true,
+      <input aria-label="Título do turno" onInput={onInput} />,
+      '/company/create',
+    )
+    await open()
+    await acceptNotice()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('preencha o título com ZZ-TESTE')
+    await screen.findAllByText(/Estou preenchendo/, {}, { timeout: 8000 })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await screen.findByText('Parei, como você pediu.', {}, { timeout: 8000 })
+    await new Promise((r) => setTimeout(r, 900))
+    expect((screen.getByLabelText('Título do turno') as HTMLInputElement).value).toBe('')
+    expect(onInput).not.toHaveBeenCalled()
+  })
+})
+
+describe('D-8: Recentes', () => {
+  it('guarda só pedido sem dado pessoal, no máximo 5, e "Limpar histórico" apaga', async () => {
+    const { rememberRequest, readHistory } = await import('../../lib/copilot/suggestions')
+    expect(rememberRequest('meu cpf é 123.456.789-09')).toEqual([])
+    expect(rememberRequest('liga para (11) 98765-4321')).toEqual([])
+    for (const n of [1, 2, 3, 4, 5, 6]) rememberRequest(`abrir turnos ${'x'.repeat(n)}`)
+    expect(readHistory()).toHaveLength(5)
+    expect(window.localStorage.getItem('worki:copilot:historico-v1')).not.toMatch(/123|9876/)
+    // Gravação antiga com dado pessoal não volta à tela.
+    window.localStorage.setItem('worki:copilot:historico-v1', JSON.stringify(['paga o [cpf]', 'abrir elenco']))
+    expect(readHistory()).toEqual(['abrir elenco'])
+    setup()
+    await open()
+    await acceptNotice()
+    fireEvent.click(await screen.findByRole('button', { name: 'Limpar histórico' }))
+    expect(window.localStorage.getItem('worki:copilot:historico-v1')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Pedidos recentes' })).toBeNull()
+  })
+
+  it('sem localStorage (navegação privada) não quebra', async () => {
+    const { rememberRequest, readHistory } = await import('../../lib/copilot/suggestions')
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('bloqueado') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('bloqueado') })
+    expect(readHistory()).toEqual([])
+    expect(() => rememberRequest('abrir elenco')).not.toThrow()
   })
 })
 

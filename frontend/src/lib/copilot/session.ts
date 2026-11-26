@@ -164,12 +164,13 @@ export function createCopilotSession(options: SessionOptions): CopilotSession {
           return `Você já abriu "${name}" duas vezes. NÃO navegue de novo: toque ou destaque um item da tela (ex.: um botão Editar), ou responda com done.`
         }
         const dirty = controller.filled.some((el) => el.isConnected)
-        if (options.mode === 'show' || (dirty && window.location.pathname !== path)) {
+        // Abrir tela é navegação: não pede cartão (nem no "Me mostre"). Só avisa se há preenchimento a perder.
+        if (dirty && window.location.pathname !== path) {
           const approved = await options.ui.confirm(
             {
               screen: screenName(window.location.pathname),
               action: `Abrir a tela "${name}"`,
-              reason: dirty ? 'O que foi preenchido aqui pode se perder.' : 'Você pediu para só mostrar.',
+              reason: 'O que foi preenchido aqui pode se perder.',
               fields: [],
             },
             null,

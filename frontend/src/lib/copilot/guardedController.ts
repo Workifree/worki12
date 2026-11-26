@@ -14,7 +14,7 @@ import type { ActionGuard } from './guard'
 import { writeLog } from './log'
 import { cleanLabel, fingerprintOf, observePage, type Observation, type ObservedElement } from './observe'
 import { containsPII, normalizeText } from './redact'
-import { classifyClick, classifyFill, isSensitiveField, submitsForm } from './risk'
+import { classifyClick, classifyFill, isSensitiveField, selectIsFormField, submitsForm } from './risk'
 import { pathPolicy, screenName } from './routes'
 import type { ConfirmCard, CopilotMode, CopilotUI } from './ui'
 
@@ -333,8 +333,8 @@ export class GuardedPageController extends PageController {
     if (!option) return fail('Não há essa opção na lista.')
     const raw = option.textContent?.trim() ?? ''
     if (this.deps.mode() === 'show') return this.waitShowMe(element, 'type', `Em "${localName(element)}", escolha "${raw}".`)
-    // Lista fora de formulário costuma gravar na hora (etiqueta, troca de unidade).
-    const needsConfirm = !select.closest('form')
+    // Lista solta (sem formulário nem campos vizinhos) costuma gravar na hora (etiqueta, troca de unidade).
+    const needsConfirm = !selectIsFormField(select)
     if (needsConfirm) {
       const approved = await this.askConfirmation(element, {
         screen: screenName(window.location.pathname),

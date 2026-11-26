@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 
 export type PillTone = 'dark' | 'green' | 'light' | 'ghost' | 'danger'
 
@@ -18,7 +18,7 @@ export function PillButton({
   type = 'button',
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: PillTone; icon?: ReactNode }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: PillTone; icon?: ReactNode; ref?: Ref<HTMLButtonElement> }) {
   return (
     <button
       type={type}
