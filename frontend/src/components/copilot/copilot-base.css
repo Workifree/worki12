@@ -75,3 +75,26 @@ html.is-hidden .wk-orb *, html.is-hidden .wk-trigger * { animation-play-state: p
 .wk-trigger--header::after { content: ''; position: absolute; inset: -6px -4px; }
 .wk-trigger--header .wk-trigger__ring, .wk-trigger--header .wk-trigger__halo { display: none; }
 .wk-trigger--header:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* shimmer do passo atual: janela deslizante (duas transform opostas), sem background-clip */
+.wk-shim { position: relative; display: inline-block; max-width: 100%; white-space: nowrap; color: var(--wk-ink3); vertical-align: bottom; }
+.wk-shim__win {
+  position: absolute; inset: 0 auto 0 0; width: calc(var(--w, 0px) * 0.5); overflow: hidden; opacity: 0; pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 38%, #000 62%, transparent);
+}
+.wk-shim__txt { position: absolute; left: 0; top: 0; width: var(--w, 0px); color: var(--wk-ink); }
+
+@media all {
+  .wk-shim__win { opacity: 1; will-change: transform; animation: wk-win 2.4s linear infinite; }
+  .wk-shim__txt { will-change: transform; animation: wk-txt 2.4s linear infinite; }
+}
+@keyframes wk-win { from { transform: translateX(calc(var(--w, 0px) * -0.5)); } to { transform: translateX(var(--w, 0px)); } }
+@keyframes wk-txt { from { transform: translateX(calc(var(--w, 0px) * 0.5)); } to { transform: translateX(calc(var(--w, 0px) * -1)); } }
+
+
+/* Pílula do cabeçalho: a mensagem passa em shimmer (mesma janela deslizante do passo atual) */
+.wk-trigger--header .wk-shim { color: var(--wk-ink2); animation: none; }
+.wk-trigger--header .wk-trigger__txt { gap: 5px; align-items: center; }
+.wk-trigger__ia { font-size: 9.5px; font-weight: 900; letter-spacing: 0.04em; border: 1.5px solid #000; border-radius: 6px; padding: 0 4px; line-height: 14px; background: #fff; color: #000; }
+html[data-copilot-motion='reduced'] .wk-shim__win, html[data-copilot-motion='reduced'] .wk-shim__txt { animation: none !important; }

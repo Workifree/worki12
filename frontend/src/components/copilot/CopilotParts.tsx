@@ -1,7 +1,7 @@
 /** Peças que PC e celular compartilham. Nenhuma toca a página: só a interface do copiloto. */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BookOpen, Check, Wand2, ChevronDown, CornerDownLeft, History, ListChecks, Send, Sparkles } from 'lucide-react'
-import { Orb } from './Trigger'
+import { Orb, Shimmer } from './Trigger'
 import { getMotionMode, setMotionMode, type MotionMode } from '../../lib/copilot/motion'
 import { PillButton } from './PillButton'
 import { ConfirmCardView } from './ConfirmCardView'
@@ -18,9 +18,9 @@ export const NOTICE_ID = 'copilot-aviso-dados'
 export { Orb }
 
 /** "Parar" do laboratório (pílula branca, contorno de tinta). O nome acessível segue sendo PARAR. */
-export function StopButton({ onStop, block = false }: { onStop: () => void; block?: boolean }) {
+export function StopButton({ onStop, block = false, touch = false }: { onStop: () => void; block?: boolean; touch?: boolean }) {
   return (
-    <button type="button" aria-label="PARAR" onClick={onStop} className={`wk-stop ${block ? 'wk-stop--block' : ''}`}>
+    <button type="button" aria-label="PARAR" onClick={onStop} className={`wk-stop ${block ? 'wk-stop--block' : ''} ${touch ? 'wk-stop--touch' : ''}`}>
       Parar
     </button>
   )
@@ -155,24 +155,6 @@ export function Chips({ items, onPick, label }: { items: readonly string[]; onPi
         </li>
       ))}
     </ul>
-  )
-}
-
-/** Texto do passo com brilho que passa (janela deslizante, só transform). A cópia que brilha é decorativa. */
-function Shimmer({ text }: { text: string }) {
-  const outer = useRef<HTMLSpanElement>(null)
-  const inner = useRef<HTMLSpanElement>(null)
-  // A largura do texto vai direto para o CSS (sem estado: nada de render a mais).
-  useLayoutEffect(() => {
-    outer.current?.style.setProperty('--w', `${inner.current?.offsetWidth ?? 0}px`)
-  }, [text])
-  return (
-    <span ref={outer} className="wk-shim">
-      <span ref={inner}>{text}</span>
-      <span className="wk-shim__win" aria-hidden="true">
-        <span className="wk-shim__txt">{text}</span>
-      </span>
-    </span>
   )
 }
 

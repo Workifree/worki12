@@ -5,7 +5,8 @@
 @layer base {
   html {
     font-family: 'Inter', sans-serif;
-    background-color: #F4F4F0; /* token canvas */
+    background-color: #F5F6F8; /* token canvas (o mesmo de bg-canvas) */
+    scrollbar-gutter: stable;
   }
 
   /* Anel de foco único. :where() tem especificidade zero: o primitivo pode especializar. */

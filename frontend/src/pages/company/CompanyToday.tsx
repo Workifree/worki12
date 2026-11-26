@@ -20,7 +20,7 @@ import CoverageModal, { type CoveragePerson } from '../../components/company/Cov
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import {
-  ActionBar, Alert, Button, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, SlotBadge, StatusBadge,
+  ActionBar, Alert, Button, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, SlotBadge, StatusPill,
 } from '../../components/ui';
 import { occupancy } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
@@ -549,7 +549,7 @@ export default function CompanyToday() {
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                            <StatusPill tone={state.tone} label={state.label} live={state.needsPeople} />
                             {job.slots !== null && <SlotBadge filled={job.filled} total={job.slots} />}
                           </div>
                           <p className="mt-1 line-clamp-3 break-words text-base font-bold">{job.title}</p>

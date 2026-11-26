@@ -20,7 +20,7 @@ export default function CompanyLayout() {
     // rota (`[location.pathname]`). Auditoria de rede de 01/09. O guard e um so, no seam.
 
     return (
-        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto bg-canvas">
+        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-screen-2xl mx-auto bg-canvas">
             <SkipLink />
             <GuideRoleEmpresa />
             {/* Desktop Sidebar - Company Mode */}
@@ -31,7 +31,7 @@ export default function CompanyLayout() {
                 <div className="flex min-w-0 items-center gap-2">
                     <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold bg-black text-white">W.</span>
                     <p className="text-lg font-bold tracking-tight text-black">Worki</p>
-                    <span className="rounded-pill bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">Empresa</span>
+                    <span className="hidden min-[430px]:inline rounded-pill bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">Empresa</span>
                 </div>
                 <div className="flex shrink-0 items-center">
                     <HelpButton />

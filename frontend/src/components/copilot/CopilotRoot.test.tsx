@@ -215,6 +215,23 @@ describe('D-6: Esc para na primeira tecla', () => {
   })
 })
 
+describe('bloqueio de entrada enquanto a IA age', () => {
+  it('a camada existe só rodando, o Parar segue clicável e ela some ao parar', async () => {
+    const save = vi.fn()
+    setup(({ find }) => click(find(/Salvar lista/)), { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'mobile' } }, true, <button type="button" onClick={save}>Salvar lista</button>)
+    await open()
+    await acceptNotice()
+    expect(document.querySelector('[data-copilot-block]')).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
+    ask('salve a lista')
+    await waitFor(() => expect(document.querySelector('[data-copilot-block]')).not.toBeNull())
+    expect(document.querySelector('[data-copilot-block]')?.closest('[data-copilot-ui]')).not.toBeNull()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await screen.findByText('Parei, como você pediu.', {}, { timeout: 8000 })
+    expect(document.querySelector('[data-copilot-block]')).toBeNull()
+  })
+})
+
 describe('D-8: Recentes', () => {
   it('guarda só pedido sem dado pessoal, no máximo 5, e "Limpar histórico" apaga', async () => {
     const { rememberRequest, readHistory } = await import('../../lib/copilot/suggestions')

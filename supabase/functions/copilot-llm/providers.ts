@@ -129,7 +129,8 @@ export function buildProviderCall(
         body: JSON.stringify({
           model: config.model,
           max_tokens: MAX_OUTPUT_TOKENS,
-          system,
+          // Cache de prompt: o contrato (system) é igual em todo passo; só o estado da tela (user) muda.
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: user }],
           tools: [{ name: TOOL_NAME, description, input_schema: schema }],
           tool_choice: toolChoice,
@@ -147,8 +148,10 @@ export function buildProviderCall(
         headers: { 'content-type': 'application/json', authorization: `Bearer ${config.apiKey}` },
         body: JSON.stringify({
           model: config.model,
+          // Cache de prompt: prefixo estável primeiro (tools + system), estado da tela por último. O marcador vale
+          // onde o provedor pede (Anthropic/Gemini); nos demais o cache é implícito pelo mesmo prefixo estável.
           messages: [
-            { role: 'system', content: system },
+            { role: 'system', content: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] },
             { role: 'user', content: user },
           ],
           tools: [{ type: 'function', function: { name: TOOL_NAME, description, parameters: schema } }],

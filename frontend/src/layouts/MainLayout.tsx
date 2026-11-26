@@ -22,7 +22,7 @@ export default function MainLayout() {
     // Auditoria de rede de 01/09: toda tela do freela pagava 2x a mesma consulta de onboarding.
 
     return (
-        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-7xl mx-auto">
+        <div className="worki-layout min-h-screen flex flex-col md:flex-row max-w-screen-2xl mx-auto bg-canvas">
             <SkipLink />
             <GuideRoleFreela />
             {/* Aviso em tela cheia de convite de turno (worker only) */}
