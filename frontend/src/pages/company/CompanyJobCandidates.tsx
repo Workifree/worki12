@@ -13,6 +13,7 @@ import { SosCallButton } from '../../components/team/SosCallButton';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
+import { CHAT_DENIED_MESSAGE, isChatDeniedByRls } from '../../lib/shiftChat';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { fillMissingWorkers } from '../../services/workerCardsService';
@@ -983,6 +984,10 @@ export default function CompanyJobCandidates() {
                 navigate(`/company/messages?conversation=${newConvId}`);
             }
         } catch (error) {
+            if (isChatDeniedByRls(error)) {
+                addToast(CHAT_DENIED_MESSAGE, 'error');
+                return;
+            }
             logError('CompanyJobCandidates', error);
             addToast('Erro ao iniciar conversa.', 'error');
         }

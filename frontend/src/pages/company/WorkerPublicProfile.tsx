@@ -6,6 +6,7 @@ import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../../lib/logger'
+import { CHAT_DENIED_MESSAGE, isChatDeniedByRls } from '../../lib/shiftChat'
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import WorkerCertificationsPanel from '../../components/company/WorkerCertificationsPanel';
@@ -232,6 +233,10 @@ export default function WorkerPublicProfile() {
                 navigate(`/company/messages?conversation=${newConvId}`);
             }
         } catch (error) {
+            if (isChatDeniedByRls(error)) {
+                addToast(CHAT_DENIED_MESSAGE, 'error');
+                return;
+            }
             logError('WorkerPublicProfile.handleChat', error);
             addToast('Erro ao iniciar conversa.', 'error');
         } finally {

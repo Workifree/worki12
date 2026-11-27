@@ -10,7 +10,10 @@ import MyJobs from './MyJobs'
 import { activeShiftLabel } from '../lib/shiftProgress'
 import { supabase } from '../lib/supabase'
 
-const mocks = vi.hoisted(() => ({ getMyCompanies: vi.fn(), navigate: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  scope: { company: { company_id: 'company-1' } as { company_id: string } | null, resolved: true, error: false },
+  navigate: vi.fn(),
+}))
 
 vi.mock('../lib/supabase', () => {
   const channel: Record<string, unknown> = {}
@@ -26,7 +29,10 @@ vi.mock('../lib/supabase', () => {
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
 vi.mock('../components/PageMeta', () => ({ default: () => null }))
 vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
-vi.mock('../services/companyScopeService', () => ({ getMyCompanies: mocks.getMyCompanies }))
+vi.mock('../hooks/useCurrentCompany', () => ({
+  useCurrentCompanyState: () => mocks.scope,
+  useCurrentCompany: () => mocks.scope.company,
+}))
 vi.mock('../hooks/useShiftInvites', () => ({
   EVENTO_CONVITES: 'worki:convites-mudaram',
   useWorkerInvites: () => ({ pendingInvites: [], loading: false, respondingId: null, respond: vi.fn(), refresh: vi.fn() }),
@@ -74,7 +80,7 @@ beforeEach(() => {
     data: { user: { id: 'user-1' } },
     error: null,
   } as unknown as Awaited<ReturnType<typeof supabase.auth.getUser>>)
-  mocks.getMyCompanies.mockResolvedValue([{ company_id: 'company-1' }])
+  mocks.scope = { company: { company_id: 'company-1' }, resolved: true, error: false }
 })
 
 describe('M-2 — Mensagens da empresa: falha não é lista vazia', () => {
@@ -96,7 +102,7 @@ describe('M-2 — Mensagens da empresa: falha não é lista vazia', () => {
   })
 
   it('falha ao resolver a empresa também vira erro, sem carregamento eterno', async () => {
-    mocks.getMyCompanies.mockRejectedValue(new Error('Failed to fetch'))
+    mocks.scope = { company: null, resolved: true, error: true }
     mockTables({})
     render(<CompanyMessages />, { wrapper: MemoryRouter })
     expect(await screen.findByRole('button', { name: /tentar de novo/i })).toBeInTheDocument()

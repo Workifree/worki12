@@ -81,7 +81,7 @@ export function rotasPermitidas(papel?: PapelGuia): RotaPermitida[] {
 }
 
 const SO_GESTOR: ReadonlySet<RotaId> = new Set<RotaId>([
-    'empresa.indicacoes', 'empresa.relatorio', 'empresa.operacao', 'empresa.equipe', 'empresa.dados', 'empresa.mensagens',
+    'empresa.indicacoes', 'empresa.relatorio', 'empresa.operacao', 'empresa.equipe', 'empresa.dados',
 ]);
 
 export function papelAlcanca(papel: PapelGuia, rota: RotaId): boolean {

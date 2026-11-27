@@ -17,6 +17,17 @@ export async function openShiftConversation(applicationId: string): Promise<stri
     return id;
 }
 
+/** Aviso quando o banco recusa criar a conversa de um turno que a pessoa não opera (ADR-20261127). */
+export const CHAT_DENIED_MESSAGE =
+    'Este turno não está sob sua responsabilidade, então você não pode iniciar a conversa. Peça ao Gestor.';
+
+/** A RLS negou (42501 / "row-level security"): não é falha de rede, é falta de vínculo com o turno. */
+export function isChatDeniedByRls(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const { code, message } = error as { code?: string; message?: string };
+    return code === '42501' || /row-level security/i.test(message ?? '');
+}
+
 /** Estado de navegação lido por `/messages`: preenche o campo, nunca envia. */
 export interface MessagesLocationState {
     draft?: string;

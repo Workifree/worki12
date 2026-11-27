@@ -21,8 +21,14 @@ describe('useCanUseCompanyChat', () => {
         await waitFor(() => expect(result.current).toBe(true))
     })
 
-    it('Encarregado nunca vê atalho de chat', async () => {
+    it('Encarregado confirmado também vê o atalho (o banco escopa pelo turno)', async () => {
         getMyCompanies.mockResolvedValue([company('encarregado')])
+        const { result } = renderHook(() => useCanUseCompanyChat())
+        await waitFor(() => expect(result.current).toBe(true))
+    })
+
+    it('Encarregado ainda não confirmado não vê o atalho', async () => {
+        getMyCompanies.mockResolvedValue([{ ...company('encarregado'), confirmed: false }])
         const { result } = renderHook(() => useCanUseCompanyChat())
         await waitFor(() => expect(getMyCompanies).toHaveBeenCalled())
         await new Promise((resolve) => setTimeout(resolve, 0))
