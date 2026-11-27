@@ -8,18 +8,18 @@ vi.mock('./jobScopeService', () => ({
   getJobScope: vi.fn(), canSeeJob: () => true, scopeResponsibleIds: () => [],
 }));
 
-import { buildCallPlan, dispatchCalls, publishBatch, resolveInvitees } from './shiftBatchService';
+import { buildCallPlan, callExpiryForShift, dispatchCalls, publishBatch, resolveInvitees, shiftStartsAt } from './shiftBatchService';
 import { createRow, emptyTemplate, type ShiftDraftBatch } from '../lib/shiftDrafts';
 
 const rows = ['2026-11-28', '2026-11-29', '2026-12-05'].map((d) =>
   createRow(d, { start_time: '18:00', end_time: '23:00', slots: 3, budget: 150 }));
 const batch: ShiftDraftBatch = { client_batch_id: 'b-1', source: 'form', template: emptyTemplate('garcom'), rows };
 
-/** `from('shift_calls').select().eq().eq()` */
+/** `from('shift_calls').select().eq('job_id').in('status', [...])` */
 const openCalls = (data: unknown[]) => {
-  const chain = { select: () => chain, eq: vi.fn(), then: undefined as unknown };
-  chain.eq.mockReturnValueOnce(chain).mockResolvedValueOnce({ data, error: null });
+  const chain = { select: () => chain, eq: () => chain, in: vi.fn(async () => ({ data, error: null })) };
   mocks.from.mockReturnValue(chain);
+  return chain;
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -111,5 +111,59 @@ describe('chamar depois de publicar', () => {
     mocks.createShiftCall.mockResolvedValue({ call: {} });
     await dispatchCalls(plan.slice(0, 1), undefined, { retry: true });
     expect(mocks.createShiftCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('retry reconhece chamado com alvos em open, filled ou expired (e só nesses) para não duplicar', async () => {
+    const chain = openCalls([{ id: 'c', targets: [{ worker_id: 'a' }] }]);
+    const [result] = await dispatchCalls(plan.slice(0, 1), undefined, { retry: true });
+    expect(result.status).toBe('sent');
+    expect(chain.in).toHaveBeenCalledWith('status', ['open', 'filled', 'expired']);
+    expect(mocks.createShiftCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('prazo do chamado do lote', () => {
+  const now = new Date('2026-11-27T12:00:00Z');
+  const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();
+  const plan = ['j1', 'j2'].map((job_id) => ({ job_id, row_key: job_id, worker_ids: ['a'] }));
+
+  it('shiftStartsAt lê data e hora como Brasília (-03:00)', () => {
+    expect(shiftStartsAt('2026-11-28', '18:00')).toBe('2026-11-28T21:00:00.000Z');
+    expect(shiftStartsAt('', '18:00')).toBeUndefined();
+    expect(shiftStartsAt('2026-11-28', '')).toBeUndefined();
+  });
+
+  it('padrão = início do turno', () => {
+    expect(callExpiryForShift(at(300), undefined, now)).toBe(at(300));
+  });
+
+  it('turno em menos de 15 min (ou já começado): 15 min', () => {
+    expect(callExpiryForShift(at(5), undefined, now)).toBe(at(15));
+    expect(callExpiryForShift(at(-60), undefined, now)).toBe(at(15));
+  });
+
+  it('prazo escolhido vale, mas nunca passa do início do turno', () => {
+    expect(callExpiryForShift(at(300), 60, now)).toBe(at(60));
+    expect(callExpiryForShift(at(90), 6 * 60, now)).toBe(at(90));
+    expect(callExpiryForShift(at(10), 60, now)).toBe(at(15));
+  });
+
+  it('dispatchCall manda expiresAt calculado a partir do início do turno', async () => {
+    mocks.createShiftCall.mockResolvedValue({ call: {} });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    try {
+      await dispatchCalls([{ ...plan[0], starts_at: at(300) }], { mode: 'workers', expires_minutes: 6 * 60 });
+      await dispatchCalls([{ ...plan[1], starts_at: at(300) }], { mode: 'workers' });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(mocks.createShiftCall).toHaveBeenNthCalledWith(1, 'j1', ['a'], { reason: 'outro', expiresAt: at(300) });
+    expect(mocks.createShiftCall).toHaveBeenNthCalledWith(2, 'j2', ['a'], { reason: 'outro', expiresAt: at(300) });
+  });
+
+  it('buildCallPlan carrega o início do turno da linha', () => {
+    const [item] = buildCallPlan(rows, ['j1', 'j2', 'j3'], () => ['a']);
+    expect(item.starts_at).toBe('2026-11-28T21:00:00.000Z');
   });
 });

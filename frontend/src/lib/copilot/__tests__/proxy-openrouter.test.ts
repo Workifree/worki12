@@ -39,13 +39,15 @@ async function run(data: unknown) {
 }
 
 describe('openrouter: pedido', () => {
-  it.each(MODELOS)('%s: endpoint fixo, privacidade fixa e sem identificação', (model) => {
+  it.each(MODELOS)('%s: endpoint fixo, privacidade fixa e só o nome público do app', (model) => {
     const config = readProviderConfig(env(model, {
       COPILOT_LLM_ENDPOINT: 'https://evil.example', COPILOT_OPENROUTER_ZDR: 'false', COPILOT_OPENROUTER_DATA_COLLECTION: 'allow',
     }))!
     const call = buildProviderCall(config, 's', 'u', agentOutputSchema('company'))
     expect(call.url).toBe('https://openrouter.ai/api/v1/chat/completions')
-    expect(Object.keys(call.init.headers).sort()).toEqual(['authorization', 'content-type'])
+    // Só o nome público do app (atribuição no OpenRouter): nada da pessoa, do turno ou da empresa vai nos cabeçalhos.
+    expect(Object.keys(call.init.headers).sort()).toEqual(['authorization', 'content-type', 'http-referer', 'x-title'])
+    expect(call.init.headers['x-title']).toBe('Worki Copiloto')
     const sent = JSON.parse(call.init.body)
     expect(sent.provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true, allow_fallbacks: true })
     expect(Object.keys(sent).sort()).toEqual(['max_tokens', 'messages', 'model', 'provider', 'tool_choice', 'tools'])

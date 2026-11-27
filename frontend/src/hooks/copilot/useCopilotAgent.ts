@@ -141,9 +141,11 @@ export function useCopilotAgent(options: UseCopilotAgentOptions) {
         const pointer = latest.current.pointer?.current
         if (!pointer) return
         setActing(request.element)
+        highlighter.show(request.element)
         try {
           await pointer.act(request.element, { action: request.kind, text: request.text }, signal)
         } finally {
+          highlighter.clear()
           setActing(null)
         }
       },

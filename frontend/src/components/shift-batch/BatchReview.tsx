@@ -59,7 +59,11 @@ export function BatchReview({
                     {mergeMessage(m)}
                 </Alert>
             ))}
-            {batchIssues.map((i) => <Alert key={i.detail} tone="danger" role="alert">{i.detail}</Alert>)}
+            {batchIssues.map((i) => (
+                i.blocking
+                    ? <Alert key={i.detail} tone="danger" role="alert">{i.detail}</Alert>
+                    : <Alert key={i.detail} tone="warning">{i.detail}</Alert>
+            ))}
 
             <ul className="flex flex-col gap-2">
                 {batch.rows.map((row) => {

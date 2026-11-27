@@ -5,7 +5,7 @@ import { DEFAULT_FALLBACKS, modelChain } from '../../../../../supabase/functions
 
 const CHAVE = 'sk-or-v1-chave-ficticia-de-teste'
 const TESTE = 'bdb8aeb9-1175-42ed-ac87-0ef5e9bc8dc4'
-// Ordem padrão (sem Haiku), do mais barato ao mais caro. Os nomes seguem a POSIÇÃO: HAIKU = 1º (hy4-flash),
+// Ordem padrão, definida pela medição real de custo e tempo (26/11/2026). Nomes por POSIÇÃO: HAIKU = 1º (hy4-flash),
 // GLM = 2º (deepseek), INKLING = 3º (inkling-2-mini); o 4º é o glm-5.3-flash.
 const HAIKU = 'tencent/hy4-flash'
 const GLM = 'deepseek/deepseek-v4.1-flash'

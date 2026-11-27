@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   ShiftCallService,
   calcExpiryAtShiftStart,
+  shiftAlreadyStarted,
   DEFAULT_CALL_EXPIRY_HOURS,
 } from './shiftCallService';
 
@@ -149,6 +150,37 @@ describe('ShiftCallService.createShiftCall', () => {
     // empresa, sem ninguém do outro lado para responder.
     expect(mockRpc).toHaveBeenCalledWith('cancel_shift_call', { p_call_id: 'call-1' });
   });
+
+  it('INSERT dos alvos que lança (rede): limpa o chamado órfão e propaga o erro; falha do cancelamento não vira sucesso', async () => {
+    const throwing = makeChain({ data: null, error: null });
+    throwing.select = vi.fn(() => Promise.reject(new Error('rede')));
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'jobs') return makeChain({ data: { id: 'job-1', slots: 2, company_id: 'company-1' }, error: null });
+      if (table === 'shift_calls') return makeChain({ data: { id: 'call-1' }, error: null });
+      if (table === 'shift_call_targets') return throwing;
+      return makeChain({ data: null, error: null });
+    });
+    mockRpc.mockRejectedValue(new Error('rede de novo'));
+
+    const result = await ShiftCallService.createShiftCall('job-1', ['w1']);
+
+    expect(mockRpc).toHaveBeenCalledWith('cancel_shift_call', { p_call_id: 'call-1' });
+    expect(result.call).toBeNull();
+    expect(result.error).toBeTruthy();
+  });
+});
+
+describe('shiftAlreadyStarted', () => {
+  const now = new Date('2026-11-27T12:00:00Z').getTime(); // 09:00 em Brasília
+  it('compara data + horário de início (Brasília) com agora', () => {
+    expect(shiftAlreadyStarted({ start_date: '2026-11-27T03:00:00Z', work_start_time: '08:00' }, now)).toBe(true);
+    expect(shiftAlreadyStarted({ start_date: '2026-11-27T03:00:00Z', work_start_time: '18:00' }, now)).toBe(false);
+    expect(shiftAlreadyStarted({ start_date: '2026-11-28T03:00:00Z', work_start_time: '08:00' }, now)).toBe(false);
+  });
+  it('sem data: não esconde', () => {
+    expect(shiftAlreadyStarted({}, now)).toBe(false);
+    expect(shiftAlreadyStarted(undefined, now)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -214,6 +246,15 @@ describe('ShiftCallService.listPendingForWorker', () => {
 
   it('esconde chamado que já foi preenchido ou cancelado', async () => {
     mockFrom.mockReturnValue(makeChain({ data: [targetRow('call-cheio', 'filled', 120)], error: null }));
+
+    await expect(ShiftCallService.listPendingForWorker()).resolves.toEqual([]);
+  });
+
+  it('esconde chamado cujo turno já começou, mesmo com prazo aberto', async () => {
+    const row = targetRow('call-iniciado', 'open', 120);
+    const started = new Date(Date.now() - 3600_000).toISOString();
+    row.call.job = { ...jobStub, start_date: started, work_start_time: undefined } as typeof jobStub;
+    mockFrom.mockReturnValue(makeChain({ data: [row], error: null }));
 
     await expect(ShiftCallService.listPendingForWorker()).resolves.toEqual([]);
   });

@@ -179,14 +179,8 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
     later(() => ring.remove(), 650)
   }
 
-  const haloOn = (element: HTMLElement) => {
-    const rect = element.getBoundingClientRect()
-    halo.style.left = `${rect.left - 5}px`
-    halo.style.top = `${rect.top - 5}px`
-    halo.style.width = `${rect.width + 10}px`
-    halo.style.height = `${rect.height + 10}px`
-    halo.classList.add('is-on')
-  }
+  // O realce azul é UM só (lib/copilot/highlight.ts), que segue o alvo e some sozinho; o ponteiro não desenha halo.
+  const haloOn = () => {}
 
   const balloon = (text: string | null, around: Point, rect: DOMRect | null, typing = false) => {
     if (!text) {
@@ -285,11 +279,11 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       if (signal.aborted) return
       const rect = element.getBoundingClientRect()
       const at = request.action === 'type' || request.action === 'select' ? { x: clamp(rect.left + Math.min(28, rect.width / 2), MARGIN, window.innerWidth - MARGIN), y: aimPoint(rect).y } : aimPoint(rect)
-      haloOn(element)
+      haloOn()
       await glide(at, signal)
       if (signal.aborted) return
       // A tela pode ter se ajeitado durante o deslize: o halo acompanha o alvo.
-      haloOn(element)
+      haloOn()
       balloon(request.say ?? null, at, element.getBoundingClientRect())
       if (request.action === 'type' && request.text) {
         root.classList.add('is-typing')
@@ -349,7 +343,7 @@ export function createVirtualPointer(host: HTMLElement, options: PointerOptions)
       await settleInView(element, signal)
       const rect = element.getBoundingClientRect()
       const at = aimPoint(rect)
-      haloOn(element)
+      haloOn()
       await glide(at, signal)
       balloon(text, at, rect)
     },

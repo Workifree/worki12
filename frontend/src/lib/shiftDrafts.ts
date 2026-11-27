@@ -94,9 +94,16 @@ export interface ShiftDraftBatch {
 }
 
 export type ShiftDraftIssueKind =
-  | 'past_date' | 'crosses_midnight' | 'probable_duplicate' | 'worker_busy' | 'missing_field' | 'over_limit' | 'missing_workers';
+  | 'past_date' | 'crosses_midnight' | 'probable_duplicate' | 'worker_busy' | 'missing_field' | 'over_limit' | 'missing_workers' | 'invite_short';
 
-export const MISSING_WORKERS_MESSAGE = 'Falta: escolher quem vai trabalhar.';
+/** Aviso (não bloqueia): sem ninguém escolhido o turno é publicado e ninguém é chamado agora. */
+export const MISSING_WORKERS_MESSAGE = 'Ninguém foi escolhido para chamar. O turno é publicado e ninguém é chamado agora.';
+
+/** "2 vagas, 1 pessoa chamada: 1 vaga continua aberta." — só avisa. */
+export function inviteShortMessage(slots: number, invited: number): string {
+  const open = slots - invited;
+  return `${plural(slots, 'vaga', 'vagas')}, ${plural(invited, 'pessoa chamada', 'pessoas chamadas')}: ${open} ${open === 1 ? 'vaga continua aberta' : 'vagas continuam abertas'}.`;
+}
 
 export interface ShiftDraftIssue {
   kind: ShiftDraftIssueKind;
@@ -401,8 +408,8 @@ export interface ValidationContext {
   existingShifts?: ExistingShift[];
   busy?: { row_key: string; worker_name: string }[];
   /**
-   * Escolha de quem vai trabalhar. Só vale com elenco carregado e não vazio (`teamSize > 0`): empresa sem
-   * ninguém no elenco publica o turno aberto. `countFor` = quantas pessoas serão chamadas para a linha.
+   * Quem será chamado. Só vale com o elenco carregado sem erro (elenco vazio incluso). `countFor` = quantas
+   * pessoas serão chamadas para a linha. Tudo aqui é AVISO: nunca bloqueia.
    */
   invite?: { teamSize: number; countFor: (row: ShiftDraftRow) => number };
 }
@@ -425,8 +432,8 @@ export function validateBatch(batch: ShiftDraftBatch, context: ValidationContext
   }
 
   const invite = context.invite;
-  if (invite && invite.teamSize > 0 && batch.rows.some((r) => invite.countFor(r) === 0)) {
-    add('missing_workers', '', MISSING_WORKERS_MESSAGE, true);
+  if (invite && batch.rows.some((r) => invite.countFor(r) === 0)) {
+    add('missing_workers', '', MISSING_WORKERS_MESSAGE, false);
   }
 
   for (const row of batch.rows) {
@@ -450,6 +457,10 @@ export function validateBatch(batch: ShiftDraftBatch, context: ValidationContext
       add('missing_field', row.key, 'Informe quantas pessoas (pelo menos 1).', true);
     } else if (row.slots > MAX_SLOTS) {
       add('over_limit', row.key, `No máximo ${MAX_SLOTS} vagas por turno.`, true);
+    }
+    if (invite && Number.isInteger(row.slots) && row.slots >= 1) {
+      const invited = invite.countFor(row);
+      if (invited > 0 && invited < row.slots) add('invite_short', row.key, inviteShortMessage(row.slots, invited), false);
     }
 
     if (isValidDate(row.date)) {

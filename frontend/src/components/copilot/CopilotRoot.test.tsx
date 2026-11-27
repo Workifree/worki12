@@ -206,7 +206,7 @@ describe('D-6: Esc para na primeira tecla', () => {
     await acceptNotice()
     fireEvent.click(screen.getByRole('radio', { name: 'Faça pra mim' }))
     ask('preencha o título com ZZ-TESTE')
-    await screen.findAllByText(/Estou preenchendo/, {}, { timeout: 8000 })
+    await screen.findAllByText(/preenchendo/i, {}, { timeout: 8000 })
     fireEvent.keyDown(window, { key: 'Escape' })
     await screen.findByText('Parei, como você pediu.', {}, { timeout: 8000 })
     await new Promise((r) => setTimeout(r, 900))
@@ -290,14 +290,14 @@ describe('barra de comando e duas experiências', () => {
     expect(document.querySelector('[data-copilot-pointer="cursor"]')).toBeNull()
   })
 
-  it('aviso de dado pessoal aparece colado ao campo', async () => {
+  it('sem aviso de dado pessoal: o campo fica limpo (o mascaramento segue silencioso)', async () => {
     setup()
     await open()
     await acceptNotice()
     await screen.findByRole('textbox', { name: 'Como posso ajudar?' })
-    expect(screen.getByText(/Não digite CPF, senha/)).toBeInTheDocument()
     fireEvent.change(screen.getByRole('textbox', { name: 'Como posso ajudar?' }), { target: { value: 'meu cpf é 123.456.789-09' } })
-    expect(screen.getByText(/parece um dado pessoal/)).toBeInTheDocument()
+    expect(screen.queryByText(/Não digite CPF/)).toBeNull()
+    expect(screen.queryByText(/parece um dado pessoal/)).toBeNull()
   })
 
   it('quando o agente PERGUNTA: mostra a pergunta com respostas rápidas e segue com a resposta (não encerra sozinho)', async () => {

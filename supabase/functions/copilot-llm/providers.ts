@@ -145,7 +145,7 @@ export function buildProviderCall(
       url: ENDPOINTS.openrouter,
       init: {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.apiKey}` },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.apiKey}`, 'http-referer': 'https://worki-opal.vercel.app', 'x-title': 'Worki Copiloto' },
         body: JSON.stringify({
           model: config.model,
           // Cache de prompt: prefixo estável primeiro (tools + system), estado da tela por último. O marcador vale

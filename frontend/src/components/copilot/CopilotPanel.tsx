@@ -113,11 +113,12 @@ export default function CopilotPanel({
   const { running: isRunning, stop: stopAgent } = agent
   // Enquanto a IA age, a pessoa não toca na página: camada de bloqueio (só o Parar e o cartão ficam por cima).
   useEffect(() => {
-    if (!isRunning) return
+    // "Me mostre": a pessoa precisa tocar/preencher, então o bloqueio sai enquanto o cartão pede isso.
+    if (!isRunning || agent.pending?.kind === 'show') return
     const block = createInputBlock(host)
     block.on()
     return () => block.off()
-  }, [isRunning, host])
+  }, [isRunning, host, agent.pending?.kind])
   useEffect(() => {
     if (!isRunning) return
     const onKey = (event: KeyboardEvent) => {

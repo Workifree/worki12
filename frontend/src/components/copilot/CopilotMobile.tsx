@@ -2,14 +2,12 @@
  * Celular: bottom sheet de comando (alça, composer acima do teclado, chips) e, ao executar, uma
  * pílula compacta embaixo, acima da barra de navegação, para não cobrir o que o agente toca.
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { X } from 'lucide-react'
-import { Composer, IdleBody, PendingCard, StepFeed, StopButton } from './CopilotParts'
+import { useEffect, useRef, useState } from 'react'
+import { PendingCard, StepFeed, StopButton } from './CopilotParts'
+import { Palette } from './CopilotDesktop'
 import { Orb } from './Trigger'
-import { PillButton } from './PillButton'
 import type { CopilotViewProps } from './copilotView'
 import { useAvoidTarget, type Box } from '../../hooks/copilot/useAvoidTarget'
-import { useDialogBehavior } from '../../hooks/copilot/useDialogBehavior'
 import { useKeyboardInset } from '../../hooks/copilot/useKeyboardInset'
 
 /** Altura ocupada pela barra de navegação de baixo (0 se não houver). */
@@ -30,87 +28,6 @@ function useBottomNavHeight(): number {
     }
   }, [])
   return height
-}
-
-function Sheet(view: CopilotViewProps) {
-  const ref = useRef<HTMLElement>(null)
-  const keyboard = useKeyboardInset()
-  const [drag, setDrag] = useState(0)
-  const startY = useRef<number | null>(null)
-  useDialogBehavior(ref, true, view.close)
-  const ready = view.availability === 'ready' && view.consent
-
-  const onDown = (event: ReactPointerEvent<HTMLElement>) => {
-    startY.current = event.clientY
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-  }
-  const onMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (startY.current !== null) setDrag(Math.max(0, event.clientY - startY.current))
-  }
-  const onUp = () => {
-    if (drag > 90) view.close()
-    startY.current = null
-    setDrag(0)
-  }
-
-  return (
-    <div className="wk-scrim fixed inset-0 z-[1]" onMouseDown={(event) => event.target === event.currentTarget && view.close()}>
-      <section
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Copiloto do Worki"
-        data-copilot-palette=""
-        className="wk-panel wk-sheet absolute inset-x-0 flex flex-col overflow-hidden overscroll-contain !rounded-b-none border-b-0"
-        style={{
-          bottom: keyboard,
-          maxHeight: `min(88dvh, calc(100dvh - ${keyboard}px - 8px))`,
-          transform: drag ? `translate3d(0, ${drag}px, 0)` : undefined,
-        }}
-      >
-        <div
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-          className="touch-none select-none pb-1 pt-2"
-          aria-hidden="true"
-        >
-          <div className="mx-auto h-1.5 w-11 rounded-full bg-[#0f1720]/25" />
-        </div>
-        <div className="wk-cmd__line !rounded-b-none" aria-hidden="true" />
-        <header className="wk-cmd__row">
-          <Orb working />
-          <h2 className="flex-1 text-[15px] font-bold">
-            Copiloto Worki <span className="wk-trigger__ia">IA</span>
-          </h2>
-          <PillButton tone="ghost" aria-label="Fechar o copiloto" onClick={view.close} className="w-11 !px-0">
-            <X size={18} aria-hidden="true" />
-          </PillButton>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 text-[15px]">
-          {ready && (
-            <p className="mb-2 line-clamp-2 text-[15px] font-semibold leading-snug">
-              Sou uma IA. Quer que eu faça alguma coisa? Ex.: criar um turno para amanhã.
-            </p>
-          )}
-          <IdleBody view={view} />
-        </div>
-        {ready && (
-          <div className="border-t border-[#e3e6eb] bg-[#fafbfc] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2" style={keyboard ? { paddingBottom: 8 } : undefined}>
-            <Composer
-              value={view.draft}
-              onChange={view.setDraft}
-              onSend={view.send}
-              autoFocus={false}
-              onEmptyEnter={() => view.suggestions[0] && view.send(view.suggestions[0])}
-              placeholder={view.agent.followUp ? 'Responda aqui' : 'Ex.: criar um turno para amanhã'}
-            />
-          </div>
-        )}
-      </section>
-    </div>
-  )
 }
 
 type Slot = 'bottom' | 'top'
@@ -150,17 +67,18 @@ function Working(view: CopilotViewProps) {
     )
   }
 
+  // Como no laboratório (variante E): pílula flutuante no topo, centrada, enxuta, com o passo atual e o Parar.
   return (
     <section
       ref={ref}
       aria-label="Copiloto trabalhando"
       data-copilot-working=""
-      className="wk-solid wk-pill wk-rise fixed inset-x-2 z-[1] flex items-center"
-      style={style}
+      className="wk-labpill wk-rise fixed right-2.5 z-[1] w-max max-w-[min(260px,calc(100%-20px))]"
+      style={{ top: 'calc(env(safe-area-inset-top) + 10px)' }}
     >
       <Orb working />
       <div className="min-w-0 flex-1 text-[13px]">
-        <StepFeed steps={current ? [current] : []} compact />
+        <StepFeed steps={current ? [current.replace(/^Estou /, '')] : []} />
       </div>
       <StopButton onStop={agent.stop} touch />
     </section>
@@ -183,6 +101,6 @@ function Launcher({ onOpen }: { onOpen: () => void }) {
 
 export function CopilotMobile(view: CopilotViewProps) {
   if (view.agent.running) return <Working {...view} />
-  if (view.open) return <Sheet {...view} />
+  if (view.open) return <Palette {...view} />
   return view.showLauncher && view.mobileLauncher ? <Launcher onOpen={view.openIt} /> : null
 }

@@ -208,6 +208,14 @@ describe('saída do modelo', () => {
     }
     expect(SYSTEM_PROMPT.length).toBeLessThanOrEqual(5000)
   })
+
+  it('prompt: N pessoas = N vagas; escolher quem chamar é opcional e nunca pede N nomes', () => {
+    for (const s of ['N pessoas" = N vagas = N freelas', 'chame todos e avise', 'opcional', 'UMA vez',
+      'nunca peça N nomes', 'publicar sem chamar']) {
+      expect(SYSTEM_PROMPT).toContain(s)
+    }
+    expect(SYSTEM_PROMPT).not.toContain('QUEM VAI TRABALHAR antes de publicar')
+  })
 })
 
 describe('provedores', () => {

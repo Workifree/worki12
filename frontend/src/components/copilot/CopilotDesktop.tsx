@@ -27,13 +27,13 @@ const CORNER_CLASS: Record<Corner, string> = {
   tl: 'left-6 top-[72px]',
 }
 
-function Palette(view: CopilotViewProps) {
+export function Palette(view: CopilotViewProps) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogBehavior(ref, true, view.close)
   const ready = view.availability === 'ready' && view.consent
   return (
     <div
-      className="wk-scrim fixed inset-0 z-[1] flex items-start justify-center p-3 pt-[16vh]"
+      className="wk-scrim fixed inset-0 z-[1] flex items-start justify-center p-3 pt-[16vh] max-sm:items-end max-sm:p-0 max-sm:pt-0"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) view.close()
       }}
@@ -44,7 +44,7 @@ function Palette(view: CopilotViewProps) {
         aria-modal="true"
         aria-label="Copiloto do Worki"
         data-copilot-palette=""
-        className="wk-glass wk-rise relative flex max-h-[min(78dvh,680px)] w-[min(440px,100%)] flex-col overflow-hidden"
+        className="wk-glass wk-rise relative flex max-h-[min(78dvh,680px)] w-[min(440px,100%)] flex-col wk-cluely overflow-hidden"
       >
         <div className="wk-cmd__line" aria-hidden="true" />
         <div className={`wk-cmd__row ${ready ? 'wk-cmd__row--top' : ''}`}>
@@ -60,7 +60,7 @@ function Palette(view: CopilotViewProps) {
                   onChange={view.setDraft}
                   onSend={view.send}
                   onEmptyEnter={() => view.suggestions[0] && view.send(view.suggestions[0])}
-                  placeholder={view.agent.followUp ? 'Responda aqui' : 'Como posso ajudar?'}
+                  placeholder={view.agent.followUp ? 'Responda aqui' : 'Quer que eu faça alguma coisa?'}
                   shortcutHint
                 />
               </div>
@@ -73,10 +73,10 @@ function Palette(view: CopilotViewProps) {
           </PillButton>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-          <IdleBody view={view} />
+          <IdleBody view={view} compact />
         </div>
         {ready && (
-          <p className="wk-cmd__foot">
+          <p className="wk-cmd__foot max-sm:hidden">
             <span>↵ enviar</span>
             <span>Esc fechar</span>
           </p>
@@ -88,7 +88,6 @@ function Palette(view: CopilotViewProps) {
 
 type PillSlot = 'top' | 'bottom'
 const PILL_SLOTS: readonly PillSlot[] = ['top', 'bottom']
-const PILL_W = 520
 
 /**
  * Trabalhando: a pílula de status do laboratório (orbe, passo com shimmer e Parar), fixa no topo e centralizada,
@@ -120,12 +119,11 @@ function Working(view: CopilotViewProps) {
       <section
         ref={pill}
         aria-label="Copiloto trabalhando"
-        className={`wk-glass wk-pill wk-rise fixed inset-x-0 z-[1] mx-auto flex items-center ${slot === 'top' ? 'top-3' : 'bottom-6'}`}
-        style={{ width: `min(${PILL_W}px, calc(100vw - 20px))` }}
+        className={`wk-labpill wk-rise fixed inset-x-0 z-[1] mx-auto w-max max-w-[min(340px,calc(100%-20px))] ${slot === 'top' ? 'top-3' : 'bottom-6'}`}
       >
         <Orb working />
         <div className="min-w-0 flex-1 text-[13px]">
-          <StepFeed steps={[current]} />
+          <StepFeed steps={[current.replace(/^Estou /, '')]} />
         </div>
         <StopButton onStop={agent.stop} />
       </section>

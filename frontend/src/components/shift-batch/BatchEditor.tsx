@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import {
-    addDays, applyToAll, batchSummary, categoryName, changeCategory, createRow, duplicateRow, isValidDate,
+    addDays, applyToAll, batchSummary, categoryName, changeCategory, createRow, dayLabel, duplicateRow, isValidDate,
     mergeDrafts, newId, plural, resolveSeries, validateBatch, MAX_BATCH_ROWS, BATCH_LIMIT_MESSAGE,
     type RowDefaults, type ShiftDraftBatch, type ValidationContext, type ShiftDraftRow,
 } from '../../lib/shiftDrafts';
@@ -98,8 +98,16 @@ export function BatchEditor({
 
     const merged = mergeDrafts(draft.template, rows).rows;
     const summary = batchSummary(draft.template, merged);
-    const blocking = validateBatch({ ...draft, rows: merged }, { today, invite: inviteCheck }).filter((i) => i.blocking);
+    const allIssues = validateBatch({ ...draft, rows: merged }, { today, invite: inviteCheck });
+    const blocking = allIssues.filter((i) => i.blocking);
     const problems = [...new Set(blocking.map((i) => i.detail))];
+    /** Vagas que sobram: só avisa. Com mais de um turno, a data identifica a linha. */
+    const shortInvites = allIssues
+        .filter((i) => i.kind === 'invite_short')
+        .map((i) => {
+            const r = merged.find((m) => m.key === i.row_key);
+            return merged.length > 1 && r ? `${dayLabel(r.date)} ${r.start_time}: ${i.detail}` : i.detail;
+        });
     const full = rows.length >= MAX_BATCH_ROWS;
     const publishes = directPublish && rows.length === 1;
 
@@ -248,6 +256,11 @@ export function BatchEditor({
             )}
 
             {callSection}
+            {shortInvites.length > 0 && (
+                <Alert tone="warning" title="Vagas sem chamado">
+                    <ul>{shortInvites.map((w) => <li key={w}>{w}</li>)}</ul>
+                </Alert>
+            )}
             {riskWarnings && riskWarnings.length > 0 && (
                 <Alert tone="warning" title="Frequência na semana">
                     <ul>{riskWarnings.map((w) => <li key={w}>{w}</li>)}</ul>

@@ -45,8 +45,33 @@ export function createInputBlock(host: HTMLElement): InputBlock {
     event.stopImmediatePropagation()
   }
 
+  // Sem teclado virtual enquanto a IA age: campos ganham inputmode="none" (o foco programático segue valendo,
+  // mas o celular não abre o teclado por cima da tela). Campos que aparecem depois também; tudo volta ao fim.
+  const saved = new Map<Element, string | null>()
+  let watcher: MutationObserver | null = null
+  const FIELDS = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),textarea'
+  const mute = (root: ParentNode) => {
+    root.querySelectorAll(FIELDS).forEach((field) => {
+      if (saved.has(field) || field.closest(`[${UI_ATTR}]`)) return
+      saved.set(field, field.getAttribute('inputmode'))
+      field.setAttribute('inputmode', 'none')
+    })
+  }
+
   const on = () => {
     if (layer) return
+    mute(document)
+    watcher = new MutationObserver((records) => {
+      for (const record of records) record.addedNodes.forEach((added) => {
+        if (!(added instanceof Element)) return
+        if (added.matches(FIELDS) && !added.closest(`[${UI_ATTR}]`) && !saved.has(added)) {
+          saved.set(added, added.getAttribute('inputmode'))
+          added.setAttribute('inputmode', 'none')
+        }
+        mute(added)
+      })
+    })
+    watcher.observe(document.body, { childList: true, subtree: true })
     for (const name of HUMAN_EVENTS) window.addEventListener(name, onHuman, { capture: true, passive: false })
     const node = document.createElement('div')
     node.setAttribute(BLOCK_ATTR, '')
@@ -69,6 +94,10 @@ export function createInputBlock(host: HTMLElement): InputBlock {
 
   const off = () => {
     if (!layer) return
+    watcher?.disconnect()
+    watcher = null
+    saved.forEach((value, field) => (value === null ? field.removeAttribute('inputmode') : field.setAttribute('inputmode', value)))
+    saved.clear()
     layer.remove()
     layer = null
     for (const name of KEY_EVENTS) window.removeEventListener(name, onKey, true)

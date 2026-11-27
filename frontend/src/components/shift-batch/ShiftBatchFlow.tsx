@@ -79,10 +79,31 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
     const invitees = (row: ShiftDraftRow) =>
         resolveInvitees(row, draft?.call, (id) => callData.lists.find((l) => l.id === id)?.memberIds ?? [], eligible);
     const pairs = step === 'review' || step === 'edit' ? rows.map((row) => ({ row, workerIds: invitees(row) })) : [];
-    /** Elenco carregado e com gente: escolher quem vai trabalhar é obrigatório. Vazio ou com erro: publica aberto. */
-    const inviteCheck = !callData.loading && !callData.error && callData.members.length > 0
+    /** Elenco carregado sem erro (vazio ou não): só AVISA quem não será chamado e vagas que sobram. */
+    const inviteCheck = !callData.loading && !callData.error
         ? { teamSize: callData.members.length, countFor: (row: ShiftDraftRow) => invitees(row).length }
         : undefined;
+    /** O rascunho pede chamado (lista, pessoas ou escolha por turno). */
+    const wantsCall = call.mode !== 'none' || rows.some((r) => r.invite_worker_ids?.length);
+    /** Elenco/listas não carregaram e há convidados no rascunho: publicar mandaria os chamados para o nada. */
+    const callLoadFailed = !callData.loading && callData.error && !!wantsCall;
+    const [triedBlocked, setTriedBlocked] = useState(false);
+    const publishGuarded = () => {
+        if (callLoadFailed) { setTriedBlocked(true); return; }
+        setTriedBlocked(false);
+        void flow.publish(invitees, inviteCheck);
+    };
+    /** Saída explícita: publica sem chamar ninguém agora (call.mode 'none' de propósito). */
+    const publishWithoutCall = () => {
+        if (!draft) return;
+        setTriedBlocked(false);
+        flow.updateDraft({ ...draft, call: { ...call, mode: 'none', list_id: undefined, worker_ids: [] }, rows: draft.rows.map((r) => ({ ...r, invite_worker_ids: undefined })) });
+        void flow.publish(() => [], inviteCheck);
+    };
+    const canPublishHere = step === 'review' || (step === 'edit' && flow.directPublish && rows.length === 1);
+    const flowError = flow.errorMessage ?? (triedBlocked && callLoadFailed
+        ? 'Não conseguimos carregar o Elenco: os chamados não serão enviados. Tente de novo ou publique sem chamar agora.'
+        : null);
     const nameOf = (id: string) => callData.members.find((m) => m.worker.id === id)?.worker.full_name || 'Freela';
     const busy = useRowBusy(options.companyId, pairs);
     const risks = useBatchLinkRisk(options.companyId, pairs);
@@ -114,7 +135,7 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
         })
         : [];
     const series = draft && options.isGestor ? resolveSeries(draft.template, rows, draft.series, today) : null;
-    const waitingTeam = callData.loading && (call.mode !== 'none' || rows.some((r) => r.invite_worker_ids?.length));
+    const waitingTeam = callData.loading && wantsCall;
     const duplicates = issues.filter((i) => i.kind === 'probable_duplicate');
     const peopleChosen = new Set(rows.flatMap((r) => invitees(r))).size;
     const riskWarnings = risks.map((r) => `${nameOf(r.worker_id)}: ${r.count} turnos na semana de ${dayLabel(r.week)}, contando este lote.`);
@@ -126,6 +147,8 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
             onPickPeople={() => setPicking('all')}
             suggestedCount={0}
             chosenCount={peopleChosen}
+            wantsCall={wantsCall}
+            onPublishWithoutCall={canPublishHere ? publishWithoutCall : undefined}
         />
     );
     const pickingRow = picking && picking !== 'all' ? rows.find((r) => r.key === picking) : undefined;
@@ -192,8 +215,8 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                         canRepeat={options.isGestor}
                         directPublish={flow.directPublish}
                         publishing={flow.publishing || callData.loading}
-                        errorMessage={flow.errorMessage ?? Object.values(flow.rowErrors)[0] ?? null}
-                        onPublish={() => { void flow.publish(invitees, inviteCheck); }}
+                        errorMessage={flowError ?? Object.values(flow.rowErrors)[0] ?? null}
+                        onPublish={publishGuarded}
                         onReview={flow.review}
                         onBack={leaveEditor}
                         initialEditingKey={flow.editingKey}
@@ -217,9 +240,9 @@ export function ShiftBatchFlow({ extra, ...options }: ShiftBatchOptions & {
                     onSeparate={(keys) => flow.updateDraft({ ...draft, rows: separateRows(draft.rows, keys) })}
                     onEditRow={flow.editRow}
                     onBack={flow.reviewFromEditor ? flow.backToEditor : leaveEditor}
-                    onPublish={() => { void flow.publish(invitees, inviteCheck); }}
+                    onPublish={publishGuarded}
                     publishing={flow.publishing || waitingTeam}
-                    errorMessage={flow.errorMessage}
+                    errorMessage={flowError}
                     rowErrors={flow.rowErrors}
                     seriesNote={draft.series
                         ? series ? `Série: repete toda semana até ${shortDate(series.range_end)}.` : SERIES_BROKEN_MESSAGE
