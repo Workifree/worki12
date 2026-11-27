@@ -7,6 +7,9 @@ import {
   setSelectedCompanyId,
   getSelectedCompanyId,
   invalidateCompanyScope,
+  isGestor,
+  isUnconfirmedManager,
+  isAwaitingConfirmation,
 } from './companyScopeService';
 import type { MyCompany } from '../types';
 
@@ -152,5 +155,20 @@ describe('companyScopeService', () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC indisponível' } });
       await expect(getAuthenticatedCompanyId()).rejects.toThrow('Perfil de empresa não encontrado');
     });
+  });
+});
+
+describe('Gestor convidado e não confirmado', () => {
+  const base = { company_id: 'c1', company_name: 'X', organization_id: 'o', organization_name: null, onboarding_completed: true, accepted_tos: true } as MyCompany;
+  it('manager com confirmed=false não é Gestor e aguarda confirmação', () => {
+    const m = { ...base, role: 'manager', confirmed: false } as MyCompany;
+    expect(isUnconfirmedManager(m)).toBe(true);
+    expect(isGestor(m)).toBe(false);
+    expect(isAwaitingConfirmation(m)).toBe(true);
+  });
+  it('manager confirmado (ou sem o campo) e dono seguem como Gestor', () => {
+    expect(isGestor({ ...base, role: 'manager', confirmed: true } as MyCompany)).toBe(true);
+    expect(isGestor({ ...base, role: 'manager' } as MyCompany)).toBe(true);
+    expect(isGestor({ ...base, role: 'owner' } as MyCompany)).toBe(true);
   });
 });

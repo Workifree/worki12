@@ -276,7 +276,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'empresa-elenco-adicionar', papeis: EMPRESA,
         titulo: 'Trazer um freela para o Elenco',
         descricao: 'Mandar o seu link ou adicionar pelo código do freela.',
-        frases: ['cadastrar funcionario', 'adicionar pessoa', 'convidar freelancer', 'link da equipe', 'codigo do freela', 'qr'],
+        frases: ['adicionar freela', 'convidar freelancer', 'link do elenco', 'codigo do freela', 'qr'],
         passos: [
             {
                 rota: 'empresa.elenco', alvos: ['empresa.elenco.copiar-link'],
@@ -333,12 +333,12 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
     },
     {
         id: 'empresa-convidar-encarregado', papeis: GESTOR,
-        titulo: 'Dar acesso a quem me ajuda (encarregado)',
-        descricao: 'Convidar uma pessoa para cuidar dos próprios turnos.',
-        frases: ['adicionar gerente', 'equipe e acessos', 'login para funcionario', 'encarregado', 'permissao'],
+        titulo: 'Convidar um funcionário (Gestor ou Encarregado)',
+        descricao: 'Convidar um funcionário por e-mail e, se quiser, definir a loja dele.',
+        frases: ['adicionar gerente', 'equipe', 'cadastrar funcionario', 'adicionar pessoa', 'link da equipe', 'login para funcionario', 'encarregado', 'permissao'],
         passos: [{
             rota: 'empresa.equipe', alvos: ['empresa.equipe.convidar'], risco: 'D',
-            titulo: 'Convidar para a equipe',
+            titulo: 'Convidar para a equipe (funcionários)',
             explicacao: 'Quem entrar passa a operar na sua empresa. Depois do aceite, você ainda confirma se é a pessoa certa.',
             aoTocar: 'Abre o formulário do convite, que gera um link para você enviar.',
             semAlvo: 'Só o Gestor vê este botão.',

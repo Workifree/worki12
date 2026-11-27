@@ -166,7 +166,18 @@ const ROLE_POWER: Record<CompanyRole, number> = {
 
 /** Gestor = quem administra a empresa (dono, operador da organização, gerente). Encarregado não. */
 export function isGestor(company: MyCompany | null | undefined): boolean {
+  if (isUnconfirmedManager(company)) return false; // convidado que o dono ainda não confirmou opera zero
   return company?.role === 'owner' || company?.role === 'operator' || company?.role === 'manager';
+}
+
+/** Gestor convidado que ainda não foi confirmado: vê só "Aguardando confirmação". `confirmed` ausente = confirmado. */
+export function isUnconfirmedManager(company: MyCompany | null | undefined): boolean {
+  return company?.role === 'manager' && company.confirmed === false;
+}
+
+/** Qualquer pessoa da equipe (Encarregado ou Gestor) esperando a confirmação "é ele?". */
+export function isAwaitingConfirmation(company: MyCompany | null | undefined): boolean {
+  return isUnconfirmedEncarregado(company) || isUnconfirmedManager(company);
 }
 
 /**
@@ -179,7 +190,7 @@ export function isUnconfirmedEncarregado(company: MyCompany | null | undefined):
 
 /**
  * R23 (divulgação progressiva): o destaque "Equipe" na navegação só aparece ao Gestor quando a
- * empresa já tem ao menos uma pessoa. Dono único chega à tela por Gestão > Equipe e acessos.
+ * empresa já tem ao menos uma pessoa. Dono único chega à tela por Gestão > Equipe.
  */
 export function showTeamNav(company: MyCompany | null | undefined): boolean {
   return isGestor(company) && company?.team_enabled === true;
@@ -254,14 +265,6 @@ function clearNavHints(): void {
   } catch {
     // best-effort
   }
-}
-
-/**
- * R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização
- * (`/company/organization`). Regra única — a navegação (lib/navigation) deve usar esta.
- */
-export function canSeeOrganization(company: MyCompany | null | undefined): boolean {
-  return company?.role === 'owner' || company?.role === 'operator';
 }
 
 /**

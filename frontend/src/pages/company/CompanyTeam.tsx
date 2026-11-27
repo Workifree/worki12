@@ -8,6 +8,7 @@ import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useToast } from '../../contexts/ToastContext';
 import { TeamListService } from '../../services/teamListService';
 import { TeamConnectionService } from '../../services/teamConnectionService';
+import { listMembers, rotateElencoLink } from '../../services/teamMembersService';
 import type { TeamMember, TeamListWithMembers } from '../../types';
 import { MemberCard } from '../../components/team/MemberCard';
 import { PendingCard } from '../../components/team/PendingCard';
@@ -171,6 +172,42 @@ export default function CompanyTeam() {
     return () => { active = false; };
   }, [companyId]);
 
+  // Alguém saiu da equipe (funcionários) depois da última troca: o link de convite dos freelas pode estar
+  // com quem saiu. Só o Gestor lê isso (a lista de equipe é Gestor-only).
+  const [rotationPending, setRotationPending] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  useEffect(() => {
+    if (!companyId || !roleResolved || restricted) return;
+    let active = true;
+    void (async () => {
+      const result = await listMembers(companyId);
+      if (active && result.outcome === 'ok') setRotationPending(result.elencoLinkRotationPending === true);
+    })();
+    return () => { active = false; };
+  }, [companyId, roleResolved, restricted]);
+
+  const handleRotateLink = async () => {
+    if (!companyId) return;
+    setRotating(true);
+    const result = await rotateElencoLink(companyId);
+    if (!result.ok) {
+      setRotating(false);
+      addToast('Não foi possível gerar o novo link. Tente novamente.', 'error');
+      return;
+    }
+    setRotationPending(false);
+    setTeamLink(null);
+    setManualLink(null);
+    try {
+      const gerado = await TeamConnectionService.generateInviteToken(companyId);
+      if (gerado) setTeamLink({ companyId, url: gerado.url });
+    } catch (err) {
+      logError('CompanyTeam.rotateRefetch', err);
+    }
+    setRotating(false);
+    addToast('Novo link criado. O antigo deixou de valer.', 'success');
+  };
+
   // Link do elenco: mesmo caminho de Dados da empresa (token estável via serviço, falha tratada).
   const handleCopyTeamLink = async () => {
     if (!companyId) return;
@@ -251,6 +288,25 @@ export default function CompanyTeam() {
         >
           {linkCopied ? 'Link copiado!' : 'Copiar link'}
         </Button>
+        {rotationPending && !restricted && (
+          <div role="status" className="w-full rounded-xl border-2 border-black bg-yellow-50 p-3">
+            <p className="text-sm font-bold">Gere um novo link</p>
+            <p className="mt-1 text-xs text-gray-700">
+              Alguém que saiu da equipe pode ter guardado o link antigo. Ao gerar um novo, o antigo deixa de valer.
+            </p>
+            <Button
+              variant="dark"
+              size="lg"
+              className="mt-3"
+              data-copilot="empresa.equipe.novo-link-elenco"
+              data-copilot-risk="D"
+              onClick={() => void handleRotateLink()}
+              loading={rotating}
+            >
+              Gerar novo link
+            </Button>
+          </div>
+        )}
         {manualLink && manualLink.companyId === companyId && (
           <input
             readOnly

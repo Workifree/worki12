@@ -6,7 +6,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
-import { invalidateCompanyScope, isGestor, isUnconfirmedEncarregado } from '../../services/companyScopeService';
+import { invalidateCompanyScope, isGestor, isAwaitingConfirmation } from '../../services/companyScopeService';
 import { ShiftBatchFlow } from '../../components/shift-batch/ShiftBatchFlow';
 import type { ShiftDraftBatch } from '../../lib/shiftDrafts';
 import { isPresencaEnabled } from '../../lib/features';
@@ -37,12 +37,12 @@ export default function CompanyCreateBatch() {
             {!resolved && <SkeletonList count={3} itemClassName="h-16" />}
             {resolved && error && <ErrorState onRetry={invalidateCompanyScope} />}
             {resolved && !error && !company && <Alert tone="warning">Perfil de empresa não encontrado.</Alert>}
-            {company && isUnconfirmedEncarregado(company) && (
+            {company && isAwaitingConfirmation(company) && (
                 <Alert tone="info" title="Aguardando confirmação">
                     O Gestor precisa confirmar o seu acesso antes de você criar turnos.
                 </Alert>
             )}
-            {company && !isUnconfirmedEncarregado(company) && (
+            {company && !isAwaitingConfirmation(company) && (
                 <ShiftBatchFlow
                     key={company.company_id}
                     companyId={company.company_id}

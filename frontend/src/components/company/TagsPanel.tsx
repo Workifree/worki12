@@ -1,28 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Archive, Tag } from 'lucide-react';
+import { Archive, Pencil } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { Button, Card, Field } from '../ui';
+import { Button, Field } from '../ui';
+import { extraTeamMessage } from '../../lib/teamMessages';
 import {
   archiveTag,
   createTag,
   listTagsChecked,
+  renameTag,
   tagMessage,
   type CompanyTag,
 } from '../../services/shiftOperationService';
 
 interface TagsPanelProps {
   companyId: string;
+  /** Quantos funcionários (ativos ou convidados) têm cada loja como padrão. */
+  memberCounts?: Record<string, number>;
+  /** Avisa a tela pai que a lista de lojas mudou. */
+  onChanged?: () => void;
 }
 
-/** Etiquetas da empresa (R20/R24): o Gestor cria e arquiva. Nunca se apaga: arquivar só tira do seletor. */
-export default function TagsPanel({ companyId }: TagsPanelProps) {
+/**
+ * Lojas da empresa (etiquetas dos turnos): o Gestor cria, renomeia e arquiva. Nunca se apaga.
+ * Loja é um rótulo para o financeiro; não dá acesso a ninguém.
+ */
+export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: TagsPanelProps) {
   const { addToast } = useToast();
   const [tags, setTags] = useState<CompanyTag[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState<CompanyTag | null>(null);
+  const [newName, setNewName] = useState('');
 
   const reload = useCallback(async () => {
     const result = await listTagsChecked(companyId);
@@ -51,7 +62,7 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
     setBusy(false);
     const ok = result.outcome === 'created' || result.outcome === 'reactivated';
     addToast(tagMessage(result.outcome), ok ? 'success' : 'error');
-    if (ok) setName('');
+    if (ok) { setName(''); onChanged?.(); }
     await reload();
   };
 
@@ -59,25 +70,39 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
     setBusy(true);
     const result = await archiveTag(tag.id);
     setBusy(false);
-    addToast(tagMessage(result.outcome), result.outcome === 'archived' ? 'success' : 'error');
+    const outcome = result.outcome as string;
+    if (outcome === 'default_of_members') {
+      addToast(extraTeamMessage(outcome) ?? 'Não foi possível arquivar.', 'error');
+    } else {
+      addToast(tagMessage(result.outcome), outcome === 'archived' ? 'success' : 'error');
+      if (outcome === 'archived') onChanged?.();
+    }
+    await reload();
+  };
+
+  const submitRename = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!renaming || !newName.trim()) return;
+    setBusy(true);
+    const result = await renameTag(renaming.id, newName);
+    setBusy(false);
+    const ok = (result.outcome as string) === 'renamed';
+    addToast(ok ? 'Loja renomeada.' : tagMessage(result.outcome), ok ? 'success' : 'error');
+    if (ok) { setRenaming(null); onChanged?.(); }
     await reload();
   };
 
   return (
-    <Card as="section" aria-label="Etiquetas">
-      <div className="flex items-center gap-2">
-        <Tag size={18} aria-hidden="true" />
-        <h2 className="text-lg font-bold">Etiquetas</h2>
-      </div>
-      <p className="mt-1 text-sm text-gray-600">
-        Etiquetas agrupam turnos (ex.: Salão, Evento). Dá para filtrar a tela Hoje por etiqueta.
+    <section aria-label="Lojas">
+      <p className="text-sm text-gray-600">
+        Loja é um rótulo para o financeiro: separa os turnos e os relatórios por loja.
       </p>
 
       <form onSubmit={(e) => { void submit(e); }} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <Field label="Nova etiqueta" className="flex-1" hint="De 1 a 40 caracteres.">
+        <Field label="Nova loja" className="flex-1" hint="Ex.: Loja Centro. De 1 a 40 caracteres.">
           <input type="text" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
         </Field>
-        <Button type="submit" data-copilot="empresa.etiquetas.criar" variant="dark" size="lg" disabled={!name.trim() || busy}>Criar etiqueta</Button>
+        <Button type="submit" data-copilot="empresa.etiquetas.criar" variant="dark" size="lg" disabled={!name.trim() || busy}>Criar loja</Button>
       </form>
 
       <div className="mt-4">
@@ -85,24 +110,51 @@ export default function TagsPanel({ companyId }: TagsPanelProps) {
           <div className="h-12 animate-pulse rounded-xl bg-gray-200" role="status"><span className="sr-only">Carregando</span></div>
         ) : loadFailed ? (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-yellow-50 p-3">
-            <p className="text-sm font-semibold">Não foi possível carregar as etiquetas.</p>
-            <Button variant="secondary" size="md" onClick={() => { void reload(); }}>Tentar de novo</Button>
+            <p className="text-sm font-semibold">Não foi possível carregar as lojas.</p>
+            <Button variant="secondary" size="lg" onClick={() => { void reload(); }}>Tentar de novo</Button>
           </div>
-        ) : tags.length === 0 ? (
-          <p className="text-sm text-gray-600">Nenhuma etiqueta ainda.</p>
+        ) : tags.filter((t) => !t.archivedAt).length === 0 ? (
+          <p className="text-sm text-gray-600">Nenhuma loja ainda. Crie a primeira acima.</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {tags.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 rounded-xl border-2 border-black p-3">
-                <span className="min-w-0 truncate text-sm font-bold">{t.name}</span>
-                <Button variant="secondary" size="md" disabled={busy} aria-label={`Arquivar etiqueta ${t.name}`} iconLeft={<Archive size={16} />} onClick={() => { void archive(t); }}>
-                  Arquivar
-                </Button>
-              </li>
-            ))}
+            {tags.filter((t) => !t.archivedAt).map((t) => {
+              const count = memberCounts[t.id] ?? 0;
+              return (
+                <li key={t.id} className="rounded-xl border-2 border-black p-3">
+                  {renaming?.id === t.id ? (
+                    <form onSubmit={(e) => { void submitRename(e); }} className="flex flex-col gap-3">
+                      <Field label="Novo nome" hint="O nome novo também aparece nos relatórios de turnos passados.">
+                        <input type="text" maxLength={40} data-autofocus value={newName} onChange={(e) => setNewName(e.target.value)} disabled={busy} />
+                      </Field>
+                      <div className="flex gap-3">
+                        <Button type="submit" variant="dark" size="lg" disabled={!newName.trim() || busy}>Salvar nome</Button>
+                        <Button variant="secondary" size="lg" disabled={busy} onClick={() => setRenaming(null)}>Cancelar</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{t.name}</p>
+                        <p className="text-xs text-gray-600">
+                          {count === 0 ? 'Nenhum encarregado' : count === 1 ? '1 encarregado' : `${count} encarregados`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="secondary" size="lg" disabled={busy} aria-label={`Renomear loja ${t.name}`} iconLeft={<Pencil size={16} />} onClick={() => { setRenaming(t); setNewName(t.name); }}>
+                          Renomear
+                        </Button>
+                        <Button variant="secondary" size="lg" disabled={busy} aria-label={`Arquivar loja ${t.name}`} iconLeft={<Archive size={16} />} onClick={() => { void archive(t); }}>
+                          Arquivar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
-    </Card>
+    </section>
   );
 }

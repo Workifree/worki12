@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 
 import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -68,6 +68,11 @@ const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+/** Links antigos de convite de gerente: o convite agora é um só (`/convite-equipe`). */
+function LegacyManagerInviteRedirect() {
+  const { token } = useParams();
+  return <Navigate to={`/convite-equipe/${token ?? ''}`} replace />;
+}
 const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
@@ -152,8 +157,12 @@ function App() {
                   */}
                   <Route path="/convite/:token" element={<InviteAccept />} />
 
-                  {/* Convite de gerente de unidade: unidades saíram da experiência (dono, 11/2026). */}
-                  <Route path="/convite-gerente/:token" element={<Navigate to="/" replace />} />
+                  {/*
+                    Convite de gerente (F13, R8/R9) — rota PÚBLICA pelo mesmo motivo de
+                    /convite/:token acima: sem sessão, o guard mandaria o usuário para "/"
+                    antes do componente montar e o token se perderia.
+                  */}
+                  <Route path="/convite-gerente/:token" element={<LegacyManagerInviteRedirect />} />
 
                   {/*
                     Convite de EQUIPE (Encarregado) — rota PÚBLICA pelo mesmo motivo: o convidado ainda

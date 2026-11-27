@@ -12,7 +12,8 @@ import { Button, Card } from './ui';
  * pessoa não fez nada de errado; a confirmação é um passo normal do convite. A barreira real é o
  * RLS/seam no banco; isto é UX.
  */
-export default function AguardandoConfirmacao() {
+export default function AguardandoConfirmacao({ papel = 'encarregado' }: { papel?: string }) {
+    const ehGestor = papel === 'manager';
     const [saindo, setSaindo] = useState(false);
     const tituloRef = useRef<HTMLHeadingElement>(null);
 
@@ -54,11 +55,12 @@ export default function AguardandoConfirmacao() {
                             Seu acesso está quase pronto
                         </h1>
                         <p className="text-base text-gray-700 mb-2">
-                            O Gestor precisa liberar sua entrada. É um passo normal de segurança.
+                            {ehGestor
+                                ? 'Outro Gestor ou o dono precisa confirmar que é você. É um passo normal de segurança.'
+                                : 'O Gestor precisa liberar sua entrada. É um passo normal de segurança.'}
                         </p>
                         <p className="text-sm text-gray-600 mb-6">
-                            Assim que a entrada for liberada, toque em &ldquo;Atualizar&rdquo;. Se demorar, avise o Gestor
-                            pelo WhatsApp.
+                            Assim que a entrada for liberada, toque em &ldquo;Atualizar&rdquo;. Se demorar, avise {ehGestor ? 'o dono' : 'o Gestor'}.
                         </p>
                     </div>
                     <div className="space-y-3">

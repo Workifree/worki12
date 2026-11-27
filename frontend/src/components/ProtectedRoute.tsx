@@ -18,7 +18,7 @@ import { getMyAccessState } from '../services/accessStateService';
 import ErroDeVerificacao from './ErroDeVerificacao';
 import { checkStoredSession } from '../lib/authSession';
 import { isAuthLockAbort, reloadOnceForAuthLock } from '../lib/authLock';
-import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado, invalidateCompanyScope } from '../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, isAwaitingConfirmation, invalidateCompanyScope } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
 /**
@@ -169,7 +169,7 @@ export default function ProtectedRoute() {
                         }
                         if (atual) {
                             setCompanyRole(atual.role);
-                            setAwaitingConfirmation(isUnconfirmedEncarregado(atual));
+                            setAwaitingConfirmation(isAwaitingConfirmation(atual));
                         }
                     } catch (error) {
                         // Sem saber se esta conta já tem empresa, o formulário de onboarding NÃO abre
@@ -204,7 +204,7 @@ export default function ProtectedRoute() {
                         setTosAccepted(true);
                     } else {
                         setCompanyRole(current.role);
-                        setAwaitingConfirmation(isUnconfirmedEncarregado(current));
+                        setAwaitingConfirmation(isAwaitingConfirmation(current));
                         if (current.role === 'encarregado') {
                             // Encarregado não tem onboarding de CNPJ (a empresa não é dele) e aceita os
                             // Termos por pessoa no próprio convite; o TosGate de empresa não o alcança.
@@ -275,7 +275,7 @@ export default function ProtectedRoute() {
     if (!user) return <Navigate to="/" replace />;
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
-    if (awaitingConfirmation) return <AguardandoConfirmacao />;
+    if (awaitingConfirmation) return <AguardandoConfirmacao papel={companyRole ?? undefined} />;
     if (accessEnded) {
         return (
             <AcessoEncerrado

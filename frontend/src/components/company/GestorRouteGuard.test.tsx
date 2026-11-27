@@ -37,7 +37,11 @@ describe('D-5: guarda única das rotas do Gestor', () => {
     expect(screen.getByText('conteúdo do gestor')).toBeInTheDocument()
   })
 
-  it('dono vê o relatório', async () => {
+  it('gerente e dono veem o relatório', async () => {
+    as('manager')
+    const first = open('/company/relatorio')
+    expect(await screen.findByText('conteúdo do gestor')).toBeInTheDocument()
+    first.unmount()
     as('owner')
     open('/company/relatorio')
     expect(await screen.findByText('conteúdo do gestor')).toBeInTheDocument()
