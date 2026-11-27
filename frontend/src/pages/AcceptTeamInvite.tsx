@@ -1,5 +1,5 @@
 /**
- * AcceptTeamInvite — entrada de Encarregado por link, SEM senha (Equipe e encarregados, E4).
+ * AcceptTeamInvite — entrada de Encarregado ou Gestor por link, SEM senha (mesmo link, mesmo fluxo).
  *
  * Rota: /convite-equipe/:token (PÚBLICA — fora do ProtectedRoute, mesmo motivo de InviteAccept e
  * AcceptManagerInvite: sob o guard, sem sessão o token do link se perderia).
@@ -37,13 +37,13 @@ import {
 } from '../lib/teamInviteToken';
 import { acceptMemberInvite, getInvitePreview, ROLE_LABEL } from '../services/teamMembersService';
 import { invalidateCompanyScope, switchCompanyUnit } from '../services/companyScopeService';
-import type { AcceptMemberInviteOutcome, InvitePreviewResult } from '../types';
+import type { InvitePreviewResult } from '../types';
 
 type Step = 'form' | 'code' | 'working';
 
 /** Desfechos que encerram o fluxo com uma mensagem (tudo menos accepted/already_accepted/already_operator). */
 const OUTCOME_COPY: Record<
-  Exclude<AcceptMemberInviteOutcome, 'accepted' | 'already_accepted' | 'already_operator' | 'tos_required'>,
+  string,
   { title: string; body: string }
 > = {
   expired: {
@@ -66,9 +66,9 @@ const OUTCOME_COPY: Record<
     title: 'Este e-mail é de uma conta de freela',
     body: 'Este e-mail já é de uma conta de freela. Use outro e-mail para entrar na equipe.',
   },
-  use_manager_invite: {
-    title: 'Este convite é de Gestor',
-    body: 'Convites de Gestor têm outro caminho de entrada. Toque abaixo para continuar.',
+  manager_requires_verified_signup: {
+    title: 'Cadastre-se primeiro',
+    body: 'Para entrar como Gestor, cadastre-se primeiro com este e-mail e confirme o e-mail. Depois abra este link de novo.',
   },
   email_not_verified: {
     title: 'Não conseguimos confirmar seu e-mail',
@@ -354,19 +354,19 @@ export default function AcceptTeamInvite() {
   }
 
   if (terminal) {
-    const copy = OUTCOME_COPY[terminal];
+    const copy = OUTCOME_COPY[terminal] ?? OUTCOME_COPY.error;
     return frame(
       <>
-        {alerta(terminal === 'use_manager_invite' ? 'neutral' : 'error', copy.title, copy.body)}
-        {terminal === 'use_manager_invite' && token ? (
+        {alerta('error', copy.title, copy.body)}
+        {terminal === 'manager_requires_verified_signup' ? (
           <Button
             variant="dark"
             size="lg"
             fullWidth
-            onClick={() => navigate(`/convite-gerente/${token}`)}
+            onClick={() => navigate(`/login?type=hire&cadastro=1&redirect=${encodeURIComponent(`/convite-equipe/${token ?? ''}`)}`)}
             iconRight={<ArrowRight size={18} />}
           >
-            Continuar como Gestor
+            Cadastrar com este e-mail
           </Button>
         ) : terminal === 'error' && sessionEmail && !sessionIsWorker ? (
           <Button
@@ -404,6 +404,11 @@ export default function AcceptTeamInvite() {
       <p className="text-sm text-gray-600 mt-2">
         Entre com um código enviado ao seu e-mail. Não precisa criar senha.
       </p>
+      {preview.role === 'manager' && (
+        <p className="text-sm font-bold mt-2">
+          Como Gestor você terá acesso total à empresa. Só começa a operar depois que o dono confirmar.
+        </p>
+      )}
     </div>
   );
 

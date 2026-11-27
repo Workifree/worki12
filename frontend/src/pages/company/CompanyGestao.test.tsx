@@ -34,7 +34,7 @@ describe('CompanyGestao', () => {
     mockCompany = company();
     renderPage();
 
-    expect(card(/Equipe e acessos.*Convidar quem te ajuda/)).toHaveAttribute('href', '/company/configuracoes/equipe');
+    expect(card(/Equipe.*Convide seu primeiro encarregado/)).toHaveAttribute('href', '/company/configuracoes/equipe');
     expect(card(/Dados da empresa/)).toHaveAttribute('href', '/company/profile');
     expect(card(/Unidades/)).toHaveAttribute('href', '/company/organization');
     expect(card(/Ajuda/)).toHaveAttribute('href', '/ajuda');

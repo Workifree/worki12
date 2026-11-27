@@ -241,7 +241,7 @@ describe('AcceptTeamInvite — todos os outcomes do aceite', () => {
     ['token_already_used', 'Link já usado'],
     ['not_found', 'Link inválido'],
     ['worker_cannot_be_manager', 'Este e-mail é de uma conta de freela'],
-    ['use_manager_invite', 'Este convite é de Gestor'],
+    ['manager_requires_verified_signup', 'Cadastre-se primeiro'],
     ['email_not_verified', 'Não conseguimos confirmar seu e-mail'],
     ['invalid_input', 'Não foi possível entrar'],
     ['unauthenticated', 'Sua sessão expirou'],
@@ -254,14 +254,6 @@ describe('AcceptTeamInvite — todos os outcomes do aceite', () => {
     await percorrerAteAceitar();
     expect(await screen.findByText(titulo)).toBeInTheDocument();
     expect(screen.queryByTestId('dashboard')).not.toBeInTheDocument();
-  });
-
-  it('use_manager_invite oferece o caminho de Gestor', async () => {
-    vi.mocked(acceptMemberInvite).mockResolvedValue({ outcome: 'use_manager_invite' });
-    renderPage();
-    await percorrerAteAceitar();
-    fireEvent.click(await screen.findByRole('button', { name: /Continuar como Gestor/ }));
-    expect(await screen.findByTestId('gerente')).toBeInTheDocument();
   });
 
   it('tos_required NÃO é beco sem saída: volta com o checkbox dos Termos e deixa aceitar sem novo código', async () => {

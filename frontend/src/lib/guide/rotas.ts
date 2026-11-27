@@ -42,7 +42,7 @@ export const ROTAS: Readonly<Record<RotaId, RotaDef>> = {
     'empresa.relatorio': { padrao: '/company/relatorio', destino: '/company/relatorio', nome: 'Pagamentos' },
     'empresa.operacao': { padrao: '/company/operacao', destino: '/company/operacao', nome: 'Operação' },
     'empresa.equipe': {
-        padrao: '/company/configuracoes/equipe', destino: '/company/configuracoes/equipe', nome: 'Equipe e acessos',
+        padrao: '/company/configuracoes/equipe', destino: '/company/configuracoes/equipe', nome: 'Equipe',
     },
     'empresa.dados': { padrao: '/company/profile', destino: '/company/profile', nome: 'Dados da empresa' },
     'empresa.gestao': { padrao: '/company/gestao', destino: '/company/gestao', nome: 'Gestão' },

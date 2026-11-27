@@ -1,12 +1,12 @@
 /**
- * CompanyTeamMembers — Gestão → Equipe e acessos (só Gestor). Rota: /company/configuracoes/equipe.
+ * CompanyTeamMembers — Gestão → Equipe (só Gestor). Rota: /company/configuracoes/equipe.
  *
- * "Equipe" = pessoas que OPERAM a empresa; "Elenco" = freelas (`CompanyTeam`). Nunca misturar rótulos.
+ * "Equipe" = funcionários que OPERAM a empresa (Gestor e Encarregado); "Elenco" = freelas (`CompanyTeam`).
+ * Nunca misturar na mesma tela, lista ou convite.
  *
- * Spec R11/R12/R15/R17/R22/R24. Convite sem e-mail: gera o link e abre o WhatsApp com a mensagem
- * pronta (telefone opcional, só para abrir a conversa certa — NÃO é enviado ao banco). Remover nunca
- * bloqueia e não exige transferência: o modal só informa (ADR remover-pessoa-so-corta-acesso).
- * Toda autorização real mora nas RPCs; esta tela é UX.
+ * Um só convite ("Convidar pessoa": nome, e-mail, papel, loja padrão): link de uso único preso ao e-mail,
+ * abre o WhatsApp com a mensagem pronta (telefone opcional, NÃO é enviado ao banco). Gestor convidado só
+ * opera depois de confirmado. Loja = etiqueta (`company_tags`). Toda autorização real mora nas RPCs.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -20,9 +20,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Check,
   Copy,
+  ChevronDown,
+  MoreHorizontal,
   MessageCircle,
-  RefreshCw,
-  Send,
   UserPlus,
   UserX,
   X,
@@ -33,6 +33,7 @@ import PageMeta from '../../components/PageMeta';
 import BackToGestao from '../../components/company/BackToGestao';
 import ModalShell from '../../components/ModalShell';
 import TagsPanel from '../../components/company/TagsPanel';
+import { listTags, type CompanyTag } from '../../services/shiftOperationService';
 import { DialogActions, Button, Card, ErrorState, Field, PageHeader } from '../../components/ui';
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
@@ -47,15 +48,16 @@ import {
   removeMember,
   resendInvite,
   revokeInvite,
-  rotateElencoLink,
+  setMemberDefaultTag,
   ROLE_LABEL,
 } from '../../services/teamMembersService';
-import type { RemoveMemberResult, TeamMemberItem, TeamMemberState } from '../../types';
+import type { RemoveMemberResult, TeamMemberItem, TeamMemberRole, TeamMemberState } from '../../types';
 import { flushSync } from 'react-dom';
 import { focusFirstInvalid } from '../../lib/formErrors';
+import { extraTeamMessage } from '../../lib/teamMessages';
 
 const STATE_BADGE: Record<TeamMemberState, { label: string; className: string }> = {
-  invited: { label: 'Convite enviado', className: 'bg-blue-50 text-blue-700' },
+  invited: { label: 'Convite pendente', className: 'bg-blue-50 text-blue-700' },
   invite_expired: { label: 'Venceu', className: 'bg-red-50 text-red-700' },
   awaiting_confirmation: { label: 'Aguardando confirmação', className: 'bg-yellow-100 text-yellow-800' },
   pending_expired: { label: 'Expirado', className: 'bg-red-50 text-red-700' },
@@ -69,6 +71,7 @@ interface ShareState {
   phone: string;
   /** O banco já tinha um convite pendente (nome igual ou parecido): é o mesmo link. */
   reused?: boolean;
+  role: TeamMemberRole;
 }
 
 /** Data e hora no fuso de São Paulo, como o Gestor as lê. */
@@ -100,6 +103,15 @@ export default function CompanyTeamMembers() {
   const [inviteName, setInviteName] = useState('');
   const [inviteNameError, setInviteNameError] = useState<string | undefined>(undefined);
   const [invitePhone, setInvitePhone] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteEmailError, setInviteEmailError] = useState<string | undefined>(undefined);
+  const [inviteRole, setInviteRole] = useState<TeamMemberRole>('encarregado');
+  const [inviteTagId, setInviteTagId] = useState('');
+  const [tags, setTags] = useState<CompanyTag[]>([]);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [editingTag, setEditingTag] = useState<TeamMemberItem | null>(null);
+  const [editTagId, setEditTagId] = useState('');
+  const [tagBusy, setTagBusy] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [share, setShare] = useState<ShareState | null>(null);
   const [copied, setCopied] = useState(false);
@@ -111,8 +123,7 @@ export default function CompanyTeamMembers() {
   const [typedName, setTypedName] = useState('');
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const [linkRotationPending, setLinkRotationPending] = useState(false);
-  const [rotating, setRotating] = useState(false);
+  const [justRemoved, setJustRemoved] = useState(false);
 
   const beginMembers = useLatestResponse();
   const reload = useCallback(async (id: string, silent = false): Promise<TeamMemberItem[]> => {
@@ -125,7 +136,6 @@ export default function CompanyTeamMembers() {
     if (!claim()) return result.items;
     setLoadError(false);
     setMembers(result.items);
-    setLinkRotationPending(result.elencoLinkRotationPending === true);
     return result.items;
   }, [beginMembers]);
 
@@ -135,7 +145,7 @@ export default function CompanyTeamMembers() {
   useLiveRefresh({
     sources: user && companyId ? notificationSources(user.id) : [],
     onRefresh: () => (companyId ? reload(companyId, true) : undefined),
-    paused: loading || dialogOpen || inviteOpen || inviting || !!busyId || removeBusy || confirmBusy || rotating,
+    paused: loading || dialogOpen || inviteOpen || inviting || !!busyId || removeBusy || confirmBusy,
   });
 
   /** Resolve a empresa pelo seam e carrega a equipe. */
@@ -172,6 +182,30 @@ export default function CompanyTeamMembers() {
     setLoading(false);
   };
 
+  const loadTags = useCallback(async (id: string) => {
+    setTags(await listTags(id, true));
+  }, []);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    void (async () => {
+      const list = await listTags(companyId, true);
+      if (active) setTags(list);
+    })();
+    return () => { active = false; };
+  }, [companyId]);
+
+  const activeTags = tags.filter((t) => !t.archivedAt);
+  const tagName = (id: string | null | undefined): string | null =>
+    (id ? tags.find((t) => t.id === id)?.name ?? null : null);
+  const memberCountByTag: Record<string, number> = {};
+  for (const m of members) {
+    if (m.defaultTagId && (m.state === 'active' || m.state === 'invited' || m.state === 'awaiting_confirmation')) {
+      memberCountByTag[m.defaultTagId] = (memberCountByTag[m.defaultTagId] ?? 0) + 1;
+    }
+  }
+
   const awaiting = members.filter((m) => m.state === 'awaiting_confirmation' && m.userId);
   const others = members.filter((m) => !(m.state === 'awaiting_confirmation' && m.userId));
 
@@ -179,6 +213,10 @@ export default function CompanyTeamMembers() {
     setInviteName('');
     setInviteNameError(undefined);
     setInvitePhone('');
+    setInviteEmail('');
+    setInviteEmailError(undefined);
+    setInviteRole('encarregado');
+    setInviteTagId('');
     setShare(null);
     setCopied(false);
     setInviteOpen(true);
@@ -203,16 +241,25 @@ export default function CompanyTeamMembers() {
       focusFirstInvalid(form);
       return;
     }
+    const email = inviteEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const form = e.currentTarget as HTMLFormElement;
+      flushSync(() => setInviteEmailError('Digite um e-mail válido.'));
+      focusFirstInvalid(form);
+      return;
+    }
     if (inviting) return;
     setInviting(true);
-    const result = await inviteMember(companyId, name, 'encarregado');
+    const result = await inviteMember(
+      companyId, name, inviteRole, email, inviteRole === 'encarregado' && inviteTagId ? inviteTagId : undefined,
+    );
     setInviting(false);
     if (
       (result.outcome === 'invited' || result.outcome === 'reinvited' || result.outcome === 'already_invited')
       && result.inviteToken
     ) {
       const reused = result.outcome === 'already_invited';
-      setShare({ displayName: name, token: result.inviteToken, phone: invitePhone, reused });
+      setShare({ displayName: name, token: result.inviteToken, phone: invitePhone, reused, role: inviteRole });
       const items = await reload(companyId);
       // Convite reaproveitado pode estar gravado com uma variação do nome (acento, espaços): a
       // mensagem e a conferência do Gestor precisam usar o nome que está no convite.
@@ -223,14 +270,14 @@ export default function CompanyTeamMembers() {
     addToast(
       result.outcome === 'invalid_input'
         ? 'Confira o nome (até 80 caracteres, sem símbolos estranhos).'
-        : memberActionMessage(result.outcome, 'Não foi possível criar o convite. Tente novamente.'),
+        : extraTeamMessage(result.outcome) ?? memberActionMessage(result.outcome, 'Não foi possível criar o convite. Tente novamente.'),
       'error',
     );
   };
 
   const shareLink = share ? buildInviteLink(share.token) : '';
   const shareMessage = share
-    ? buildInviteMessage({ displayName: share.displayName, companyName, role: 'encarregado', link: shareLink })
+    ? buildInviteMessage({ displayName: share.displayName, companyName, role: share.role, link: shareLink })
     : '';
 
   const copyLink = async () => {
@@ -258,7 +305,7 @@ export default function CompanyTeamMembers() {
     if (result.outcome === 'resent' && result.inviteToken) {
       setCopied(false);
       setInviteOpen(true);
-      setShare({ displayName: member.displayName ?? 'a pessoa', token: result.inviteToken, phone: '' });
+      setShare({ displayName: member.displayName ?? 'a pessoa', token: result.inviteToken, phone: '', role: member.role });
       addToast('Novo link gerado. O link antigo deixou de valer.', 'success');
       void reload(companyId);
       return;
@@ -311,41 +358,26 @@ export default function CompanyTeamMembers() {
     void reload(companyId);
   };
 
-  /** Prazo de confirmação vencido: um convite novo (o aceite dele encerra a entrada antiga). */
-  const handleInviteAgain = async (member: TeamMemberItem) => {
-    if (!companyId || !member.displayName) {
-      openInvite();
-      return;
-    }
-    setBusyId(member.memberId);
-    const result = await inviteMember(companyId, member.displayName, 'encarregado');
-    setBusyId(null);
-    if (result.inviteToken) {
-      setCopied(false);
-      setInviteOpen(true);
-      setShare({
-        displayName: member.displayName,
-        token: result.inviteToken,
-        phone: '',
-        reused: result.outcome === 'already_invited',
-      });
-    } else {
-      addToast(memberActionMessage(result.outcome, 'Não foi possível convidar de novo. Tente novamente.'), 'error');
-    }
-    void reload(companyId);
+  /** Prazo de confirmação vencido: convite novo (o e-mail é pedido de novo). */
+  const handleInviteAgain = (member: TeamMemberItem) => {
+    openInvite();
+    setInviteName(member.displayName ?? '');
+    setInviteRole(member.role);
+    setInviteTagId(member.defaultTagId ?? '');
   };
 
-  const handleRotateLink = async () => {
-    if (!companyId) return;
-    setRotating(true);
-    const result = await rotateElencoLink(companyId);
-    setRotating(false);
-    if (!result.ok) {
-      addToast('Não foi possível gerar o novo link do Elenco. Tente novamente.', 'error');
-      return;
+  const submitEditTag = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!companyId || !editingTag) return;
+    setTagBusy(true);
+    const result = await setMemberDefaultTag(companyId, editingTag.memberId, editTagId || null);
+    setTagBusy(false);
+    if ((result.outcome as string) === 'ok' || (result.outcome as string) === 'updated') {
+      addToast('Loja atualizada. Vale para os próximos turnos.', 'success');
+      setEditingTag(null);
+    } else {
+      addToast(extraTeamMessage(result.outcome) ?? memberActionMessage(result.outcome, 'Não foi possível alterar a loja. Tente novamente.'), 'error');
     }
-    setLinkRotationPending(false);
-    addToast('Novo link do Elenco criado. O antigo deixou de valer.', 'success');
     void reload(companyId);
   };
 
@@ -384,6 +416,7 @@ export default function CompanyTeamMembers() {
     if (result.outcome === 'removed') {
       addToast(`${removing.member.displayName ?? 'A pessoa'} saiu da equipe.`, 'success');
       setRemoving(null);
+      setJustRemoved(true);
     } else {
       addToast(memberActionMessage(result.outcome, 'Não foi possível remover. Tente novamente.'), 'error');
     }
@@ -392,12 +425,12 @@ export default function CompanyTeamMembers() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <PageMeta title="Equipe e acessos" description="Quem opera a sua empresa no Worki." />
+      <PageMeta title="Equipe" description="Funcionários que operam a empresa com você." />
       <BackToGestao />
 
       <PageHeader
-        title="Equipe e acessos"
-        subtitle="Pessoas que operam a empresa com você. Seus freelas ficam em Meu Elenco."
+        title="Equipe"
+        subtitle="Funcionários que operam a empresa com você."
         action={
           <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />} data-copilot="empresa.equipe.convidar" data-copilot-risk="D">
             Convidar pessoa
@@ -417,31 +450,9 @@ export default function CompanyTeamMembers() {
       )}
 
       {!loading && !loadError && (
-        <>
-          {linkRotationPending && (
-            <Card className="mb-6">
-              <div role="status">
-                <h2 className="text-lg font-bold">Gere um novo link do Elenco</h2>
-                <p className="text-sm text-gray-700 mt-1">
-                  Alguém que saiu da equipe pode ter guardado o link antigo. Ao gerar um novo, o antigo deixa
-                  de valer.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                className="mt-4"
-                data-copilot="empresa.equipe.novo-link-elenco"
-                data-copilot-risk="D"
-                onClick={() => void handleRotateLink()}
-                loading={rotating}
-                iconLeft={<RefreshCw size={18} />}
-              >
-                Gerar novo link do Elenco
-              </Button>
-            </Card>
-          )}
+        <div className="space-y-8">
           {awaiting.length > 0 && (
-            <section aria-labelledby="equipe-confirmar" className="mb-6 space-y-3">
+            <section aria-labelledby="equipe-confirmar" className="space-y-3">
               <h2 id="equipe-confirmar" className="text-xl font-bold">Precisa da sua confirmação</h2>
               {awaiting.map((m) => (
                 <Card
@@ -477,7 +488,7 @@ export default function CompanyTeamMembers() {
                       disabled={busyId === m.memberId}
                       iconLeft={<UserX size={18} />}
                     >
-                      Não é essa pessoa
+                      Não é ele
                     </Button>
                   </div>
                 </Card>
@@ -485,109 +496,162 @@ export default function CompanyTeamMembers() {
             </section>
           )}
 
-          {members.length === 0 ? (
-            <Card className="text-center">
-              <h2 className="text-xl font-bold mb-2">Ninguém na equipe ainda</h2>
-              <p className="text-sm text-gray-700 mb-5">
-                Convide quem toca o dia a dia (um encarregado, por exemplo). A pessoa entra por um link no
-                WhatsApp, sem criar senha.
-              </p>
-              <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>
-                Convidar alguém da equipe
-              </Button>
-            </Card>
-          ) : (
-            others.length > 0 && (
-              <section aria-labelledby="equipe-lista" className="space-y-3">
-                <h2 id="equipe-lista" className="text-xl font-bold">Pessoas</h2>
-                <ul className="space-y-3">
-                  {others.map((m) => {
-                    const badge = STATE_BADGE[m.state];
-                    const pending = m.state === 'invited' || m.state === 'invite_expired';
-                    const busy = busyId === m.memberId;
-                    return (
-                      <li key={m.memberId}>
-                        <Card>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-lg font-bold">{m.displayName ?? 'Sem nome'}</p>
-                            <span className="rounded-pill bg-gray-100 text-gray-700 px-3 py-1 text-xs font-bold">
-                              {ROLE_LABEL[m.role]}
-                            </span>
-                            <span className={`rounded-pill px-3 py-1 text-xs font-bold ${badge.className}`}>
-                              {badge.label}
-                            </span>
-                          </div>
-                          {m.acceptedEmail && !pending && (
-                            <p className="text-sm text-gray-600 mt-1 break-all">{m.acceptedEmail}</p>
-                          )}
-                          {m.state === 'pending_expired' && (
-                            <p className="text-xs text-gray-600 mt-2">
-                              O prazo de 72 horas para confirmar acabou. Envie um novo convite.
-                            </p>
-                          )}
-                          {pending && (
-                            <p className="text-xs text-gray-600 mt-2">
-                              Gerar um novo link faz o link atual deixar de valer.
-                            </p>
-                          )}
-                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {pending && (
-                              <>
-                                <Button
-                                  variant="dark"
-                                  size="lg"
-                                  onClick={() => void handleResend(m)}
-                                  loading={busy}
-                                  iconLeft={<Send size={16} />}
-                                >
-                                  Gerar novo link
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="lg"
-                                  onClick={() => void handleRevoke(m)}
-                                  disabled={busy}
-                                  iconLeft={<X size={16} />}
-                                >
-                                  Revogar convite
-                                </Button>
-                              </>
-                            )}
-                            {m.state === 'pending_expired' && (
-                              <Button
-                                variant="dark"
-                                size="lg"
-                                onClick={() => void handleInviteAgain(m)}
-                                loading={busy}
-                                iconLeft={<Send size={16} />}
-                              >
-                                Convidar de novo
-                              </Button>
-                            )}
-                            {m.state === 'active' && m.userId && (
-                              <Button
-                                variant="secondary"
-                                size="lg"
-                                onClick={() => void openRemove(m)}
-                                loading={busy}
-                                iconLeft={<UserX size={16} />}
-                              >
-                                Remover da equipe
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )
+          {justRemoved && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-black bg-yellow-50 p-3 text-sm font-semibold">
+              <span>Gere um novo link de convite em Meu Elenco.</span>
+              <Button variant="secondary" size="lg" onClick={() => navigate('/company/team')}>Abrir Meu Elenco</Button>
+            </div>
           )}
 
-          {/* R20/R24: etiquetas só depois que existe equipe (divulgação progressiva). */}
-          {companyId && members.length > 0 && <TagsPanel companyId={companyId} />}
-        </>
+          <section aria-labelledby="equipe-lista" className="space-y-3">
+            <h2 id="equipe-lista" className="text-xl font-bold">Pessoas</h2>
+            {others.length === 0 ? (
+              <Card className="text-center">
+                <h3 className="text-xl font-bold mb-2">Convide seu primeiro encarregado</h3>
+                <p className="text-sm text-gray-700 mb-5">
+                  A pessoa recebe um link só dela, pelo WhatsApp, e entra com o e-mail que você informar.
+                </p>
+                <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>
+                  Convidar pessoa
+                </Button>
+              </Card>
+            ) : (
+              <ul className="space-y-3">
+                {others.map((m) => {
+                  const badge = STATE_BADGE[m.state];
+                  const pending = m.state === 'invited' || m.state === 'invite_expired';
+                  const busy = busyId === m.memberId;
+                  const store = tagName(m.defaultTagId);
+                  const validUntil = formatSaoPaulo(m.expiresAt);
+                  const canEditStore = m.role === 'encarregado' && (m.state === 'active' || m.state === 'invited');
+                  const itemClass = 'flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-bold hover:bg-gray-100';
+                  return (
+                    <li key={m.memberId}>
+                      <Card>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-lg font-bold truncate">{m.displayName ?? 'Sem nome'}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="rounded-pill bg-gray-100 text-gray-700 px-3 py-1 text-xs font-bold">
+                                {ROLE_LABEL[m.role]}
+                              </span>
+                              {m.role === 'encarregado' && (
+                                <span className="rounded-pill bg-blue-50 text-blue-700 px-3 py-1 text-xs font-bold">
+                                  {store ? `Loja: ${store}` : 'Sem loja padrão'}
+                                </span>
+                              )}
+                              <span className={`rounded-pill px-3 py-1 text-xs font-bold ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              aria-label={`Ações de ${m.displayName ?? 'pessoa'}`}
+                              aria-haspopup="menu"
+                              aria-expanded={menuId === m.memberId}
+                              onClick={() => setMenuId(menuId === m.memberId ? null : m.memberId)}
+                              className="min-h-11 min-w-11 flex items-center justify-center rounded-xl border-2 border-black bg-white hover:bg-gray-100"
+                            >
+                              <MoreHorizontal size={20} />
+                            </button>
+                            {menuId === m.memberId && (
+                              <div role="menu" className="absolute right-0 z-10 mt-2 w-56 rounded-xl border-2 border-black bg-white p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                {canEditStore && (
+                                  <button type="button" role="menuitem" className={itemClass}
+                                    onClick={() => { setMenuId(null); setEditTagId(m.defaultTagId ?? ''); setEditingTag(m); }}>
+                                    Alterar loja
+                                  </button>
+                                )}
+                                {pending && (
+                                  <>
+                                    <button type="button" role="menuitem" className={itemClass}
+                                      onClick={() => { setMenuId(null); void handleResend(m); }}>
+                                      Gerar novo link
+                                    </button>
+                                    <button type="button" role="menuitem" className={itemClass}
+                                      onClick={() => { setMenuId(null); void handleRevoke(m); }}>
+                                      Revogar convite
+                                    </button>
+                                  </>
+                                )}
+                                {m.state === 'pending_expired' && (
+                                  <button type="button" role="menuitem" className={itemClass}
+                                    onClick={() => { setMenuId(null); handleInviteAgain(m); }}>
+                                    Convidar de novo
+                                  </button>
+                                )}
+                                {m.state === 'active' && m.userId && (
+                                  <button type="button" role="menuitem" className={`${itemClass} text-red-700 hover:bg-red-50`}
+                                    onClick={() => { setMenuId(null); void openRemove(m); }}>
+                                    Remover
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {m.acceptedEmail && !pending && (
+                          <p className="text-sm text-gray-600 mt-2 break-all">{m.acceptedEmail}</p>
+                        )}
+                        {pending && (
+                          <>
+                            <p className="text-xs text-gray-600 mt-2">
+                              {m.state === 'invite_expired'
+                                ? 'O link venceu. Gere um novo.'
+                                : `Link válido${validUntil ? ` até ${validUntil}` : ''}, só dessa pessoa.`}
+                            </p>
+                            <Button
+                              variant="secondary"
+                              size="lg"
+                              className="mt-3"
+                              onClick={() => void handleResend(m)}
+                              loading={busy}
+                              iconLeft={<Copy size={16} />}
+                            >
+                              Copiar link
+                            </Button>
+                          </>
+                        )}
+                        {m.state === 'pending_expired' && (
+                          <p className="text-xs text-gray-600 mt-2">O prazo para confirmar acabou. Convide de novo.</p>
+                        )}
+                      </Card>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {companyId && (
+            <details className="group rounded-2xl border-2 border-black bg-white" data-testid="lojas-section">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 text-xl font-bold">
+                Lojas
+                <ChevronDown size={20} className="transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="px-4 pb-4">
+                <TagsPanel
+                  companyId={companyId}
+                  memberCounts={memberCountByTag}
+                  onChanged={() => { void loadTags(companyId); }}
+                />
+              </div>
+            </details>
+          )}
+
+          <details className="group rounded-2xl border-2 border-black bg-white">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 text-xl font-bold">
+              Papéis
+              <ChevronDown size={20} className="transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="space-y-3 px-4 pb-4 text-sm text-gray-800">
+              <p><strong>Gestor:</strong> vê e faz tudo na empresa, convida pessoas e define as lojas. Só opera depois que você confirma.</p>
+              <p><strong>Encarregado:</strong> cuida só dos próprios turnos (ou dos que cobrir). Pode ter uma loja padrão.</p>
+            </div>
+          </details>
+        </div>
       )}
 
       {/* Convidar / compartilhar */}
@@ -620,18 +684,55 @@ export default function CompanyTeamMembers() {
                   />
                 </Field>
 
+                <Field label="E-mail da pessoa" required hint="O link só funciona com este e-mail." error={inviteEmailError}>
+                  <input
+                    data-copilot-private
+                    type="email"
+                    name="invitee-email"
+                    inputMode="email"
+                    autoComplete="off"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); setInviteEmailError(undefined); }}
+                  />
+                </Field>
+
                 <fieldset>
                   <legend className="text-sm font-bold mb-2">Papel</legend>
-                  <div
-                    aria-label="Papel Encarregado"
-                    className="rounded-2xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]"
-                  >
-                    <p className="font-bold">Encarregado</p>
-                    <p className="text-sm text-gray-700 mt-1">
-                      Cuida do dia a dia dos turnos. Você continua no comando da empresa.
-                    </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(['encarregado', 'manager'] as const).map((r) => (
+                      <label
+                        key={r}
+                        className={`min-h-11 cursor-pointer rounded-2xl border-2 border-black p-4 ${inviteRole === r ? 'bg-blue-50 shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]' : 'bg-white'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="invitee-role"
+                          className="sr-only"
+                          checked={inviteRole === r}
+                          onChange={() => setInviteRole(r)}
+                        />
+                        <span className="block font-bold">{ROLE_LABEL[r]}</span>
+                        <span className="mt-1 block text-sm text-gray-700">
+                          {r === 'encarregado'
+                            ? 'Cuida só dos próprios turnos.'
+                            : 'Acesso total à empresa. Só opera depois da sua confirmação.'}
+                        </span>
+                      </label>
+                    ))}
                   </div>
                 </fieldset>
+
+                {inviteRole === 'encarregado' && activeTags.length > 0 && (
+                  <Field
+                    label="Loja padrão (opcional)"
+                    hint="Os turnos que ele criar nascem com esta loja e ele não pode trocar."
+                  >
+                    <select aria-label="Loja padrão" value={inviteTagId} onChange={(e) => setInviteTagId(e.target.value)}>
+                      <option value="">Sem loja padrão</option>
+                      {activeTags.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                    </select>
+                  </Field>
+                )}
 
                 <Field
                   label="WhatsApp da pessoa (opcional)"
@@ -698,6 +799,30 @@ export default function CompanyTeamMembers() {
         </ModalShell>
       )}
 
+      {editingTag && (
+        <ModalShell labelledBy="loja-titulo" onClose={() => { if (!tagBusy) setEditingTag(null); }}>
+          <form onSubmit={(e) => void submitEditTag(e)} className="space-y-4">
+            <h2 id="loja-titulo" className="text-2xl font-bold">Alterar loja de {editingTag.displayName ?? 'a pessoa'}</h2>
+            <Field label="Loja padrão">
+              <select aria-label="Loja padrão" data-autofocus value={editTagId} onChange={(e) => setEditTagId(e.target.value)}>
+                <option value="">Sem loja padrão</option>
+                {tags.filter((t) => !t.archivedAt || t.id === editTagId).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </Field>
+            <p className="text-sm text-gray-700">
+              Os turnos que este encarregado criar nascem com esta loja e ele não pode trocar; relatórios e
+              financeiro filtram por loja. Turnos que já existem não mudam.
+            </p>
+            <DialogActions>
+              <Button variant="secondary" size="lg" onClick={() => setEditingTag(null)} disabled={tagBusy}>Voltar</Button>
+              <Button type="submit" variant="dark" size="lg" loading={tagBusy}>Salvar</Button>
+            </DialogActions>
+          </form>
+        </ModalShell>
+      )}
+
       {/* Remover — informativo, nunca bloqueia (ADR remover-pessoa-so-corta-acesso) */}
       {removing && (
         <ModalShell labelledBy="remover-titulo" onClose={() => { if (!removeBusy) setRemoving(null); }}>
@@ -719,12 +844,6 @@ export default function CompanyTeamMembers() {
                 <li>Não há turnos abertos no nome dessa pessoa.</li>
               )}
               <li>Nada do que foi feito é apagado: turnos, freelas e pagamentos continuam como estão.</li>
-              {removing.preview.elencoLinkRotationAdvised && (
-                <li>
-                  Essa pessoa chegou a ver o link do seu Elenco. Depois de remover, esta tela vai pedir para
-                  gerar um novo.
-                </li>
-              )}
             </ul>
             <DialogActions>
               <Button variant="secondary" size="lg" data-autofocus onClick={() => setRemoving(null)} disabled={removeBusy}>

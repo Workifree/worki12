@@ -194,8 +194,8 @@ export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = fal
         {
             id: 'pessoas', label: 'Pessoas',
             cards: gestor ? [{
-                id: 'equipe', title: 'Equipe e acessos', icon: UserCog, path: '/company/configuracoes/equipe',
-                description: teamInvited ? 'Quem opera a empresa com você' : 'Convidar quem te ajuda',
+                id: 'equipe', title: 'Equipe', icon: UserCog, path: '/company/configuracoes/equipe',
+                description: teamInvited ? 'Funcionários, papéis e lojas' : 'Convide seu primeiro encarregado',
             }] : [],
         },
         {
