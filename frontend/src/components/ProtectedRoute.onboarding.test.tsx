@@ -35,13 +35,14 @@ vi.mock('../contexts/ToastContext', () => ({
 
 import ProtectedRoute from './ProtectedRoute'
 
-function renderRoute(path = '/dashboard') {
+function renderRoute(path = '/dashboard', state?: { entrada: boolean }) {
     return render(
-        <MemoryRouter initialEntries={[path]}>
+        <MemoryRouter initialEntries={[{ pathname: path, state }]}>
             <Routes>
                 <Route element={<ProtectedRoute />}>
                     <Route path="/dashboard" element={<div data-testid="outlet-content">Conteudo Protegido</div>} />
                     <Route path="/company/dashboard" element={<div data-testid="outlet-content">Conteudo Protegido</div>} />
+                    <Route path="/company/hoje" element={<div data-testid="hoje-content">Hoje</div>} />
                     <Route path="/company/organization" element={<div data-testid="organization-content">Organização</div>} />
                     <Route path="/company/configuracoes/equipe" element={<div data-testid="equipe-content">Equipe</div>} />
                     <Route path="/worker/onboarding" element={<div data-testid="worker-onboarding">Worker Onboarding</div>} />
@@ -341,6 +342,42 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             })
             expect(screen.queryByTestId('company-onboarding')).not.toBeInTheDocument()
             expect(screen.queryByText('Termos de Uso Atualizados')).not.toBeInTheDocument()
+        })
+
+        describe('entrada do Encarregado em Hoje', () => {
+            async function sessao(role: 'encarregado' | 'manager') {
+                mockGetSession.mockResolvedValue({
+                    data: { session: { user: { id: 'u-entrada', user_metadata: { user_type: 'hire' } } } },
+                })
+                mockRpc.mockResolvedValue({
+                    data: [myCompaniesRow({ company_id: 'comp-9', role, confirmed: true })],
+                    error: null,
+                })
+            }
+
+            it('Encarregado que entra por /company/dashboard (entrada de login) vai para /company/hoje', async () => {
+                await sessao('encarregado')
+                renderRoute('/company/dashboard', { entrada: true })
+
+                await waitFor(() => expect(screen.getByTestId('hoje-content')).toBeInTheDocument())
+                expect(screen.queryByTestId('outlet-content')).not.toBeInTheDocument()
+            })
+
+            it('Encarregado que abre "Visão geral" pela aba (sem entrada) permanece em /company/dashboard', async () => {
+                await sessao('encarregado')
+                renderRoute('/company/dashboard')
+
+                await waitFor(() => expect(screen.getByTestId('outlet-content')).toBeInTheDocument())
+                expect(screen.queryByTestId('hoje-content')).not.toBeInTheDocument()
+            })
+
+            it('Gestor com entrada permanece em /company/dashboard', async () => {
+                await sessao('manager')
+                renderRoute('/company/dashboard', { entrada: true })
+
+                await waitFor(() => expect(screen.getByTestId('outlet-content')).toBeInTheDocument())
+                expect(screen.queryByTestId('hoje-content')).not.toBeInTheDocument()
+            })
         })
 
         it('Gestor (manager) acessa /company/configuracoes/equipe', async () => {

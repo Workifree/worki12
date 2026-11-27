@@ -29,6 +29,8 @@ export interface NavItem {
     matches: readonly string[];
     /** Fora da barra inferior: no celular a rota "pertence" a este outro item. */
     mobileParent?: string;
+    /** Só no celular (barra inferior): na lateral do desktop os filhos já são itens próprios. */
+    mobileOnly?: boolean;
 }
 
 export interface NavTab {
@@ -139,12 +141,18 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
         },
     ];
     if (isEncarregado) {
-        // Gestão do Encarregado só teria "Suporte": sem o hub, Relatórios vira item próprio e a Ajuda vai direto.
+        // Barra inferior com no máximo 5: Relatórios e Ajuda ficam sob "Mais" (hub /company/gestao, que
+        // já lista "Meus relatórios", trilha e Ajuda para quem não é Gestor). No desktop seguem como itens.
+        const base = items
+            .filter((item) => !item.gestorOnly && item.id !== 'gestao')
+            .map((item) => (item.id === 'relatorios' ? { ...item, mobileParent: 'mais' } : item));
         return [
-            ...items
-                .filter((item) => !item.gestorOnly && item.id !== 'gestao')
-                .map((item) => (item.id === 'relatorios' ? { ...item, mobileParent: undefined } : item)),
-            { id: 'ajuda', label: 'Ajuda', icon: HelpCircle, path: '/ajuda', matches: ['/ajuda', COMPANY_GESTAO_PATH] },
+            ...base,
+            { id: 'ajuda', label: 'Ajuda', icon: HelpCircle, path: '/ajuda', matches: ['/ajuda'], mobileParent: 'mais' },
+            {
+                id: 'mais', label: 'Mais', icon: LayoutGrid, path: COMPANY_GESTAO_PATH, mobileOnly: true,
+                matches: [COMPANY_GESTAO_PATH, '/company/trilha'],
+            },
         ];
     }
     return items.filter((item) => !item.gestorOnly);

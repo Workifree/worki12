@@ -128,7 +128,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const { pathname } = useLocation();
     const currentCompany = myCompanies.find(c => c.company_id === currentCompanyId) ?? null;
     const companyNav = useCompanyNavContext(isCompany ? currentCompany : null);
-    const navItems = isCompany ? getCompanyNav(companyNav) : getWorkerNav();
+    const navItems = (isCompany ? getCompanyNav(companyNav) : getWorkerNav()).filter((item) => !item.mobileOnly);
 
     // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
     // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).

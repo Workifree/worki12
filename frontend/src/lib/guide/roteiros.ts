@@ -416,7 +416,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         frases: ['sem acesso', 'nao consigo abrir', 'equipe indicacoes'],
         passos: [{
             rota: 'empresa.hoje', alvos: [], titulo: 'Acesso de encarregado',
-            explicacao: 'Equipe, Indicar freela e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele. Mensagens e Relatórios mostram só os turnos que você cuida.',
+            explicacao: 'Equipe, Indicar freela e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele. Mensagens e Relatórios mostram só os turnos que você cuida. No celular, Relatórios e Ajuda ficam em "Mais".',
             aoTocar: 'Nada muda por aqui.',
         }],
     },

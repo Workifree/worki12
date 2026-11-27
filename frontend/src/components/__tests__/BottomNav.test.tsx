@@ -56,19 +56,34 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('encarregado: sem Gestão, com Mensagens, Relatórios e Ajuda direto', () => {
+  it('encarregado: no máximo 5 itens, com Relatórios e Ajuda sob "Mais" (alvos de 44px)', () => {
     mockCompany = company({ role: 'encarregado' })
     renderBottomNav('company', '/company/hoje')
 
-    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Ajuda'])
+    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Mais'])
+    expect(screen.getByLabelText('Mais')).toHaveAttribute('href', '/company/gestao')
+    for (const link of within(screen.getByLabelText('Menu de navegação')).getAllByRole('link')) {
+      expect(link.className).toContain('min-h-11')
+      expect(link.className).toContain('min-w-11')
+    }
   })
 
-  it('papel ainda carregando e sem dica: não oferece o que talvez tenha de esconder', () => {
+  it('encarregado: Relatórios, Ajuda e Trilha marcam "Mais" na barra', () => {
+    mockCompany = company({ role: 'encarregado' })
+    for (const path of ['/company/relatorio', '/ajuda', '/company/gestao']) {
+      const { unmount } = renderBottomNav('company', path)
+      expect(screen.getByLabelText('Mais')).toHaveAttribute('aria-current', 'page')
+      unmount()
+    }
+  })
+
+  it('papel ainda carregando e sem dica: menu restrito, Início já aponta para Hoje (sem piscar)', () => {
     renderBottomNav('company', '/company/dashboard')
 
     // Sem dica, assume o menu restrito: nada de Gestão (que o Encarregado não usa).
     expect(screen.queryByLabelText('Gestão')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Ajuda')).toBeInTheDocument()
+    expect(screen.getByLabelText('Mais')).toBeInTheDocument()
+    expect(screen.getByLabelText('Início')).toHaveAttribute('href', '/company/hoje')
   })
 
   it('papel carregando com dica de Gestor: menu completo desde o primeiro render', () => {
