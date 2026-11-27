@@ -23,6 +23,7 @@
 
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { toBrazilDateOnly } from '../lib/dateUtils';
 import { fillMissingWorkers } from './workerCardsService';
 import type {
   PendingInvite,
@@ -113,6 +114,22 @@ export function calcExpiryAtShiftStart(
   return start.getTime() > minimum.getTime() ? start.toISOString() : minimum.toISOString();
 }
 
+/**
+ * O turno já começou? Data do turno em Brasília + horário de início. Sem data (ou sem horário
+ * utilizável) devolve false: na dúvida não esconde a vaga.
+ */
+export function shiftAlreadyStarted(
+  job: { start_date?: string | null; work_start_time?: string | null } | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!job?.start_date) return false;
+  const time = (job.work_start_time ?? '').slice(0, 5);
+  const start = /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+    ? new Date(`${toBrazilDateOnly(job.start_date)}T${time}:00-03:00`).getTime()
+    : new Date(job.start_date).getTime();
+  return !Number.isNaN(start) && start <= now;
+}
+
 /** Obtém o company_id da sessão autenticada (empresa). */
 async function getAuthCompanyId(): Promise<string> {
   // Delega ao seam. A ancoragem dupla escrita aqui (owner_id, com fallback para o uid)
@@ -198,16 +215,32 @@ export const ShiftCallService = {
         return { call: null, invited: 0, error: 'Não foi possível abrir o chamado.' };
       }
 
-      const { data: targets, error: targetsErr } = await supabase
-        .from('shift_call_targets')
-        .insert(uniqueWorkerIds.map((workerId) => ({ call_id: call.id, worker_id: workerId })))
-        .select('id, worker_id');
+      let targets: { id: string; worker_id: string }[] | null = null;
+      let targetsErr: unknown = null;
+      try {
+        const res = await supabase
+          .from('shift_call_targets')
+          .insert(uniqueWorkerIds.map((workerId) => ({ call_id: call.id, worker_id: workerId })))
+          .select('id, worker_id');
+        targets = res.data as { id: string; worker_id: string }[] | null;
+        targetsErr = res.error;
+      } catch (thrown) {
+        targetsErr = thrown; // rede caiu no meio: o chamado já existe e precisa ser limpo igual
+      }
 
       if (targetsErr || !targets || targets.length === 0) {
         logError('shiftCall.createShiftCall.insertTargets', targetsErr);
         // O chamado sem alvo nenhum é lixo visível na tela da empresa — fecha na hora.
-        // Best-effort: se este cancelamento falhar, o chamado ainda expira sozinho.
-        await supabase.rpc('cancel_shift_call', { p_call_id: call.id });
+        // Se o cancelamento também falhar, registra: o chamado ainda expira sozinho, e o erro
+        // abaixo sobe de qualquer jeito (nunca devolvemos sucesso com chamado órfão).
+        try {
+          const { data: cancelled, error: cancelErr } = await supabase.rpc('cancel_shift_call', { p_call_id: call.id });
+          if (cancelErr || (cancelled as ShiftCallRpcResult | null)?.outcome !== 'cancelled') {
+            logError('shiftCall.createShiftCall.cancelOrphan', cancelErr ?? cancelled);
+          }
+        } catch (cancelThrown) {
+          logError('shiftCall.createShiftCall.cancelOrphan', cancelThrown);
+        }
         return {
           call: null,
           invited: 0,
@@ -422,6 +455,8 @@ export const ShiftCallService = {
         const call = target.call;
         if (!call || call.status !== 'open') return null;
         if (new Date(call.expires_at).getTime() <= now) return null;
+        // Turno que já começou não se aceita mais (o dado do turno já vem no select; sem data, não filtra).
+        if (shiftAlreadyStarted(call.job, now)) return null;
 
         const invite: PendingInvite = {
           source: 'call',

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SHIFT_CALL_REASON_LABELS, type ShiftCallReason, type TeamMember } from '../../types';
 import { CALL_EXPIRY_PRESETS, DEFAULT_CALL_EXPIRY_HOURS } from '../../services/shiftCallService';
 import { isWorkerAvailableFor, periodForTime } from '../../lib/availability';
-import { MISSING_WORKERS_MESSAGE, plural, weekdayOf, type ShiftDraftCall, type ShiftDraftRow } from '../../lib/shiftDrafts';
+import { plural, weekdayOf, type ShiftDraftCall, type ShiftDraftRow } from '../../lib/shiftDrafts';
 import { roleLabel } from '../../lib/statusLabels';
 import { BusyWorkerBadge } from '../team/BusyWorkerBadge';
 import { Alert, Button, ButtonLink, ChoiceCard, Field, SkeletonList } from '../ui';
@@ -73,11 +73,12 @@ export function PeopleDialog({
 }
 
 /**
- * "Quem vai trabalhar": lista do elenco e/ou pessoas. Obrigatório para publicar (exceto elenco vazio).
+ * "Quem vai trabalhar": lista do elenco e/ou pessoas. Opcional: sem ninguém, publica e ninguém é chamado agora.
  * Os chamados saem logo depois de os turnos serem criados, no mesmo passo.
  */
 export function CallSection({
-    call, onChange, data, onPickPeople, suggestedCount, chosenCount, title = 'Quem vai trabalhar', showMissing = false,
+    call, onChange, data, onPickPeople, suggestedCount, chosenCount, title = 'Quem vai trabalhar',
+    wantsCall = false, onPublishWithoutCall,
 }: {
     call: ShiftDraftCall;
     onChange: (call: ShiftDraftCall) => void;
@@ -87,9 +88,16 @@ export function CallSection({
     /** Pessoas que serão chamadas (já resolvidas contra o elenco). */
     chosenCount: number;
     title?: string;
-    /** Mostra a pendência quando a pessoa já tentou seguir sem escolher. */
-    showMissing?: boolean;
+    /** O rascunho já tem gente para chamar (lista, pessoas ou escolha por turno). */
+    wantsCall?: boolean;
+    /** Saída explícita: publica sem chamar ninguém agora. Ausente quando a tela não publica direto. */
+    onPublishWithoutCall?: () => void;
 }) {
+    const withoutCall = onPublishWithoutCall && (
+        <Button variant="secondary" onClick={onPublishWithoutCall} data-copilot="empresa.turno-lote.publicar-sem-chamar">
+            Publicar sem chamar agora
+        </Button>
+    );
     const peopleCount = call.worker_ids?.length ?? 0;
     const toggleList = (listId: string) => {
         if (call.mode === 'list' && call.list_id === listId) {
@@ -102,9 +110,24 @@ export function CallSection({
         <section aria-labelledby="lote-chamar" className="flex flex-col gap-2" data-copilot="empresa.turno-lote.quem-trabalha">
             <h2 id="lote-chamar" className="text-lg font-bold">{title}</h2>
             {data.loading && <SkeletonList count={2} itemClassName="h-11" />}
-            {!data.loading && data.error && (
+            {!data.loading && data.error && !wantsCall && (
                 <Alert tone="warning" action={<Button variant="secondary" onClick={data.retry}>Tentar de novo</Button>}>
                     Não conseguimos carregar o seu elenco. Dá para publicar agora e chamar depois.
+                </Alert>
+            )}
+            {!data.loading && data.error && wantsCall && (
+                <Alert
+                    tone="danger"
+                    role="alert"
+                    title="Não conseguimos carregar o Elenco"
+                    action={(
+                        <div className="flex flex-col gap-2">
+                            <Button variant="secondary" onClick={data.retry} data-copilot="empresa.turno-lote.elenco-tentar">Tentar de novo</Button>
+                            {withoutCall}
+                        </div>
+                    )}
+                >
+                    Os chamados não serão enviados enquanto o Elenco não carregar, e a publicação fica parada. Tente de novo ou publique sem chamar agora.
                 </Alert>
             )}
             {!data.loading && !data.error && data.members.length === 0 && (
@@ -136,7 +159,11 @@ export function CallSection({
                     <p role="status" className="text-sm font-bold">
                         {chosenCount > 0 ? plural(chosenCount, 'pessoa escolhida', 'pessoas escolhidas') : 'Ninguém escolhido ainda.'}
                     </p>
-                    {showMissing && chosenCount === 0 && <Alert tone="danger" role="alert">{MISSING_WORKERS_MESSAGE}</Alert>}
+                    {chosenCount === 0 && withoutCall && !data.error && (
+                        <Alert tone="info" action={withoutCall}>
+                            Escolher quem chamar é opcional. Sem ninguém, o turno é publicado e você chama depois.
+                        </Alert>
+                    )}
                     {suggestedCount > 0 && (
                         <p className="text-xs text-gray-600">
                             {plural(suggestedCount, 'pessoa foi chamada', 'pessoas foram chamadas')} nestes turnos da vez passada. Elas aparecem primeiro, desmarcadas.

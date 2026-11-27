@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
 import { toBrazilDateOnly } from '../lib/dateUtils';
 import {
-  addDays, distinctModels, toPublishPayload,
+  addDays, distinctModels, isValidDate, isValidTime, toPublishPayload,
   type ExistingShift, type ShiftDraftBatch, type ShiftDraftCall, type ShiftDraftRow,
   type ShiftDraftSeries, type SourceJob,
 } from '../lib/shiftDrafts';
@@ -209,6 +209,29 @@ export interface CallPlanItem {
   job_id: string;
   row_key: string;
   worker_ids: string[];
+  /** Início do turno (ISO, horário de Brasília). Limita o prazo do chamado; ausente = prazo escolhido/padrão. */
+  starts_at?: string;
+}
+
+/** Menor janela útil para responder: chamado de turno que começa já nasce com isso. */
+export const MIN_CALL_WINDOW_MINUTES = 15;
+
+/** Início do turno em instante real: data e hora de Brasília (sem horário de verão desde 2019). */
+export function shiftStartsAt(date: string, startTime: string): string | undefined {
+  if (!isValidDate(date) || !isValidTime(startTime)) return undefined;
+  return new Date(`${date}T${startTime}:00-03:00`).toISOString();
+}
+
+/**
+ * Prazo do chamado do lote. Padrão = o INÍCIO do turno; se o usuário escolheu um prazo, vale esse,
+ * mas nunca passa do início. Piso de 15 min à frente (turno em menos que isso: 15 min).
+ */
+export function callExpiryForShift(startsAt: string, requestedMinutes?: number, now: Date = new Date()): string {
+  const floor = now.getTime() + MIN_CALL_WINDOW_MINUTES * 60_000;
+  const start = new Date(startsAt).getTime();
+  if (Number.isNaN(start)) return new Date(floor).toISOString();
+  const wanted = requestedMinutes && requestedMinutes > 0 ? Math.min(now.getTime() + requestedMinutes * 60_000, start) : start;
+  return new Date(Math.max(wanted, floor)).toISOString();
 }
 
 /**
@@ -238,7 +261,9 @@ export function buildCallPlan(
 ): CallPlanItem[] {
   return rows.flatMap((row, i) => {
     const worker_ids = invitees(row);
-    return jobIds[i] && worker_ids.length ? [{ job_id: jobIds[i], row_key: row.key, worker_ids }] : [];
+    if (!jobIds[i] || !worker_ids.length) return [];
+    const starts_at = shiftStartsAt(row.date, row.start_time);
+    return [{ job_id: jobIds[i], row_key: row.key, worker_ids, ...(starts_at ? { starts_at } : {}) }];
   });
 }
 
@@ -248,11 +273,14 @@ export interface CallResult {
   error?: string;
 }
 
-/** Chamado aberto, com alvos, já existente: a tentativa anterior chegou e só a resposta se perdeu. */
-async function hasOpenCall(jobId: string): Promise<boolean> {
+/**
+ * Chamado já existente com alvos, em qualquer status vivo (aberto, preenchido, expirado): a tentativa
+ * anterior chegou e só a resposta se perdeu. Chamado cancelado não conta (a empresa desistiu dele).
+ */
+async function hasCallWithTargets(jobId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('shift_calls').select('id, targets:shift_call_targets(worker_id)')
-    .eq('job_id', jobId).eq('status', 'open');
+    .eq('job_id', jobId).in('status', ['open', 'filled', 'expired']);
   if (error) throw error;
   return ((data ?? []) as { targets: unknown[] | null }[]).some((c) => (c.targets?.length ?? 0) > 0);
 }
@@ -263,10 +291,12 @@ export async function dispatchCall(
   options: { retry?: boolean } = {},
 ): Promise<CallResult> {
   try {
-    if (options.retry && (await hasOpenCall(item.job_id))) return { item, status: 'sent' };
+    if (options.retry && (await hasCallWithTargets(item.job_id))) return { item, status: 'sent' };
     const result = await ShiftCallService.createShiftCall(item.job_id, item.worker_ids, {
       reason: call?.reason ?? 'outro',
-      ...(call?.expires_minutes ? { expiresInHours: call.expires_minutes / 60 } : {}),
+      ...(item.starts_at
+        ? { expiresAt: callExpiryForShift(item.starts_at, call?.expires_minutes) }
+        : call?.expires_minutes ? { expiresInHours: call.expires_minutes / 60 } : {}),
     });
     return result.call
       ? { item, status: 'sent' }

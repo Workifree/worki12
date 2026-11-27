@@ -139,22 +139,79 @@ describe('ShiftBatchFlow', () => {
         await waitFor(() => expect(service.dispatchCall).toHaveBeenCalledTimes(1));
     });
 
-    it('sem escolher quem vai trabalhar, Publicar não segue e explica; escolhendo a lista, publica e chama', async () => {
+    it('sem escolher quem vai trabalhar, Publicar segue sem chamar (não bloqueia); escolhendo a lista, publica e chama', async () => {
         service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
-        service.dispatchCall.mockImplementation(async (item: unknown) => ({ item, status: 'sent' }));
         renderFlow();
         await repeatFromHistory();
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
         expect(await screen.findByText('Ninguém escolhido ainda.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
-        expect(screen.getByRole('alert').textContent).toContain('Falta: escolher quem vai trabalhar.');
-        expect(service.publishBatch).not.toHaveBeenCalled();
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        expect(service.publishBatch).toHaveBeenCalledTimes(1);
+        expect(service.dispatchCall).not.toHaveBeenCalled();
+    });
+
+    it('com a lista escolhida, publica e chama', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
         await pickList();
         expect(screen.getByText('1 pessoa escolhida')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(await screen.findByText('1 turno publicado')).toBeTruthy();
         await waitFor(() => expect(service.dispatchCall).toHaveBeenCalledTimes(1));
-        expect(service.dispatchCall.mock.calls[0][0]).toEqual(expect.objectContaining({ job_id: 'n1', worker_ids: ['w1'] }));
+        expect(service.dispatchCall.mock.calls[0][0]).toEqual(expect.objectContaining({ job_id: 'n1', worker_ids: ['w1'], starts_at: expect.any(String) }));
+    });
+
+    it('"Publicar sem chamar agora": saída explícita, publica e não chama ninguém', async () => {
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        renderFlow();
+        await repeatFromHistory();
+        fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Publicar sem chamar agora' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        expect(service.dispatchCall).not.toHaveBeenCalled();
+    });
+
+    it('falha ao carregar o Elenco com convidados no rascunho: não publica em silêncio e oferece tentar de novo', async () => {
+        vi.mocked(TeamConnectionService.listTeamMembers).mockRejectedValueOnce(new Error('rede'));
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        const batch = batchFromParse(parseShiftText('amanhã 18-23h 3 garçons 150', { today: todayInBrazil() }));
+        if (!batch) throw new Error('texto de teste não entendido');
+        renderFlow({ ...batch, call: { mode: 'workers', worker_ids: ['w1'] } });
+        expect(await screen.findByText('Não conseguimos carregar o Elenco')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: /^Publicar \d/ }));
+        expect(service.publishBatch).not.toHaveBeenCalled();
+        expect(screen.getAllByRole('alert').some((a) => /não serão enviados/.test(a.textContent ?? ''))).toBe(true);
+        // Tentar de novo: o Elenco volta (mock padrão) e a publicação passa a chamar.
+        fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+        await waitFor(() => expect(screen.queryByText('Não conseguimos carregar o Elenco')).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: /^Publicar \d/ }));
+        await waitFor(() => expect(service.publishBatch).toHaveBeenCalledTimes(1));
+    });
+
+    it('falha só das listas com lista escolhida também bloqueia; "Publicar sem chamar agora" libera', async () => {
+        const { TeamListService } = await import('../../services/teamListService');
+        vi.mocked(TeamListService.listLists).mockRejectedValueOnce(new Error('rede'));
+        service.publishBatch.mockResolvedValue({ ok: true, alreadyCreated: false, jobIds: ['n1'] });
+        const batch = batchFromParse(parseShiftText('amanhã 18-23h 3 garçons 150', { today: todayInBrazil() }));
+        if (!batch) throw new Error('texto de teste não entendido');
+        renderFlow({ ...batch, call: { mode: 'list', list_id: 'l1' } });
+        expect(await screen.findByText('Não conseguimos carregar o Elenco')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^Publicar \d/ }));
+        expect(service.publishBatch).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Publicar sem chamar agora' }));
+        expect(await screen.findByText('1 turno publicado')).toBeTruthy();
+        expect(service.dispatchCall).not.toHaveBeenCalled();
+    });
+
+    it('2 vagas e 1 pessoa chamada: avisa que 1 vaga continua aberta, sem bloquear', async () => {
+        const batch = batchFromParse(parseShiftText('amanhã 18-23h 2 garçons 150', { today: todayInBrazil() }));
+        if (!batch) throw new Error('texto de teste não entendido');
+        renderFlow({ ...batch, call: { mode: 'workers', worker_ids: ['w1'] } });
+        expect(await screen.findByText('2 vagas, 1 pessoa chamada: 1 vaga continua aberta.')).toBeTruthy();
+        expect((screen.getByRole('button', { name: /^Publicar \d/ }) as HTMLButtonElement).disabled).toBe(false);
     });
 
     it('elenco vazio: explica que o turno fica aberto e publica sem chamar', async () => {

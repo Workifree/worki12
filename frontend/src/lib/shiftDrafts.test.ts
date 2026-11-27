@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  BATCH_LIMIT_MESSAGE, addDays, applyToAll, batchFingerprint, batchSummary, copyJobs, createRow,
+  BATCH_LIMIT_MESSAGE, MISSING_WORKERS_MESSAGE, inviteShortMessage, addDays, applyToAll, batchFingerprint, batchSummary, copyJobs, createRow,
   distinctModels, duplicateRow, emptyTemplate, hasBlockingIssue, isValidDate, lastWeekRange,
   lastWeekendRange, mergeDrafts, newId, nowTimeInBrazil, quickDateOptions, resolveSeries, rowCost,
   separateRows, seriesDates, templateFromJob, toPublishPayload, validateBatch, weekdayOf,
@@ -117,14 +117,29 @@ describe('validateBatch', () => {
     expect(hasBlockingIssue(validate([row({ end_time: '18:00' })]))).toBe(true);
   });
 
-  it('quem vai trabalhar: sem ninguém escolhido bloqueia uma vez; elenco vazio ou escolha feita libera', () => {
+  it('quem vai trabalhar: sem ninguém escolhido só avisa (uma vez), com elenco vazio ou não', () => {
     const rows = [row(), row({ key: 'k2', date: '2026-12-05' })];
-    expect(validate(rows)).toEqual([]); // sem contexto: nada a exigir
+    expect(validate(rows)).toEqual([]); // sem contexto: nada a avisar
     const withInvite = (teamSize: number, countFor: () => number) =>
       validate(rows, { invite: { teamSize, countFor } }).filter((i) => i.kind === 'missing_workers');
-    expect(withInvite(3, () => 0)).toEqual([expect.objectContaining({ row_key: '', blocking: true, detail: 'Falta: escolher quem vai trabalhar.' })]);
-    expect(withInvite(0, () => 0)).toEqual([]);
+    const warning = [expect.objectContaining({ row_key: '', blocking: false, detail: MISSING_WORKERS_MESSAGE })];
+    expect(withInvite(3, () => 0)).toEqual(warning);
+    expect(withInvite(0, () => 0)).toEqual(warning);
     expect(withInvite(3, () => 2)).toEqual([]);
+    expect(hasBlockingIssue(validate(rows, { invite: { teamSize: 3, countFor: () => 0 } }))).toBe(false);
+  });
+
+  it('convidados < vagas: avisa a linha sem bloquear; igual ou mais, ou ninguém, não gera esse aviso', () => {
+    const rows = [row({ slots: 2 })];
+    const shortOf = (n: number) =>
+      validate(rows, { invite: { teamSize: 5, countFor: () => n } }).filter((i) => i.kind === 'invite_short');
+    expect(shortOf(1)).toEqual([
+      expect.objectContaining({ row_key: rows[0].key, blocking: false, detail: '2 vagas, 1 pessoa chamada: 1 vaga continua aberta.' }),
+    ]);
+    expect(shortOf(2)).toEqual([]);
+    expect(shortOf(3)).toEqual([]);
+    expect(shortOf(0)).toEqual([]);
+    expect(inviteShortMessage(4, 1)).toBe('4 vagas, 1 pessoa chamada: 3 vagas continuam abertas.');
   });
 
   it('diz o que falta', () => {

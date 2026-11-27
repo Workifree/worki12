@@ -471,10 +471,11 @@ export async function handleCopilot(request: Request, deps: Deps): Promise<Respo
     const output = checked.output
     if (!output) {
       // Só o NOME da regra que falhou (ação/campo), nunca o conteúdo: serve para diagnosticar sem vazar dado.
-      if (!result.noAction) deps.log('output_invalido', { why: checked.why ?? 'desconhecido' })
+      if (!result.noAction) deps.log('output_invalido', { why: checked.why ?? 'desconhecido', model, cost_usd: typeof cost === 'number' && Number.isFinite(cost) ? cost : -1 })
       return fail(502, result.noAction ? 'model_no_action' : 'invalid_model_output')
     }
-    deps.log('ok', { inputTokens, outputTokens })
+    // Custo e tempo reais por chamada (só números e o nome do modelo: nada de conteúdo), para comparar modelos.
+    deps.log('ok', { inputTokens, outputTokens, model, attempts, latency_ms: Date.now() - started, cost_usd: typeof cost === 'number' && Number.isFinite(cost) ? cost : -1 })
     return reply(200, {
       ...(report ? { eval: report } : {}),
       choices: [

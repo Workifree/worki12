@@ -1,19 +1,17 @@
 /** Peças que PC e celular compartilham. Nenhuma toca a página: só a interface do copiloto. */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { BookOpen, Check, Wand2, ChevronDown, CornerDownLeft, History, ListChecks, Send, Sparkles } from 'lucide-react'
+import { BookOpen, Check, Wand2, ChevronDown, CornerDownLeft, History, ListChecks, ArrowUp, Sparkles } from 'lucide-react'
 import { Orb, Shimmer } from './Trigger'
 import { getMotionMode, setMotionMode, type MotionMode } from '../../lib/copilot/motion'
 import { PillButton } from './PillButton'
 import { ConfirmCardView } from './ConfirmCardView'
 import type { ChatItem, Pending } from '../../hooks/copilot/useCopilotAgent'
 import { readLog } from '../../lib/copilot/log'
-import { containsPII } from '../../lib/copilot/redact'
 import type { CopilotRole } from '../../lib/copilot/routes'
 import { quickAnswersFor } from '../../lib/copilot/suggestions'
 import type { CopilotMode } from '../../lib/copilot/ui'
 import type { CopilotViewProps } from './copilotView'
 
-export const NOTICE_ID = 'copilot-aviso-dados'
 
 export { Orb }
 
@@ -70,7 +68,6 @@ export function Composer({
   useEffect(() => {
     if (autoFocus) ref.current?.focus({ preventScroll: true })
   }, [autoFocus])
-  const pii = value.length > 5 && containsPII(value)
   return (
     <div>
       <form
@@ -84,7 +81,6 @@ export function Composer({
         <textarea
           ref={ref}
           aria-label="Como posso ajudar?"
-          aria-describedby={NOTICE_ID}
           placeholder={placeholder}
           rows={1}
           maxLength={600}
@@ -105,18 +101,10 @@ export function Composer({
         {shortcutHint && !value && (
           <kbd className="hidden shrink-0 rounded-md border-[1.5px] border-[#e3e6eb] px-1.5 text-[10.5px] text-[#6b7280] sm:block">Esc</kbd>
         )}
-        <button type="submit" aria-label="Enviar pedido" disabled={!value.trim()} className="wk-btn wk-btn--primary inline-flex w-11 shrink-0 items-center justify-center p-0">
-          <Send size={18} aria-hidden="true" />
+        <button type="submit" aria-label="Enviar pedido" disabled={!value.trim()} className="wk-send inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0f1720] text-white disabled:opacity-25">
+          <ArrowUp size={18} strokeWidth={2.6} aria-hidden="true" />
         </button>
       </form>
-      <p id={NOTICE_ID} className={`pt-1.5 text-xs text-[#4b5563] ${bare ? '' : 'px-1'}`}>
-        Não digite CPF, senha, chave PIX, telefone ou outros dados pessoais.
-      </p>
-      {pii && (
-        <p role="status" className="mx-4 mt-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
-          Isto parece um dado pessoal. Ele é escondido antes do envio, mas prefira não digitar.
-        </p>
-      )}
     </div>
   )
 }
@@ -219,7 +207,6 @@ function AskForm({ onAnswer }: { onAnswer: (text: string) => void }) {
     >
       <input
         aria-label="Sua resposta ao copiloto"
-        aria-describedby={NOTICE_ID}
         value={answer}
         maxLength={300}
         autoFocus
@@ -345,7 +332,7 @@ function HelpRow({ icon, title, detail, onClick, expanded }: { icon: ReactNode; 
  * 1. conversa em andamento (se houver) e respostas rápidas; 2. como o copiloto ajuda (Me mostre/Faça pra mim);
  * 3. Sugestões e Recentes; 4. Ajuda (guias e passos da última tarefa); 5. Atividade neste aparelho, discreta no fim.
  */
-export function IdleBody({ view, children }: { view: CopilotViewProps; children?: ReactNode }) {
+export function IdleBody({ view, children, compact = false }: { view: CopilotViewProps; children?: ReactNode; compact?: boolean }) {
   const { agent, availability, consent } = view
   const [showSteps, setShowSteps] = useState(false)
   const [motion, setMotion] = useState<MotionMode>(getMotionMode)
@@ -365,17 +352,32 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
   return (
     <div className="space-y-4">
       {children}
-      {hasChat && <ChatLog messages={agent.messages} />}
+      {hasChat && (compact ? <ChatLog messages={agent.messages.slice(-2)} /> : <ChatLog messages={agent.messages} />)}
       {agent.followUp && <Chips items={quickAnswersFor(agent.followUp)} onPick={view.send} label="Respostas rápidas" />}
 
       <div className="space-y-1.5">
         <ModeSwitch mode={view.mode} onChange={view.setMode} />
-        <p className="px-1 text-[11.5px] text-[#6b7280]">
+        {!compact && <p className="px-1 text-[11.5px] text-[#6b7280]">
           {view.mode === 'show' ? 'Eu mostro na tela e você toca.' : 'Eu navego e preencho. Antes de gravar ou enviar, peço sua confirmação.'}
-        </p>
+        </p>}
       </div>
 
-      {!hasChat && (
+      {!hasChat && compact && (
+        <CommandList primary items={view.suggestions.slice(0, 3)} onPick={view.send} label="Sugestões de pedido" />
+      )}
+      {!hasChat && compact && view.history.length > 0 && (
+        <Section
+          title="Recentes"
+          action={
+            <button type="button" aria-label="Limpar histórico" onClick={view.forgetHistory} className="min-h-6 px-1 text-[11.5px] font-semibold text-[#6b7280] underline hover:text-[#0f1720]">
+              Limpar
+            </button>
+          }
+        >
+          <CommandList items={view.history.slice(0, 2)} onPick={view.send} label="Pedidos recentes" />
+        </Section>
+      )}
+      {!hasChat && !compact && (
         <>
           <Section title="Sugestões">
             <CommandList primary items={view.suggestions} onPick={view.send} label="Sugestões de pedido" />
@@ -395,7 +397,7 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
         </>
       )}
 
-      <Section title="Ajuda">
+      {!compact && <Section title="Ajuda">
         <div className="grid gap-0.5">
           {view.onOpenGuide && (
             <HelpRow
@@ -428,9 +430,9 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
             ))}
           </ol>
         )}
-      </Section>
+      </Section>}
 
-      <div className="flex items-center justify-between gap-3 px-1">
+      {!compact && <div className="flex items-center justify-between gap-3 px-1">
         <span id="copilot-anim-label" className="text-[11.5px] font-semibold text-[#4b5563]">Animações do copiloto</span>
         <div role="radiogroup" aria-labelledby="copilot-anim-label" className="wk-seg !w-auto">
           {([['pleno', 'Completas'], ['reduzido', 'Reduzidas']] as const).map(([value, label]) => (
@@ -439,9 +441,9 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <div className="border-t border-[#e3e6eb] pt-1">
+      {!compact && <div className="border-t border-[#e3e6eb] pt-1">
         <HelpRow
           icon={<History size={13} />}
           title="Atividade neste aparelho"
@@ -459,7 +461,7 @@ export function IdleBody({ view, children }: { view: CopilotViewProps; children?
             ))}
           </ul>
         )}
-      </div>
+      </div>}
     </div>
   )
 }

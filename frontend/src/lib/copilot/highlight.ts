@@ -166,7 +166,14 @@ export function createOutlineHighlighter(): Highlighter {
         } else {
           n.style.width = `${box.right - box.left + PAD * 2}px`
           n.style.height = `${box.bottom - box.top + PAD * 2}px`
-          n.style.transform = `translate(${box.left - PAD}px, ${box.top - PAD}px)`
+          const wantX = box.left - PAD
+          const wantY = box.top - PAD
+          n.style.transform = `translate(${wantX}px, ${wantY}px)`
+          // Contêiner com transform/filter vira o "fixed" do nó e o desloca: mede e compensa.
+          const got = n.getBoundingClientRect()
+          const dx = wantX - got.left
+          const dy = wantY - got.top
+          if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) n.style.transform = `translate(${wantX + dx}px, ${wantY + dy}px)`
           n.style.opacity = '1'
         }
       }
