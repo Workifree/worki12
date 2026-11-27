@@ -371,14 +371,14 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         }],
     },
     {
-        id: 'empresa-mensagens', papeis: GESTOR,
+        id: 'empresa-mensagens', papeis: EMPRESA,
         titulo: 'Responder mensagem de um freela',
         descricao: 'Conversar pelo chat do Worki.',
         frases: ['chat', 'falar com freela', 'conversa'],
         passos: [{
             rota: 'empresa.mensagens', alvos: ['empresa.mensagens.enviar'],
             titulo: 'Abra a conversa e responda',
-            explicacao: 'Escolha a conversa na lista, escreva e envie.',
+            explicacao: 'Escolha o freela na lista, escreva e envie. Se ele tem mais de um turno, troque o turno no topo da conversa. O Encarregado vê só os freelas dos turnos que cuida.',
             aoTocar: 'Envia a sua mensagem ao freela.',
             semAlvo: 'Abra uma conversa na lista. Se não há nenhuma, comece pela tela do turno.',
         }],
@@ -413,10 +413,10 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'encarregado-menus', papeis: ENCARREGADO,
         titulo: 'Entender por que não vejo alguns menus',
         descricao: 'O que fica só com o Gestor.',
-        frases: ['nao aparece relatorio', 'sumiu mensagens', 'sem acesso', 'equipe indicacoes unidades'],
+        frases: ['nao aparece relatorio', 'sem acesso', 'equipe indicacoes unidades'],
         passos: [{
             rota: 'empresa.gestao', alvos: [], titulo: 'Acesso de encarregado',
-            explicacao: 'Relatórios, Mensagens, Equipe, Indicações, Unidades e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
+            explicacao: 'Relatórios, Equipe, Indicações, Unidades e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele. Mensagens mostra só os freelas dos turnos que você cuida.',
             aoTocar: 'Nada muda por aqui.',
         }],
     },
@@ -629,6 +629,6 @@ export function roteirosDoPapel(papel: PapelGuia): RoteiroGuia[] {
 /** Primeiros passos por papel (ids do catálogo). */
 export const PRIMEIROS_PASSOS: Readonly<Record<PapelGuia, readonly string[]>> = {
     gestor: ['empresa-elenco-adicionar', 'empresa-criar-turno', 'empresa-chamar-freelas', 'empresa-presenca', 'empresa-pagamento'],
-    encarregado: ['encarregado-meus-turnos', 'empresa-chamar-freelas', 'empresa-presenca', 'encarregado-menus'],
+    encarregado: ['encarregado-meus-turnos', 'empresa-chamar-freelas', 'empresa-presenca', 'empresa-mensagens', 'encarregado-menus'],
     freela: ['freela-pix', 'freela-meu-link', 'freela-convite', 'freela-chegada', 'freela-confirmar-recebimento'],
 };

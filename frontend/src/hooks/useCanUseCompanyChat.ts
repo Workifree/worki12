@@ -1,10 +1,11 @@
 import { useCurrentCompany } from './useCurrentCompany';
 
 /**
- * O chat da empresa é só do Gestor na v1: o Encarregado não tem (spec equipe-encarregados).
+ * Chat da empresa (ADR-20261127): o Gestor e o Encarregado CONFIRMADO usam Mensagens; o banco
+ * escopa as conversas pelo turno (`is_job_owner`). Encarregado ainda não confirmado opera zero.
  * Enquanto o papel é desconhecido o atalho não aparece (só APARECE depois, nunca some).
  */
 export function useCanUseCompanyChat(): boolean {
     const company = useCurrentCompany();
-    return !!company && company.role !== 'encarregado';
+    return !!company && company.confirmed !== false;
 }
