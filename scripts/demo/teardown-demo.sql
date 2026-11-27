@@ -42,7 +42,7 @@ CREATE TEMP TABLE _du ON COMMIT DROP AS
   UNION SELECT pg_temp.d('company')
   UNION SELECT pg_temp.d('company-b')
   UNION SELECT pg_temp.d('u:' || x) FROM unnest(ARRAY['gestor2','enc.centro','enc.norte','enc.eventos','enc.aguardando','enc.removido']) x
-  UNION SELECT pg_temp.d('w:' || g) FROM generate_series(1, 25) g;
+  UNION SELECT pg_temp.d('w:' || g) FROM generate_series(1, 32) g;
 
 CREATE TEMP TABLE _dc ON COMMIT DROP AS
   SELECT pg_temp.d('company') AS id UNION SELECT pg_temp.d('company-b');
@@ -130,7 +130,7 @@ DELETE FROM auth.users
       SELECT pg_temp.d('company')
       UNION SELECT pg_temp.d('company-b')
       UNION SELECT pg_temp.d('u:' || x) FROM unnest(ARRAY['gestor2','enc.centro','enc.norte','enc.eventos','enc.aguardando','enc.removido']) x
-      UNION SELECT pg_temp.d('w:' || g) FROM generate_series(1, 25) g);
+      UNION SELECT pg_temp.d('w:' || g) FROM generate_series(1, 32) g);
 COMMIT;
 
 -- Conferencia: tudo deve ser 0.
