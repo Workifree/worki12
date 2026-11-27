@@ -125,14 +125,16 @@ describe('navegação — estado ativo', () => {
         expect(activeIds(bottom, '/company/relatorio')).toEqual(['gestao']);
     });
 
-    it('encarregado: quatro itens (com Elenco, sem Mensagens e Relatórios) e, em Gestão, só trilha e ajuda', () => {
+    it('encarregado: com Elenco e Relatórios (visão própria), sem Mensagens; em Gestão, relatório, trilha e ajuda', () => {
         const items = getCompanyNav({ isEncarregado: true, hasTeam: true });
-        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão']);
+        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Relatórios', 'Gestão']);
         expect(isGestorOnlyPath('/company/messages')).toBe(true);
+        expect(isGestorOnlyPath('/company/relatorio')).toBe(false);
+        expect(isGestorOnlyPath('/company/operacao')).toBe(true);
         expect(toBottomNav(items)).toHaveLength(4);
         const cards = getGestaoGroups({ gestor: false, units: false, teamInvited: false, trail: true })
             .flatMap((g) => g.cards.map((c) => c.id));
-        expect(cards).toEqual(['trilha', 'ajuda']);
+        expect(cards).toEqual(['relatorios', 'trilha', 'ajuda']);
     });
 
     it('Início aponta para Hoje só com equipe', () => {

@@ -93,13 +93,13 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     expect(screen.getByRole('link', { name: /Divino Fogão/ })).toHaveAttribute('href', '/company/gestao');
   });
 
-  it('encarregado: com Elenco, sem Mensagens (chat fora da v1) e sem Relatórios', async () => {
+  it('encarregado: com Elenco e Relatórios (visão própria), sem Mensagens (chat fora da v1)', async () => {
     mockRpc.mockResolvedValue({ data: [companyRow({ role: 'encarregado' })], error: null });
 
     renderSidebar();
 
     await waitFor(() => expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/company/hoje'));
-    expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão']);
+    expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Relatórios', 'Gestão']);
   });
 
   it('sub-rota mantém o item ativo; notificações não marcam nada', async () => {

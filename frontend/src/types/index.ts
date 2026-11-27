@@ -509,7 +509,7 @@ export type ShiftCallReason =
 
 /** Rótulos em pt-BR dos motivos — fonte única para dropdown e relatório. */
 export const SHIFT_CALL_REASON_LABELS: Record<ShiftCallReason, string> = {
-  falta: 'Falta de funcionário',
+  falta: 'Falta de freela',
   demissao: 'Demissão / quebra de escala',
   pico_previsto: 'Pico de movimento previsto',
   evento: 'Evento',
@@ -1594,3 +1594,103 @@ export type {
   ShiftDraftRow, ShiftDraftCall, ShiftDraftSeries, ShiftDraftBatch, ShiftDraftIssueKind, ShiftDraftIssue,
 } from '../lib/shiftDrafts';
 import type { PresenceMode, PresenceQrMode } from '../lib/presence';
+
+// =============================================
+// RELATÓRIO FINANCEIRO e PLANILHA DE PAGAMENTO (ADR-20261127-relatorio-financeiro-e-planilha-de-pagamento)
+// Contrato das RPCs `get_financial_report` e `get_payment_sheet`. Escritos à mão (sem codegen).
+// `get_financial_report` NUNCA carrega CPF/PIX; só `get_payment_sheet` (Gestor) os devolve.
+// =============================================
+export type FinancialReportStatus = 'aberta' | 'agendada' | 'paga' | 'conciliada';
+export type FinancialAmountKind = 'realized' | 'estimated';
+export type FinancialReportOutcome =
+  | 'ok' | 'forbidden' | 'not_confirmed' | 'range_too_large' | 'invalid_input' | 'unauthenticated';
+
+export interface FinancialReportRow {
+  job_id: string;
+  job_title: string | null;
+  job_category: string | null;
+  /** Data LOCAL do turno (America/Sao_Paulo), YYYY-MM-DD. */
+  job_date: string | null;
+  tag_id: string | null;
+  tag_name: string | null;
+  responsible_id: string | null;
+  responsible_name: string | null;
+  worker_id: string | null;
+  worker_name: string | null;
+  checkin_at: string | null;
+  checkout_at: string | null;
+  checkout_confirmed: boolean;
+  /** Medido (check-in/out). `null` = sem check-in/out: nunca 0. */
+  hours: number | null;
+  /** Planejado (jobs.estimated_hours), só para rotular. */
+  hours_estimated: number | null;
+  amount: number;
+  amount_kind: FinancialAmountKind;
+  hourly_rate: number | null;
+  /** = shift_payments.id (número do recibo). */
+  payment_id: string | null;
+  payment_status: 'scheduled' | 'recorded' | null;
+  source: string | null;
+  paid_at: string | null;
+  scheduled_for: string | null;
+  worker_confirmed_at: string | null;
+  status: FinancialReportStatus;
+}
+
+export interface FinancialTotalsBase {
+  rows_count: number;
+  hours_total: number;
+  hours_missing_count: number;
+  total_realized: number;
+  total_estimated: number;
+}
+
+export interface FinancialTotalsByWorker extends FinancialTotalsBase {
+  worker_id: string | null;
+  worker_name: string | null;
+}
+
+export interface FinancialTotalsByDay extends FinancialTotalsBase {
+  /** YYYY-MM-DD (data local). */
+  day: string;
+}
+
+export interface FinancialReportTotals {
+  by_worker: FinancialTotalsByWorker[];
+  by_day: FinancialTotalsByDay[];
+  overall: FinancialTotalsBase;
+}
+
+export interface FinancialReport {
+  outcome: FinancialReportOutcome;
+  /** 'company' = Gestor (company inteira); 'own' = Encarregado (só os próprios turnos + cobertos). */
+  scope: 'company' | 'own';
+  truncated: boolean;
+  rows: FinancialReportRow[];
+  totals: FinancialReportTotals;
+}
+
+export type PaymentSheetOutcome = 'ok' | 'forbidden' | 'range_too_large' | 'too_many_workers' | 'invalid_input' | 'unauthenticated';
+
+export interface PaymentSheetRow {
+  worker_id: string;
+  full_name: string | null;
+  /** Completos na RPC; a tela mascara, só o arquivo exportado leva inteiro. Nulos se anonimizado. */
+  cpf: string | null;
+  pix_key: string | null;
+  shifts_count: number;
+  hours_total: number;
+  hours_missing_count: number;
+  total_paid: number;
+  total_to_pay: number;
+  has_estimated_amount: boolean;
+  tags: string[];
+  payment_ids: string[];
+}
+
+export interface PaymentSheet {
+  outcome: PaymentSheetOutcome;
+  rows: PaymentSheetRow[];
+  generated_at: string | null;
+  log_id: string | null;
+}

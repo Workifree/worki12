@@ -49,7 +49,9 @@ export const ORGANIZATION_PATH = '/company/organization';
 
 /** Rotas só do Gestor (guarda única em `GestorRouteGuard`). Indicações: as RPCs são Gestor-only. */
 export const GESTOR_ONLY_ROUTES: readonly string[] = [
-    '/company/indicacoes', '/company/relatorio', '/company/operacao', ORGANIZATION_PATH,
+    // `/company/relatorio` NÃO está aqui: o Encarregado confirmado vê uma visão só dos próprios turnos
+    // (ADR-20261127). O escopo e a ausência de PII são decididos na RPC; a página esconde o que é do Gestor.
+    '/company/indicacoes', '/company/operacao', ORGANIZATION_PATH,
     '/company/configuracoes/*', '/company/messages',
 ];
 
@@ -127,7 +129,7 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             matches: ['/company/messages'], gestorOnly: true,
         },
         {
-            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio', gestorOnly: true,
+            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
             matches: tabPaths('relatorios'), mobileParent: 'gestao',
         },
         {
@@ -213,11 +215,14 @@ export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = fal
                     id: 'unidades', title: 'Unidades', icon: Network, path: '/company/organization',
                     description: 'Visão das lojas da sua rede',
                 }] : []),
-                ...(gestor ? [{
-                    id: 'relatorios', title: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
-                    description: 'Pagamentos e operação', mobileOnly: true,
-                }] : []),
             ],
+        },
+        {
+            id: 'financeiro', label: 'Financeiro',
+            cards: [{
+                id: 'relatorios', title: gestor ? 'Relatórios' : 'Meus relatórios', icon: BarChart3, path: '/company/relatorio',
+                description: gestor ? 'Pagamentos, horas e operação' : 'Pagamentos e horas dos seus turnos', mobileOnly: true,
+            }],
         },
         {
             id: 'bonus', label: 'Meus bônus',

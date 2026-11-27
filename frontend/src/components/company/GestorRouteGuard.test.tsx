@@ -22,7 +22,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('D-5: guarda única das rotas do Gestor', () => {
   it.each([
-    '/company/indicacoes', '/company/relatorio', '/company/operacao', '/company/organization', '/company/configuracoes/equipe',
+    '/company/indicacoes', '/company/operacao', '/company/organization', '/company/configuracoes/equipe',
   ])('encarregado em %s: sem acesso, e a tela nunca chega a montar', async (path) => {
     as('encarregado')
     open(path)
@@ -34,6 +34,12 @@ describe('D-5: guarda única das rotas do Gestor', () => {
   it('encarregado entra no Elenco (R7/R10b)', () => {
     as('encarregado')
     open('/company/team')
+    expect(screen.getByText('conteúdo do gestor')).toBeInTheDocument()
+  })
+
+  it('encarregado entra no relatório (visão só dos próprios turnos, escopo decidido na RPC)', () => {
+    as('encarregado')
+    open('/company/relatorio')
     expect(screen.getByText('conteúdo do gestor')).toBeInTheDocument()
   })
 
