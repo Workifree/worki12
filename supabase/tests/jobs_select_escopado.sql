@@ -2,264 +2,289 @@
 -- File: supabase/tests/jobs_select_escopado.sql
 -- NAO e migration. Rodar a mao, DEPOIS de aplicar 20261206000100_jobs_select_escopado.sql.
 --
--- PARTE 1 e READ-ONLY (so catalogo) e pode rodar em producao.
--- PARTE 2 roda em BEGIN ... ROLLBACK, sem escrita de dado: so troca de papel (SET LOCAL ROLE) e claims.
---   Os ids de cada persona sao descobertos como superusuario ANTES de trocar de papel. Persona que nao
---   existe nos dados vira RAISE NOTICE 'SKIP ...' (nao e aprovacao; registrar no relatorio). Falha = EXCEPTION.
---   Rodar em producao so se o operador aceitar (nao escreve nada; ROLLBACK ao fim).
--- Escrita SEM execucao previa contra o banco pos-migration: a primeira rodada faz parte da verificacao.
+-- PARTE 1: catalogo, read-only, falha com ASSERT/EXCEPTION. Pode rodar em producao.
+-- PARTE 2: FIXTURES SINTETICAS dentro de BEGIN ... ROLLBACK (nada persiste). ESCREVE (como superusuario)
+--   empresas, membros, turnos, applications, chamados e pagamentos de mentira, e troca de papel com
+--   SET LOCAL ROLE + request.jwt.claims. Rodar em branch/QA/staging; em producao so com aceite explicito do operador
+--   (e a transacao inteira e desfeita, mas ha triggers de escrita no caminho).
+-- Escrita SEM execucao previa pos-migration: a primeira rodada faz parte da verificacao. Se um INSERT de fixture
+-- falhar por trigger/CHECK nao previsto, o erro aponta a linha; ajustar a fixture, nao afrouxar a assercao.
 
 -- ============================================================================
--- PARTE 1 — CATALOGO (read-only)
+-- PARTE 1 — CATALOGO (read-only; cada bloco FALHA se o esperado nao vale)
 -- ============================================================================
+DO $$
+DECLARE v_n int; v_name text;
+BEGIN
+  -- 1.1 jobs nao tem policy de leitura USING(true)
+  SELECT count(*) INTO v_n FROM pg_policies
+   WHERE schemaname='public' AND tablename='jobs' AND cmd IN ('SELECT','ALL') AND lower(btrim(qual)) IN ('true','(true)');
+  ASSERT v_n = 0, format('1.1 jobs ainda tem %s policy USING(true)', v_n);
 
--- 1.1 jobs nao pode ter policy de leitura USING(true). esperado: 0 linhas.
-SELECT policyname, cmd, qual FROM pg_policies
- WHERE schemaname = 'public' AND tablename = 'jobs' AND cmd IN ('SELECT','ALL')
-   AND lower(btrim(qual)) IN ('true','(true)');
+  -- 1.2 EXATAMENTE 1 policy de leitura, e e jobs_select_scoped
+  SELECT count(*), min(policyname) INTO v_n, v_name FROM pg_policies
+   WHERE schemaname='public' AND tablename='jobs' AND cmd IN ('SELECT','ALL');
+  ASSERT v_n = 1 AND v_name = 'jobs_select_scoped', format('1.2 esperado 1 policy jobs_select_scoped; achei % (%)', v_n, v_name);
 
--- 1.2 unica policy de SELECT em jobs = jobs_select_scoped. esperado: 1 linha.
-SELECT policyname, roles, qual FROM pg_policies
- WHERE schemaname = 'public' AND tablename = 'jobs' AND cmd = 'SELECT';
+  -- 1.3 funcao: DEFINER, search_path vazio, anon sem EXECUTE, authenticated e service_role com
+  ASSERT (SELECT prosecdef FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='session_is_job_participant'),
+         '1.3 session_is_job_participant nao e DEFINER';
+  ASSERT (SELECT proconfig::text LIKE '%search_path=""%' FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='session_is_job_participant'),
+         '1.3 search_path nao e vazio';
+  ASSERT NOT has_function_privilege('anon', 'public.session_is_job_participant(uuid)', 'EXECUTE'), '1.3 anon tem EXECUTE';
+  ASSERT has_function_privilege('authenticated', 'public.session_is_job_participant(uuid)', 'EXECUTE'), '1.3 authenticated sem EXECUTE';
+  ASSERT has_function_privilege('service_role', 'public.session_is_job_participant(uuid)', 'EXECUTE'), '1.3 service_role sem EXECUTE';
 
--- 1.3 funcao: DEFINER, search_path vazio, anon SEM EXECUTE, authenticated e service_role COM.
---     esperado: definer=true, anon_exec=false, auth_exec=true, svc_exec=true, config={search_path=""}.
-SELECT p.proname, p.prosecdef AS definer, p.proconfig AS config,
-       has_function_privilege('anon',          p.oid, 'EXECUTE') AS anon_exec,
-       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec,
-       has_function_privilege('service_role',  p.oid, 'EXECUTE') AS svc_exec
-  FROM pg_proc p
- WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'session_is_job_participant';
+  -- 1.4 RLS ligada
+  ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid='public.jobs'::regclass), '1.4 RLS desligada em jobs';
 
--- 1.4 RLS ligada em jobs. esperado: true.
-SELECT relrowsecurity FROM pg_class WHERE oid = 'public.jobs'::regclass;
+  -- 1.5 M1: nao existe INSERT de candidatura pull por freela
+  ASSERT NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='applications'
+                      AND cmd='INSERT' AND policyname='Workers can insert applications'),
+         '1.5 policy "Workers can insert applications" ainda existe';
+  SELECT count(*) INTO v_n FROM pg_policies WHERE schemaname='public' AND tablename='applications' AND cmd IN ('INSERT','ALL');
+  ASSERT v_n = 1, format('1.5 applications deve ter so applications_insert_company_invite como INSERT; tem %s', v_n);
 
--- 1.5 indices de apoio (apos 000200/000300). esperado: 2 linhas.
-SELECT indexname FROM pg_indexes
- WHERE schemaname = 'public'
-   AND indexname IN ('idx_shift_call_targets_worker_call','idx_shift_payments_job_worker');
-
--- 1.6 nenhum indice de apoio invalido (CONCURRENTLY interrompido deixa indisvalid=false). esperado: 0 linhas.
-SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
- WHERE c.relname IN ('idx_shift_call_targets_worker_call','idx_shift_payments_job_worker') AND NOT i.indisvalid;
+  RAISE NOTICE 'PARTE 1 OK';
+END $$;
 
 -- ============================================================================
--- PARTE 2 — COMPORTAMENTO POR PAPEL (BEGIN ... ROLLBACK)
+-- PARTE 2 — COMPORTAMENTO POR PAPEL, COM FIXTURES (BEGIN ... ROLLBACK)
 -- ============================================================================
 BEGIN;
 
-CREATE TEMP TABLE _jt (k text PRIMARY KEY, v text) ON COMMIT DROP;
-GRANT ALL ON _jt TO PUBLIC;
+CREATE TEMP TABLE _f (k text PRIMARY KEY, id uuid NOT NULL DEFAULT gen_random_uuid()) ON COMMIT DROP;  -- pessoas/empresas
+CREATE TEMP TABLE _j (label text PRIMARY KEY, id uuid NOT NULL DEFAULT gen_random_uuid()) ON COMMIT DROP; -- turnos
+GRANT SELECT ON _f, _j TO PUBLIC;
 
--- Descoberta das personas (como superusuario).
-DO $$
-DECLARE
-  v_company uuid; v_owner uuid; v_enc uuid; v_enc_unconf uuid; v_worker uuid; v_worker_free uuid; v_other_owner uuid;
-BEGIN
-  -- empresa com mais turnos
-  SELECT j.company_id INTO v_company FROM public.jobs j GROUP BY j.company_id ORDER BY count(*) DESC LIMIT 1;
-  SELECT COALESCE(c.owner_id, c.id) INTO v_owner FROM public.companies c WHERE c.id = v_company;
-  -- outra empresa (dono diferente, com turnos)
-  SELECT COALESCE(c.owner_id, c.id) INTO v_other_owner FROM public.companies c
-   WHERE c.id <> v_company AND EXISTS (SELECT 1 FROM public.jobs j WHERE j.company_id = c.id)
-     AND COALESCE(c.owner_id, c.id) <> v_owner LIMIT 1;
-  SELECT cm.user_id INTO v_enc FROM public.company_members cm
-   WHERE cm.company_id = v_company AND cm.role = 'encarregado' AND cm.status = 'active' AND cm.confirmed_at IS NOT NULL LIMIT 1;
-  SELECT cm.user_id INTO v_enc_unconf FROM public.company_members cm
-   WHERE cm.company_id = v_company AND cm.role = 'encarregado' AND cm.status = 'active' AND cm.confirmed_at IS NULL LIMIT 1;
-  -- freela com vinculo (application) em turno dessa empresa
-  SELECT a.worker_id INTO v_worker FROM public.applications a JOIN public.jobs j ON j.id = a.job_id
-   WHERE j.company_id = v_company AND a.worker_id <> v_owner LIMIT 1;
-  -- freela sem NENHUM vinculo (nem application, alvo ou pagamento) e que nao e operador de empresa
-  SELECT w.id INTO v_worker_free FROM public.workers w
-   WHERE NOT EXISTS (SELECT 1 FROM public.applications a WHERE a.worker_id = w.id)
-     AND NOT EXISTS (SELECT 1 FROM public.shift_call_targets t WHERE t.worker_id = w.id)
-     AND NOT EXISTS (SELECT 1 FROM public.shift_payments p WHERE p.worker_id = w.id)
-     AND NOT EXISTS (SELECT 1 FROM public.company_members cm WHERE cm.user_id = w.id)
-     AND NOT EXISTS (SELECT 1 FROM public.companies c WHERE c.id = w.id OR c.owner_id = w.id)
-   LIMIT 1;
-  INSERT INTO _jt VALUES ('company', v_company::text), ('owner', v_owner::text), ('other_owner', v_other_owner::text),
-    ('enc', v_enc::text), ('enc_unconf', v_enc_unconf::text), ('worker', v_worker::text), ('worker_free', v_worker_free::text);
-END $$;
+INSERT INTO _f(k) VALUES ('gestor'),('gestor_b'),('enc_ok'),('enc_unconf'),('enc_removed'),('enc_cov'),
+  ('w_app'),('w_team'),('w_sos_open'),('w_sos_exp'),('w_sos_closed'),('w_sos_decl'),('w_sos_acc'),('w_void'),('w_none'),
+  ('co_a'),('co_b'),('org_a'),('org_b');
 
--- Helper: troca para authenticated com o uid dado.
-CREATE FUNCTION pg_temp.as_user(p_uid uuid) RETURNS void LANGUAGE plpgsql AS $$
+-- helper: id de fixture
+CREATE FUNCTION pg_temp.f(p text) RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT id FROM _f WHERE k = p $$;
+CREATE FUNCTION pg_temp.j(p text) RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT id FROM _j WHERE label = p $$;
+
+-- helper: labels de turno-fixture VISIVEIS para o usuario (troca de papel real; volta ao superusuario)
+CREATE FUNCTION pg_temp.vis(p_uid uuid) RETURNS text AS $$
+DECLARE r text;
 BEGIN
   PERFORM set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
-END $$;
-GRANT EXECUTE ON FUNCTION pg_temp.as_user(uuid) TO PUBLIC;
+  SELECT COALESCE(string_agg(l.label, ',' ORDER BY l.label), '') INTO r
+    FROM _j l WHERE EXISTS (SELECT 1 FROM public.jobs j WHERE j.id = l.id);
+  EXECUTE 'RESET ROLE';
+  RETURN r;
+END $$ LANGUAGE plpgsql;
 
--- 2.1 Gestor/dono: ve TODOS os turnos da empresa (inclui deleted) e NENHUM de outra empresa sem vinculo.
-DO $$
-DECLARE v_company uuid := (SELECT v::uuid FROM _jt WHERE k='company');
-        v_owner uuid := (SELECT v::uuid FROM _jt WHERE k='owner');
-        v_total int; v_seen int; v_foreign int;
+CREATE FUNCTION pg_temp.expect(p_what text, p_got text, p_want text) RETURNS void AS $$
 BEGIN
-  SELECT count(*) INTO v_total FROM public.jobs WHERE company_id = v_company;
-  PERFORM pg_temp.as_user(v_owner);
-  SELECT count(*) INTO v_seen FROM public.jobs WHERE company_id = v_company;
-  -- turnos de outras empresas visiveis (dono pode ter outras empresas ou ser freela: so conta de empresa sem relacao)
-  SELECT count(*) INTO v_foreign FROM public.jobs j
-   WHERE j.company_id <> v_company
-     AND NOT EXISTS (SELECT 1 FROM public.companies c WHERE c.id = j.company_id AND (c.owner_id = v_owner OR c.id = v_owner));
-  RESET ROLE;
-  IF v_seen <> v_total THEN RAISE EXCEPTION '2.1 Gestor viu % de % turnos da empresa', v_seen, v_total; END IF;
-  RAISE NOTICE '2.1 OK: Gestor viu %/% turnos; de outras empresas (sem vinculo seu) viu %', v_seen, v_total, v_foreign;
-  IF v_foreign > 0 THEN
-    -- so e erro se o dono nao tem vinculo de freela/membro nessas empresas
-    IF EXISTS (SELECT 1 FROM public.company_members cm WHERE cm.user_id = v_owner AND cm.company_id <> v_company)
-       OR EXISTS (SELECT 1 FROM public.applications a WHERE a.worker_id = v_owner) THEN
-      RAISE NOTICE '2.1 aviso: dono tem outros vinculos; v_foreign nao conclusivo';
-    ELSE
-      RAISE EXCEPTION '2.1 Gestor viu % turnos de outras empresas', v_foreign;
-    END IF;
+  IF p_got IS DISTINCT FROM p_want THEN
+    RAISE EXCEPTION '% — viu [%], esperado [%]', p_what, p_got, p_want;
   END IF;
+  RAISE NOTICE 'OK % = [%]', p_what, p_got;
+END $$ LANGUAGE plpgsql;
+
+-- helper: cria chamado + alvo (fixture)
+CREATE FUNCTION pg_temp.mkcall(p_job text, p_origin text, p_status text, p_exp timestamptz, p_worker text, p_resp text)
+RETURNS void AS $$
+DECLARE v_call uuid;
+BEGIN
+  INSERT INTO public.shift_calls(job_id, company_id, created_by, slots, expires_at, status, origin)
+  VALUES (pg_temp.j(p_job), pg_temp.f('co_a'), pg_temp.f('gestor'), 1, p_exp, p_status, p_origin)
+  RETURNING id INTO v_call;
+  INSERT INTO public.shift_call_targets(call_id, worker_id, response, responded_at)
+  VALUES (v_call, pg_temp.f(p_worker), p_resp, CASE WHEN p_resp IS NULL THEN NULL ELSE now() END);
+END $$ LANGUAGE plpgsql;
+
+-- ---- fixtures (como superusuario) ----
+DO $$
+DECLARE
+  d0 date := current_date + 10;   -- inicio da janela de cobertura (enc_cov -> enc_ok): d0 .. d0+2
+  ts timestamptz;
+  v_call uuid;
+BEGIN
+  INSERT INTO public.organizations(id, name, created_by) VALUES (pg_temp.f('org_a'), 'ZZ org a', pg_temp.f('gestor')),
+                                                               (pg_temp.f('org_b'), 'ZZ org b', pg_temp.f('gestor_b'));
+  INSERT INTO public.companies(id, name, organization_id, owner_id) VALUES
+    (pg_temp.f('co_a'), 'ZZ empresa A', pg_temp.f('org_a'), pg_temp.f('gestor')),
+    (pg_temp.f('co_b'), 'ZZ empresa B', pg_temp.f('org_b'), pg_temp.f('gestor_b'));
+
+  -- membros: confirmado, nao confirmado, removido, e o "de" da cobertura (ativo e confirmado)
+  INSERT INTO public.company_members(company_id, user_id, role, status, created_by, confirmed_at, removed_at) VALUES
+    (pg_temp.f('co_a'), pg_temp.f('enc_ok'),      'encarregado', 'active',  pg_temp.f('gestor'), now(), NULL),
+    (pg_temp.f('co_a'), pg_temp.f('enc_unconf'),  'encarregado', 'active',  pg_temp.f('gestor'), NULL,  NULL),
+    (pg_temp.f('co_a'), pg_temp.f('enc_removed'), 'encarregado', 'removed', pg_temp.f('gestor'), now(), now()),
+    (pg_temp.f('co_a'), pg_temp.f('enc_cov'),     'encarregado', 'active',  pg_temp.f('gestor'), now(), NULL);
+
+  -- coberturas: enc_cov -> enc_ok em [d0, d0+2]; gestor -> enc_ok (inerte: "de" e Gestor) em d0+20
+  INSERT INTO public.responsibility_coverages(company_id, from_user_id, to_user_id, starts_on, ends_on, created_by) VALUES
+    (pg_temp.f('co_a'), pg_temp.f('enc_cov'), pg_temp.f('enc_ok'), d0, d0 + 2, pg_temp.f('gestor')),
+    (pg_temp.f('co_a'), pg_temp.f('gestor'),  pg_temp.f('enc_ok'), d0 + 20, d0 + 20, pg_temp.f('gestor'));
+
+  -- turnos: (label, empresa, responsavel, dia)
+  INSERT INTO _j(label) VALUES ('a_enc_ok'),('a_enc_unconf'),('a_resp_null'),('a_enc_removed'),('a_gestor'),
+    ('a_cov_before'),('a_cov_start'),('a_cov_mid'),('a_cov_end'),('a_cov_after'),('a_cov_from_gestor'),('b_gestor');
+
+  INSERT INTO public.jobs(id, company_id, title, responsible_id, start_date)
+  SELECT pg_temp.j(x.label), pg_temp.f(x.co), 'ZZ ' || x.label,
+         CASE WHEN x.resp IS NULL THEN NULL ELSE pg_temp.f(x.resp) END,
+         ((x.day::text || ' 12:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo')
+    FROM (VALUES
+      ('a_enc_ok',          'co_a', 'enc_ok',     (d0 + 40)),
+      ('a_enc_unconf',      'co_a', 'enc_unconf', (d0 + 41)),
+      ('a_resp_null',       'co_a', NULL,         (d0 + 42)),
+      ('a_enc_removed',     'co_a', 'enc_removed',(d0 + 43)),
+      ('a_gestor',          'co_a', 'gestor',     (d0 + 44)),
+      ('a_cov_before',      'co_a', 'enc_cov',    (d0 - 1)),   -- borda: um dia ANTES da janela
+      ('a_cov_start',       'co_a', 'enc_cov',    (d0)),       -- borda: primeiro dia
+      ('a_cov_mid',         'co_a', 'enc_cov',    (d0 + 1)),
+      ('a_cov_end',         'co_a', 'enc_cov',    (d0 + 2)),   -- borda: ultimo dia
+      ('a_cov_after',       'co_a', 'enc_cov',    (d0 + 3)),   -- borda: um dia DEPOIS
+      ('a_cov_from_gestor', 'co_a', 'gestor',     (d0 + 20)),  -- cobertura com "de" = Gestor e inerte
+      ('b_gestor',          'co_b', 'gestor_b',   (d0 + 45))
+    ) AS x(label, co, resp, day);
+
+  -- freelas
+  INSERT INTO public.workers(id) SELECT id FROM _f WHERE k LIKE 'w\_%';
+
+  -- w_app: application (invited) em a_gestor
+  INSERT INTO public.applications(job_id, worker_id, status) VALUES (pg_temp.j('a_gestor'), pg_temp.f('w_app'), 'invited');
+
+  -- chamados (um por turno): team encerrado; sos aberto; sos expirado; sos cancelado; sos recusado; sos aceito
+  PERFORM pg_temp.mkcall('a_enc_unconf', 'team', 'cancelled', now() + interval '1 day', 'w_team',      NULL);
+  PERFORM pg_temp.mkcall('a_resp_null',  'sos',  'open',      now() + interval '1 hour', 'w_sos_open',   NULL);
+  PERFORM pg_temp.mkcall('a_enc_removed','sos',  'open',      now() - interval '1 hour', 'w_sos_exp',    NULL);
+  PERFORM pg_temp.mkcall('a_cov_before', 'sos',  'cancelled', now() + interval '1 hour', 'w_sos_closed', NULL);
+  PERFORM pg_temp.mkcall('a_cov_after',  'sos',  'open',      now() + interval '1 hour', 'w_sos_decl',   'declined');
+  PERFORM pg_temp.mkcall('a_cov_mid',    'sos',  'filled',    now() - interval '1 hour', 'w_sos_acc',    'accepted');
+
+  -- w_void: so um shift_payments voided
+  INSERT INTO public.shift_payments(job_id, company_id, worker_id, source, amount, status, voided_at, void_reason)
+  VALUES (pg_temp.j('a_cov_end'), pg_temp.f('co_a'), pg_temp.f('w_void'), 'cash', 10, 'voided', now(), 'fixture');
 END $$;
 
--- 2.2 Encarregado confirmado: so os que e responsavel + os cobertos na data; nenhum de outro responsavel sem cobertura.
+-- ---- assertions ----
+
+-- 2.1 Gestor/dono: todos os turnos da empresa A, nenhum da B
+SELECT pg_temp.expect('2.1 Gestor A', pg_temp.vis(pg_temp.f('gestor')),
+  'a_cov_after,a_cov_before,a_cov_end,a_cov_from_gestor,a_cov_mid,a_cov_start,a_enc_ok,a_enc_removed,a_enc_unconf,a_gestor,a_resp_null');
+
+-- 2.2 Gestor de OUTRA empresa: ve so o da B, nada da A
+SELECT pg_temp.expect('2.2 Gestor B', pg_temp.vis(pg_temp.f('gestor_b')), 'b_gestor');
+
+-- 2.3 Encarregado confirmado: os dele + cobertura nas bordas (d0 e d0+2 entram; d0-1 e d0+3 nao);
+--     cobertura com "de" = Gestor e inerte; responsible_id NULL, de removido e de nao confirmado ficam de fora.
+SELECT pg_temp.expect('2.3 Encarregado confirmado', pg_temp.vis(pg_temp.f('enc_ok')),
+  'a_cov_end,a_cov_mid,a_cov_start,a_enc_ok');
+
+-- 2.4 Encarregado NAO confirmado e REMOVIDO: zero
+SELECT pg_temp.expect('2.4a Encarregado nao confirmado', pg_temp.vis(pg_temp.f('enc_unconf')), '');
+SELECT pg_temp.expect('2.4b Encarregado removido',       pg_temp.vis(pg_temp.f('enc_removed')), '');
+
+-- 2.5 Freelas (M2: SOS so enquanto aberto e nao expirado, ou apos aceitar; team mantem)
+SELECT pg_temp.expect('2.5a freela com application',               pg_temp.vis(pg_temp.f('w_app')),        'a_gestor');
+SELECT pg_temp.expect('2.5b freela alvo team (chamado encerrado)', pg_temp.vis(pg_temp.f('w_team')),       'a_enc_unconf');
+SELECT pg_temp.expect('2.5c freela alvo SOS aberto',               pg_temp.vis(pg_temp.f('w_sos_open')),   'a_resp_null');
+SELECT pg_temp.expect('2.5d freela alvo SOS expirado',             pg_temp.vis(pg_temp.f('w_sos_exp')),    '');
+SELECT pg_temp.expect('2.5e freela alvo SOS cancelado',            pg_temp.vis(pg_temp.f('w_sos_closed')), '');
+SELECT pg_temp.expect('2.5f freela alvo SOS recusado',             pg_temp.vis(pg_temp.f('w_sos_decl')),   '');
+SELECT pg_temp.expect('2.5g freela alvo SOS aceito',               pg_temp.vis(pg_temp.f('w_sos_acc')),    'a_cov_mid');
+SELECT pg_temp.expect('2.5h freela so com shift_payments voided',  pg_temp.vis(pg_temp.f('w_void')),       'a_cov_end');
+SELECT pg_temp.expect('2.5i freela sem vinculo',                   pg_temp.vis(pg_temp.f('w_none')),       '');
+
+-- 2.6 M1: freela sem vinculo NAO consegue se auto-conceder leitura inserindo application em turno alheio
 DO $$
-DECLARE v_company uuid := (SELECT v::uuid FROM _jt WHERE k='company');
-        v_enc uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='enc');
-        v_total int; v_seen int; v_expected int;
+DECLARE v_failed boolean := false;
 BEGIN
-  IF v_enc IS NULL THEN RAISE NOTICE '2.2 SKIP: nao ha encarregado confirmado na empresa escolhida'; RETURN; END IF;
-  SELECT count(*) INTO v_total FROM public.jobs WHERE company_id = v_company;
-  -- esperado calculado SEM o seam: responsavel = eu, ou cobertura ativa de quem e o responsavel na data local
-  SELECT count(*) INTO v_expected FROM public.jobs j
-   WHERE j.company_id = v_company AND j.responsible_id IS NOT NULL
-     AND (j.responsible_id = v_enc
-          OR EXISTS (SELECT 1 FROM public.responsibility_coverages rc
-                      WHERE rc.company_id = v_company AND rc.to_user_id = v_enc AND rc.from_user_id = j.responsible_id
-                        AND rc.revoked_at IS NULL
-                        AND ((j.start_date AT TIME ZONE 'America/Sao_Paulo')::date) BETWEEN rc.starts_on AND rc.ends_on
-                        AND EXISTS (SELECT 1 FROM public.company_members cf WHERE cf.company_id = v_company
-                                     AND cf.user_id = rc.from_user_id AND cf.role = 'encarregado'
-                                     AND cf.status = 'active' AND cf.confirmed_at IS NOT NULL)));
-  PERFORM pg_temp.as_user(v_enc);
-  SELECT count(*) INTO v_seen FROM public.jobs WHERE company_id = v_company;
-  RESET ROLE;
-  -- participacao como freela pode somar turnos; encarregado normalmente nao tem. Tolerancia explicita:
-  IF EXISTS (SELECT 1 FROM public.applications WHERE worker_id = v_enc) THEN
-    RAISE NOTICE '2.2 aviso: encarregado tambem e freela; comparacao nao conclusiva (viu %, esperado % + participacao)', v_seen, v_expected;
-  ELSIF v_seen <> v_expected THEN
-    RAISE EXCEPTION '2.2 Encarregado viu % turnos, esperado % (total da empresa %)', v_seen, v_expected, v_total;
-  END IF;
-  IF v_total > 0 AND v_seen = v_total AND v_expected < v_total THEN
-    RAISE EXCEPTION '2.2 Encarregado enxerga a empresa inteira (furo aberto)';
-  END IF;
-  RAISE NOTICE '2.2 OK: Encarregado viu % de % (esperado %)', v_seen, v_total, v_expected;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('w_none'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  BEGIN
+    INSERT INTO public.applications(job_id, worker_id, status) VALUES (pg_temp.j('a_gestor'), pg_temp.f('w_none'), 'pending');
+  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+  END;
+  EXECUTE 'RESET ROLE';
+  IF NOT v_failed THEN RAISE EXCEPTION '2.6 freela inseriu application em turno alheio (M1 aberto)'; END IF;
+  PERFORM pg_temp.expect('2.6 apos INSERT barrado, freela sem vinculo ve', pg_temp.vis(pg_temp.f('w_none')), '');
 END $$;
 
--- 2.3 Encarregado NAO confirmado: zero da empresa.
+-- 2.7 Encarregado: INSERT ... RETURNING e UPDATE ... RETURNING no proprio turno (RETURNING exige SELECT)
 DO $$
-DECLARE v_company uuid := (SELECT v::uuid FROM _jt WHERE k='company');
-        v_u uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='enc_unconf');
-        v_seen int;
+DECLARE v_id uuid; v_ok boolean; v_failed boolean := false;
 BEGIN
-  IF v_u IS NULL THEN RAISE NOTICE '2.3 SKIP: nao ha encarregado nao confirmado na empresa escolhida'; RETURN; END IF;
-  PERFORM pg_temp.as_user(v_u);
-  SELECT count(*) INTO v_seen FROM public.jobs WHERE company_id = v_company;
-  RESET ROLE;
-  IF v_seen <> 0 THEN RAISE EXCEPTION '2.3 Encarregado nao confirmado viu % turnos', v_seen; END IF;
-  RAISE NOTICE '2.3 OK: nao confirmado viu 0';
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('enc_ok'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  INSERT INTO public.jobs(company_id, title, start_date)
+  VALUES (pg_temp.f('co_a'), 'ZZ criado pelo encarregado', now() + interval '60 days') RETURNING id INTO v_id;
+  IF v_id IS NULL THEN RAISE EXCEPTION '2.7 INSERT RETURNING nao devolveu o turno do Encarregado'; END IF;
+  UPDATE public.jobs SET title = 'ZZ editado' WHERE id = v_id RETURNING true INTO v_ok;
+  IF v_ok IS DISTINCT FROM true THEN RAISE EXCEPTION '2.7 UPDATE RETURNING nao devolveu linha'; END IF;
+  EXECUTE 'RESET ROLE';
+  RAISE NOTICE 'OK 2.7 Encarregado confirmado: INSERT/UPDATE RETURNING';
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('enc_unconf'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  BEGIN
+    INSERT INTO public.jobs(company_id, title, start_date)
+    VALUES (pg_temp.f('co_a'), 'ZZ nao deveria', now() + interval '61 days');
+  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+  END;
+  EXECUTE 'RESET ROLE';
+  IF NOT v_failed THEN RAISE EXCEPTION '2.7 Encarregado nao confirmado criou turno'; END IF;
+  RAISE NOTICE 'OK 2.7 nao confirmado barrado';
 END $$;
 
--- 2.4 Freela COM vinculo: ve exatamente o conjunto de turnos de applications + alvos + pagamentos proprios.
+-- 2.8 Sem 42P17: joins como freela; leitura das tabelas que cruzam jobs como Gestor e Encarregado
 DO $$
-DECLARE v_w uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='worker');
-        v_expected int; v_seen int; v_extra int;
+DECLARE n1 int; n2 int; n4 int; n5 int;
 BEGIN
-  IF v_w IS NULL THEN RAISE NOTICE '2.4 SKIP: nao ha freela com application'; RETURN; END IF;
-  SELECT count(*) INTO v_expected FROM (
-      SELECT job_id FROM public.applications WHERE worker_id = v_w
-      UNION SELECT c.job_id FROM public.shift_call_targets t JOIN public.shift_calls c ON c.id = t.call_id WHERE t.worker_id = v_w
-      UNION SELECT job_id FROM public.shift_payments WHERE worker_id = v_w) s;
-  PERFORM pg_temp.as_user(v_w);
-  SELECT count(*) INTO v_seen FROM public.jobs;
-  RESET ROLE;
-  IF v_seen <> v_expected THEN RAISE EXCEPTION '2.4 Freela viu % turnos, esperado % (vinculo proprio)', v_seen, v_expected; END IF;
-  RAISE NOTICE '2.4 OK: freela viu % turnos (= vinculos)', v_seen;
-END $$;
-
--- 2.5 Freela SEM vinculo: zero.
-DO $$
-DECLARE v_w uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='worker_free'); v_seen int;
-BEGIN
-  IF v_w IS NULL THEN RAISE NOTICE '2.5 SKIP: nao ha freela sem vinculo'; RETURN; END IF;
-  PERFORM pg_temp.as_user(v_w);
-  SELECT count(*) INTO v_seen FROM public.jobs;
-  RESET ROLE;
-  IF v_seen <> 0 THEN RAISE EXCEPTION '2.5 Freela sem vinculo viu % turnos', v_seen; END IF;
-  RAISE NOTICE '2.5 OK: freela sem vinculo viu 0';
-END $$;
-
--- 2.6 Dono de OUTRA empresa: zero turnos da empresa escolhida.
-DO $$
-DECLARE v_company uuid := (SELECT v::uuid FROM _jt WHERE k='company');
-        v_o uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='other_owner'); v_seen int;
-BEGIN
-  IF v_o IS NULL THEN RAISE NOTICE '2.6 SKIP: nao ha segunda empresa com turnos'; RETURN; END IF;
-  PERFORM pg_temp.as_user(v_o);
-  SELECT count(*) INTO v_seen FROM public.jobs WHERE company_id = v_company;
-  RESET ROLE;
-  IF v_seen <> 0 THEN RAISE EXCEPTION '2.6 Dono de outra empresa viu % turnos alheios', v_seen; END IF;
-  RAISE NOTICE '2.6 OK: dono de outra empresa viu 0 da empresa alheia';
-END $$;
-
--- 2.7 Sem 42P17: joins como freela (se algum der recursao, o DO aborta com o erro).
-DO $$
-DECLARE v_w uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='worker'); n1 int; n2 int; n3 int; n4 int;
-BEGIN
-  IF v_w IS NULL THEN RAISE NOTICE '2.7 SKIP: sem freela com vinculo'; RETURN; END IF;
-  PERFORM pg_temp.as_user(v_w);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('w_app'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
   SELECT count(*) INTO n1 FROM public.applications a JOIN public.jobs j ON j.id = a.job_id;
+  SELECT count(*) INTO n5 FROM public.shift_payments p JOIN public.jobs j ON j.id = p.job_id;
+  SELECT count(*) INTO n4 FROM public.applications a WHERE public.is_job_owner(a.job_id);
+  EXECUTE 'RESET ROLE';
+  IF n1 <> 1 THEN RAISE EXCEPTION '2.8 applications x jobs devolveu % (esperado 1)', n1; END IF;
+  IF n4 <> 0 THEN RAISE EXCEPTION '2.8 freela nao opera turno: is_job_owner devolveu % linhas', n4; END IF;
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('w_sos_open'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
   SELECT count(*) INTO n2 FROM public.shift_call_targets t JOIN public.shift_calls c ON c.id = t.call_id JOIN public.jobs j ON j.id = c.job_id;
-  SELECT count(*) INTO n3 FROM public.shift_payments p JOIN public.jobs j ON j.id = p.job_id;
-  SELECT count(*) INTO n4 FROM public.applications a WHERE public.is_job_owner(a.job_id) OR true;
-  RESET ROLE;
-  RAISE NOTICE '2.7 OK: sem 42P17 (applications x jobs=%, targets x calls x jobs=%, payments x jobs=%, is_job_owner=%)', n1, n2, n3, n4;
+  EXECUTE 'RESET ROLE';
+  IF n2 <> 1 THEN RAISE EXCEPTION '2.8 targets x calls x jobs devolveu % (esperado 1)', n2; END IF;
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('gestor'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  SELECT count(*) INTO n5 FROM public.applications;       SELECT count(*) INTO n5 FROM public.shift_calls;
+  SELECT count(*) INTO n5 FROM public.shift_call_targets; SELECT count(*) INTO n5 FROM public.shift_payments;
+  EXECUTE 'RESET ROLE';
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', pg_temp.f('enc_ok'), 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  SELECT count(*) INTO n5 FROM public.applications;       SELECT count(*) INTO n5 FROM public.shift_calls;
+  SELECT count(*) INTO n5 FROM public.shift_call_targets; SELECT count(*) INTO n5 FROM public.shift_payments;
+  EXECUTE 'RESET ROLE';
+  RAISE NOTICE 'OK 2.8 sem 42P17';
 END $$;
 
--- 2.8 Sem 42P17 como Gestor e Encarregado nas tabelas que cruzam jobs (is_job_owner INVOKER le jobs sob a nova RLS).
+-- 2.9 anon real: sem EXECUTE na funcao (insufficient_privilege) e sem turnos
 DO $$
-DECLARE v_o uuid := (SELECT v::uuid FROM _jt WHERE k='owner');
-        v_e uuid := (SELECT NULLIF(v,'')::uuid FROM _jt WHERE k='enc'); n int;
-BEGIN
-  PERFORM pg_temp.as_user(v_o);
-  SELECT count(*) INTO n FROM public.applications;
-  SELECT count(*) INTO n FROM public.shift_calls;
-  SELECT count(*) INTO n FROM public.shift_call_targets;
-  SELECT count(*) INTO n FROM public.shift_payments;
-  RESET ROLE;
-  IF v_e IS NOT NULL THEN
-    PERFORM pg_temp.as_user(v_e);
-    SELECT count(*) INTO n FROM public.applications;
-    SELECT count(*) INTO n FROM public.shift_calls;
-    SELECT count(*) INTO n FROM public.shift_call_targets;
-    SELECT count(*) INTO n FROM public.shift_payments;
-    RESET ROLE;
-  END IF;
-  RAISE NOTICE '2.8 OK: applications/shift_calls/shift_call_targets/shift_payments legiveis por Gestor e Encarregado sem 42P17';
-END $$;
-
--- 2.9 anon: nenhum turno (sem policy) e sem EXECUTE na funcao.
-DO $$
-DECLARE n int;
+DECLARE n int; v_denied boolean := false;
 BEGIN
   PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
   EXECUTE 'SET LOCAL ROLE anon';
   BEGIN
-    SELECT count(*) INTO n FROM public.jobs;
-    IF n <> 0 THEN RAISE EXCEPTION '2.9 anon viu % turnos', n; END IF;
-  EXCEPTION WHEN insufficient_privilege THEN
-    n := 0; -- negado por GRANT tambem e aceitavel
+    PERFORM public.session_is_job_participant(pg_temp.j('a_gestor'));
+  EXCEPTION WHEN insufficient_privilege THEN v_denied := true;
   END;
-  RESET ROLE;
-  IF has_function_privilege('anon', 'public.session_is_job_participant(uuid)', 'EXECUTE') THEN
-    RAISE EXCEPTION '2.9 anon tem EXECUTE em session_is_job_participant';
-  END IF;
-  RAISE NOTICE '2.9 OK: anon sem acesso';
+  IF NOT v_denied THEN EXECUTE 'RESET ROLE'; RAISE EXCEPTION '2.9 anon executou session_is_job_participant'; END IF;
+  v_denied := false;
+  BEGIN
+    SELECT count(*) INTO n FROM public.jobs;
+    IF n <> 0 THEN EXECUTE 'RESET ROLE'; RAISE EXCEPTION '2.9 anon viu % turnos', n; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN v_denied := true;
+  END;
+  EXECUTE 'RESET ROLE';
+  RAISE NOTICE 'OK 2.9 anon: funcao negada; jobs %', CASE WHEN v_denied THEN 'negado por GRANT' ELSE '0 linhas (sem policy)' END;
 END $$;
 
 ROLLBACK;

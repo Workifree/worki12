@@ -1,7 +1,7 @@
 # ADR-20261127 — Leitura de turnos (`jobs`) escopada por quem opera ou participa
 
 ## Status
-PROPOSTO (gate do harness-architect; aplicar após aprovação humana)
+APROVADO (emendado em 27/11/2026 após revisão de segurança: SOS limitado no tempo e DROP da INSERT de candidatura)
 
 ## Contexto
 Teste real em produção: um Encarregado confirmado faz
@@ -81,8 +81,16 @@ visível quando o próprio seam já seria verdadeiro.
 - O F13/E2 continua sendo a única costura de autorização de empresa.
 
 ### Negativas / Trade-offs
-- Freela que perdeu corrida de SOS continua lendo aquele turno (foi alvo). Aceito: o conteúdo já chegou na
-  notificação.
+- **Revisado após a revisão de segurança:** o alvo de SOS NÃO mantém leitura para sempre. A notificação do SOS só
+  traz o nome da empresa; título, valor, local e briefing do turno vazariam para quem foi sorteado e nunca aceitou.
+  Regra: alvo de SOS lê o turno só enquanto o chamado está `open` e não expirado, ou depois de `response='accepted'`.
+  Recusou, perdeu a corrida, expirou ou foi cancelado = perde a leitura. Alvos `team` (elenco) mantêm a leitura.
+  A lista de convites pendentes do freela (`listPendingForWorkerChecked`) já descarta chamado não aberto ou expirado,
+  então não depende de embed de chamado fechado.
+- A policy de INSERT `Workers can insert applications` (worker_id = auth.uid(), qualquer job_id) é removida na mesma
+  migration: com leitura por participação, ela permitiria ao freela se auto-conceder leitura de qualquer turno por
+  uuid. O frontend não tem INSERT de candidatura pull; o convite da empresa segue por `applications_insert_company_invite`
+  e o aceite é `claim_shift_slot` (DEFINER).
 - O seam passa a rodar por linha nas leituras de `jobs`. São 59 linhas hoje, e as funções são STABLE. Revisar com
   `EXPLAIN` quando houver mais de 10 mil linhas.
 - Para o Encarregado, relatórios e contagens (`orderReportService`, `operationAnalyticsService`,
@@ -133,7 +141,9 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
                 WHERE a.job_id = p_job_id AND a.worker_id = (SELECT auth.uid()))
     OR EXISTS (SELECT 1 FROM public.shift_call_targets t
                  JOIN public.shift_calls c ON c.id = t.call_id
-                WHERE c.job_id = p_job_id AND t.worker_id = (SELECT auth.uid()))
+                WHERE c.job_id = p_job_id AND t.worker_id = (SELECT auth.uid())
+                  AND (COALESCE(c.origin,'team') <> 'sos' OR t.response = 'accepted'
+                       OR (c.status = 'open' AND c.expires_at > now())))
     OR EXISTS (SELECT 1 FROM public.shift_payments sp
                 WHERE sp.job_id = p_job_id AND sp.worker_id = (SELECT auth.uid()))
   );
@@ -151,8 +161,9 @@ CREATE POLICY jobs_select_scoped ON public.jobs FOR SELECT TO authenticated USIN
   OR public.session_is_job_participant(id)
 );
 
--- Índices de apoio (CONCURRENTLY fora de transação, em passo separado, se ainda não existirem):
--- applications(job_id, worker_id), shift_call_targets(worker_id), shift_payments(job_id, worker_id).
+-- Índices de apoio: nenhum novo (applications UNIQUE(job_id, worker_id); shift_calls(job_id); shift_call_targets
+-- UNIQUE(call_id, worker_id); shift_payments(job_id)).
+-- (O SQL final, com a regra de SOS no tempo e o DROP da policy de INSERT, está na migration.)
 
 -- DOWN (restaura o estado anterior, inclusive o furo):
 -- DROP POLICY IF EXISTS jobs_select_scoped ON public.jobs;
