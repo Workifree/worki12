@@ -25,6 +25,12 @@ vi.mock('../lib/logger', () => ({
     logError: vi.fn(),
 }))
 
+// Sem espera real entre as repetições (1s/2s/4s em produção)
+vi.mock('../lib/retry', async (importActual) => {
+    const actual = await importActual<typeof import('../lib/retry')>()
+    return { ...actual, withRetry: <T,>(fn: () => Promise<T>, o = {}) => actual.withRetry(fn, { ...o, delays: [0, 0, 0] }) }
+})
+
 // Mock ToastContext
 vi.mock('../contexts/ToastContext', () => ({
     useToast: () => ({

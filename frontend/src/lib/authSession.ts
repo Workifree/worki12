@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { clearAuthLockReload, isAuthLockAbort, sleep } from './authLock';
+import { withRetry } from './retry';
 
 /**
  * `getUser()` vai à rede. Sem conexão ele devolve `user: null` JUNTO com um erro de rede, e quem
@@ -48,7 +49,23 @@ export async function checkStoredSession(delays: readonly number[] = SESSION_RET
     return result;
 }
 
+/** `getUser()` com repetição (1s/2s/4s): rede lenta/token em renovação não vira erro de primeira. */
 export async function checkSession(): Promise<SessionCheck> {
+    let last = await checkSessionOnce();
+    let first = true;
+    try {
+        await withRetry(async () => {
+            if (!first) last = await checkSessionOnce();
+            first = false;
+            if (last.status === 'unavailable') throw last.error;
+        });
+    } catch {
+        // `last` segue `unavailable`
+    }
+    return last;
+}
+
+async function checkSessionOnce(): Promise<SessionCheck> {
     try {
         const { data, error } = await supabase.auth.getUser();
         if (data.user) return { status: 'ok', user: data.user };
