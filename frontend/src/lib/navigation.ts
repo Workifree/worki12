@@ -108,7 +108,7 @@ export function getWorkerNav(): NavItem[] {
 }
 
 export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): NavItem[] {
-    const items: Array<NavItem & { gestorOnly?: boolean }> = [
+    const items: NavItem[] = [
         {
             id: 'inicio', label: 'Início', icon: Home,
             path: hasTeam ? '/company/hoje' : '/company/dashboard',
@@ -144,7 +144,7 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
         // Barra inferior com no máximo 5: Relatórios e Ajuda ficam sob "Mais" (hub /company/gestao, que
         // já lista "Meus relatórios", trilha e Ajuda para quem não é Gestor). No desktop seguem como itens.
         const base = items
-            .filter((item) => !item.gestorOnly && item.id !== 'gestao')
+            .filter((item) => item.id !== 'gestao')
             .map((item) => (item.id === 'relatorios' ? { ...item, mobileParent: 'mais' } : item));
         return [
             ...base,
@@ -155,7 +155,7 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             },
         ];
     }
-    return items.filter((item) => !item.gestorOnly);
+    return items;
 }
 
 /** Itens da barra inferior: quem tem `mobileParent` sai e empresta os `matches` ao pai. */

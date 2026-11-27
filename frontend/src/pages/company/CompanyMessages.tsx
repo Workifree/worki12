@@ -137,6 +137,16 @@ export default function CompanyMessages() {
 
     // `silent` = recarga ao vivo: falha mantém a tela e a conversa não é reescolhida pela URL.
     const loadData = async (silent = false) => {
+        try {
+            await loadDataUnsafe(silent);
+        } catch (err) {
+            // Exceção fora dos ramos tratados: o spinner nunca fica preso.
+            if (silent) logError('CompanyMessages.loadData', err);
+            else falharCarga('CompanyMessages.loadData', err);
+        }
+    };
+
+    const loadDataUnsafe = async (silent: boolean) => {
         const claim = beginList();
         const falhar = (contexto: string, causa: unknown) =>
             silent ? logError(contexto, causa) : falharCarga(contexto, causa);
@@ -560,14 +570,15 @@ export default function CompanyMessages() {
                                 };
                                 return (
                                 <button
+                                    type="button"
                                     key={group.key}
                                     onClick={() => handleSelectConversation(group.latest)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedGroup?.key === group.key ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
+                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selectedGroup?.key === group.key ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
                                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             {conv.worker_avatar ? (
-                                                <img src={conv.worker_avatar} alt={conv.worker_name} className="w-full h-full object-cover" />
+                                                <img src={conv.worker_avatar} alt="" className="w-full h-full object-cover" />
                                             ) : (
                                                 <User size={20} className="text-gray-400" />
                                             )}
@@ -659,7 +670,7 @@ export default function CompanyMessages() {
                                         >
                                             {selectedGroup.conversations.map(c => (
                                                 <option key={c.id} value={c.id}>
-                                                    {`${c.job_title} · ${getStatusLabel(c.status, c.attendance)}${c.unread_count > 0 ? ` · ${c.unread_count} nova(s)` : ''}`}
+                                                    {`${c.job_title} · ${getStatusLabel(c.status, c.attendance)}${c.unread_count > 0 ? ` · ${c.unread_count === 1 ? '1 nova' : `${c.unread_count} novas`}` : ''}`}
                                                 </option>
                                             ))}
                                         </select>

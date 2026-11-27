@@ -293,8 +293,8 @@ describe('listCompanyOperators', () => {
 
 describe('tagMessage', () => {
   it('forbidden de atribuição fala do turno; o de gestão fala de criar/arquivar', () => {
-    expect(tagMessage('forbidden', 'assign')).toBe('Você não pode alterar a etiqueta deste turno.');
-    expect(tagMessage('forbidden')).toBe('Só o Gestor pode criar ou arquivar etiquetas.');
+    expect(tagMessage('forbidden', 'assign')).toBe('Você não pode alterar a loja deste turno.');
+    expect(tagMessage('forbidden')).toBe('Só o Gestor pode criar ou arquivar lojas.');
   });
 });
 

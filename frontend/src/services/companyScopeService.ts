@@ -252,8 +252,8 @@ export function writeNavRoleHint(value: NavRoleHint): void {
   }
 }
 
-/** Troca de unidade: as dicas de menu eram da unidade anterior (senão itens aparecem e somem). */
-export function switchCompanyUnit(companyId: string): void {
+/** Troca de empresa: as dicas de menu eram da empresa anterior (senão itens aparecem e somem). */
+export function switchCompany(companyId: string): void {
   setSelectedCompanyId(companyId);
   clearNavHints();
 }

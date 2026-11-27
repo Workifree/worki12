@@ -41,8 +41,10 @@ describe('máscaras', () => {
   })
 
   it('PIX mostra só o fim e nunca vaza o começo', () => {
-    expect(maskPixKey('ana@email.com')).toBe('••••.com')
-    expect(maskPixKey('11999998888')).toBe('••••8888')
+    expect(maskPixKey('ana@email.com')).toBe('a•••@email.com')
+    expect(maskPixKey('11999998888')).toBe('••••88')
+    expect(maskPixKey('529.982.247-25')).toBe('CPF (provável)')
+    expect(maskPixKey('123e4567-e89b-12d3-a456-426614174000')).toBe('123e••••')
     expect(maskPixKey('abc')).toBe('••••')
     expect(maskPixKey('ana@email.com')).not.toContain('ana')
     expect(maskPixKey(null)).toBe('—')

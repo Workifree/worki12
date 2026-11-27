@@ -1,3 +1,4 @@
+import { maskPixKey } from '../../services/paymentSheetService';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Star, Briefcase, Wallet, Copy, Send, History, Share2, Trash2 } from 'lucide-react';
@@ -131,7 +132,7 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
             >
               <span className="flex items-center gap-2 text-xs text-gray-700 min-w-0">
                 <Wallet size={14} className="flex-shrink-0 text-gray-500" />
-                <span className="truncate">{worker.pix_key}</span>
+                <span className="truncate">{maskPixKey(worker.pix_key)}</span>
               </span>
               <IconButton
                 onClick={(e) => { e.stopPropagation(); void handleCopyPix(); }}

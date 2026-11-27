@@ -428,7 +428,7 @@ export default function CompanyToday() {
           className="mb-4"
           action={<Button variant="secondary" onClick={reload}>Tentar de novo</Button>}
         >
-          Não foi possível carregar as etiquetas ou as coberturas agora. Os turnos abaixo estão corretos.
+          Não foi possível carregar as lojas ou as coberturas agora. Os turnos abaixo estão corretos.
         </Alert>
       )}
 
@@ -448,7 +448,7 @@ export default function CompanyToday() {
               ))}
           </div>
           {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Etiquetas">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Lojas">
               {tags.map((t) => (
                 <FilterChip key={t.id} pressed={tagFilter === t.id} onClick={() => changeFilters(personFilter, tagFilter === t.id ? null : t.id)}>
                   {t.name}

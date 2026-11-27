@@ -84,9 +84,8 @@ describe('AcceptTeamInvite — prévia', () => {
     renderPage();
     expect(await screen.findByText('Divino Fogão te convidou como Encarregado')).toBeInTheDocument();
     expect(getInvitePreview).toHaveBeenCalledWith(TOKEN);
-    const campo = screen.getByLabelText('E-mail do convite') as HTMLInputElement;
-    expect(campo.value).toBe('an***@exemplo.com');
-    expect(campo).toBeDisabled();
+    expect(screen.getByTestId('convite-email')).toHaveTextContent('an***@exemplo.com');
+    expect(screen.queryByLabelText('E-mail do convite')).not.toBeInTheDocument();
     expect(sessionStorage.getItem('pending_team_invite_token')).toBe(TOKEN);
   });
 

@@ -38,9 +38,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // Quem é a PESSOA da sessão (o `name` acima é o da empresa) e o papel dela, para o rodapé.
     const [personName, setPersonName] = useState('');
     const [companyRole, setCompanyRole] = useState<MyCompany['role'] | null>(null);
-    // F13 (R13) — seletor de unidade: só aparece quando a sessão opera mais de UMA empresa
-    // (gerente de duas lojas, ou sócio navegando por unidade). Para 100% das contas de hoje
-    // (uma linha), `myCompanies.length <= 1` e o seletor nunca renderiza.
+    // Empresas que a sessão opera (`get_my_companies`) e a corrente: dão o nome e o papel do rodapé.
     const [myCompanies, setMyCompanies] = useState<MyCompany[]>([]);
     const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -74,10 +72,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             if (!user) return;
 
             if (type === 'company') {
-                // F13 (R11/R13) — `get_my_companies()` é o único resolvedor de escopo de empresa.
-                // `.eq('id', user.id)` nunca casava para um gerente (sem linha própria em
-                // `companies`), deixando o nome preso em "Carregando...". Resolve a lista inteira
-                // aqui: também alimenta o seletor de unidade quando há mais de uma.
+                // `get_my_companies()` é o único resolvedor de escopo de empresa: dá o nome, o papel e a empresa corrente.
                 try {
                     const companies = await getMyCompanies();
                     setMyCompanies(companies);
@@ -132,7 +127,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
 
     // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
     // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).
-    const activeNavClass = isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white';
+    const activeNavClass = isCompany ? 'bg-blue-600 text-white' : 'bg-primary-dark text-white';
 
     // Recolhida (768 a 1099px): só ícones. O texto continua no DOM (`sr-only`) para leitor de tela.
     const label = 'max-[1099px]:sr-only';
@@ -151,7 +146,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             {/* Cabeçalho compacto: marca + sino. Recolhida: marca em cima, sino embaixo. */}
             <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 pl-4 pr-2 max-[1099px]:h-auto max-[1099px]:flex-col max-[1099px]:justify-center max-[1099px]:gap-0 max-[1099px]:px-0 max-[1099px]:py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white'}`}>W.</span>
+                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-blue-600 text-white' : 'bg-primary-dark text-white'}`}>W.</span>
                     <div className={`min-w-0 leading-none ${label}`}>
                         <p className="text-base font-bold tracking-tight text-black">Worki</p>
                         {isCompany && <p className="mt-1 text-xs font-semibold text-gray-600">Empresa</p>}

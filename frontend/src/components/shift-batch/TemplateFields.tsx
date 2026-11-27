@@ -50,9 +50,9 @@ export function TemplateFields({
                         Intervalo (1h)
                     </label>
                     {(tags.length > 0 || template.tag_id) && (
-                        <Field label="Etiqueta (opcional)">
+                        <Field label="Loja (opcional)">
                             <select value={template.tag_id ?? ''} onChange={(e) => set({ tag_id: e.target.value || null })}>
-                                <option value="">Sem etiqueta</option>
+                                <option value="">Sem loja</option>
                                 {tags.filter((t) => !t.archivedAt).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                         </Field>

@@ -7,7 +7,7 @@ export function extraTeamMessage(outcome: string): string | null {
     case 'already_member_other_role':
       return 'Essa pessoa já está na equipe com outro papel. Remova-a antes de convidar com um papel novo.';
     case 'already_invited_other_role':
-      return 'Já existe um convite pendente para este e-mail com outro papel. Revogue o convite antes de criar outro.';
+      return 'Já existe um convite pendente para este e-mail com outro papel. Cancele o convite antes de criar outro.';
     case 'invalid_tag':
       return 'Essa loja não está mais disponível. Escolha outra.';
     case 'default_of_members':

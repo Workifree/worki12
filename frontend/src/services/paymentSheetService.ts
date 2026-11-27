@@ -28,16 +28,29 @@ import type { ReportFilters } from './orderReportService';
 export function maskCpf(cpf: string | null | undefined): string {
   if (!cpf) return '—';
   const d = cpf.replace(/\D/g, '');
-  if (d.length !== 11) return maskPixKey(cpf);
+  if (d.length !== 11) return `•••${d.slice(-2)}`;
   return `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**`;
 }
 
-/** Chave PIX com só o fim visível (4 últimos caracteres). Curta demais: esconde tudo. */
+/**
+ * Chave PIX mascarada pelo tipo inferido, para não somar com o CPF mascarado ao lado (a chave
+ * costuma SER o CPF): CPF/CNPJ não mostram dígito algum, só "CPF (provável)"; telefone, só os 2
+ * últimos; e-mail, a inicial e o domínio; aleatória, os 4 primeiros.
+ */
 export function maskPixKey(pix: string | null | undefined): string {
   if (!pix) return '—';
   const v = pix.trim();
-  if (v.length <= 6) return '••••';
-  return `••••${v.slice(-4)}`;
+  switch (inferPixKeyType(v)) {
+    case 'cpf': return 'CPF (provável)';
+    case 'cnpj': return 'CNPJ (provável)';
+    case 'telefone': return `••••${v.replace(/\D/g, '').slice(-2)}`;
+    case 'email': {
+      const [user, domain] = v.split('@');
+      return `${user.slice(0, 1)}•••@${domain}`;
+    }
+    case 'aleatoria': return `${v.slice(0, 4)}••••`;
+    default: return v.length <= 6 ? '••••' : `••••${v.slice(-2)}`;
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
@@ -147,7 +160,7 @@ export function paymentSheetOutcomeMessage(outcome: PaymentSheetOutcome): string
 
 export const PAYMENT_SHEET_CSV_HEADER = [
   'Freela', 'CPF', 'Chave PIX', 'Tipo da chave (provável)', 'Turnos concluídos', 'Horas',
-  'Turnos sem check-in/out', 'Total pago', 'A pagar', 'A pagar inclui valor estimado', 'Etiquetas', 'IDs dos pagamentos',
+  'Turnos sem check-in/out', 'Total pago', 'A pagar', 'A pagar inclui valor estimado', 'Lojas', 'IDs dos pagamentos',
 ];
 
 export function toPaymentSheetCSV(rows: PaymentSheetRow[]): string {

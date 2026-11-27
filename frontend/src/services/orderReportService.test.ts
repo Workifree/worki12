@@ -111,7 +111,7 @@ describe('toCSV', () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff)
     const [header, line] = csv.slice(1).split('\r\n')
     expect(header).toBe(
-      'Data;Etiqueta;Turno;Função;Responsável;Freela;Check-in;Check-out;Horas;Valor/hora;Valor;Tipo do valor;Forma;Status;Data Pgto;ID do pagamento',
+      'Data;Loja;Turno;Função;Responsável;Freela;Check-in;Check-out;Horas;Valor/hora;Valor;Tipo do valor;Forma;Status;Data Pgto;ID do pagamento',
     )
     const cells = line.split(';')
     expect(cells[0]).toBe('21/11/2026')

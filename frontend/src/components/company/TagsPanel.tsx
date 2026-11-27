@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Archive, Pencil } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { Button, Field } from '../ui';
+import { Button, DialogActions, Field } from '../ui';
+import ModalShell from '../ModalShell';
+import { useLatestResponse } from '../../hooks/useLatestResponse';
 import { extraTeamMessage } from '../../lib/teamMessages';
 import {
   archiveTag,
@@ -22,7 +24,7 @@ interface TagsPanelProps {
 }
 
 /**
- * Lojas da empresa (etiquetas dos turnos): o Gestor cria, renomeia e arquiva. Nunca se apaga.
+ * Lojas da empresa: o Gestor cria, renomeia e arquiva. Nunca se apaga.
  * Loja é um rótulo para o financeiro; não dá acesso a ninguém.
  */
 export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: TagsPanelProps) {
@@ -35,24 +37,31 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
   const [renaming, setRenaming] = useState<CompanyTag | null>(null);
   const [newName, setNewName] = useState('');
 
+  const [archiving, setArchiving] = useState<CompanyTag | null>(null);
+
+  // Resposta atrasada de uma leitura antiga não pode sobrescrever a lista mais nova.
+  const beginLoad = useLatestResponse();
   const reload = useCallback(async () => {
+    const claim = beginLoad();
     const result = await listTagsChecked(companyId);
+    if (!claim()) return;
     setTags(result.items);
     setLoadFailed(!result.ok);
     setLoading(false);
-  }, [companyId]);
+  }, [companyId, beginLoad]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
+      const claim = beginLoad();
       const result = await listTagsChecked(companyId);
-      if (!active) return;
+      if (!active || !claim()) return;
       setTags(result.items);
       setLoadFailed(!result.ok);
       setLoading(false);
     })();
     return () => { active = false; };
-  }, [companyId]);
+  }, [companyId, beginLoad]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -70,11 +79,11 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
     setBusy(true);
     const result = await archiveTag(tag.id);
     setBusy(false);
-    const outcome = result.outcome as string;
+    const { outcome } = result;
     if (outcome === 'default_of_members') {
       addToast(extraTeamMessage(outcome) ?? 'Não foi possível arquivar.', 'error');
     } else {
-      addToast(tagMessage(result.outcome), outcome === 'archived' ? 'success' : 'error');
+      addToast(tagMessage(outcome), outcome === 'archived' ? 'success' : 'error');
       if (outcome === 'archived') onChanged?.();
     }
     await reload();
@@ -86,7 +95,7 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
     setBusy(true);
     const result = await renameTag(renaming.id, newName);
     setBusy(false);
-    const ok = (result.outcome as string) === 'renamed';
+    const ok = result.outcome === 'renamed';
     addToast(ok ? 'Loja renomeada.' : tagMessage(result.outcome), ok ? 'success' : 'error');
     if (ok) { setRenaming(null); onChanged?.(); }
     await reload();
@@ -143,7 +152,7 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
                         <Button variant="secondary" size="lg" disabled={busy} aria-label={`Renomear loja ${t.name}`} iconLeft={<Pencil size={16} />} onClick={() => { setRenaming(t); setNewName(t.name); }}>
                           Renomear
                         </Button>
-                        <Button variant="secondary" size="lg" disabled={busy} aria-label={`Arquivar loja ${t.name}`} iconLeft={<Archive size={16} />} onClick={() => { void archive(t); }}>
+                        <Button variant="secondary" size="lg" disabled={busy} aria-label={`Arquivar loja ${t.name}`} iconLeft={<Archive size={16} />} onClick={() => setArchiving(t)}>
                           Arquivar
                         </Button>
                       </div>
@@ -155,6 +164,22 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
           </ul>
         )}
       </div>
+      {archiving && (
+        <ModalShell labelledBy="arquivar-loja-titulo" onClose={() => setArchiving(null)}>
+          <>
+            <h2 id="arquivar-loja-titulo" className="mb-3 text-2xl font-bold">Arquivar a loja {archiving.name}?</h2>
+            <p className="mb-5 text-sm text-gray-800">
+              Ela deixa de aparecer para novos turnos. Os turnos antigos continuam com ela e os relatórios não mudam.
+            </p>
+            <DialogActions>
+              <Button variant="secondary" size="lg" data-autofocus onClick={() => setArchiving(null)}>Voltar</Button>
+              <Button variant="danger" size="lg" onClick={() => { const t = archiving; setArchiving(null); void archive(t); }}>
+                Arquivar loja
+              </Button>
+            </DialogActions>
+          </>
+        </ModalShell>
+      )}
     </section>
   );
 }

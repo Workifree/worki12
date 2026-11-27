@@ -14,6 +14,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { formatBRL } from '../../lib/currency';
 import { downloadCsv } from '../../lib/csv';
+import { formatDateOnly } from '../../lib/dateUtils';
 import type { PaymentSheet } from '../../types';
 import type { ReportFilters } from '../../services/orderReportService';
 import {
@@ -27,14 +28,23 @@ import {
 
 interface PaymentSheetModalProps {
   filters: ReportFilters;
+  /** O relatório tem um filtro de status ligado; a planilha não o aplica. */
+  statusFilterIgnored?: boolean;
   onClose: () => void;
 }
 
-export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModalProps) {
+export default function PaymentSheetModal({ filters, statusFilterIgnored = false, onClose }: PaymentSheetModalProps) {
   const { addToast } = useToast();
   const { from, to, workerId, responsibleId, tagId } = filters;
   const [sheet, setSheet] = useState<PaymentSheet | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = () => {
+    setFailed(false);
+    setSheet(null);
+    setAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     let active = true;
@@ -48,7 +58,7 @@ export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModa
       }
     })();
     return () => { active = false; };
-  }, [from, to, workerId, responsibleId, tagId]);
+  }, [from, to, workerId, responsibleId, tagId, attempt]);
 
   const rows = sheet?.outcome === 'ok' ? sheet.rows : [];
 
@@ -69,12 +79,22 @@ export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModa
           <p className="mt-1 text-sm text-gray-700">
             Uma linha por freela com turno concluído no período. Use para pagar.
           </p>
+          <p className="mt-1 text-sm font-semibold">
+            Período: {formatDateOnly(from, 'dd/MM/yyyy')} a {formatDateOnly(to, 'dd/MM/yyyy')}
+            {workerId || responsibleId || tagId ? ' · com filtros de freela, responsável ou loja do relatório' : ''}
+          </p>
         </div>
       </div>
 
       <Alert tone="warning" className="mt-4">
         O arquivo contém dados pessoais (CPF e chave PIX). Compartilhe só com quem vai pagar. Esta extração fica registrada.
       </Alert>
+
+      {statusFilterIgnored && (
+        <p role="status" className="mt-3 text-sm text-gray-700">
+          O filtro de status do relatório não vale aqui: a planilha lista só turnos concluídos.
+        </p>
+      )}
 
       <div className="mt-4">
         {!sheet && !failed && (
@@ -83,7 +103,12 @@ export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModa
             <Loader2 size={24} aria-hidden="true" className="animate-spin text-gray-600" />
           </div>
         )}
-        {failed && <p role="alert" className="text-sm font-semibold text-red-700">Não foi possível gerar a planilha.</p>}
+        {failed && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-red-700">Não foi possível gerar a planilha.</p>
+            <Button variant="secondary" onClick={retry}>Tentar de novo</Button>
+          </div>
+        )}
         {sheet && sheet.outcome !== 'ok' && (
           <p role="alert" className="text-sm font-semibold text-red-700">{paymentSheetOutcomeMessage(sheet.outcome)}</p>
         )}
@@ -96,7 +121,7 @@ export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModa
           <p className="text-sm text-gray-700">Nenhum turno concluído no período e filtros escolhidos.</p>
         )}
         {rows.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border-2 border-black">
+          <div tabIndex={0} role="region" aria-label="Planilha de pagamento, role para o lado para ver todas as colunas" className="overflow-x-auto rounded-xl border-2 border-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-black bg-gray-50 text-left text-xs text-gray-600">

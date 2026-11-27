@@ -17,10 +17,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Building2, Eye, EyeOff, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { focusFirstInvalid } from '../lib/formErrors';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, Field } from '../components/ui';
 import {
@@ -34,7 +36,7 @@ import {
   provisionTeamInviteAccount,
   ROLE_LABEL,
 } from '../services/teamMembersService';
-import { invalidateCompanyScope, switchCompanyUnit } from '../services/companyScopeService';
+import { invalidateCompanyScope, switchCompany } from '../services/companyScopeService';
 import type { InvitePreviewResult } from '../types';
 
 type Step = 'form' | 'working';
@@ -83,7 +85,7 @@ const OUTCOME_COPY: Record<
   },
   account_pending: {
     title: 'Já existe uma conta com este e-mail',
-    body: 'Já existe uma conta com este e-mail ainda não confirmada. Peça ao Gestor um convite com outro e-mail ou use "Esqueci a senha" em /login.',
+    body: 'Já existe uma conta com este e-mail ainda não confirmada. Peça ao Gestor um convite com outro e-mail ou use "Esqueci a senha" na tela de entrada.',
   },
   rate_limited: {
     title: 'Muitas tentativas',
@@ -130,6 +132,8 @@ export default function AcceptTeamInvite() {
   const [loginPassword, setLoginPassword] = useState('');
   const [acceptedTos, setAcceptedTos] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [confirmError, setConfirmError] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
   const [terminal, setTerminal] = useState<TerminalOutcome | null>(null);
 
@@ -161,7 +165,7 @@ export default function AcceptTeamInvite() {
     ) {
       clearStoredToken();
       // Quem já tem empresa própria cairia nela (`pickPrimaryCompany`): abre a do convite.
-      if (result.companyId) switchCompanyUnit(result.companyId);
+      if (result.companyId) switchCompany(result.companyId);
       invalidateCompanyScope();
       // Cai direto na Hoje (E5); sem onboarding de CNPJ (o ProtectedRoute resolve pelo seam
       // e, se o Gestor ainda não confirmou, mostra a tela de espera).
@@ -227,12 +231,17 @@ export default function AcceptTeamInvite() {
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(undefined);
+    setPasswordError(undefined);
+    setConfirmError(undefined);
+    const form = e.currentTarget as HTMLFormElement;
     if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
-      setFormError(`A senha precisa ter de ${MIN_PASSWORD} a ${MAX_PASSWORD} caracteres.`);
+      flushSync(() => setPasswordError(`A senha precisa ter de ${MIN_PASSWORD} a ${MAX_PASSWORD} caracteres.`));
+      focusFirstInvalid(form);
       return;
     }
     if (password !== confirmPassword) {
-      setFormError('As senhas não são iguais.');
+      flushSync(() => setConfirmError('As senhas não são iguais.'));
+      focusFirstInvalid(form);
       return;
     }
     if (!acceptedTos) {
@@ -461,7 +470,7 @@ export default function AcceptTeamInvite() {
       <p className="text-sm text-gray-600 mt-2">
         {mode === 'login' || sessionEmail
           ? 'Entre com a sua conta para aceitar o convite.'
-          : 'Crie uma senha para entrar. Nenhum código é enviado por e-mail.'}
+          : 'Crie uma senha para entrar.'}
       </p>
       {preview.role === 'manager' && (
         <p className="text-sm font-bold mt-2">
@@ -622,25 +631,27 @@ export default function AcceptTeamInvite() {
     <>
       {header}
       <form onSubmit={(e) => void submitCreate(e)} className="space-y-4" noValidate>
-        <Field label="E-mail do convite" hint="Definido por quem te convidou. Não dá para trocar aqui.">
-          <input type="text" value={preview.emailMasked ?? ''} readOnly disabled aria-label="E-mail do convite" />
-        </Field>
-        <Field label="Crie uma senha" required hint="De 8 a 72 caracteres.">
+        <div>
+          <p className="text-sm font-bold text-black">E-mail do convite</p>
+          <p className="mt-1 text-base font-semibold break-all" data-testid="convite-email">{preview.emailMasked ?? ''}</p>
+          <p className="mt-1 text-sm text-gray-600">Definido por quem te convidou. Não dá para trocar aqui.</p>
+        </div>
+        <Field label="Crie uma senha" required hint="De 8 a 72 caracteres." error={passwordError}>
           <input
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
             maxLength={MAX_PASSWORD}
             value={password}
-            onChange={(e) => { setPassword(e.target.value); setFormError(undefined); }}
+            onChange={(e) => { setPassword(e.target.value); setFormError(undefined); setPasswordError(undefined); }}
           />
         </Field>
-        <Field label="Repita a senha" required>
+        <Field label="Repita a senha" required error={confirmError}>
           <input
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
             maxLength={MAX_PASSWORD}
             value={confirmPassword}
-            onChange={(e) => { setConfirmPassword(e.target.value); setFormError(undefined); }}
+            onChange={(e) => { setConfirmPassword(e.target.value); setFormError(undefined); setConfirmError(undefined); }}
           />
         </Field>
         <Button

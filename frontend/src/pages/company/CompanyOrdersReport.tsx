@@ -80,7 +80,7 @@ const STATUS_OPTIONS: Array<{ key: OrderStatus | 'todas'; label: string }> = [
 ];
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  aberta: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  aberta: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   agendada: 'bg-gray-100 text-gray-700 border-gray-300',
   paga: 'bg-blue-100 text-blue-700 border-blue-300',
   conciliada: 'bg-primary-light text-primary-dark border-primary',
@@ -105,7 +105,7 @@ function optionsFromRows(rows: FinancialReportRow[]) {
   for (const r of rows) {
     if (r.worker_id) workers.push({ id: r.worker_id, label: r.worker_name ?? 'Freela' });
     if (r.responsible_id) responsibles.push({ id: r.responsible_id, label: r.responsible_name ?? 'Responsável' });
-    if (r.tag_id) tags.push({ id: r.tag_id, label: r.tag_name ?? 'Etiqueta' });
+    if (r.tag_id) tags.push({ id: r.tag_id, label: r.tag_name ?? 'Loja' });
   }
   return { workers, responsibles, tags };
 }
@@ -280,7 +280,7 @@ export default function CompanyOrdersReport() {
               </select>
             </Field>
           )}
-          <Field label="Etiqueta">
+          <Field label="Loja">
             <select id="tagSelect" value={tagId} onChange={(e) => setTagId(e.target.value)}>
               <option value="">Todas</option>
               {tagOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
@@ -312,6 +312,7 @@ export default function CompanyOrdersReport() {
       {sheetOpen && gestor && (
         <PaymentSheetModal
           filters={{ from, to, workerId, responsibleId, tagId }}
+          statusFilterIgnored={statusFilter !== 'todas'}
           onClose={() => setSheetOpen(false)}
         />
       )}
@@ -374,7 +375,7 @@ export default function CompanyOrdersReport() {
                 <tr className="border-b-2 border-black bg-gray-50 text-left">
                   <Th>Data</Th>
                   <Th>Turno</Th>
-                  <Th>Etiqueta</Th>
+                  <Th>Loja</Th>
                   {gestor && <Th>Responsável</Th>}
                   <Th>Freela</Th>
                   <Th>Check-in / out</Th>

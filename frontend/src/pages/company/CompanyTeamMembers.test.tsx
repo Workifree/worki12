@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import CompanyTeamMembers from './CompanyTeamMembers';
 import type { MyCompany, TeamMemberItem } from '../../types';
@@ -119,19 +119,19 @@ describe('CompanyTeamMembers', () => {
     expect(screen.getByText('Caio')).toBeInTheDocument();
     expect(screen.getByText('Convite pendente')).toBeInTheDocument();
     expect(screen.getByText(/Link válido até 01\/12/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Copiar link/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Gerar novo link/ })).toBeInTheDocument();
   });
 
-  it('destaca "Fulano entrou" com Confirmar e Não é ele; confirmação exige digitar o nome', async () => {
+  it('destaca "Fulano entrou" com Confirmar e Não é essa pessoa; confirmação exige digitar o nome', async () => {
     list([
       member({ memberId: 'm1', userId: 'u1', displayName: 'Ana', state: 'awaiting_confirmation', confirmed: false }),
       member({ memberId: 'm3', userId: null, displayName: 'Caio', state: 'invite_expired', status: 'invited' }),
     ]);
     vi.mocked(svc.confirmMember).mockResolvedValue({ outcome: 'confirmed' });
     renderPage();
-    expect(await screen.findByText('Ana entrou. É a pessoa certa?')).toBeInTheDocument();
-    expect(screen.getByText('Venceu')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Não é ele/ })).toBeInTheDocument();
+    expect(await screen.findByText('Ana entrou. É essa pessoa?')).toBeInTheDocument();
+    expect(screen.getByText('Expirado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Não é essa pessoa/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Confirmar$/ }));
     const campo = await screen.findByLabelText(/Digite o nome da pessoa/);
@@ -191,7 +191,7 @@ describe('CompanyTeamMembers', () => {
     renderPage();
     expect((await screen.findAllByText('Gestor')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Ações de Ana' }));
-    expect(screen.queryByRole('menuitem', { name: /Alterar loja|Revogar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Alterar loja|Cancelar convite/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
   });
 
@@ -261,7 +261,7 @@ describe('CompanyTeamMembers', () => {
     await waitFor(() => expect(svc.setMemberDefaultTag).toHaveBeenCalledWith('c1', 'm7', 't1'));
   });
 
-  it('remover: dry-run, informa turnos abertos, remove e aponta para Meu Elenco só como atalho', async () => {
+  it('remover: dry-run, informa turnos abertos, remove e avisa sem misturar Equipe com Elenco', async () => {
     list([member()]);
     vi.mocked(svc.removeMember)
       .mockResolvedValueOnce({ outcome: 'would_remove', openJobs: 3, elencoLinkRotationAdvised: true, alreadyRemoved: false })
@@ -274,8 +274,10 @@ describe('CompanyTeamMembers', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Remover agora/ }));
     await waitFor(() => expect(svc.removeMember).toHaveBeenNthCalledWith(2, 'c1', 'u1', false));
-    fireEvent.click(await screen.findByRole('button', { name: /Abrir Meu Elenco/ }));
-    expect(await screen.findByTestId('elenco')).toBeInTheDocument();
+    expect(await screen.findByText(/Para trazer outra, use Convidar pessoa/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Abrir Meu Elenco/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Dispensar aviso/ }));
+    expect(screen.queryByText(/Para trazer outra/)).not.toBeInTheDocument();
   });
 
   it('remover o último Gestor (last_manager) explica o motivo', async () => {
@@ -288,21 +290,32 @@ describe('CompanyTeamMembers', () => {
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/pelo menos um Gestor/), 'error'));
   });
 
-  it('"Não é ele" corta o acesso só depois de confirmar', async () => {
+  it('"Não é essa pessoa" corta o acesso só depois de confirmar', async () => {
     list([member({ state: 'awaiting_confirmation', confirmed: false })]);
     vi.mocked(svc.rejectMember).mockResolvedValue({ outcome: 'rejected' });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Não é ele/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Não é essa pessoa/ }));
     expect(svc.rejectMember).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole('button', { name: /Cortar acesso/ }));
     await waitFor(() => expect(svc.rejectMember).toHaveBeenCalledWith('c1', 'u1'));
   });
 
-  it('"Copiar link" de convite pendente gera o NOVO link (o antigo morre)', async () => {
+  it('"Gerar novo link" de convite ainda válido pede confirmação (o antigo morre)', async () => {
+    list([member({ memberId: 'm4', userId: null, displayName: 'Davi', state: 'invited', status: 'invited' })]);
+    vi.mocked(svc.resendInvite).mockResolvedValue({ outcome: 'resent', inviteToken: 'tok-davi' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Gerar novo link/ }));
+    expect(svc.resendInvite).not.toHaveBeenCalled();
+    expect(screen.getByText(/O link anterior deixa de valer/, { selector: 'p.mb-5' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Gerar novo link/ }));
+    await waitFor(() => expect(svc.resendInvite).toHaveBeenCalledWith('m4'));
+  });
+
+  it('convite vencido: "Gerar novo link" gera direto e mostra o NOVO link', async () => {
     list([member({ memberId: 'm3', userId: null, displayName: 'Caio', state: 'invite_expired', status: 'invited' })]);
     vi.mocked(svc.resendInvite).mockResolvedValue({ outcome: 'resent', inviteToken: 'novo-token' });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Copiar link/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Gerar novo link/ }));
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('/convite-equipe/novo-token');
     expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
   });
@@ -311,7 +324,7 @@ describe('CompanyTeamMembers', () => {
     list([member({ memberId: 'm3', userId: null, displayName: 'Caio', state: 'invited', status: 'invited' })]);
     vi.mocked(svc.revokeInvite).mockResolvedValue({ outcome: 'revoked' });
     renderPage();
-    await menu('Caio', /Revogar convite/);
+    await menu('Caio', /Cancelar convite/);
     await waitFor(() => expect(svc.revokeInvite).toHaveBeenCalledWith('m3'));
   });
 
@@ -339,7 +352,7 @@ describe('CompanyTeamMembers', () => {
     list([member({ state: 'awaiting_confirmation', confirmed: false })]);
     vi.mocked(svc.rejectMember).mockResolvedValue({ outcome: 'not_pending_confirmation' });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Não é ele/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Não é essa pessoa/ }));
     fireEvent.click(await screen.findByRole('button', { name: /Cortar acesso/ }));
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/Outro Gestor já resolveu/), 'error'));
   });

@@ -529,8 +529,8 @@ export default function CompanyDashboard() {
                                             <span className="text-xs font-semibold text-yellow-700">Alguns dados podem estar incompletos.</span>
                                         </div>
                                     )}
-                                    {activities.map((activity, i) => (
-                                        <div key={i} className="flex gap-3 items-start">
+                                    {activities.map((activity) => (
+                                        <div key={`${activity.type}:${activity.id}`} className="flex gap-3 items-start">
                                             <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${activity.type === 'job_created' ? 'bg-blue-500' : 'bg-green-500'}`} aria-hidden="true" />
                                             <div>
                                                 <p className="text-sm font-semibold leading-snug">{activity.text}</p>

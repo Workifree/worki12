@@ -215,7 +215,7 @@ export function reportOutcomeMessage(outcome: FinancialReportOutcome): string {
 // ---------------------------------------------------------------------------
 
 export const REPORT_CSV_HEADER = [
-  'Data', 'Etiqueta', 'Turno', 'Função', 'Responsável', 'Freela', 'Check-in', 'Check-out',
+  'Data', 'Loja', 'Turno', 'Função', 'Responsável', 'Freela', 'Check-in', 'Check-out',
   'Horas', 'Valor/hora', 'Valor', 'Tipo do valor', 'Forma', 'Status', 'Data Pgto', 'ID do pagamento',
 ];
 

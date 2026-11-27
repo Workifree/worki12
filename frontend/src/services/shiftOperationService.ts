@@ -659,15 +659,15 @@ export async function setJobTag(jobId: string, tagId: string | null): Promise<{ 
 export function tagMessage(outcome: TagOutcome, context: 'manage' | 'assign' = 'manage'): string {
   switch (outcome) {
     case 'created':
-      return 'Etiqueta criada.';
+      return 'Loja criada.';
     case 'reactivated':
-      return 'Essa etiqueta já existia arquivada. Ela voltou a ficar disponível.';
+      return 'Essa loja já existia arquivada. Ela voltou a ficar disponível.';
     case 'already_exists':
-      return 'Já existe uma etiqueta com esse nome.';
+      return 'Já existe uma loja com esse nome.';
     case 'archived':
-      return 'Etiqueta arquivada. Os turnos antigos continuam com ela.';
+      return 'Loja arquivada. Os turnos antigos continuam com ela.';
     case 'already_archived':
-      return 'Essa etiqueta já estava arquivada.';
+      return 'Essa loja já estava arquivada.';
     case 'renamed':
       return 'Nome atualizado. Os relatórios passados passam a mostrar o nome novo.';
     case 'default_of_members':
@@ -675,13 +675,13 @@ export function tagMessage(outcome: TagOutcome, context: 'manage' | 'assign' = '
     case 'invalid_input':
       return 'Use um nome de 1 a 40 caracteres.';
     case 'invalid_tag':
-      return 'Essa etiqueta não está mais disponível. Escolha outra.';
+      return 'Essa loja não está mais disponível. Escolha outra.';
     case 'job_deleted':
       return 'Esse turno foi cancelado.';
     case 'forbidden':
       return context === 'assign'
-        ? 'Você não pode alterar a etiqueta deste turno.'
-        : 'Só o Gestor pode criar ou arquivar etiquetas.';
+        ? 'Você não pode alterar a loja deste turno.'
+        : 'Só o Gestor pode criar ou arquivar lojas.';
     case 'not_found':
       return 'Não encontramos o item. A lista foi atualizada.';
     case 'unauthenticated':
