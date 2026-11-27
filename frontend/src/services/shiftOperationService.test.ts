@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  archiveTag,
+  renameTag,
   buildShiftWindow,
   cancelJob,
   cancelJobMessage,
@@ -322,5 +324,29 @@ describe('isCancelJobAvailable (front no ar antes da E5)', () => {
     const r = await cancelJob('j1');
     expect(r.outcome).toBe('unavailable');
     expect(cancelJobMessage(r)).toMatch(/ainda não está disponível/);
+  });
+});
+
+describe('lojas: renomear e arquivar (ADR-20261127)', () => {
+  it('renameTag usa o contrato e devolve o outcome', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'renamed', tag_id: 't1' }, error: null });
+    expect(await renameTag('t1', 'Loja Centro')).toEqual({ outcome: 'renamed' });
+    expect(mockRpc).toHaveBeenLastCalledWith('rename_company_tag', { p_tag_id: 't1', p_name: 'Loja Centro' });
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'already_exists' }, error: null });
+    expect((await renameTag('t1', 'Outra')).outcome).toBe('already_exists');
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('x') });
+    expect((await renameTag('t1', 'Outra')).outcome).toBe('error');
+  });
+
+  it('archiveTag devolve a contagem só em default_of_members', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'default_of_members', count: 2 }, error: null });
+    expect(await archiveTag('t1')).toEqual({ outcome: 'default_of_members', count: 2 });
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'archived' }, error: null });
+    expect(await archiveTag('t1')).toEqual({ outcome: 'archived' });
+  });
+
+  it('tagMessage cobre renamed e default_of_members', () => {
+    expect(tagMessage('default_of_members')).toMatch(/padrão/);
+    expect(tagMessage('renamed')).toMatch(/Nome atualizado/);
   });
 });

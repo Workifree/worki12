@@ -138,6 +138,8 @@ export type TagOutcome =
   | 'already_exists'
   | 'archived'
   | 'already_archived'
+  | 'renamed'
+  | 'default_of_members'
   | 'ok'
   | 'invalid_tag'
   | 'job_deleted'
@@ -192,6 +194,7 @@ interface RpcJson {
   cancelled_calls?: number;
   closed_candidates?: number;
   tag_id?: string;
+  count?: number;
   truncated?: boolean;
   items?: RpcJobItem[];
 }
@@ -614,13 +617,28 @@ export async function createTag(companyId: string, name: string): Promise<{ outc
   }
 }
 
-export async function archiveTag(tagId: string): Promise<{ outcome: TagOutcome }> {
+/** `count` só vem em `default_of_members`: quantas pessoas (convidadas ou ativas) têm a loja como padrão. */
+export async function archiveTag(tagId: string): Promise<{ outcome: TagOutcome; count?: number }> {
   try {
     const { data, error } = await supabase.rpc('archive_company_tag', { p_tag_id: tagId });
     if (error) throw error;
-    return { outcome: outcomeOf<TagOutcome>((data ?? null) as RpcJson | null) };
+    const row = (data ?? null) as RpcJson | null;
+    const outcome = outcomeOf<TagOutcome>(row);
+    return outcome === 'default_of_members' ? { outcome, count: num(row?.count) } : { outcome };
   } catch (err) {
     logError('shiftOperation.archiveTag', err);
+    return { outcome: 'error' };
+  }
+}
+
+/** Renomeia a loja (só Gestor). O id é a chave fiscal: relatórios passados passam a mostrar o nome novo. */
+export async function renameTag(tagId: string, name: string): Promise<{ outcome: TagOutcome }> {
+  try {
+    const { data, error } = await supabase.rpc('rename_company_tag', { p_tag_id: tagId, p_name: name });
+    if (error) throw error;
+    return { outcome: outcomeOf<TagOutcome>((data ?? null) as RpcJson | null) };
+  } catch (err) {
+    logError('shiftOperation.renameTag', err);
     return { outcome: 'error' };
   }
 }
@@ -650,6 +668,10 @@ export function tagMessage(outcome: TagOutcome, context: 'manage' | 'assign' = '
       return 'Etiqueta arquivada. Os turnos antigos continuam com ela.';
     case 'already_archived':
       return 'Essa etiqueta já estava arquivada.';
+    case 'renamed':
+      return 'Nome atualizado. Os relatórios passados passam a mostrar o nome novo.';
+    case 'default_of_members':
+      return 'Essa loja é o padrão de alguém da equipe. Troque a loja dessa pessoa antes de arquivar.';
     case 'invalid_input':
       return 'Use um nome de 1 a 40 caracteres.';
     case 'invalid_tag':
