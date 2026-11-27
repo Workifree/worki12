@@ -108,7 +108,7 @@ CREATE POLICY message_update_read_receipt ON public."Message"
 
 -- 4. Aviso
 CREATE OR REPLACE FUNCTION public.notify_new_message()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
     v_sender_name    text;
     v_app_id         uuid;
@@ -153,8 +153,18 @@ BEGIN
                    AND rc.from_user_id = j.responsible_id
                    AND rc.revoked_at IS NULL
                    AND (j.start_date AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN rc.starts_on AND rc.ends_on
+                   -- Espelha session_can_operate_job (b): so cobertura que o seam reconhece.
+                   -- from e to PRECISAM ser encarregado ativo e confirmado; cobertura inerte nao avisa
+                   -- (o aviso carrega left(content,100) e nao pode vazar a quem nao le a conversa).
                    AND public.internal_company_confirmed_operator(j.company_id, rc.to_user_id)
-                   AND public.internal_company_confirmed_operator(j.company_id, rc.from_user_id)
+                   AND EXISTS (SELECT 1 FROM public.company_members ct
+                                WHERE ct.company_id = j.company_id AND ct.user_id = rc.to_user_id
+                                  AND ct.role = 'encarregado' AND ct.status = 'active'
+                                  AND ct.confirmed_at IS NOT NULL)
+                   AND EXISTS (SELECT 1 FROM public.company_members cf
+                                WHERE cf.company_id = j.company_id AND cf.user_id = rc.from_user_id
+                                  AND cf.role = 'encarregado' AND cf.status = 'active'
+                                  AND cf.confirmed_at IS NOT NULL)
                ) d
          WHERE d.r IS NOT NULL
            AND d.r::text <> NEW.senderid
@@ -185,11 +195,25 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- 4b. Funcoes de acesso do chat: anon nunca executa (authenticated e service_role mantem).
+GRANT EXECUTE ON FUNCTION public.can_access_application(text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.can_access_conversation(text) TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION public.can_access_application(text) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.can_access_conversation(text) FROM PUBLIC, anon;
+
 -- 5. Verificacao
 DO $$
 DECLARE
     v_n integer;
 BEGIN
+    IF has_function_privilege('anon', 'public.can_access_application(text)', 'EXECUTE')
+       OR has_function_privilege('anon', 'public.can_access_conversation(text)', 'EXECUTE')
+       OR NOT has_function_privilege('authenticated', 'public.can_access_application(text)', 'EXECUTE')
+       OR NOT has_function_privilege('authenticated', 'public.can_access_conversation(text)', 'EXECUTE')
+    THEN
+        RAISE EXCEPTION 'VERIFICACAO: grants de can_access_application/conversation incorretos. HALT.';
+    END IF;
+
     IF position('is_job_owner(a.job_id)' IN
                 pg_get_functiondef(to_regprocedure('public.can_access_application(text)'))) = 0
        OR position('is_company_owner' IN
