@@ -33,6 +33,7 @@ import {
   removeMember,
   resendInvite,
   revokeInvite,
+  setMemberDefaultTag,
 } from './teamMembersService';
 
 beforeEach(() => {
@@ -295,6 +296,7 @@ describe('provisionTeamInviteAccount', () => {
 
   it.each([
     'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite', 'not_found', 'expired',
+    'manager_requires_verified_signup',
   ])('repassa %s e NÃO devolve e-mail', async (outcome) => {
     mockInvoke.mockResolvedValue({ data: { outcome, email: 'vazou@x.com' }, error: null });
     expect(await provisionTeamInviteAccount('tok', 'senha-forte-1')).toEqual({ outcome, email: undefined });
@@ -347,5 +349,71 @@ describe('invalida o escopo (Sidebar reflete team_enabled sem recarregar)', () =
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'not_pending' }, error: null });
     await resendInvite('m1');
     expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('equipe unificada e loja padrão (ADR-20261127)', () => {
+  it('convite de Encarregado manda p_default_tag_id; de Gestor nunca manda', async () => {
+    mockRpc.mockResolvedValue({ data: { outcome: 'invited', member_id: 'm1', invite_token: 'tok' }, error: null });
+    await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com', 't1');
+    expect(mockRpc).toHaveBeenLastCalledWith('invite_company_member', {
+      p_company_id: 'c1', p_display_name: 'Ana', p_role: 'encarregado', p_email: 'ana@x.com', p_default_tag_id: 't1',
+    });
+    await inviteMember('c1', 'Gil', 'manager', 'gil@x.com', 't1');
+    expect(mockRpc).toHaveBeenLastCalledWith('invite_company_member', {
+      p_company_id: 'c1', p_display_name: 'Gil', p_role: 'manager', p_email: 'gil@x.com',
+    });
+  });
+
+  it.each(['already_invited_other_role', 'invalid_tag'])('invite repassa %s sem token', async (outcome) => {
+    mockRpc.mockResolvedValue({ data: { outcome }, error: null });
+    const r = await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com');
+    expect(r.outcome).toBe(outcome);
+    expect(r.inviteToken).toBeUndefined();
+  });
+
+  it('setMemberDefaultTag usa (empresa, membro, loja) e aceita null para remover', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'updated' }, error: null });
+    expect(await setMemberDefaultTag('c1', 'm1', 't1')).toEqual({ outcome: 'updated' });
+    expect(mockRpc).toHaveBeenLastCalledWith('set_member_default_tag', {
+      p_company_id: 'c1', p_member_id: 'm1', p_tag_id: 't1',
+    });
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'updated' }, error: null });
+    await setMemberDefaultTag('c1', 'm1', null);
+    expect(mockRpc).toHaveBeenLastCalledWith('set_member_default_tag', {
+      p_company_id: 'c1', p_member_id: 'm1', p_tag_id: null,
+    });
+  });
+
+  it('setMemberDefaultTag: outcome do banco e erro de rede', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'not_encarregado' }, error: null });
+    expect((await setMemberDefaultTag('c1', 'm1', 't1')).outcome).toBe('not_encarregado');
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('x') });
+    expect((await setMemberDefaultTag('c1', 'm1', 't1')).outcome).toBe('error');
+  });
+
+  it('list traz a loja padrão e Gestor aguardando confirmação', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        outcome: 'ok',
+        items: [
+          { member_id: 'm1', user_id: 'u1', display_name: 'Ana', role: 'encarregado', status: 'active',
+            state: 'active', confirmed: true, accepted_email: null, invited_at: null, expires_at: null,
+            accepted_at: null, confirmed_at: null, removed_at: null, default_tag_id: 't1', default_tag_name: 'Loja A' },
+          { member_id: 'm2', user_id: 'u2', display_name: 'Gil', role: 'manager', status: 'active',
+            state: 'awaiting_confirmation', confirmed: false, accepted_email: null, invited_at: null, expires_at: null,
+            accepted_at: null, confirmed_at: null, removed_at: null },
+        ],
+      },
+      error: null,
+    });
+    const r = await listMembers('c1');
+    expect(r.items[0]).toMatchObject({ defaultTagId: 't1', defaultTagName: 'Loja A' });
+    expect(r.items[1]).toMatchObject({ role: 'manager', state: 'awaiting_confirmation', defaultTagId: null });
+  });
+
+  it('memberActionMessage: invalid_tag e not_encarregado', () => {
+    expect(memberActionMessage('invalid_tag', 'x')).toMatch(/loja/i);
+    expect(memberActionMessage('not_encarregado', 'x')).toMatch(/Encarregado/);
   });
 });

@@ -225,7 +225,7 @@ export interface CompanyMember {
 // EQUIPE E ENCARREGADOS (E4) — supabase/migrations/20261123000500_equipe_e4_convites_e_papel.sql
 // "Equipe" = pessoas que operam a empresa; "Elenco" = freelas (nunca misturar rótulos).
 // =============================================
-/** Papel de uma pessoa da equipe. Gestor-por-link não existe (H1): só 'encarregado' é convidado aqui. */
+/** Papel de uma pessoa da equipe. Desde ADR-20261127 os dois entram pelo mesmo convite; Gestor opera zero até ser confirmado. */
 export type TeamMemberRole = 'manager' | 'encarregado';
 
 /** Estado derivado por `list_company_members` (nunca recomputar no client). */
@@ -256,6 +256,10 @@ export interface TeamMemberItem {
   confirmationExpiresAt?: string | null;
   /** E-mail do convite pendente (só se o banco devolver). `null` = convite antigo, sem e-mail. */
   invitedEmail?: string | null;
+  /** Loja padrão (company_tags.id) do Encarregado; `null` = sem padrão. Sempre `null` para Gestor. Nunca concede acesso. */
+  defaultTagId?: string | null;
+  /** Nome atual da loja padrão (derivado no banco). */
+  defaultTagName?: string | null;
 }
 
 /** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
@@ -264,6 +268,8 @@ export type ProvisionAccountOutcome =
   | 'existing_account'
   | 'account_pending'
   | 'worker_cannot_be_manager'
+  /** Convite de GESTOR sem conta verificada: a pessoa precisa se cadastrar (e verificar o e-mail) antes. */
+  | 'manager_requires_verified_signup'
   | 'legacy_invite'
   | 'not_found'
   | 'expired'
@@ -296,6 +302,8 @@ export type InviteMemberOutcome =
   | 'invalid_email'
   | 'name_already_invited'
   | 'already_member'
+  | 'already_invited_other_role'
+  | 'invalid_tag'
   | 'worker_cannot_be_manager'
   | 'invalid_input'
   | 'not_found'
@@ -338,7 +346,9 @@ export type AcceptMemberInviteOutcome =
   | 'revoked'
   | 'expired'
   | 'not_found'
+  /** Legado (ADR-20261127 D5): o banco não devolve mais; mantido para telas antigas compilarem. */
   | 'use_manager_invite'
+  | 'already_member_other_role'
   | 'tos_required'
   | 'worker_cannot_be_manager'
   | 'email_not_verified'
@@ -397,6 +407,17 @@ export interface RemoveMemberResult {
   elencoLinkRotationAdvised: boolean;
   alreadyRemoved: boolean;
 }
+
+export type SetMemberDefaultTagOutcome =
+  | 'updated'
+  | 'unchanged'
+  | 'not_found'
+  | 'not_encarregado'
+  | 'invalid_tag'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
 
 export type ListMembersOutcome = 'ok' | 'forbidden' | 'unauthenticated' | 'error';
 

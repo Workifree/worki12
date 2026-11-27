@@ -33,6 +33,7 @@ import type {
   RemoveMemberResult,
   ResendInviteOutcome,
   RevokeInviteOutcome,
+  SetMemberDefaultTagOutcome,
   TeamMemberItem,
   TeamMemberRole,
   TeamMemberState,
@@ -54,6 +55,8 @@ interface RpcMemberRow {
   confirmed_at: string | null;
   removed_at: string | null;
   invited_email?: string | null;
+  default_tag_id?: string | null;
+  default_tag_name?: string | null;
 }
 
 interface RpcRow {
@@ -97,6 +100,10 @@ export function memberActionMessage(outcome: string, fallback: string): string {
     case 'not_pending_confirmation':
     case 'not_pending':
       return 'Outro Gestor já resolveu isso. A lista foi atualizada.';
+    case 'invalid_tag':
+      return 'Essa loja não está mais disponível. Escolha outra.';
+    case 'not_encarregado':
+      return 'A loja padrão vale só para Encarregado.';
     case 'last_manager':
       return 'A empresa precisa ter pelo menos um Gestor. Inclua outro Gestor antes de tirar este.';
     case 'cannot_remove_self':
@@ -139,6 +146,8 @@ export async function inviteMember(
   displayName: string,
   role: TeamMemberRole = 'encarregado',
   email?: string,
+  /** Loja padrão (company_tags.id). Só vale para Encarregado; para Gestor nem é enviada. */
+  defaultTagId?: string | null,
 ): Promise<InviteTokenResult<InviteMemberOutcome>> {
   try {
     const { data, error } = await supabase.rpc('invite_company_member', {
@@ -146,6 +155,7 @@ export async function inviteMember(
       p_display_name: displayName,
       p_role: role,
       p_email: normalizeInviteEmail(email),
+      ...(role === 'encarregado' && defaultTagId ? { p_default_tag_id: defaultTagId } : {}),
     });
     if (error) throw error;
     const row = (data ?? null) as RpcRow | null;
@@ -162,6 +172,29 @@ export async function inviteMember(
     };
   } catch (err) {
     logError('teamMembersService.inviteMember', err);
+    return { outcome: 'error' };
+  }
+}
+
+/**
+ * Define (ou remove, com `null`) a loja padrão de um Encarregado JÁ existente (convidado ou ativo).
+ * Só Gestor. Não reescreve turnos criados; os próximos herdam a nova loja (jobs_responsible_guard).
+ */
+export async function setMemberDefaultTag(
+  companyId: string,
+  memberId: string,
+  tagId: string | null,
+): Promise<{ outcome: SetMemberDefaultTagOutcome }> {
+  try {
+    const { data, error } = await supabase.rpc('set_member_default_tag', {
+      p_company_id: companyId,
+      p_member_id: memberId,
+      p_tag_id: tagId,
+    });
+    if (error) throw error;
+    return { outcome: outcomeOf<SetMemberDefaultTagOutcome>((data ?? null) as RpcRow | null) };
+  } catch (err) {
+    logError('teamMembersService.setMemberDefaultTag', err);
     return { outcome: 'error' };
   }
 }
@@ -242,7 +275,7 @@ export async function acceptMemberInvite(
 
 const PROVISION_OUTCOMES: ProvisionAccountOutcome[] = [
   'created', 'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite',
-  'not_found', 'expired', 'rate_limited', 'invalid_input',
+  'not_found', 'expired', 'rate_limited', 'invalid_input', 'manager_requires_verified_signup',
 ];
 
 /**
@@ -393,6 +426,8 @@ export async function listMembers(
       removedAt: m.removed_at,
       confirmationExpiresAt: m.confirmation_expires_at ?? null,
       invitedEmail: m.invited_email,
+      defaultTagId: m.default_tag_id ?? null,
+      defaultTagName: m.default_tag_name ?? null,
     }));
     return { outcome: 'ok', items, elencoLinkRotationPending: row?.elenco_link_rotation_pending === true };
   } catch (err) {
