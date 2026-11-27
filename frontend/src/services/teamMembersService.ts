@@ -5,7 +5,7 @@
  * ADRs: previa-publica-do-convite, encarregado-confirmado-e-pii, remover-pessoa-so-corta-acesso.
  *
  * Toda autorização mora nas RPCs `SECURITY DEFINER`; este serviço só invoca e traduz `outcome`
- * (padrão de `organizationService`/`referralService`): erro de rede vira `outcome: 'error'`, nunca
+ * (padrão de `referralService`): erro de rede vira `outcome: 'error'`, nunca
  * lança para a UI. Nada aqui toca saldo (Article 8).
  *
  * A prévia pública (`get_member_invite_preview`) é VOLATILE de propósito: chamada via `.rpc()` sem

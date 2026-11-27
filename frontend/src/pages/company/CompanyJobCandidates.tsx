@@ -1562,8 +1562,10 @@ export default function CompanyJobCandidates() {
                             <div className="flex items-start gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => navigate(`/company/worker/${app.worker_id}`)}
-                                    aria-label={`Ver perfil de ${app.worker?.full_name || 'freela'}`}
+                                    // O perfil completo é do Gestor; o Encarregado já vê nome, função, nota e cidade aqui.
+                                    onClick={podeEstornar ? () => navigate(`/company/worker/${app.worker_id}`) : undefined}
+                                    disabled={!podeEstornar}
+                                    aria-label={podeEstornar ? `Ver perfil de ${app.worker?.full_name || 'freela'}` : undefined}
                                     className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <span className="block h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-black bg-gray-200">

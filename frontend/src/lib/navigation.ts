@@ -138,7 +138,16 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             ],
         },
     ];
-    return items.filter((item) => !(isEncarregado && item.gestorOnly));
+    if (isEncarregado) {
+        // Gestão do Encarregado só teria "Suporte": sem o hub, Relatórios vira item próprio e a Ajuda vai direto.
+        return [
+            ...items
+                .filter((item) => !item.gestorOnly && item.id !== 'gestao')
+                .map((item) => (item.id === 'relatorios' ? { ...item, mobileParent: undefined } : item)),
+            { id: 'ajuda', label: 'Ajuda', icon: HelpCircle, path: '/ajuda', matches: ['/ajuda', COMPANY_GESTAO_PATH] },
+        ];
+    }
+    return items.filter((item) => !item.gestorOnly);
 }
 
 /** Itens da barra inferior: quem tem `mobileParent` sai e empresta os `matches` ao pai. */

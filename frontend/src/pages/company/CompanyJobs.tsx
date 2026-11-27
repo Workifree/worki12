@@ -535,6 +535,8 @@ export default function CompanyJobs() {
         const result = await deleteShift(jobId);
         if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
             addToast(deleteShiftToast(result), 'success');
+            // O card some na hora; a recarga confirma com o banco.
+            setJobs((current) => current.filter((j) => j.id !== jobId));
             fetchJobs();
         } else {
             addToast(cancelJobMessage(result, isGestor(currentCompany) ? 'gestor' : 'encarregado'), 'error');

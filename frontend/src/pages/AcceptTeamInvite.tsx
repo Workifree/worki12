@@ -41,8 +41,6 @@ type Step = 'form' | 'working';
 /** `create`: conta nova com o e-mail do convite. `login`: a pessoa já tem conta e entra com ela. */
 type Mode = 'create' | 'login';
 
-type ExtraOutcome = 'account_pending' | 'rate_limited' | 'legacy_invite';
-
 const MIN_PASSWORD = 8;
 const MAX_PASSWORD = 72;
 

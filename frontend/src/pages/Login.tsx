@@ -232,7 +232,7 @@ export default function Login() {
                         // correto ou usar outro e-mail (A1).
                         setRoleMismatch({ actualType: userType });
                     } else if (userType === 'hire') {
-                        navigate('/company/dashboard');
+                        navigate('/company/dashboard', { state: { entrada: true } });
                     } else {
                         navigate('/dashboard');
                     }

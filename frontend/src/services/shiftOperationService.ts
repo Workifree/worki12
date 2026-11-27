@@ -510,8 +510,8 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
 /** Aviso do gesto "Excluir turno". */
 export function deleteShiftToast(result: CancelJobResult): string {
   const total = result.cancelledApplications + result.closedCandidates;
-  if (total === 0) return 'Turno excluído com sucesso.';
-  return `Turno excluído com sucesso. ${total} freela${total > 1 ? 's' : ''} notificado${total > 1 ? 's' : ''}.`;
+  if (total === 0) return 'Turno excluído.';
+  return `Turno cancelado. ${total} freela${total > 1 ? 's' : ''} avisado${total > 1 ? 's' : ''}.`;
 }
 
 export function cancelJobWasRefused(outcome: CancelJobOutcome): boolean {

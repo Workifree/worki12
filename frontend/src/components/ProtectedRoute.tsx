@@ -327,6 +327,16 @@ export default function ProtectedRoute() {
         roleRedirectTarget = '/company/dashboard';
     }
 
+    // Entrada (login, raiz): o Encarregado começa em "Hoje", não na visão geral. Navegar
+    // depois para "Visão geral" pela aba continua funcionando (sem `entrada`).
+    const entrada = (location.state as { entrada?: boolean } | null)?.entrada === true;
+    if (
+        !roleRedirectTarget && userType === 'hire' && companyRole === 'encarregado'
+        && pathname === '/company/dashboard' && entrada
+    ) {
+        roleRedirectTarget = '/company/hoje';
+    }
+
     if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} />;
 
     // Pular gate de TOS durante onboarding para nao confundir o usuario

@@ -79,13 +79,13 @@ describe('Sidebar — empresa e papéis', () => {
     expect(screen.getByRole('link', { name: /Divino Fogão/ })).toHaveAttribute('href', '/company/gestao');
   });
 
-  it('encarregado: com Elenco e Relatórios (visão própria), sem Mensagens (chat fora da v1)', async () => {
+  it('encarregado: com Elenco e Relatórios (visão própria), com Mensagens (só dos próprios turnos), sem Gestão', async () => {
     mockRpc.mockResolvedValue({ data: [companyRow({ role: 'encarregado' })], error: null });
 
     renderSidebar();
 
     await waitFor(() => expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/company/hoje'));
-    expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Relatórios', 'Gestão']);
+    expect(itens()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Ajuda']);
   });
 
   it('sub-rota mantém o item ativo; notificações não marcam nada', async () => {

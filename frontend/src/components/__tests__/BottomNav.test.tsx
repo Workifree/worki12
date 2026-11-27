@@ -34,8 +34,8 @@ describe('BottomNav', () => {
   it('freela: cinco itens (o perfil foi para o cabeçalho) com as rotas certas', () => {
     renderBottomNav('worker')
 
-    expect(labels()).toEqual(['Início', 'Turnos', 'Empresas', 'Recebimentos', 'Mensagens'])
-    expect(screen.getByLabelText('Turnos')).toHaveAttribute('href', '/my-jobs')
+    expect(labels()).toEqual(['Início', 'Meus Turnos', 'Empresas', 'Recebimentos', 'Mensagens'])
+    expect(screen.getByLabelText('Meus Turnos')).toHaveAttribute('href', '/my-jobs')
     expect(screen.getByLabelText('Empresas')).toHaveAttribute('href', '/carteira')
   })
 
@@ -56,19 +56,19 @@ describe('BottomNav', () => {
     expect(screen.getByLabelText('Início')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('encarregado: quatro itens, com Elenco e sem Mensagens', () => {
+  it('encarregado: sem Gestão, com Mensagens, Relatórios e Ajuda direto', () => {
     mockCompany = company({ role: 'encarregado' })
     renderBottomNav('company', '/company/hoje')
 
-    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão'])
+    expect(labels()).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Ajuda'])
   })
 
   it('papel ainda carregando e sem dica: não oferece o que talvez tenha de esconder', () => {
     renderBottomNav('company', '/company/dashboard')
 
-    expect(screen.queryByLabelText('Relatórios')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Mensagens')).not.toBeInTheDocument()
-    expect(labels()).toHaveLength(4)
+    // Sem dica, assume o menu restrito: nada de Gestão (que o Encarregado não usa).
+    expect(screen.queryByLabelText('Gestão')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Ajuda')).toBeInTheDocument()
   })
 
   it('papel carregando com dica de Gestor: menu completo desde o primeiro render', () => {

@@ -236,7 +236,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
     expect(mockNavigate).toHaveBeenCalledWith('/company/jobs')
   })
@@ -279,7 +279,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
         'error'
       )
     })
-    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído.', 'success')
     expect(mockNavigate).not.toHaveBeenCalledWith('/company/jobs')
   })
 })
@@ -311,7 +311,7 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     // 0 freelas cancelados NÃO produz nenhum toast de erro — é legítimo, a mensagem
     // permanece a genérica (sem contagem).
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
   })
 
@@ -359,7 +359,7 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso. 2 freelas notificados.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno cancelado. 2 freelas avisados.', 'success')
     })
     // sem escrow reservado: nada de estorno
     expect(WalletService.refundEscrow).not.toHaveBeenCalled()

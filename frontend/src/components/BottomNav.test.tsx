@@ -22,9 +22,9 @@ describe('BottomNav', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Menu de navegação' })
     const links = within(nav).getAllByRole('link')
-    expect(links.map((a) => a.getAttribute('aria-label'))).toEqual(['Início', 'Turnos', 'Empresas', 'Recebimentos', 'Mensagens'])
+    expect(links.map((a) => a.getAttribute('aria-label'))).toEqual(['Início', 'Meus Turnos', 'Empresas', 'Recebimentos', 'Mensagens'])
     expect(links.filter((a) => a.getAttribute('aria-current') === 'page')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Turnos' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Meus Turnos' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('é a barra do celular: fixa na base, com safe-area e publicada como [data-bottom-nav]', () => {

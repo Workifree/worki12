@@ -127,11 +127,12 @@ describe('navegação — estado ativo', () => {
 
     it('encarregado: com Elenco e Relatórios (visão própria), sem Mensagens; em Gestão, relatório, trilha e ajuda', () => {
         const items = getCompanyNav({ isEncarregado: true, hasTeam: true });
-        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Relatórios', 'Gestão']);
-        expect(isGestorOnlyPath('/company/messages')).toBe(true);
+        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Ajuda']);
+        expect(isGestorOnlyPath('/company/messages')).toBe(false);
+        expect(isGestorOnlyPath('/company/profile')).toBe(true);
         expect(isGestorOnlyPath('/company/relatorio')).toBe(false);
         expect(isGestorOnlyPath('/company/operacao')).toBe(true);
-        expect(toBottomNav(items)).toHaveLength(4);
+        expect(toBottomNav(items)).toHaveLength(6);
         const cards = getGestaoGroups({ gestor: false, teamInvited: false, trail: true })
             .flatMap((g) => g.cards.map((c) => c.id));
         expect(cards).toEqual(['relatorios', 'trilha', 'ajuda']);

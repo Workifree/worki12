@@ -1,7 +1,7 @@
 /**
  * Convite de equipe (`/convite-equipe/:token`): chaves de storage e marca de "já foi da equipe".
  *
- * Módulo próprio (mesmo padrão de `lib/managerInviteToken.ts`) para não acoplar chunks lazy.
+ * Módulo próprio, para não acoplar chunks lazy.
  * O token é segredo ao portador: vive só na sessão da aba e é apagado ao concluir o aceite — e
  * também em todo desfecho terminal (convite inexistente, vencido, revogado ou já usado).
  */

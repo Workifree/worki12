@@ -199,27 +199,8 @@ export interface MyCompany {
   team_enabled?: boolean;
 }
 
-/**
- * Linha de `company_members` (migration 20260818100000) — vínculo gerente x unidade. `user_id`
- * é `null` enquanto o convite não foi aceito (R9). Projeção usada por `organizationService` /
- * `pages/company/Organization.tsx` (R14-R16) — nunca dado financeiro/PII além do e-mail
- * convidado, que a própria empresa digitou.
- */
+/** Estado de uma linha de `company_members`. */
 export type CompanyMemberStatus = 'invited' | 'active' | 'removed';
-
-export interface CompanyMember {
-  id: string;
-  company_id: string;
-  user_id: string | null;
-  role: 'manager';
-  status: CompanyMemberStatus;
-  invited_email: string | null;
-  /** Só não-nulo enquanto `status='invited'` — queima (`NULL`) no aceite (R9). */
-  invite_token: string | null;
-  invited_at: string;
-  accepted_at: string | null;
-  expires_at: string;
-}
 
 // =============================================
 // EQUIPE E ENCARREGADOS (E4) — supabase/migrations/20261123000500_equipe_e4_convites_e_papel.sql

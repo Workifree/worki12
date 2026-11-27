@@ -749,7 +749,7 @@ export default function CompanyTeamMembers() {
                   </p>
                 )}
                 <p className="text-sm text-gray-700">
-                  Envie o link para <strong>{share.displayName}</strong>. O link vale por 14 dias e é só dessa pessoa.
+                  Envie este link para <strong>{share.displayName}</strong>. O link vale por 14 dias e é só dessa pessoa.
                 </p>
                 <p data-copilot-private className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
                   {shareLink}
