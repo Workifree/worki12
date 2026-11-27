@@ -268,14 +268,6 @@ function clearNavHints(): void {
 }
 
 /**
- * R16: só sócio/operador (organization_members ativo) vê a visão consolidada da organização
- * (`/company/organization`). Regra única — a navegação (lib/navigation) deve usar esta.
- */
-export function canSeeOrganization(company: MyCompany | null | undefined): boolean {
-  return company?.role === 'owner' || company?.role === 'operator';
-}
-
-/**
  * A empresa CORRENTE da sessão: respeita o seletor de unidade (R13) quando a seleção ainda é
  * válida para esta sessão; cai para a primária caso contrário (primeira sessão, seleção órfã
  * após revogação, etc.).

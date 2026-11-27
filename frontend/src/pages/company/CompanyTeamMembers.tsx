@@ -5,7 +5,7 @@
  * Nunca misturar na mesma tela, lista ou convite.
  *
  * Um só convite ("Convidar pessoa": nome, e-mail, papel, loja padrão): link de uso único preso ao e-mail,
- * abre o WhatsApp com a mensagem pronta (telefone opcional, NÃO é enviado ao banco). Gestor convidado só
+ * (a pessoa é identificada só pelo e-mail; o convite é copiar o link). Gestor convidado só
  * opera depois de confirmado. Loja = etiqueta (`company_tags`). Toda autorização real mora nas RPCs.
  */
 
@@ -22,7 +22,6 @@ import {
   Copy,
   ChevronDown,
   MoreHorizontal,
-  MessageCircle,
   UserPlus,
   UserX,
   X,
@@ -38,8 +37,6 @@ import { DialogActions, Button, Card, ErrorState, Field, PageHeader } from '../.
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
-  buildInviteMessage,
-  buildWhatsAppUrl,
   confirmMember,
   inviteMember,
   listMembers,
@@ -68,7 +65,6 @@ const STATE_BADGE: Record<TeamMemberState, { label: string; className: string }>
 interface ShareState {
   displayName: string;
   token: string;
-  phone: string;
   /** O banco já tinha um convite pendente (nome igual ou parecido): é o mesmo link. */
   reused?: boolean;
   role: TeamMemberRole;
@@ -93,7 +89,6 @@ export default function CompanyTeamMembers() {
   const { addToast } = useToast();
 
   const [companyId, setCompanyId] = useState<string | null>(null);
-  const [companyName, setCompanyName] = useState('');
   const [members, setMembers] = useState<TeamMemberItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -102,7 +97,6 @@ export default function CompanyTeamMembers() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteNameError, setInviteNameError] = useState<string | undefined>(undefined);
-  const [invitePhone, setInvitePhone] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteEmailError, setInviteEmailError] = useState<string | undefined>(undefined);
   const [inviteRole, setInviteRole] = useState<TeamMemberRole>('encarregado');
@@ -157,7 +151,6 @@ export default function CompanyTeamMembers() {
         return;
       }
       setCompanyId(current.company_id);
-      setCompanyName(current.company_name ?? 'Sua empresa');
       await reload(current.company_id);
     } catch (error) {
       logError('CompanyTeamMembers.load', error);
@@ -212,7 +205,6 @@ export default function CompanyTeamMembers() {
   const openInvite = () => {
     setInviteName('');
     setInviteNameError(undefined);
-    setInvitePhone('');
     setInviteEmail('');
     setInviteEmailError(undefined);
     setInviteRole('encarregado');
@@ -259,7 +251,7 @@ export default function CompanyTeamMembers() {
       && result.inviteToken
     ) {
       const reused = result.outcome === 'already_invited';
-      setShare({ displayName: name, token: result.inviteToken, phone: invitePhone, reused, role: inviteRole });
+      setShare({ displayName: name, token: result.inviteToken, reused, role: inviteRole });
       const items = await reload(companyId);
       // Convite reaproveitado pode estar gravado com uma variação do nome (acento, espaços): a
       // mensagem e a conferência do Gestor precisam usar o nome que está no convite.
@@ -276,9 +268,6 @@ export default function CompanyTeamMembers() {
   };
 
   const shareLink = share ? buildInviteLink(share.token) : '';
-  const shareMessage = share
-    ? buildInviteMessage({ displayName: share.displayName, companyName, role: share.role, link: shareLink })
-    : '';
 
   const copyLink = async () => {
     try {
@@ -292,11 +281,6 @@ export default function CompanyTeamMembers() {
     }
   };
 
-  const openWhatsApp = () => {
-    if (!share) return;
-    window.open(buildWhatsAppUrl(shareMessage, share.phone), '_blank', 'noopener,noreferrer');
-  };
-
   const handleResend = async (member: TeamMemberItem) => {
     if (!companyId) return;
     setBusyId(member.memberId);
@@ -305,7 +289,7 @@ export default function CompanyTeamMembers() {
     if (result.outcome === 'resent' && result.inviteToken) {
       setCopied(false);
       setInviteOpen(true);
-      setShare({ displayName: member.displayName ?? 'a pessoa', token: result.inviteToken, phone: '', role: member.role });
+      setShare({ displayName: member.displayName ?? 'a pessoa', token: result.inviteToken, role: member.role });
       addToast('Novo link gerado. O link antigo deixou de valer.', 'success');
       void reload(companyId);
       return;
@@ -509,7 +493,7 @@ export default function CompanyTeamMembers() {
               <Card className="text-center">
                 <h3 className="text-xl font-bold mb-2">Convide seu primeiro encarregado</h3>
                 <p className="text-sm text-gray-700 mb-5">
-                  A pessoa recebe um link só dela, pelo WhatsApp, e entra com o e-mail que você informar.
+                  A pessoa recebe um link só dela e entra com o e-mail que você informar.
                 </p>
                 <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>
                   Convidar pessoa
@@ -734,22 +718,6 @@ export default function CompanyTeamMembers() {
                   </Field>
                 )}
 
-                <Field
-                  label="WhatsApp da pessoa (opcional)"
-                  hint="Só para abrir a conversa certa. Não fica guardado."
-                >
-                  <input
-                    data-copilot-private
-                    type="tel"
-                    name="invitee-phone"
-                    inputMode="tel"
-                    autoComplete="off"
-                    placeholder="(11) 91234-5678"
-                    value={invitePhone}
-                    onChange={(e) => setInvitePhone(e.target.value)}
-                  />
-                </Field>
-
                 <Button type="submit" variant="dark" size="lg" fullWidth loading={inviting} iconLeft={<UserPlus size={18} />}>
                   Gerar convite
                 </Button>
@@ -778,11 +746,8 @@ export default function CompanyTeamMembers() {
                 <p data-copilot-private className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
                   {shareLink}
                 </p>
-                <Button variant="dark" size="lg" fullWidth onClick={openWhatsApp} iconLeft={<MessageCircle size={18} />}>
-                  Enviar no WhatsApp
-                </Button>
                 <Button
-                  variant="secondary"
+                  variant="dark"
                   size="lg"
                   fullWidth
                   onClick={() => void copyLink()}

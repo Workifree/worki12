@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
-import { canSeeOrganization, invalidateCompanyScope } from '../../services/companyScopeService';
-import { isGestorOnlyPath, ORGANIZATION_PATH } from '../../lib/navigation';
+import { invalidateCompanyScope } from '../../services/companyScopeService';
+import { isGestorOnlyPath } from '../../lib/navigation';
 import ErroDeCarga from '../ErroDeCarga';
 import SemAcesso from '../SemAcesso';
 
-function Guard({ pathname, children }: { pathname: string; children: ReactNode }) {
+function Guard({ children }: { pathname: string; children: ReactNode }) {
     const { company, resolved, error } = useCurrentCompanyState();
 
     // Nada da tela monta antes de saber o papel: sem consulta e sem conteúdo piscando.
@@ -15,9 +15,6 @@ function Guard({ pathname, children }: { pathname: string; children: ReactNode }
     }
     if (error) return <ErroDeCarga onRetry={invalidateCompanyScope} />;
     if (company?.role === 'encarregado') return <SemAcesso />;
-    if (pathname === ORGANIZATION_PATH && company && !canSeeOrganization(company)) {
-        return <SemAcesso mensagem="A visão das unidades é só para sócios e operadores da rede." />;
-    }
     return <>{children}</>;
 }
 

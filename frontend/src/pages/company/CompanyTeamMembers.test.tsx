@@ -195,25 +195,21 @@ describe('CompanyTeamMembers', () => {
     expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
   });
 
-  it('convidar: nome, e-mail, papel e loja padrão vão ao serviço; link e wa.me com telefone normalizado', async () => {
+  it('convidar: nome, e-mail, papel e loja padrão vão ao serviço; só há o link para copiar (sem WhatsApp/telefone)', async () => {
     vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'invited', inviteToken: 'tok123' });
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderPage();
     fireEvent.click((await screen.findAllByRole('button', { name: /Convidar pessoa/ }))[0]);
     preencher('Ana');
     await screen.findByRole('option', { name: 'Loja Centro' });
     fireEvent.change(screen.getByLabelText('Loja padrão'), { target: { value: 't1' } });
-    fireEvent.change(screen.getByLabelText(/WhatsApp da pessoa/), { target: { value: '(11) 91234-5678' } });
+    expect(screen.queryByLabelText(/WhatsApp|telefone/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
 
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('/convite-equipe/tok123');
     expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado', 'ana@x.com', 't1');
 
-    fireEvent.click(screen.getByRole('button', { name: /Enviar no WhatsApp/ }));
-    const url = open.mock.calls[0][0] as string;
-    expect(url).toMatch(/^https:\/\/wa\.me\/5511912345678\?text=/);
-    expect(decodeURIComponent(url)).toContain('Divino Fogão te convidou para o Worki como Encarregado');
-    open.mockRestore();
+    expect(screen.queryByRole('button', { name: /WhatsApp/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copiar link/ })).toBeInTheDocument();
   });
 
   it('convidar Gestor: papel escolhido segue ao serviço, sem loja padrão', async () => {

@@ -45,7 +45,7 @@ function expandTabs(paths: string[]): Set<string> {
 function companyReachable(device: 'desktop' | 'mobile', hasTeam: boolean): Set<string> {
     const items = getCompanyNav({ isEncarregado: false, hasTeam });
     const nav = device === 'desktop' ? items : toBottomNav(items);
-    const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: hasTeam, trail: true, sites: true })
+    const cards = getGestaoGroups({ gestor: true, teamInvited: hasTeam, trail: true, sites: true })
         .flatMap((g) => g.cards)
         .filter((c) => device === 'mobile' || !c.mobileOnly);
     const direct = [
@@ -130,7 +130,7 @@ describe('navegação — estado ativo', () => {
         expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão']);
         expect(isGestorOnlyPath('/company/messages')).toBe(true);
         expect(toBottomNav(items)).toHaveLength(4);
-        const cards = getGestaoGroups({ gestor: false, units: false, teamInvited: false, trail: true })
+        const cards = getGestaoGroups({ gestor: false, teamInvited: false, trail: true })
             .flatMap((g) => g.cards.map((c) => c.id));
         expect(cards).toEqual(['trilha', 'ajuda']);
     });

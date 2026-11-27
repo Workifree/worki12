@@ -10,7 +10,6 @@ const ALVOS_D: ReadonlySet<string> = new Set([
   'publico.recuperar-senha.enviar-link',
   'publico.login.criar-conta',
   'publico.login.entrar',
-  'publico.convite-gerente.aceitar',
   'publico.convite-equipe.entrar',
   'publico.convite-equipe.confirmar-codigo',
   'publico.convite-equipe.aceitar',

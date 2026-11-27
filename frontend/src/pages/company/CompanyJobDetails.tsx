@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle, Megaphone } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Users, Edit2, PauseCircle, PlayCircle, Trash2, XCircle, Megaphone, Tag } from 'lucide-react';
 import { occupancy, shiftStep, shiftWhen, type ApplicationStepInput } from '../../lib/nextAction';
 import PageMeta from '../../components/PageMeta';
 import { formatDistanceToNow } from 'date-fns';
@@ -13,7 +13,7 @@ import { logError } from '../../lib/logger';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { deleteShift } from '../../services/deleteShiftService';
-import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
+import { cancelJobMessage, deleteShiftToast, listTags } from '../../services/shiftOperationService';
 import { toBrazilDateOnly } from '../../lib/dateUtils';
 import { getAuthenticatedCompanyId, isGestor, hasTeamNav } from '../../services/companyScopeService';
 import { jobHasStarted } from '../../lib/todayView';
@@ -51,9 +51,24 @@ export default function CompanyJobDetails() {
         work_end_time?: string;
         has_lunch?: boolean;
         slots?: number;
+        company_id?: string;
+        tag_id?: string | null;
     }
 
     const [job, setJob] = useState<JobDetails | null>(null);
+    // Loja (etiqueta) do turno: nome resolvido pela lista da empresa.
+    const [tagName, setTagName] = useState<string | null>(null);
+    const jobCompanyId = job?.company_id ?? null;
+    const jobTagId = job?.tag_id ?? null;
+    useEffect(() => {
+        if (!jobCompanyId || !jobTagId) return;
+        let active = true;
+        void (async () => {
+            const list = await listTags(jobCompanyId, true);
+            if (active) setTagName(list.find((t) => t.id === jobTagId)?.name ?? null);
+        })();
+        return () => { active = false; };
+    }, [jobCompanyId, jobTagId]);
     const [loading, setLoading] = useState(true);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showCancelJob, setShowCancelJob] = useState(false);
@@ -291,6 +306,7 @@ export default function CompanyJobDetails() {
                         <div className="mb-3 flex flex-wrap gap-2">
                             <StatusBadge domain="job" status={job.status} />
                             {filled !== null && !encerrado && <StatusBadge tone={state.tone}>{state.label}</StatusBadge>}
+                            {jobTagId && tagName && <StatusBadge tone="neutral" icon={Tag} title="Loja do turno">{tagName}</StatusBadge>}
                         </div>
                         <h1 className="mb-2 break-words text-2xl font-bold tracking-tight sm:text-3xl">{job.title}</h1>
                         <p className="flex items-center gap-1.5 text-base font-bold">

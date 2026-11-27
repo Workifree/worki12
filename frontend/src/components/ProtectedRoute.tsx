@@ -275,7 +275,7 @@ export default function ProtectedRoute() {
     if (!user) return <Navigate to="/" replace />;
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
-    if (awaitingConfirmation) return <AguardandoConfirmacao />;
+    if (awaitingConfirmation) return <AguardandoConfirmacao papel={companyRole ?? undefined} />;
     if (accessEnded) {
         return (
             <AcessoEncerrado
