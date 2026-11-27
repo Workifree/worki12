@@ -16,7 +16,7 @@ import { getSessionUserOrThrow } from '../lib/authSession';
 import { getAuthenticatedCompanyId } from './companyScopeService';
 import { validateCPF, validateCNPJ } from '../lib/validation';
 import type { PixKeyType } from '../lib/validation';
-import { csvDecimal, csvFile, csvLine, csvSafeText } from '../lib/csv';
+import { csvDecimal, csvFile, csvKeepDigitsAsText, csvLine, csvSafeText } from '../lib/csv';
 import type { PaymentSheet, PaymentSheetOutcome, PaymentSheetRow } from '../types';
 import type { ReportFilters } from './orderReportService';
 
@@ -88,7 +88,7 @@ export const PaymentSheetService = {
   async getPaymentSheet(params: ReportFilters): Promise<PaymentSheet> {
     try {
       const user = await getSessionUserOrThrow();
-      if (!user) return { outcome: 'unauthenticated', rows: [], generated_at: null, log_id: null };
+      if (!user) return { outcome: 'unauthenticated', truncated: false, rows: [], generated_at: null, log_id: null };
       const companyId = await getAuthenticatedCompanyId();
 
       const { data, error } = await supabase.rpc('get_payment_sheet', {
@@ -104,6 +104,7 @@ export const PaymentSheetService = {
       const payload = (data ?? {}) as Partial<PaymentSheet>;
       return {
         outcome: (payload.outcome ?? 'ok') as PaymentSheetOutcome,
+        truncated: payload.truncated === true,
         rows: (payload.rows ?? []).map((r: PaymentSheetRow) => ({
           ...r,
           cpf: r.cpf ?? null,
@@ -133,9 +134,7 @@ export function paymentSheetOutcomeMessage(outcome: PaymentSheetOutcome): string
       return 'A planilha de pagamento é só para o Gestor.';
     case 'range_too_large':
       return 'Período grande demais. Escolha no máximo 92 dias.';
-    case 'too_many_workers':
-      return 'Freelas demais para uma planilha só. Reduza o período ou filtre.';
-    case 'invalid_input':
+    case 'invalid_range':
       return 'Confira as datas escolhidas.';
     default:
       return 'Não foi possível gerar a planilha.';
@@ -157,8 +156,8 @@ export function toPaymentSheetCSV(rows: PaymentSheetRow[]): string {
     lines.push(
       csvLine([
         csvSafeText(r.full_name),
-        r.cpf ?? '',
-        csvSafeText(r.pix_key),
+        csvKeepDigitsAsText(r.cpf),
+        csvKeepDigitsAsText(r.pix_key),
         r.pix_key ? pixTypeLabel(r.pix_key) : '',
         String(r.shifts_count),
         csvDecimal(r.hours_total),

@@ -77,7 +77,7 @@ describe('inferPixKeyType', () => {
 
 describe('getPaymentSheet', () => {
   it('chama get_payment_sheet com a empresa do seam e filtros', async () => {
-    mockRpc.mockResolvedValue({ data: { outcome: 'ok', rows: [sheetRow()], generated_at: '2026-11-27T10:00:00Z', log_id: 'log-1' }, error: null })
+    mockRpc.mockResolvedValue({ data: { outcome: 'ok', rows: [sheetRow()], truncated: true, generated_at: '2026-11-27T10:00:00Z', log_id: 'log-1' }, error: null })
     const sheet = await PaymentSheetService.getPaymentSheet({ from: '2026-11-01', to: '2026-11-30', workerId: '', responsibleId: 'r-1', tagId: null })
     expect(mockRpc).toHaveBeenCalledWith('get_payment_sheet', {
       p_company_id: 'company-1', p_from: '2026-11-01', p_to: '2026-11-30',
@@ -86,6 +86,7 @@ describe('getPaymentSheet', () => {
     expect(sheet.outcome).toBe('ok')
     expect(sheet.rows[0].total_paid).toBe(300)
     expect(sheet.log_id).toBe('log-1')
+    expect(sheet.truncated).toBe(true)
   })
 
   it('forbidden volta como dado, sem linhas', async () => {
@@ -108,6 +109,12 @@ describe('toPaymentSheetCSV', () => {
     const [header, line] = csv.slice(1).split('\r\n')
     expect(header.split(';')).toHaveLength(12)
     expect(line).toBe('Ana Souza;529.982.247-25;ana@email.com;E-mail (provável);3;21,50;1;300,00;120,50;Sim;Loja Centro, Evento;p1, p2')
+  })
+
+  it('CPF e PIX só de dígitos vão como texto para não perder o zero à esquerda', () => {
+    const csv = toPaymentSheetCSV([sheetRow({ cpf: '01234567890', pix_key: '01234567890' })])
+    const line = csv.slice(1).split('\r\n')[1]
+    expect(line.split(';').slice(1,3)).toEqual(['"=""01234567890"""', '"=""01234567890"""'])
   })
 
   it('protege nome e etiqueta contra fórmula; anonimizado sai com CPF/PIX vazios', () => {

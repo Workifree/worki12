@@ -87,6 +87,11 @@ export default function PaymentSheetModal({ filters, onClose }: PaymentSheetModa
         {sheet && sheet.outcome !== 'ok' && (
           <p role="alert" className="text-sm font-semibold text-red-700">{paymentSheetOutcomeMessage(sheet.outcome)}</p>
         )}
+        {sheet?.outcome === 'ok' && sheet.truncated && (
+          <Alert tone="warning" className="mb-3" role="alert">
+            Planilha cortada em 500 freelas. Reduza o período ou use os filtros para ver os demais.
+          </Alert>
+        )}
         {sheet?.outcome === 'ok' && rows.length === 0 && (
           <p className="text-sm text-gray-700">Nenhum turno concluído no período e filtros escolhidos.</p>
         )}

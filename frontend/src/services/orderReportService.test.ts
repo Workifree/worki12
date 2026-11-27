@@ -32,10 +32,11 @@ function row(over: Partial<FinancialReportRow> = {}): FinancialReportRow {
   }
 }
 
+const SUMS = { shifts_count: 1, hours_total: 8, hours_missing_count: 0, total_amount: 160, total_paid: 160, total_to_pay: 0 }
 const TOTALS = {
-  by_worker: [{ worker_id: 'w-1', worker_name: 'Ana Souza', rows_count: 1, hours_total: 8, hours_missing_count: 0, total_realized: 160, total_estimated: 0 }],
-  by_day: [{ day: '2026-11-21', rows_count: 1, hours_total: 8, hours_missing_count: 0, total_realized: 160, total_estimated: 0 }],
-  overall: { rows_count: 1, hours_total: 8, hours_missing_count: 0, total_realized: 160, total_estimated: 0 },
+  by_worker: [{ worker_id: 'w-1', worker_name: 'Ana Souza', ...SUMS }],
+  by_day: [{ job_date: '2026-11-21', ...SUMS }],
+  overall: SUMS,
 }
 
 beforeEach(() => {
@@ -58,7 +59,8 @@ describe('OrderReportService.getReport', () => {
     expect(mockFrom).not.toHaveBeenCalled()
     expect(report.outcome).toBe('ok')
     expect(report.rows).toHaveLength(1)
-    expect(report.totals.overall.total_realized).toBe(160)
+    expect(report.totals.overall.total_paid).toBe(160)
+    expect(report.totals.by_day[0].job_date).toBe('2026-11-21')
   })
 
   it("status 'todas' vira null", async () => {
@@ -74,6 +76,7 @@ describe('OrderReportService.getReport', () => {
     expect(report.rows).toEqual([])
     expect(reportOutcomeMessage('not_confirmed')).toMatch(/confirmado/i)
     expect(reportOutcomeMessage('range_too_large')).toMatch(/92/)
+    expect(reportOutcomeMessage('invalid_range')).toMatch(/datas/)
   })
 
   it('normaliza numéricos que chegam como string e preserva horas nulas (nunca 0)', async () => {
@@ -144,6 +147,11 @@ describe('toCSV', () => {
     expect(line).toContain("'+cmd")
     expect(line).toContain("'@alguem")
     expect(line).toContain("'\tTab")
+  })
+
+  it('rotula estimado por horas previstas', () => {
+    const csv = toCSV({ rows: [row({ amount_kind: 'estimated_by_planned_hours' })] })
+    expect(csv).toContain(';Estimado (horas previstas);')
   })
 
   it('número negativo legítimo não recebe apóstrofo', () => {

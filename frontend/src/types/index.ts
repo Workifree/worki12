@@ -1601,9 +1601,9 @@ import type { PresenceMode, PresenceQrMode } from '../lib/presence';
 // `get_financial_report` NUNCA carrega CPF/PIX; só `get_payment_sheet` (Gestor) os devolve.
 // =============================================
 export type FinancialReportStatus = 'aberta' | 'agendada' | 'paga' | 'conciliada';
-export type FinancialAmountKind = 'realized' | 'estimated';
+export type FinancialAmountKind = 'realized' | 'estimated' | 'estimated_by_planned_hours';
 export type FinancialReportOutcome =
-  | 'ok' | 'forbidden' | 'not_confirmed' | 'range_too_large' | 'invalid_input' | 'unauthenticated';
+  | 'ok' | 'forbidden' | 'not_confirmed' | 'invalid_range' | 'range_too_large' | 'invalid_status' | 'unauthenticated';
 
 export interface FinancialReportRow {
   job_id: string;
@@ -1638,11 +1638,12 @@ export interface FinancialReportRow {
 }
 
 export interface FinancialTotalsBase {
-  rows_count: number;
+  shifts_count: number;
   hours_total: number;
   hours_missing_count: number;
-  total_realized: number;
-  total_estimated: number;
+  total_amount: number;
+  total_paid: number;
+  total_to_pay: number;
 }
 
 export interface FinancialTotalsByWorker extends FinancialTotalsBase {
@@ -1652,7 +1653,7 @@ export interface FinancialTotalsByWorker extends FinancialTotalsBase {
 
 export interface FinancialTotalsByDay extends FinancialTotalsBase {
   /** YYYY-MM-DD (data local). */
-  day: string;
+  job_date: string;
 }
 
 export interface FinancialReportTotals {
@@ -1670,7 +1671,7 @@ export interface FinancialReport {
   totals: FinancialReportTotals;
 }
 
-export type PaymentSheetOutcome = 'ok' | 'forbidden' | 'range_too_large' | 'too_many_workers' | 'invalid_input' | 'unauthenticated';
+export type PaymentSheetOutcome = 'ok' | 'forbidden' | 'invalid_range' | 'range_too_large' | 'unauthenticated';
 
 export interface PaymentSheetRow {
   worker_id: string;
@@ -1690,6 +1691,8 @@ export interface PaymentSheetRow {
 
 export interface PaymentSheet {
   outcome: PaymentSheetOutcome;
+  /** Planilha cortada em 500 freelas. */
+  truncated: boolean;
   rows: PaymentSheetRow[];
   generated_at: string | null;
   log_id: string | null;

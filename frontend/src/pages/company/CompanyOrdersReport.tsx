@@ -322,18 +322,18 @@ export default function CompanyOrdersReport() {
         </Alert>
       )}
 
-      {/* Resumo: real e estimado SEPARADOS */}
+      {/* Resumo: pago e a pagar SEPARADOS (a pagar pode incluir valores estimados) */}
       {totals && !loading && !error && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
           <SummaryCard
-            label="Real (pagamento registrado ou agendado)"
-            value={formatBRL(totals.overall.total_realized)}
-            detail={`${rows.filter((r) => r.status === 'paga' || r.status === 'conciliada').length} pagas, ${rows.filter((r) => r.status === 'agendada').length} agendadas`}
+            label="Pago"
+            value={formatBRL(totals.overall.total_paid)}
+            detail={`${rows.filter((r) => r.status === 'paga' || r.status === 'conciliada').length} pagas de ${totals.overall.shifts_count} ordens`}
           />
           <SummaryCard
-            label="Estimado (sem pagamento registrado)"
-            value={formatBRL(totals.overall.total_estimated)}
-            detail={`${rows.filter((r) => r.status === 'aberta').length} em aberto — usa o valor do turno`}
+            label="A pagar (pode incluir estimado)"
+            value={formatBRL(totals.overall.total_to_pay)}
+            detail={`${rows.filter((r) => r.status === 'aberta' || r.status === 'agendada').length} em aberto ou agendadas`}
             className="text-yellow-700"
           />
           <SummaryCard
@@ -342,7 +342,7 @@ export default function CompanyOrdersReport() {
             detail={
               totals.overall.hours_missing_count > 0
                 ? `${totals.overall.hours_missing_count} ordens ${NO_HOURS_LABEL}`
-                : `${totals.overall.rows_count} ordens`
+                : `${totals.overall.shifts_count} ordens`
             }
           />
         </div>
@@ -427,17 +427,17 @@ export default function CompanyOrdersReport() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b-2 border-black bg-gray-50 text-left">
-                      <Th>Freela</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Real</Th><Th right>Estimado</Th>
+                      <Th>Freela</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Pago</Th><Th right>A pagar</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {totals.by_worker.map((w) => (
                       <tr key={w.worker_id ?? 'none'} className="border-b border-gray-200 last:border-0">
                         <td className="px-3 py-2 font-medium">{w.worker_name ?? 'Sem freela'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{w.rows_count}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{w.shifts_count}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{totalHours(w.hours_total, w.hours_missing_count)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_realized)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_estimated)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_paid)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_to_pay)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -448,17 +448,17 @@ export default function CompanyOrdersReport() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b-2 border-black bg-gray-50 text-left">
-                      <Th>Dia</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Real</Th><Th right>Estimado</Th>
+                      <Th>Dia</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Pago</Th><Th right>A pagar</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {totals.by_day.map((d) => (
-                      <tr key={d.day} className="border-b border-gray-200 last:border-0">
-                        <td className="px-3 py-2 font-bold whitespace-nowrap">{formatReportDate(d.day)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{d.rows_count}</td>
+                      <tr key={d.job_date} className="border-b border-gray-200 last:border-0">
+                        <td className="px-3 py-2 font-bold whitespace-nowrap">{formatReportDate(d.job_date)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{d.shifts_count}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{totalHours(d.hours_total, d.hours_missing_count)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_realized)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_estimated)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_paid)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_to_pay)}</td>
                       </tr>
                     ))}
                   </tbody>

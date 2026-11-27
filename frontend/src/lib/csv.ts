@@ -11,6 +11,15 @@ export function csvSafeText(value: string | null | undefined): string {
   return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
 }
 
+/**
+ * Identificador só de dígitos (CPF/CNPJ/telefone sem pontuação): vira `="..."` para o Excel manter
+ * como texto e não perder o zero à esquerda. Os dígitos nunca formam fórmula. Outros valores passam por `csvSafeText`.
+ */
+export function csvKeepDigitsAsText(value: string | null | undefined): string {
+  const s = value ?? '';
+  return /^\d+$/.test(s) ? `="${s}"` : csvSafeText(s);
+}
+
 /** Aspas quando o campo tem `;`, aspas ou quebra de linha. */
 export function csvQuote(field: string): string {
   return /[;"\n\r]/.test(field) ? `"${field.replace(/"/g, '""')}"` : field;

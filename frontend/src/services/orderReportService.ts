@@ -72,7 +72,11 @@ export const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   other: 'Outro',
 };
 
-export const AMOUNT_KIND_LABELS = { realized: 'Real', estimated: 'Estimado' } as const;
+export const AMOUNT_KIND_LABELS = {
+  realized: 'Real',
+  estimated: 'Estimado',
+  estimated_by_planned_hours: 'Estimado (horas previstas)',
+} as const;
 
 /** Texto exibido quando não há horas medidas (nunca "0h"). */
 export const NO_HOURS_LABEL = 'sem check-in/out';
@@ -93,11 +97,12 @@ const numOrNull = (v: unknown): number | null => {
 
 function normalizeBase(t: Partial<FinancialTotalsBase> | null | undefined): FinancialTotalsBase {
   return {
-    rows_count: num(t?.rows_count),
+    shifts_count: num(t?.shifts_count),
     hours_total: num(t?.hours_total),
     hours_missing_count: num(t?.hours_missing_count),
-    total_realized: num(t?.total_realized),
-    total_estimated: num(t?.total_estimated),
+    total_amount: num(t?.total_amount),
+    total_paid: num(t?.total_paid),
+    total_to_pay: num(t?.total_to_pay),
   };
 }
 
@@ -119,7 +124,7 @@ function normalizeTotals(t: Partial<FinancialReportTotals> | null | undefined): 
       worker_id: w.worker_id ?? null,
       worker_name: w.worker_name ?? null,
     })),
-    by_day: (t?.by_day ?? []).map((d) => ({ ...normalizeBase(d), day: d.day })),
+    by_day: (t?.by_day ?? []).map((d) => ({ ...normalizeBase(d), job_date: d.job_date })),
     overall: normalizeBase(t?.overall),
   };
 }
@@ -196,8 +201,10 @@ export function reportOutcomeMessage(outcome: FinancialReportOutcome): string {
       return 'Seu acesso ainda não foi confirmado pelo Gestor. Assim que for, o relatório dos seus turnos aparece aqui.';
     case 'forbidden':
       return 'Você não tem acesso a este relatório.';
-    case 'invalid_input':
+    case 'invalid_range':
       return 'Confira as datas escolhidas.';
+    case 'invalid_status':
+      return 'Status inválido. Escolha outro filtro.';
     default:
       return 'Não foi possível carregar o relatório.';
   }
@@ -229,7 +236,7 @@ export function toCSV(report: Pick<FinancialReport, 'rows'>): string {
         csvDecimal(row.hours),
         csvDecimal(row.hourly_rate),
         csvDecimal(row.amount),
-        AMOUNT_KIND_LABELS[row.amount_kind] ?? '',
+        AMOUNT_KIND_LABELS[row.amount_kind] ?? row.amount_kind,
         row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—',
         ORDER_STATUS_LABELS[row.status] ?? row.status,
         row.paid_at ? formatReportDate(row.paid_at) : '',
