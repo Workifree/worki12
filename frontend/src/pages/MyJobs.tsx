@@ -33,32 +33,17 @@ import type {
     AttendanceConfirmationOutcome,
 } from '../types';
 import { Dialog } from '../components/ui/Dialog';
+import {
+    isRateDismissed,
+    isWithinRatePromptWindow,
+    markRateDismissed,
+    markRatePromptShownThisSession,
+    ratePromptShownThisSession,
+} from '../lib/ratePrompt';
 
-// O pedido automático de avaliação é POR TURNO (nunca por sessão) e só para turno recente:
-// abrir o modal por um turno de semanas atrás, a cada sessão nova, cobria a navegação sem motivo.
-// Quem fechou sem avaliar continua com o botão "Avaliar" no histórico; o modal não volta sozinho.
-const RATE_PROMPTED_KEY = 'worki_rate_prompted_jobs';
-const RATE_PROMPT_WINDOW_DAYS = 3;
-function readRatePrompted(): string[] {
-    try {
-        const parsed: unknown = JSON.parse(localStorage.getItem(RATE_PROMPTED_KEY) ?? '[]');
-        return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
-    } catch {
-        return [];
-    }
-}
-function markRatePrompted(jobId: string): void {
-    try {
-        localStorage.setItem(RATE_PROMPTED_KEY, JSON.stringify([...readRatePrompted(), jobId].slice(-100)));
-    } catch {
-        // sem storage vale só a trava por visita (ref)
-    }
-}
+// Pedido automático de avaliação: regras em lib/ratePrompt.ts (1 por sessão, dispensa por 14 dias, janela de 3 dias).
 function isRecentShift(job: JobApplication, now = Date.now()): boolean {
-    const ref = job.company_checkout_confirmed_at ?? job.worker_checkout_at ?? job.raw_date;
-    if (!ref) return false;
-    const t = new Date(ref.length === 10 ? `${ref}T12:00:00` : ref).getTime();
-    return Number.isFinite(t) && now - t <= RATE_PROMPT_WINDOW_DAYS * 86_400_000;
+    return isWithinRatePromptWindow(job.company_checkout_confirmed_at ?? job.worker_checkout_at ?? job.raw_date, now);
 }
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
@@ -581,20 +566,20 @@ export default function MyJobs() {
         }
     };
 
-    // Pedido de avaliação logo após o turno concluído: 1x por turno, só se for recente (3 dias) e sem
-    // avaliação, e nunca com convite pendente (tem prazo e vem antes). O modal fecha por X, Esc e fora.
+    // Pedido de avaliação logo após o turno concluído: 1 por sessão do navegador, só turno recente
+    // (3 dias), sem avaliação e não dispensado (14 dias); nunca com convite pendente nem sobre outro modal.
     useEffect(() => {
-        if (autoRatePrompted.current || loading || invitesLoading || pendingInvites.length > 0) return;
-        const already = readRatePrompted();
+        if (autoRatePrompted.current || ratePromptShownThisSession()) return;
+        if (loading || invitesLoading || pendingInvites.length > 0 || rateModalOpen || detailJob || cancelJob) return;
         const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id)
-            && !already.includes(j.job_id) && isRecentShift(j));
+            && !isRateDismissed(j.job_id) && isRecentShift(j));
         if (pending) {
             autoRatePrompted.current = true;
-            markRatePrompted(pending.job_id);
+            markRatePromptShownThisSession();
             setSelectedJobToRate(pending);
             setRateModalOpen(true);
         }
-    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length]);
+    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length, rateModalOpen, detailJob, cancelJob]);
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
     // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
@@ -1182,7 +1167,10 @@ export default function MyJobs() {
 
             <RateModal
                 isOpen={rateModalOpen}
-                onClose={() => setRateModalOpen(false)}
+                onClose={() => {
+                    if (selectedJobToRate) markRateDismissed(selectedJobToRate.job_id);
+                    setRateModalOpen(false);
+                }}
                 onSubmit={handleSubmitRate}
                 targetName={selectedJobToRate?.company_name || 'Empresa'}
                 targetPhotoUrl={selectedJobToRate?.company_logo ?? undefined}

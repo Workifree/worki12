@@ -522,7 +522,7 @@ export default function Dashboard() {
 
                 <Card className={temTurnoHoje ? 'md:col-span-3 flex flex-col' : 'flex flex-col'}>
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <TrendingUp size={18} className="text-primary" /> Ganhos
+                        <TrendingUp size={18} className="text-primary" /> Ganhos em turnos concluídos
                     </h2>
                     <p className="text-3xl font-bold tabular-nums [overflow-wrap:anywhere]">
                         {formatBRL(worker.earnings_total || 0)}

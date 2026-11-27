@@ -150,6 +150,9 @@ export default function PreferenciasDeAvisos({ whatsappDisponivel = false }: Pre
                     onToggle={() => void alternarEmail()}
                     disabled={salvando}
                 />
+                <p className="text-sm text-gray-700">
+                    Avisos por e-mail serão ativados em breve. Sua escolha já fica salva.
+                </p>
             </div>
 
             <form onSubmit={salvarHorario} className="mt-6">
