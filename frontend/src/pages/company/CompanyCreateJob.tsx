@@ -10,6 +10,7 @@ import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megap
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { jobDraftKey } from '../../lib/jobDraft';
+import { isNotVisibleError } from '../../lib/notVisible';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
@@ -273,6 +274,7 @@ export default function CompanyCreateJob() {
     const [erroCarga, setErroCarga] = useState<{ jobId: string; modo: 'editar' | 'repetir' } | null>(null);
 
     const [semAcesso, setSemAcesso] = useState(false);
+    const [indisponivel, setIndisponivel] = useState(false);
 
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
@@ -330,6 +332,7 @@ export default function CompanyCreateJob() {
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
+            if (error && isNotVisibleError(error)) { setIndisponivel(true); return; }
             if (error) throw error;
             setErroCarga(null);
             if (data && !canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
@@ -365,9 +368,7 @@ export default function CompanyCreateJob() {
             }
         } catch (error) {
             logError('Error fetching job:', error);
-            // PGRST116 = turno inexistente/sem acesso. O resto é falha de carga: fica na tela.
-            if ((error as { code?: string } | null)?.code === 'PGRST116') navigate('/company/jobs');
-            else setErroCarga({ jobId, modo });
+            setErroCarga({ jobId, modo });
         }
     };
 
@@ -639,6 +640,9 @@ export default function CompanyCreateJob() {
 
     const rotuloEnviar = isEditing ? 'Salvar alterações' : (isRecurring ? 'Criar série de turnos' : 'Criar turno');
 
+    if (indisponivel) {
+        return <SemAcesso titulo="Turno indisponível" mensagem="Você não tem acesso a este turno ou ele foi removido." voltarPara="/company/jobs" rotulo="Voltar para Turnos" />;
+    }
     if (semAcesso) {
         return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
     }

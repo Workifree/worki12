@@ -53,9 +53,10 @@ interface HistoryItem {
     id: string;
     status: string;
     created_at: string;
+    /** `null` quando a RLS não deixa ver o turno (removido ou de outra pessoa). */
     job: {
         title: string;
-    };
+    } | null;
 }
 
 export default function Dashboard() {
@@ -638,7 +639,7 @@ export default function Dashboard() {
                             className="flex w-full justify-between items-center gap-3 min-h-14 px-2 -mx-2 py-2 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer border-b border-gray-100 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                         >
                             <div className="min-w-0">
-                                <p className="font-semibold text-sm truncate" title={h.job.title}>{h.job.title}</p>
+                                <p className="font-semibold text-sm truncate" title={h.job?.title ?? 'Turno indisponível'}>{h.job?.title ?? 'Turno indisponível'}</p>
                                 <p className="text-xs text-gray-600">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
                             <StatusBadge domain="application" status={h.status} className="flex-shrink-0" />

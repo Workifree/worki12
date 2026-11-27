@@ -14,6 +14,7 @@ import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsApp
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
 import { CHAT_DENIED_MESSAGE, isChatDeniedByRls } from '../../lib/shiftChat';
+import { isNotVisibleError } from '../../lib/notVisible';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { fillMissingWorkers } from '../../services/workerCardsService';
@@ -273,6 +274,7 @@ export default function CompanyJobCandidates() {
     const [jobBudget, setJobBudget] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
     const [semAcesso, setSemAcesso] = useState(false);
+    const [indisponivel, setIndisponivel] = useState(false);
     // Registro de pagamento externo (modo A) por freela (ADR-20260816 — o marcador é por
     // (job_id, worker_id), não mais por job_id sozinho: um turno com N freelas tem N
     // marcadores independentes). Cada card olha só a própria entrada deste mapa.
@@ -436,8 +438,9 @@ export default function CompanyJobCandidates() {
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
             // PGRST116 = nenhuma linha; outro erro é falha de carga, não "turno inexistente".
-            if (jobError && jobError.code !== 'PGRST116') throw jobError;
-            if (!job) { if (!silent) navigate('/company/jobs'); return; }
+            if (jobError && isNotVisibleError(jobError)) { if (!silent && claim()) setIndisponivel(true); return; }
+            if (jobError) throw jobError;
+            if (!job) { if (!silent && claim()) setIndisponivel(true); return; }
             if (!canSeeJob(await getJobScope(), job)) { if (!silent) setSemAcesso(true); return; }
             if (!claim()) return;
             setJobTitle(job.title);
@@ -1381,6 +1384,9 @@ export default function CompanyJobCandidates() {
         );
     };
 
+    if (indisponivel) {
+        return <SemAcesso titulo="Turno indisponível" mensagem="Você não tem acesso a este turno ou ele foi removido." voltarPara="/company/jobs" rotulo="Voltar para Turnos" />;
+    }
     if (semAcesso) {
         return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
     }

@@ -366,3 +366,39 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     expect(supabase.rpc).toHaveBeenCalledWith('cancel_job', { p_job_id: 'job-1', p_reason: null })
   })
 })
+
+describe('CompanyJobDetails — turno que a pessoa não enxerga (RLS)', () => {
+  function setupBlocked(error: unknown) {
+    setupMocks()
+    const jobsChain = {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error }),
+          }),
+        }),
+      }),
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
+      return { select: vi.fn(() => applicationsReadThenable()) } as unknown as ReturnType<typeof supabase.from>
+    })
+  }
+
+  it('0 linhas (PGRST116/406) mostra "Turno indisponível" sem "Tentar de novo"', async () => {
+    setupBlocked({ code: 'PGRST116', status: 406, message: 'The result contains 0 rows' })
+    renderComponent()
+    expect(await screen.findByText('Turno indisponível')).toBeInTheDocument()
+    expect(screen.getByText(/não tem acesso a este turno ou ele foi removido/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Voltar para Turnos' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).toBeNull()
+    expect(screen.queryByText(/verifique sua conexão/i)).toBeNull()
+  })
+
+  it('falha de rede real mantém a mensagem de conexão com "Tentar de novo"', async () => {
+    setupBlocked({ message: 'Failed to fetch' })
+    renderComponent()
+    expect(await screen.findByRole('button', { name: /tentar de novo/i })).toBeInTheDocument()
+    expect(screen.queryByText('Turno indisponível')).toBeNull()
+  })
+})

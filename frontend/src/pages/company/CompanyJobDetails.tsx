@@ -10,6 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
 import { formatBRL } from '../../lib/currency';
 import { logError } from '../../lib/logger';
+import { isNotVisibleError } from '../../lib/notVisible';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { deleteShift } from '../../services/deleteShiftService';
@@ -80,6 +81,7 @@ export default function CompanyJobDetails() {
     const [erroFreelas, setErroFreelas] = useState(false);
     const [erroCarga, setErroCarga] = useState(false);
     const [semAcesso, setSemAcesso] = useState(false);
+    const [indisponivel, setIndisponivel] = useState(false);
     const { addToast } = useToast();
 
     const beginDetails = useLatestResponse();
@@ -137,6 +139,7 @@ export default function CompanyJobDetails() {
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
+            if (error && isNotVisibleError(error)) { if (!silent && claim()) setIndisponivel(true); return; }
             if (error) throw error;
             if (!canSeeJob(await getJobScope(), data)) { if (!silent) setSemAcesso(true); return; }
 
@@ -201,6 +204,14 @@ export default function CompanyJobDetails() {
     );
     if (semAcesso) return (
         <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />
+    );
+    if (indisponivel) return (
+        <SemAcesso
+            titulo="Turno indisponível"
+            mensagem="Você não tem acesso a este turno ou ele foi removido."
+            voltarPara="/company/jobs"
+            rotulo="Voltar para Turnos"
+        />
     );
     if (erroCarga && !job) return (
         <div className="max-w-4xl mx-auto p-4 sm:p-8">
