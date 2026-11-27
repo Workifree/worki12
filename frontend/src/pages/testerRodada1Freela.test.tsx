@@ -24,6 +24,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../lib/supabase', () => ({ supabase: { auth: { getUser: vi.fn() }, from: vi.fn() } }))
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
+// Sem espera real entre as repetições (1s/2s/4s em produção)
+vi.mock('../lib/retry', async (importActual) => {
+  const actual = await importActual<typeof import('../lib/retry')>()
+  return { ...actual, withRetry: <T,>(fn: () => Promise<T>, o = {}) => actual.withRetry(fn, { ...o, delays: [0, 0, 0] }) }
+})
 vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: mocks.addToast }) }))
 vi.mock('../services/paymentRecordService', () => ({
   PaymentRecordService: { listForWorkerChecked: mocks.listForWorker },
@@ -74,12 +79,18 @@ beforeEach(() => {
 
 describe('D-4 — falha de rede não é "sem sessão"', () => {
   it('checkSession separa rede, sessão inexistente e sessão válida', async () => {
-    vi.mocked(supabase.auth.getUser).mockResolvedValueOnce(OFFLINE)
+    // falha persistente (esgota as repetições) é "indisponível"; falha única se recupera sozinha
+    vi.mocked(supabase.auth.getUser).mockResolvedValue(OFFLINE)
     expect((await checkSession()).status).toBe('unavailable')
-    vi.mocked(supabase.auth.getUser).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    vi.mocked(supabase.auth.getUser).mockRejectedValue(new TypeError('Failed to fetch'))
     expect((await checkSession()).status).toBe('unavailable')
+    vi.mocked(supabase.auth.getUser).mockReset()
+    vi.mocked(supabase.auth.getUser).mockResolvedValueOnce(OFFLINE).mockResolvedValueOnce(SESSION_OK)
+    expect((await checkSession()).status).toBe('ok')
+    vi.mocked(supabase.auth.getUser).mockReset()
     vi.mocked(supabase.auth.getUser).mockResolvedValueOnce(SIGNED_OUT)
     expect((await checkSession()).status).toBe('signed_out')
+    vi.mocked(supabase.auth.getUser).mockResolvedValue(SESSION_OK)
     expect((await checkSession()).status).toBe('ok')
   })
 

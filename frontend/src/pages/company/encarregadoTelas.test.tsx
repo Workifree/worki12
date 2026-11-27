@@ -16,6 +16,11 @@ vi.mock('react-router-dom', async () => ({
 }))
 vi.mock('../../lib/supabase', () => ({ supabase: { auth: { getUser: vi.fn() }, from: vi.fn(), rpc: vi.fn() } }))
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
+// Sem espera real entre as repetições (1s/2s/4s em produção)
+vi.mock('../../lib/retry', async (importActual) => {
+  const actual = await importActual<typeof import('../../lib/retry')>()
+  return { ...actual, withRetry: <T,>(fn: () => Promise<T>, o = {}) => actual.withRetry(fn, { ...o, delays: [0, 0, 0] }) }
+})
 vi.mock('../../hooks/useCurrentCompany', () => ({ useCurrentCompany: () => null, useCurrentCompanyState: () => ({ company: null, resolved: true, error: false }) }))
 vi.mock('../../hooks/useShiftInvites', () => ({
   useCompanyInvites: () => ({ invitedWorkerIds: [], invite: vi.fn(), invitingWorkerId: null }),
