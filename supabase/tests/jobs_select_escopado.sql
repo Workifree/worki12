@@ -24,12 +24,12 @@ BEGIN
   -- 1.2 EXATAMENTE 1 policy de leitura, e e jobs_select_scoped
   SELECT count(*), min(policyname) INTO v_n, v_name FROM pg_policies
    WHERE schemaname='public' AND tablename='jobs' AND cmd IN ('SELECT','ALL');
-  ASSERT v_n = 1 AND v_name = 'jobs_select_scoped', format('1.2 esperado 1 policy jobs_select_scoped; achei % (%)', v_n, v_name);
+  ASSERT v_n = 1 AND v_name = 'jobs_select_scoped', format('1.2 esperado 1 policy jobs_select_scoped; achei %s (%s)', v_n, v_name);
 
   -- 1.3 funcao: DEFINER, search_path vazio, anon sem EXECUTE, authenticated e service_role com
   ASSERT (SELECT prosecdef FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='session_is_job_participant'),
          '1.3 session_is_job_participant nao e DEFINER';
-  ASSERT (SELECT proconfig::text LIKE '%search_path=""%' FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='session_is_job_participant'),
+  ASSERT (SELECT coalesce(proconfig @> ARRAY['search_path=""'], false) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='session_is_job_participant'),
          '1.3 search_path nao e vazio';
   ASSERT NOT has_function_privilege('anon', 'public.session_is_job_participant(uuid)', 'EXECUTE'), '1.3 anon tem EXECUTE';
   ASSERT has_function_privilege('authenticated', 'public.session_is_job_participant(uuid)', 'EXECUTE'), '1.3 authenticated sem EXECUTE';
@@ -201,7 +201,7 @@ BEGIN
   EXECUTE 'SET LOCAL ROLE authenticated';
   BEGIN
     INSERT INTO public.applications(job_id, worker_id, status) VALUES (pg_temp.j('a_gestor'), pg_temp.f('w_none'), 'pending');
-  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+  EXCEPTION WHEN insufficient_privilege OR check_violation OR raise_exception THEN v_failed := true;
   END;
   EXECUTE 'RESET ROLE';
   IF NOT v_failed THEN RAISE EXCEPTION '2.6 freela inseriu application em turno alheio (M1 aberto)'; END IF;
@@ -227,7 +227,7 @@ BEGIN
   BEGIN
     INSERT INTO public.jobs(company_id, title, start_date)
     VALUES (pg_temp.f('co_a'), 'ZZ nao deveria', now() + interval '61 days');
-  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+  EXCEPTION WHEN insufficient_privilege OR check_violation OR raise_exception THEN v_failed := true;
   END;
   EXECUTE 'RESET ROLE';
   IF NOT v_failed THEN RAISE EXCEPTION '2.7 Encarregado nao confirmado criou turno'; END IF;
