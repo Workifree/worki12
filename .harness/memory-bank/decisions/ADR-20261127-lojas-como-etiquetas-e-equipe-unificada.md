@@ -18,7 +18,8 @@ Estado de produção conferido no catálogo em 27/11/2026 (`vrklakcbkcsonarmhqhp
   CHECK de papel já é `('manager','encarregado')`.
 - `company_tags`: 1 linha; `jobs.tag_id` preenchido: **0**. `jobs.responsible_id` preenchido: 25.
 - `organizations`: 16, nenhuma com mais de uma company; `organization_members`: só `owner` (14 ativos, 2 removidos).
-- **`invite_company_manager`, `accept_company_invite_by_token` e `revoke_company_manager` (F13 Fase 3)
+- **`invite_company_manager`, `accept_manager_invite` e `revoke_company_manager` (F13 Fase 3; correção de 27/11:
+  o ADR citava `accept_company_invite_by_token`, que é o aceite de ELENCO do freela e NÃO é revogado)
   continuam com `EXECUTE` para `authenticated`.** O frontend do convite de gerente foi removido, mas a porta no
   banco segue aberta e cria Gestor **sem** a confirmação "é ele?". Isso é um segundo caminho para um papel de
   poder total.
@@ -82,9 +83,16 @@ Seguro em produção: zero `manager` hoje, ninguém perde acesso. `internal_comp
 confirmado (e mostrar `awaiting_confirmation` para manager).
 
 ### D7. Porta antiga fechada
-`REVOKE EXECUTE ... FROM authenticated, anon, PUBLIC` em `invite_company_manager`, `accept_company_invite_by_token`
+`REVOKE EXECUTE ... FROM authenticated, anon, PUBLIC` em `invite_company_manager`, **`accept_manager_invite`**
 e `revoke_company_manager` nesta migration; `DROP` numa migration posterior depois de um ciclo sem chamadas
 (grep no frontend já limpo pelo commit 9abe877e). Um só caminho cria Gestor.
+**`accept_company_invite_by_token` NÃO é revogada:** é o aceite do Elenco pelo freela (`team_connections`).
+Complementos de segurança (revisão de 27/11): convite de Gestor só com conta VERIFICADA
+(`internal_team_invite_provision_check` devolve `manager_requires_verified_signup` se não há conta; o aceite recusa
+`email_ownership='not_verified'` e convite de Gestor sem e-mail); `company_tags_select` e `rc_select_partes_ou_gestor`
+usam `is_company_member_confirmed`; `get_invite_preview` (anon) só serve token de Elenco (48 hex); a trava de loja do
+encarregado vale também para a loja herdada de outro responsável; `create_company_tag` e `rename_company_tag` usam a
+mesma normalização de espaços. Rollback em `supabase/migrations/_rollback/20261204000400_down.sql`.
 
 ### D8. Migração de dados
 - `company_tags`: 1 linha, mantida. `jobs.tag_id`: 0 — **nenhum backfill** de turno (inventar loja de turno
@@ -156,7 +164,7 @@ $$;
 --   internal_company_gestor_ids, notification_recipients_for_job, get_my_companies: manager só confirmado
 
 REVOKE ALL ON FUNCTION public.invite_company_manager        FROM PUBLIC, anon, authenticated; -- assinatura exata do catálogo
-REVOKE ALL ON FUNCTION public.accept_company_invite_by_token FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.accept_manager_invite(text)   FROM PUBLIC, anon, authenticated; -- NÃO accept_company_invite_by_token (Elenco)
 REVOKE ALL ON FUNCTION public.revoke_company_manager        FROM PUBLIC, anon, authenticated;
 
 -- GRANT EXECUTE TO authenticated, service_role em toda RPC nova; REVOKE de anon/PUBLIC.

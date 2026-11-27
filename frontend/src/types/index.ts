@@ -268,6 +268,8 @@ export type ProvisionAccountOutcome =
   | 'existing_account'
   | 'account_pending'
   | 'worker_cannot_be_manager'
+  /** Convite de GESTOR sem conta verificada: a pessoa precisa se cadastrar (e verificar o e-mail) antes. */
+  | 'manager_requires_verified_signup'
   | 'legacy_invite'
   | 'not_found'
   | 'expired'

@@ -296,6 +296,7 @@ describe('provisionTeamInviteAccount', () => {
 
   it.each([
     'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite', 'not_found', 'expired',
+    'manager_requires_verified_signup',
   ])('repassa %s e NÃO devolve e-mail', async (outcome) => {
     mockInvoke.mockResolvedValue({ data: { outcome, email: 'vazou@x.com' }, error: null });
     expect(await provisionTeamInviteAccount('tok', 'senha-forte-1')).toEqual({ outcome, email: undefined });

@@ -275,7 +275,7 @@ export async function acceptMemberInvite(
 
 const PROVISION_OUTCOMES: ProvisionAccountOutcome[] = [
   'created', 'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite',
-  'not_found', 'expired', 'rate_limited', 'invalid_input',
+  'not_found', 'expired', 'rate_limited', 'invalid_input', 'manager_requires_verified_signup',
 ];
 
 /**

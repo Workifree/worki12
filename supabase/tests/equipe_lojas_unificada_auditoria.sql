@@ -81,6 +81,10 @@ DECLARE
     v_enc1 uuid := gen_random_uuid();   -- encarregado com loja padrao A
     v_enc2 uuid := gen_random_uuid();   -- encarregado com a MESMA loja A (nao ve turno do enc1)
     v_ger  uuid := gen_random_uuid();   -- Gestor convidado
+    v_ger2 uuid := gen_random_uuid();   -- Gestor convidado que fica PENDENTE (nunca confirmado)
+    v_ger3 uuid := gen_random_uuid();   -- conta pre-criada com email_ownership=not_verified
+    v_tok2 text;  v_tok3 text;
+    v_msg  text;
     v_tag  text := left(replace(gen_random_uuid()::text, '-', ''), 8);
     v_r    jsonb;
     v_tok  text;
@@ -88,6 +92,8 @@ DECLARE
     v_m1   uuid;  v_m2 uuid;  v_mg uuid;
     v_j1   uuid := gen_random_uuid();
     v_j2   uuid := gen_random_uuid();
+    v_j3   uuid := gen_random_uuid();
+    v_j4   uuid := gen_random_uuid();
     v_tpl  public.jobs%ROWTYPE;
     v_n    bigint;
     v_got  uuid;
@@ -148,6 +154,55 @@ BEGIN
     IF v_r->>'outcome' <> 'confirmed' THEN RAISE EXCEPTION 'FALHA confirmar gestor: %', v_r; END IF;
     PERFORM pg_temp.as_user(v_ger);
     IF NOT public.is_company_owner(v_dono) THEN RAISE EXCEPTION 'FALHA: manager confirmado deveria operar.'; END IF;
+    -- Gestor JA confirmado tambem nao se confirma sozinho (nem confirma a linha do outro por cima de si)
+    v_r := public.confirm_company_member(v_dono, v_ger, 'Gestor X');
+    IF v_r->>'outcome' <> 'forbidden' THEN RAISE EXCEPTION 'FALHA: Gestor confirmado se autoconfirmou: %', v_r; END IF;
+
+    -- ---- Gestor PENDENTE (ger2): conta verificada, aceita, mas nao confirmada => zero acesso ----
+    PERFORM pg_temp.as_server();
+    PERFORM pg_temp.mk_user(v_ger2, 'qa-lj-' || v_tag || '-g2@invalido.local');
+    PERFORM pg_temp.as_user(v_dono);
+    v_r := public.invite_company_member(v_dono, 'Gestor Dois', 'manager', 'qa-lj-' || v_tag || '-g2@invalido.local');
+    IF v_r->>'outcome' <> 'invited' THEN RAISE EXCEPTION 'FALHA convite gestor2: %', v_r; END IF;
+    v_tok2 := v_r->>'invite_token';
+    PERFORM pg_temp.as_user(v_ger2);
+    v_r := public.accept_company_member_invite(v_tok2, true);
+    IF v_r->>'outcome' <> 'accepted' THEN RAISE EXCEPTION 'FALHA aceite gestor2: %', v_r; END IF;
+    v_r := public.list_company_members(v_dono, false);
+    IF v_r->>'outcome' <> 'forbidden' THEN RAISE EXCEPTION 'FALHA: gestor pendente listou a equipe: %', v_r; END IF;
+    SELECT count(*) INTO v_n FROM public.company_tags WHERE company_id = v_dono;
+    IF v_n <> 0 THEN RAISE EXCEPTION 'FALHA 1.2: gestor pendente le lojas (%).', v_n; END IF;
+    SELECT count(*) INTO v_n FROM public.team_connections WHERE company_id = v_dono;
+    IF v_n <> 0 THEN RAISE EXCEPTION 'FALHA: gestor pendente le Elenco (%).', v_n; END IF;
+    IF public.is_company_owner(v_dono) OR public.is_company_member_confirmed(v_dono) THEN
+        RAISE EXCEPTION 'FALHA: gestor pendente passa nos seams (PII de freela depende deles).'; END IF;
+    IF EXISTS (SELECT 1 FROM public.get_my_companies() g WHERE g.company_id = v_dono AND g.confirmed) THEN
+        RAISE EXCEPTION 'FALHA: get_my_companies marca gestor pendente como confirmado.'; END IF;
+
+    -- ---- Gestor so nasce de conta VERIFICADA (MAJOR 1) ----
+    PERFORM pg_temp.as_user(v_dono);
+    v_r := public.invite_company_member(v_dono, 'Gestor Tres', 'manager', 'qa-lj-' || v_tag || '-g3@invalido.local');
+    v_tok3 := v_r->>'invite_token';
+    PERFORM pg_temp.as_server();
+    v_r := public.internal_team_invite_provision_check(v_tok3);   -- e-mail sem conta
+    IF v_r->>'outcome' <> 'manager_requires_verified_signup' THEN
+        RAISE EXCEPTION 'FALHA MAJOR 1: provision_check de manager sem conta: %', v_r; END IF;
+    -- conta pre-criada pela edge function (email_ownership=not_verified) nao aceita convite de Gestor
+    PERFORM pg_temp.mk_user(v_ger3, 'qa-lj-' || v_tag || '-g3@invalido.local');
+    UPDATE auth.users SET raw_app_meta_data = '{"email_ownership":"not_verified"}'::jsonb WHERE id = v_ger3;
+    PERFORM pg_temp.as_user(v_ger3);
+    v_r := public.accept_company_member_invite(v_tok3, true);
+    IF v_r->>'outcome' <> 'email_not_verified' THEN
+        RAISE EXCEPTION 'FALHA MAJOR 1: conta not_verified virou Gestor: %', v_r; END IF;
+
+    -- ---- previa publica NAO revela token de Gestor; aceite de Elenco segue executavel ----
+    PERFORM pg_temp.as_server();
+    v_r := public.get_invite_preview(v_tok3);
+    IF v_r->>'outcome' <> 'not_found' OR v_r->>'kind' IS NOT NULL THEN
+        RAISE EXCEPTION 'FALHA 2.1: get_invite_preview revelou token de gerente: %', v_r; END IF;
+    IF NOT has_function_privilege('authenticated', 'public.accept_company_invite_by_token(text)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'FALHA: accept_company_invite_by_token (Elenco do freela) perdeu EXECUTE.'; END IF;
+    PERFORM pg_temp.as_user(v_ger);
 
     -- ---- encarregados aceitos e confirmados ----
     PERFORM pg_temp.as_user(v_dono);
@@ -193,6 +248,13 @@ BEGIN
     SELECT tag_id INTO v_got FROM public.jobs WHERE id = v_j2;
     IF v_got IS DISTINCT FROM v_b THEN RAISE EXCEPTION 'FALHA: explicito deveria vencer o padrao.'; END IF;
 
+    -- ---- heranca com SESSAO NULA (cron/service_role): tambem herda ----
+    PERFORM pg_temp.as_server();
+    INSERT INTO public.jobs SELECT (jsonb_populate_record(v_tpl, jsonb_build_object(
+        'id', v_j3, 'company_id', v_dono, 'responsible_id', v_enc2, 'tag_id', NULL, 'series_id', NULL, 'status', 'open'))).*;
+    SELECT tag_id INTO v_got FROM public.jobs WHERE id = v_j3;
+    IF v_got IS DISTINCT FROM v_a THEN RAISE EXCEPTION 'FALHA heranca sessao nula: tag=%', v_got; END IF;
+
     -- ---- D3: etiqueta nao concede acesso: enc2 (mesma loja A) NAO ve o turno do enc1 ----
     PERFORM pg_temp.as_user(v_enc2);
     IF public.is_job_owner(v_j1) THEN RAISE EXCEPTION 'FALHA D3: mesma loja concedeu acesso ao turno alheio.'; END IF;
@@ -216,6 +278,18 @@ BEGIN
     IF v_r->>'outcome' <> 'updated' THEN RAISE EXCEPTION 'FALHA mudar padrao: %', v_r; END IF;
     SELECT tag_id INTO v_got FROM public.jobs WHERE id = v_j2;
     IF v_got IS DISTINCT FROM v_b THEN RAISE EXCEPTION 'FALHA: turno existente foi reescrito.'; END IF;
+
+    -- ---- INSERT de encarregado com loja explicita DIFERENTE do padrao (enc1 agora tem padrao B) ----
+    PERFORM pg_temp.as_user(v_enc1);
+    v_ok := false;
+    BEGIN
+        INSERT INTO public.jobs SELECT (jsonb_populate_record(v_tpl, jsonb_build_object(
+            'id', v_j4, 'company_id', v_dono, 'responsible_id', v_enc1, 'tag_id', v_a, 'series_id', NULL, 'status', 'open'))).*;
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+        v_ok := v_msg LIKE '%loja do turno%';
+    END;
+    IF NOT v_ok THEN RAISE EXCEPTION 'FALHA 3.1: INSERT de encarregado com outra loja nao foi barrado pela trava.'; END IF;
 
     -- ---- porta F13 fechada para authenticated ----
     PERFORM pg_temp.as_user(v_dono);

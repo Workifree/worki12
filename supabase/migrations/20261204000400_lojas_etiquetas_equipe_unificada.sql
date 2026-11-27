@@ -339,7 +339,6 @@ DECLARE
     v_resp_changed boolean;
     v_tag_changed  boolean;
     v_moved        boolean := false;
-    v_inherited    boolean := false;
     v_default      uuid;
     v_own_default  uuid;
 BEGIN
@@ -378,7 +377,6 @@ BEGIN
         IF v_default IS NOT NULL THEN
             NEW.tag_id     := v_default;
             v_tag_changed  := true;
-            v_inherited    := true;
         END IF;
     END IF;
 
@@ -392,8 +390,9 @@ BEGIN
             RAISE EXCEPTION 'jobs: série recorrente é do Gestor (v1).'
                 USING ERRCODE = '42501';
         END IF;
-        -- D2: encarregado COM loja padrao nao grava outra loja (INSERT ou UPDATE). Sem padrao: livre.
-        IF v_tag_changed AND NOT v_inherited THEN
+        -- D2: encarregado COM loja padrao nao grava outra loja (INSERT ou UPDATE), inclusive a herdada de
+        -- OUTRO responsavel (o Gestor e quem lanca turno em outra loja). Sem padrao: livre.
+        IF v_tag_changed THEN
             v_own_default := public.internal_member_default_tag(v_company, v_uid);
             IF v_own_default IS NOT NULL AND NEW.tag_id IS DISTINCT FROM v_own_default THEN
                 RAISE EXCEPTION 'jobs: a loja do turno é definida pelo Gestor.'
@@ -880,6 +879,11 @@ BEGIN
 
     IF v_uid IS NULL THEN
         v_account := 'none';
+        -- Gestor tem poder total: nao nasce de conta pre-criada com e-mail NAO verificado.
+        -- A pessoa precisa ter uma conta de empresa verificada (cadastro normal) antes de aceitar.
+        IF v_row.role = 'manager' THEN
+            RETURN jsonb_build_object('outcome', 'manager_requires_verified_signup');
+        END IF;
     ELSIF EXISTS (SELECT 1 FROM public.workers w WHERE w.id = v_uid) THEN
         v_account := 'worker';
     ELSIF v_conf_at IS NULL THEN
@@ -918,6 +922,7 @@ DECLARE
     v_masked   text;
     v_notice   text;
     v_label    text;
+    v_ownership text;
 BEGIN
     IF v_uid IS NULL THEN
         RETURN jsonb_build_object('outcome', 'unauthenticated');
@@ -970,6 +975,11 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'not_found');
     END IF;
 
+    -- Convite de Gestor so existe preso a e-mail (sem ramo legado sem e-mail).
+    IF v_row.role = 'manager' AND NULLIF(btrim(COALESCE(v_row.invited_email, '')), '') IS NULL THEN
+        RETURN jsonb_build_object('outcome', 'not_found');
+    END IF;
+
     IF p_accept_tos IS DISTINCT FROM true THEN
         RETURN jsonb_build_object('outcome', 'tos_required');
     END IF;
@@ -982,10 +992,15 @@ BEGIN
         RETURN jsonb_build_object('outcome', 'already_operator');
     END IF;
 
-    SELECT lower(btrim(u.email)), (u.email_confirmed_at IS NOT NULL)
-      INTO v_email, v_verified
+    SELECT lower(btrim(u.email)), (u.email_confirmed_at IS NOT NULL),
+           (u.raw_app_meta_data->>'email_ownership')
+      INTO v_email, v_verified, v_ownership
       FROM auth.users u WHERE u.id = v_uid;
     IF v_email IS NULL OR NOT COALESCE(v_verified, false) THEN
+        RETURN jsonb_build_object('outcome', 'email_not_verified');
+    END IF;
+    -- Conta provisionada por convite (e-mail so informado, nao provado) nunca vira Gestor.
+    IF v_row.role = 'manager' AND v_ownership = 'not_verified' THEN
         RETURN jsonb_build_object('outcome', 'email_not_verified');
     END IF;
 
@@ -1468,7 +1483,107 @@ END;
 $fn$;
 
 -- ============================================================================
--- DOWN (manual; NAO executar enquanto houver manager confirmado por este fluxo ou loja padrao em uso)
+-- 12. Gestor convidado pendente nao enxerga lojas nem cobertura (company_tags_select e afins)
+--     is_company_member = qualquer membro ativo (inclusive NAO confirmado); _confirmed exige confirmed_at.
+-- ============================================================================
+ALTER POLICY company_tags_select ON public.company_tags
+    USING (public.is_company_member_confirmed(company_id));
+
+ALTER POLICY rc_select_partes_ou_gestor ON public.responsibility_coverages
+    USING (
+        public.is_company_owner(company_id)
+        OR (
+            (from_user_id = (SELECT auth.uid()) OR to_user_id = (SELECT auth.uid()))
+            AND public.is_company_member_confirmed(company_id)
+        )
+    );
+
+-- ============================================================================
+-- 13. get_invite_preview (anon): so tokens de ELENCO (48 hex). Token de Gestor (64 hex) nao revela mais nada.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.get_invite_preview(p_token text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $fn$
+DECLARE
+    c_not_found constant jsonb :=
+        '{"outcome": "not_found", "inviter_name": null, "kind": null}'::jsonb;
+    v_name text;
+BEGIN
+    IF p_token IS NULL OR octet_length(p_token) <> 48 OR p_token !~ '^[0-9a-f]+$' THEN
+        RETURN c_not_found;
+    END IF;
+
+    SELECT c.name INTO v_name
+      FROM public.company_invite_links l
+      JOIN public.companies c ON c.id = l.company_id
+     WHERE l.token = p_token
+       AND c.anonymized_at IS NULL;
+
+    v_name := NULLIF(btrim(COALESCE(v_name, '')), '');
+    IF v_name IS NULL THEN
+        RETURN c_not_found;
+    END IF;
+
+    RETURN jsonb_build_object('outcome', 'ok', 'inviter_name', v_name, 'kind', 'elenco');
+END;
+$fn$;
+
+-- ============================================================================
+-- 14. create_company_tag: mesma normalizacao de espacos de rename_company_tag
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.create_company_tag(p_company_id uuid, p_name text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $fn$
+DECLARE
+    v_uid  uuid := (SELECT auth.uid());
+    v_name text := btrim(regexp_replace(replace(COALESCE(p_name, ''), chr(160), ' '), '[[:space:]]+', ' ', 'g'));
+    v_tag  public.company_tags%ROWTYPE;
+    v_id   uuid;
+BEGIN
+    IF v_uid IS NULL THEN
+        RETURN jsonb_build_object('outcome', 'unauthenticated');
+    END IF;
+    IF p_company_id IS NULL OR length(v_name) < 1 OR length(v_name) > 40 OR v_name ~ '[[:cntrl:]]' THEN
+        RETURN jsonb_build_object('outcome', 'invalid_input');
+    END IF;
+    IF NOT public.is_company_owner(p_company_id) THEN
+        RETURN jsonb_build_object('outcome', 'forbidden');
+    END IF;
+
+    SELECT * INTO v_tag FROM public.company_tags t
+     WHERE t.company_id = p_company_id AND lower(btrim(t.name)) = lower(v_name)
+     FOR UPDATE;
+    IF FOUND THEN
+        IF v_tag.archived_at IS NULL THEN
+            RETURN jsonb_build_object('outcome', 'already_exists', 'tag_id', v_tag.id);
+        END IF;
+        UPDATE public.company_tags SET archived_at = NULL WHERE id = v_tag.id;
+        RETURN jsonb_build_object('outcome', 'reactivated', 'tag_id', v_tag.id);
+    END IF;
+
+    BEGIN
+        INSERT INTO public.company_tags (company_id, name, created_by)
+        VALUES (p_company_id, v_name, v_uid)
+        RETURNING id INTO v_id;
+    EXCEPTION WHEN unique_violation THEN
+        SELECT t.id INTO v_id FROM public.company_tags t
+         WHERE t.company_id = p_company_id AND lower(btrim(t.name)) = lower(v_name);
+        RETURN jsonb_build_object('outcome', 'already_exists', 'tag_id', v_id);
+    END;
+
+    RETURN jsonb_build_object('outcome', 'created', 'tag_id', v_id);
+END;
+$fn$;
+
+-- ============================================================================
+-- DOWN: supabase/migrations/_rollback/20261204000400_down.sql (gerado das definicoes VIVAS antes de aplicar).
+-- NAO executar enquanto houver manager confirmado por este fluxo ou loja padrao em uso.
 -- ============================================================================
 -- REVOKE EXECUTE ... e re-GRANT authenticated de invite_company_manager(uuid,text), accept_manager_invite(text),
 --   revoke_company_manager(uuid,uuid) so se o dono quiser reabrir a F13 (nao recomendado).
