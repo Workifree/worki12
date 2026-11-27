@@ -47,8 +47,10 @@ export const COMPANY_GESTAO_PATH = '/company/gestao';
 
 /** Rotas só do Gestor (guarda única em `GestorRouteGuard`). Indicações: as RPCs são Gestor-only. */
 export const GESTOR_ONLY_ROUTES: readonly string[] = [
-    '/company/indicacoes', '/company/relatorio', '/company/operacao',
-    '/company/configuracoes/*', '/company/messages',
+    // `/company/relatorio` e `/company/messages` NÃO estão aqui: o Encarregado confirmado vê só os próprios
+    // turnos (ADR-20261127). O escopo e a ausência de PII são decididos nas RPCs.
+    '/company/indicacoes', '/company/operacao', '/company/profile',
+    '/company/configuracoes/*',
 ];
 
 export function isGestorOnlyPath(pathname: string): boolean {
@@ -74,7 +76,7 @@ export const SECTION_TABS = {
     ],
     elenco: [
         { label: 'Meu Elenco', path: '/company/team' },
-        { label: 'Indicações', path: '/company/indicacoes' },
+        { label: 'Indicar freela', path: '/company/indicacoes' },
     ],
     relatorios: [
         { label: 'Pagamentos', path: '/company/relatorio' },
@@ -93,9 +95,9 @@ const tabPaths = (section: SectionId): string[] => SECTION_TABS[section].map((t)
 const WORKER_NAV: readonly NavItem[] = [
     { id: 'inicio', label: 'Início', icon: Home, path: '/dashboard', matches: ['/dashboard'] },
     // "Meus Turnos", não "Convites": o rótulo descreve o DESTINO (information scent).
-    { id: 'turnos', label: 'Meus Turnos', shortLabel: 'Turnos', icon: Inbox, path: '/my-jobs', matches: ['/my-jobs'] },
+    { id: 'turnos', label: 'Meus Turnos', icon: Inbox, path: '/my-jobs', matches: ['/my-jobs'] },
     { id: 'empresas', label: 'Empresas', icon: Contact, path: '/carteira', matches: [...tabPaths('empresas'), '/empresa/:id'] },
-    { id: 'recebimentos', label: 'Recebimentos', tinyLabel: 'Recibos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
+    { id: 'recebimentos', label: 'Recebimentos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
     { id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/messages', matches: ['/messages'] },
 ];
 
@@ -119,13 +121,13 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             id: 'elenco', label: 'Elenco', icon: Users, path: '/company/team',
             matches: [...tabPaths('elenco'), '/company/worker/:id', '/company/empresa/:id'],
         },
-        // Chat da empresa fica fora da v1 para o Encarregado (spec equipe-encarregados).
+        // O Encarregado confirmado vê só os freelas dos turnos que cuida (ADR-20261127; escopo na RPC).
         {
             id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/company/messages',
-            matches: ['/company/messages'], gestorOnly: true,
+            matches: ['/company/messages'],
         },
         {
-            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio', gestorOnly: true,
+            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
             matches: tabPaths('relatorios'), mobileParent: 'gestao',
         },
         {
@@ -205,11 +207,14 @@ export function getGestaoGroups({ gestor, teamInvited, trail, sites = false }: G
                     id: 'locais', title: 'Locais', icon: MapPin, path: '/company/locais',
                     description: 'QR e localização para confirmar presença',
                 }] : []),
-                ...(gestor ? [{
-                    id: 'relatorios', title: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
-                    description: 'Pagamentos e operação', mobileOnly: true,
-                }] : []),
             ],
+        },
+        {
+            id: 'financeiro', label: 'Financeiro',
+            cards: [{
+                id: 'relatorios', title: gestor ? 'Relatórios' : 'Meus relatórios', icon: BarChart3, path: '/company/relatorio',
+                description: gestor ? 'Pagamentos, horas e operação' : 'Pagamentos e horas dos seus turnos', mobileOnly: true,
+            }],
         },
         {
             id: 'bonus', label: 'Meus bônus',

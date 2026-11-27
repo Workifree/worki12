@@ -49,12 +49,12 @@ describe('CompanyGestao', () => {
     expect(card(/Dados da empresa/)).toBeInTheDocument();
   });
 
-  it('encarregado com trilha: só Trilha e Ajuda (nada de acesso novo)', () => {
+  it('encarregado com trilha: Relatório (só os turnos dele), Trilha e Ajuda (nada de acesso de Gestor)', () => {
     mockCompany = company({ role: 'encarregado' });
     mockTrail = true;
     renderPage();
 
-    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/company/trilha', '/ajuda']);
+    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/company/relatorio', '/company/trilha', '/ajuda']);
     expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
   });
 });
