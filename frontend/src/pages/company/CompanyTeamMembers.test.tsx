@@ -59,7 +59,7 @@ function list(items: TeamMemberItem[]) {
 }
 
 async function menu(nome: string, item: RegExp) {
-  fireEvent.click(await screen.findByRole('button', { name: `Ações de ${nome}` }));
+  fireEvent.click(await screen.findByRole('button', { name: (n: string) => n.startsWith(`Ações de ${nome} (`) }));
   fireEvent.click(await screen.findByRole('menuitem', { name: item }));
 }
 
@@ -190,7 +190,7 @@ describe('CompanyTeamMembers', () => {
     list([member({ role: 'manager', state: 'active', confirmed: false })]);
     renderPage();
     expect((await screen.findAllByText('Gestor')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Ações de Ana' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Ações de Ana \(/ }));
     expect(screen.queryByRole('menuitem', { name: /Alterar loja|Cancelar convite/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
   });
@@ -325,7 +325,26 @@ describe('CompanyTeamMembers', () => {
     vi.mocked(svc.revokeInvite).mockResolvedValue({ outcome: 'revoked' });
     renderPage();
     await menu('Caio', /Cancelar convite/);
+    expect(svc.revokeInvite).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/Cancelar o convite de Caio/);
+    expect(dialog).toHaveTextContent('O link deixa de valer.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar convite' }));
     await waitFor(() => expect(svc.revokeInvite).toHaveBeenCalledWith('m3'));
+  });
+
+  it('homônimos têm botões de ações distintos e o diálogo mostra e-mail e papel', async () => {
+    list([
+      member({ memberId: 'a1', displayName: 'Ana', acceptedEmail: 'ana1@x.com' }),
+      member({ memberId: 'a2', userId: null, displayName: 'Ana', state: 'invited', status: 'invited', acceptedEmail: null, invitedEmail: 'ana2@x.com' }),
+    ]);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Ações de Ana (ana1@x.com)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ações de Ana (ana2@x.com)' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Cancelar convite/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Ana (ana2@x.com)');
+    expect(dialog).toHaveTextContent('Encarregado');
   });
 
   it('modal de convite fecha com Escape e devolve o foco ao botão que abriu', async () => {

@@ -56,5 +56,13 @@ describe('CompanyGestao', () => {
 
     expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/company/relatorio', '/company/trilha', '/ajuda']);
     expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Mais' })).toBeInTheDocument();
+    expect(screen.getByText('Relatórios e ajuda')).toBeInTheDocument();
+  });
+
+  it('gestor: título continua Gestão', () => {
+    mockCompany = company();
+    renderPage();
+    expect(screen.getByRole('heading', { level: 1, name: 'Gestão' })).toBeInTheDocument();
   });
 });

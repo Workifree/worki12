@@ -192,11 +192,26 @@ export default function CompanyTeamMembers() {
   const tagName = (id: string | null | undefined): string | null =>
     (id ? tags.find((t) => t.id === id)?.name ?? null : null);
   const memberCountByTag: Record<string, number> = {};
+  const inviteCountByTag: Record<string, number> = {};
   for (const m of members) {
-    if (m.defaultTagId && (m.state === 'active' || m.state === 'invited' || m.state === 'awaiting_confirmation')) {
+    if (!m.defaultTagId || m.role !== 'encarregado') continue;
+    if (m.state === 'active') {
       memberCountByTag[m.defaultTagId] = (memberCountByTag[m.defaultTagId] ?? 0) + 1;
+    } else if (m.state === 'invited') {
+      inviteCountByTag[m.defaultTagId] = (inviteCountByTag[m.defaultTagId] ?? 0) + 1;
     }
   }
+  const memberDetail = (m: TeamMemberItem): string => {
+    const email = m.acceptedEmail ?? m.invitedEmail ?? null;
+    if (email) return email;
+    const store = tagName(m.defaultTagId);
+    return store ? `${ROLE_LABEL[m.role]}, ${store}` : ROLE_LABEL[m.role];
+  };
+  const memberIdentity = (m: TeamMemberItem): string => {
+    const email = m.acceptedEmail ?? m.invitedEmail ?? null;
+    return `${m.displayName ?? 'Sem nome'}${email ? ` (${email})` : ''}, ${ROLE_LABEL[m.role]}`;
+  };
+  const [revokeTarget, setRevokeTarget] = useState<TeamMemberItem | null>(null);
 
   const awaiting = members.filter((m) => m.state === 'awaiting_confirmation' && m.userId);
   const others = members.filter((m) => !(m.state === 'awaiting_confirmation' && m.userId));
@@ -536,13 +551,13 @@ export default function CompanyTeamMembers() {
                             </div>
                           </div>
                           <Menu
-                            label={`Ações de ${m.displayName ?? 'pessoa'}`}
+                            label={`Ações de ${m.displayName ?? 'pessoa'} (${memberDetail(m)})`}
                             menuLabel="Ações"
                             triggerVariant="secondary"
                             items={[
                               canEditStore && { label: 'Alterar loja', onSelect: () => { setEditTagId(m.defaultTagId ?? ''); setEditingTag(m); } },
                               pending && { label: 'Gerar novo link', onSelect: () => askResend(m) },
-                              pending && { label: 'Cancelar convite', onSelect: () => { void handleRevoke(m); } },
+                              pending && { label: 'Cancelar convite', onSelect: () => setRevokeTarget(m) },
                               m.state === 'pending_expired' && { label: 'Convidar de novo', onSelect: () => handleInviteAgain(m) },
                               m.state === 'active' && !!m.userId && { label: 'Remover', danger: true, onSelect: () => { void openRemove(m); } },
                             ]}
@@ -600,6 +615,7 @@ export default function CompanyTeamMembers() {
                 <TagsPanel
                   companyId={companyId}
                   memberCounts={memberCountByTag}
+                  inviteCounts={inviteCountByTag}
                   onChanged={() => { void loadTags(companyId); }}
                 />
               </div>
@@ -612,8 +628,9 @@ export default function CompanyTeamMembers() {
               <ChevronDown size={20} className="transition-transform group-open:rotate-180" aria-hidden="true" />
             </summary>
             <div className="space-y-3 px-4 pb-4 text-sm text-gray-800">
-              <p><strong>Gestor:</strong> vê e faz tudo na empresa, convida pessoas e define as lojas. Só opera depois que você confirma.</p>
+              <p><strong>Gestor:</strong> vê e faz tudo na empresa, convida pessoas e define as lojas.</p>
               <p><strong>Encarregado:</strong> cuida só dos próprios turnos (ou dos que cobrir). Pode ter uma loja padrão.</p>
+              <p>Quem você convida só opera depois que você confirmar (&quot;É essa pessoa?&quot;).</p>
             </div>
           </details>
         </div>
@@ -765,6 +782,23 @@ export default function CompanyTeamMembers() {
         </ModalShell>
       )}
 
+      {revokeTarget && (
+        <ModalShell labelledBy="cancelar-convite-titulo" onClose={() => setRevokeTarget(null)}>
+          <>
+            <h2 id="cancelar-convite-titulo" className="text-2xl font-bold mb-3">
+              Cancelar o convite de {memberIdentity(revokeTarget)}?
+            </h2>
+            <p className="text-sm text-gray-800 mb-5">O link deixa de valer.</p>
+            <DialogActions>
+              <Button variant="secondary" size="lg" data-autofocus onClick={() => setRevokeTarget(null)}>Voltar</Button>
+              <Button variant="danger" size="lg" onClick={() => { const m = revokeTarget; setRevokeTarget(null); void handleRevoke(m); }}>
+                Cancelar convite
+              </Button>
+            </DialogActions>
+          </>
+        </ModalShell>
+      )}
+
       {editingTag && (
         <ModalShell labelledBy="loja-titulo" onClose={() => { if (!tagBusy) setEditingTag(null); }}>
           <form onSubmit={(e) => void submitEditTag(e)} className="space-y-4">
@@ -794,7 +828,7 @@ export default function CompanyTeamMembers() {
         <ModalShell labelledBy="remover-titulo" onClose={() => { if (!removeBusy) setRemoving(null); }}>
           <>
             <h2 id="remover-titulo" className="text-2xl font-bold mb-3">
-              Remover {removing.member.displayName ?? 'esta pessoa'}?
+              Remover {memberIdentity(removing.member)}?
             </h2>
             <ul className="space-y-2 text-sm text-gray-800 mb-5 list-disc pl-5">
               <li>O acesso é cortado agora.</li>
@@ -832,6 +866,10 @@ export default function CompanyTeamMembers() {
               <div>
                 <dt className="text-xs font-bold uppercase text-gray-600">Nome no convite</dt>
                 <dd className="font-bold">{confirming.displayName ?? 'Sem nome'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold uppercase text-gray-600">Papel</dt>
+                <dd className="font-bold">{ROLE_LABEL[confirming.role]}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase text-gray-600">E-mail informado no convite</dt>

@@ -19,6 +19,8 @@ interface TagsPanelProps {
   companyId: string;
   /** Quantos funcionários (ativos ou convidados) têm cada loja como padrão. */
   memberCounts?: Record<string, number>;
+  /** Convites pendentes por loja (separados dos ativos). */
+  inviteCounts?: Record<string, number>;
   /** Avisa a tela pai que a lista de lojas mudou. */
   onChanged?: () => void;
 }
@@ -27,7 +29,7 @@ interface TagsPanelProps {
  * Lojas da empresa: o Gestor cria, renomeia e arquiva. Nunca se apaga.
  * Loja é um rótulo para o financeiro; não dá acesso a ninguém.
  */
-export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: TagsPanelProps) {
+export default function TagsPanel({ companyId, memberCounts = {}, inviteCounts = {}, onChanged }: TagsPanelProps) {
   const { addToast } = useToast();
   const [tags, setTags] = useState<CompanyTag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +130,7 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
           <ul className="flex flex-col gap-2">
             {tags.filter((t) => !t.archivedAt).map((t) => {
               const count = memberCounts[t.id] ?? 0;
+              const invites = inviteCounts[t.id] ?? 0;
               return (
                 <li key={t.id} className="rounded-xl border-2 border-black p-3">
                   {renaming?.id === t.id ? (
@@ -145,7 +148,8 @@ export default function TagsPanel({ companyId, memberCounts = {}, onChanged }: T
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold">{t.name}</p>
                         <p className="text-xs text-gray-600">
-                          {count === 0 ? 'Nenhum encarregado' : count === 1 ? '1 encarregado' : `${count} encarregados`}
+                          {count === 0 ? 'Nenhum encarregado ativo' : `${count} ${count === 1 ? 'ativo' : 'ativos'}`}
+                          {invites > 0 && ` · ${invites} ${invites === 1 ? 'convite' : 'convites'}`}
                         </p>
                       </div>
                       <div className="flex gap-2">
