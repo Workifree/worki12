@@ -3,8 +3,8 @@
  *
  * "Equipe" = pessoas que OPERAM a empresa; "Elenco" = freelas (`CompanyTeam`). Nunca misturar rótulos.
  *
- * Spec R11/R12/R15/R17/R22/R24. Convite sem e-mail: gera o link e abre o WhatsApp com a mensagem
- * pronta (telefone opcional, só para abrir a conversa certa — NÃO é enviado ao banco). Remover nunca
+ * Spec R11/R12/R15/R17/R22/R24. Convite (ADR-20261127): o Gestor informa nome + e-mail, o banco prende o
+ * convite a esse e-mail e a tela mostra SÓ o link para copiar. Nenhum e-mail é enviado pelo Worki. Remover nunca
  * bloqueia e não exige transferência: o modal só informa (ADR remover-pessoa-so-corta-acesso).
  * Toda autorização real mora nas RPCs; esta tela é UX.
  */
@@ -20,7 +20,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Check,
   Copy,
-  MessageCircle,
   RefreshCw,
   Send,
   UserPlus,
@@ -37,8 +36,8 @@ import { DialogActions, Button, Card, ErrorState, Field, PageHeader } from '../.
 import { getMyCompanies, isGestor, pickCurrentCompany } from '../../services/companyScopeService';
 import {
   buildInviteLink,
-  buildInviteMessage,
-  buildWhatsAppUrl,
+  isValidInviteEmail,
+  normalizeInviteEmail,
   confirmMember,
   inviteMember,
   listMembers,
@@ -66,7 +65,8 @@ const STATE_BADGE: Record<TeamMemberState, { label: string; className: string }>
 interface ShareState {
   displayName: string;
   token: string;
-  phone: string;
+  /** E-mail ao qual o convite está preso; vazio só se o banco não informou. */
+  email: string;
   /** O banco já tinha um convite pendente (nome igual ou parecido): é o mesmo link. */
   reused?: boolean;
 }
@@ -85,12 +85,31 @@ function formatSaoPaulo(iso: string | null | undefined): string | null {
   }).format(date);
 }
 
+/** Mensagem do Gestor para cada desfecho de `invite_company_member` que não gera link. */
+function inviteErrorMessage(outcome: string): string {
+  switch (outcome) {
+    case 'email_required':
+      return 'Informe o e-mail da pessoa. O convite fica preso a ele.';
+    case 'invalid_email':
+      return 'Esse e-mail não parece válido. Confira e tente de novo.';
+    case 'worker_cannot_be_manager':
+      return 'Esse e-mail já é de uma conta de freela. Use outro e-mail para a equipe.';
+    case 'already_member':
+      return 'Essa pessoa já faz parte da equipe.';
+    case 'name_already_invited':
+      return 'Já existe um convite pendente com esse nome e outro e-mail. Revogue o antigo ou use outro nome.';
+    case 'invalid_input':
+      return 'Confira o nome (até 80 caracteres, sem símbolos estranhos).';
+    default:
+      return memberActionMessage(outcome, 'Não foi possível criar o convite. Tente novamente.');
+  }
+}
+
 export default function CompanyTeamMembers() {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
   const [companyId, setCompanyId] = useState<string | null>(null);
-  const [companyName, setCompanyName] = useState('');
   const [members, setMembers] = useState<TeamMemberItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -99,7 +118,8 @@ export default function CompanyTeamMembers() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteNameError, setInviteNameError] = useState<string | undefined>(undefined);
-  const [invitePhone, setInvitePhone] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteEmailError, setInviteEmailError] = useState<string | undefined>(undefined);
   const [inviting, setInviting] = useState(false);
   const [share, setShare] = useState<ShareState | null>(null);
   const [copied, setCopied] = useState(false);
@@ -147,7 +167,6 @@ export default function CompanyTeamMembers() {
         return;
       }
       setCompanyId(current.company_id);
-      setCompanyName(current.company_name ?? 'Sua empresa');
       await reload(current.company_id);
     } catch (error) {
       logError('CompanyTeamMembers.load', error);
@@ -178,7 +197,8 @@ export default function CompanyTeamMembers() {
   const openInvite = () => {
     setInviteName('');
     setInviteNameError(undefined);
-    setInvitePhone('');
+    setInviteEmail('');
+    setInviteEmailError(undefined);
     setShare(null);
     setCopied(false);
     setInviteOpen(true);
@@ -203,16 +223,22 @@ export default function CompanyTeamMembers() {
       focusFirstInvalid(form);
       return;
     }
+    if (!isValidInviteEmail(inviteEmail)) {
+      const form = e.currentTarget as HTMLFormElement;
+      flushSync(() => setInviteEmailError('Digite um e-mail válido, como nome@empresa.com.'));
+      focusFirstInvalid(form);
+      return;
+    }
     if (inviting) return;
     setInviting(true);
-    const result = await inviteMember(companyId, name, 'encarregado');
+    const result = await inviteMember(companyId, name, 'encarregado', normalizeInviteEmail(inviteEmail));
     setInviting(false);
     if (
       (result.outcome === 'invited' || result.outcome === 'reinvited' || result.outcome === 'already_invited')
       && result.inviteToken
     ) {
       const reused = result.outcome === 'already_invited';
-      setShare({ displayName: name, token: result.inviteToken, phone: invitePhone, reused });
+      setShare({ displayName: name, token: result.inviteToken, email: normalizeInviteEmail(inviteEmail), reused });
       const items = await reload(companyId);
       // Convite reaproveitado pode estar gravado com uma variação do nome (acento, espaços): a
       // mensagem e a conferência do Gestor precisam usar o nome que está no convite.
@@ -220,18 +246,10 @@ export default function CompanyTeamMembers() {
       if (stored) setShare((current) => (current ? { ...current, displayName: stored } : current));
       return;
     }
-    addToast(
-      result.outcome === 'invalid_input'
-        ? 'Confira o nome (até 80 caracteres, sem símbolos estranhos).'
-        : memberActionMessage(result.outcome, 'Não foi possível criar o convite. Tente novamente.'),
-      'error',
-    );
+    addToast(inviteErrorMessage(result.outcome), 'error');
   };
 
   const shareLink = share ? buildInviteLink(share.token) : '';
-  const shareMessage = share
-    ? buildInviteMessage({ displayName: share.displayName, companyName, role: 'encarregado', link: shareLink })
-    : '';
 
   const copyLink = async () => {
     try {
@@ -245,11 +263,6 @@ export default function CompanyTeamMembers() {
     }
   };
 
-  const openWhatsApp = () => {
-    if (!share) return;
-    window.open(buildWhatsAppUrl(shareMessage, share.phone), '_blank', 'noopener,noreferrer');
-  };
-
   const handleResend = async (member: TeamMemberItem) => {
     if (!companyId) return;
     setBusyId(member.memberId);
@@ -258,7 +271,11 @@ export default function CompanyTeamMembers() {
     if (result.outcome === 'resent' && result.inviteToken) {
       setCopied(false);
       setInviteOpen(true);
-      setShare({ displayName: member.displayName ?? 'a pessoa', token: result.inviteToken, phone: '' });
+      setShare({
+        displayName: member.displayName ?? 'a pessoa',
+        token: result.inviteToken,
+        email: member.invitedEmail ?? '',
+      });
       addToast('Novo link gerado. O link antigo deixou de valer.', 'success');
       void reload(companyId);
       return;
@@ -311,28 +328,13 @@ export default function CompanyTeamMembers() {
     void reload(companyId);
   };
 
-  /** Prazo de confirmação vencido: um convite novo (o aceite dele encerra a entrada antiga). */
-  const handleInviteAgain = async (member: TeamMemberItem) => {
-    if (!companyId || !member.displayName) {
-      openInvite();
-      return;
-    }
-    setBusyId(member.memberId);
-    const result = await inviteMember(companyId, member.displayName, 'encarregado');
-    setBusyId(null);
-    if (result.inviteToken) {
-      setCopied(false);
-      setInviteOpen(true);
-      setShare({
-        displayName: member.displayName,
-        token: result.inviteToken,
-        phone: '',
-        reused: result.outcome === 'already_invited',
-      });
-    } else {
-      addToast(memberActionMessage(result.outcome, 'Não foi possível convidar de novo. Tente novamente.'), 'error');
-    }
-    void reload(companyId);
+  /**
+   * Prazo de confirmação vencido: o convite novo exige o e-mail (o banco recusa sem ele), então
+   * abre o formulário com o nome já preenchido.
+   */
+  const handleInviteAgain = (member: TeamMemberItem) => {
+    openInvite();
+    if (member.displayName) setInviteName(member.displayName);
   };
 
   const handleRotateLink = async () => {
@@ -489,8 +491,8 @@ export default function CompanyTeamMembers() {
             <Card className="text-center">
               <h2 className="text-xl font-bold mb-2">Ninguém na equipe ainda</h2>
               <p className="text-sm text-gray-700 mb-5">
-                Convide quem toca o dia a dia (um encarregado, por exemplo). A pessoa entra por um link no
-                WhatsApp, sem criar senha.
+                Convide quem toca o dia a dia (um encarregado, por exemplo). Você informa o e-mail e envia o
+                link; a pessoa cria uma senha e entra.
               </p>
               <Button variant="dark" size="lg" onClick={openInvite} iconLeft={<UserPlus size={18} />}>
                 Convidar alguém da equipe
@@ -525,6 +527,14 @@ export default function CompanyTeamMembers() {
                               O prazo de 72 horas para confirmar acabou. Envie um novo convite.
                             </p>
                           )}
+                          {pending && m.invitedEmail && (
+                            <p className="text-sm text-gray-600 mt-1 break-all">{m.invitedEmail}</p>
+                          )}
+                          {pending && m.invitedEmail === null && (
+                            <p role="status" className="text-xs font-bold text-yellow-800 mt-2">
+                              Convite antigo, sem e-mail: não funciona mais. Revogue e convide de novo com o e-mail.
+                            </p>
+                          )}
                           {pending && (
                             <p className="text-xs text-gray-600 mt-2">
                               Gerar um novo link faz o link atual deixar de valer.
@@ -557,8 +567,7 @@ export default function CompanyTeamMembers() {
                               <Button
                                 variant="dark"
                                 size="lg"
-                                onClick={() => void handleInviteAgain(m)}
-                                loading={busy}
+                                onClick={() => handleInviteAgain(m)}
                                 iconLeft={<Send size={16} />}
                               >
                                 Convidar de novo
@@ -634,18 +643,21 @@ export default function CompanyTeamMembers() {
                 </fieldset>
 
                 <Field
-                  label="WhatsApp da pessoa (opcional)"
-                  hint="Só para abrir a conversa certa. Não fica guardado."
+                  label="E-mail do encarregado"
+                  required
+                  hint="O convite fica preso a este e-mail. O Worki não envia e-mail: você manda o link."
+                  error={inviteEmailError}
                 >
                   <input
                     data-copilot-private
-                    type="tel"
-                    name="invitee-phone"
-                    inputMode="tel"
+                    type="email"
+                    name="invitee-email"
+                    inputMode="email"
                     autoComplete="off"
-                    placeholder="(11) 91234-5678"
-                    value={invitePhone}
-                    onChange={(e) => setInvitePhone(e.target.value)}
+                    maxLength={254}
+                    placeholder="nome@empresa.com"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); setInviteEmailError(undefined); }}
                   />
                 </Field>
 
@@ -672,14 +684,17 @@ export default function CompanyTeamMembers() {
                   </p>
                 )}
                 <p className="text-sm text-gray-700">
-                  Envie o link para <strong>{share.displayName}</strong>. O link vale por 14 dias e é só dessa pessoa.
+                  Envie este link para <strong>{share.displayName}</strong>.{' '}
+                  {share.email ? (
+                    <>Ele entra com o e-mail <strong className="break-all">{share.email}</strong> e cria uma senha.</>
+                  ) : (
+                    <>Ele entra com o e-mail do convite e cria uma senha.</>
+                  )}{' '}
+                  O link vale por 14 dias e é só dessa pessoa.
                 </p>
                 <p data-copilot-private className="break-all rounded-xl border-2 border-black bg-gray-50 p-3 text-sm font-mono" data-testid="invite-link">
                   {shareLink}
                 </p>
-                <Button variant="dark" size="lg" fullWidth onClick={openWhatsApp} iconLeft={<MessageCircle size={18} />}>
-                  Enviar no WhatsApp
-                </Button>
                 <Button
                   variant="secondary"
                   size="lg"
@@ -749,7 +764,7 @@ export default function CompanyTeamMembers() {
                 <dd className="font-bold">{confirming.displayName ?? 'Sem nome'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold uppercase text-gray-600">E-mail verificado</dt>
+                <dt className="text-xs font-bold uppercase text-gray-600">E-mail informado no convite</dt>
                 <dd className="font-bold break-all">{confirming.acceptedEmail ?? 'Não informado'}</dd>
               </div>
               <div>

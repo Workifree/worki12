@@ -254,20 +254,49 @@ export interface TeamMemberItem {
   removedAt: string | null;
   /** Prazo (72h) para o Gestor confirmar; só para Encarregado aceito e não confirmado. */
   confirmationExpiresAt?: string | null;
+  /** E-mail do convite pendente (só se o banco devolver). `null` = convite antigo, sem e-mail. */
+  invitedEmail?: string | null;
 }
 
 /** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
+export type ProvisionAccountOutcome =
+  | 'created'
+  | 'existing_account'
+  | 'account_pending'
+  | 'worker_cannot_be_manager'
+  | 'legacy_invite'
+  | 'not_found'
+  | 'expired'
+  | 'rate_limited'
+  | 'invalid_input'
+  | 'error';
+
+export interface ProvisionAccountResult {
+  outcome: ProvisionAccountOutcome;
+  /** Só em `created`: e-mail da conta recém-criada, para o `signInWithPassword`. */
+  email?: string;
+}
+
 export type InvitePreviewOutcome = 'ok' | 'expired' | 'not_found' | 'error';
 export interface InvitePreviewResult {
   outcome: InvitePreviewOutcome;
   companyName?: string;
   role?: TeamMemberRole;
+  /** E-mail do convite mascarado (jo***@dominio.com); nunca o completo. */
+  emailMasked?: string;
+  /** `false` = convite antigo, sem e-mail: não dá para aceitar sem OTP. */
+  emailBound?: boolean;
 }
 
 export type InviteMemberOutcome =
   | 'invited'
   | 'reinvited'
   | 'already_invited'
+  | 'email_required'
+  | 'invalid_email'
+  | 'name_already_invited'
+  | 'already_member'
+  | 'worker_cannot_be_manager'
   | 'invalid_input'
   | 'not_found'
   | 'forbidden'
@@ -313,6 +342,7 @@ export type AcceptMemberInviteOutcome =
   | 'tos_required'
   | 'worker_cannot_be_manager'
   | 'email_not_verified'
+  | 'email_mismatch'
   | 'invalid_input'
   | 'unauthenticated'
   | 'error';

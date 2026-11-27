@@ -24,6 +24,8 @@ import type {
   InviteMemberOutcome,
   InvitePreviewOutcome,
   InvitePreviewResult,
+  ProvisionAccountOutcome,
+  ProvisionAccountResult,
   InviteTokenResult,
   ListMembersOutcome,
   RejectMemberOutcome,
@@ -51,6 +53,7 @@ interface RpcMemberRow {
   accepted_at: string | null;
   confirmed_at: string | null;
   removed_at: string | null;
+  invited_email?: string | null;
 }
 
 interface RpcRow {
@@ -67,6 +70,8 @@ interface RpcRow {
   elenco_link_rotation_advised?: boolean;
   already_removed?: boolean;
   items?: RpcMemberRow[];
+  email_masked?: string;
+  email_bound?: boolean;
   elenco_link_rotation_pending?: boolean;
 }
 
@@ -118,6 +123,8 @@ export async function getInvitePreview(token: string): Promise<InvitePreviewResu
       outcome: outcome as InvitePreviewOutcome,
       companyName: row?.company_name ?? undefined,
       role: asRole(row?.role),
+      emailMasked: row?.email_masked ?? undefined,
+      emailBound: row?.email_bound === true,
     };
   } catch (err) {
     logError('teamMembersService.getInvitePreview', err);
@@ -131,12 +138,14 @@ export async function inviteMember(
   companyId: string,
   displayName: string,
   role: TeamMemberRole = 'encarregado',
+  email?: string,
 ): Promise<InviteTokenResult<InviteMemberOutcome>> {
   try {
     const { data, error } = await supabase.rpc('invite_company_member', {
       p_company_id: companyId,
       p_display_name: displayName,
       p_role: role,
+      p_email: normalizeInviteEmail(email),
     });
     if (error) throw error;
     const row = (data ?? null) as RpcRow | null;
@@ -227,6 +236,47 @@ export async function acceptMemberInvite(
     };
   } catch (err) {
     logError('teamMembersService.acceptMemberInvite', err);
+    return { outcome: 'error' };
+  }
+}
+
+const PROVISION_OUTCOMES: ProvisionAccountOutcome[] = [
+  'created', 'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite',
+  'not_found', 'expired', 'rate_limited', 'invalid_input',
+];
+
+/**
+ * Cria a conta do Encarregado com e-mail preso ao convite + senha (Edge Function
+ * `accept-team-invite`, verify_jwt=false; ADR-20261127). NÃO aceita o convite: depois do
+ * `signInWithPassword` quem ativa é `acceptMemberInvite`. Só `created` devolve o e-mail.
+ */
+export async function provisionTeamInviteAccount(
+  token: string,
+  password: string,
+): Promise<ProvisionAccountResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('accept-team-invite', {
+      body: { token, password, accept_tos: true },
+    });
+    let payload = data as { outcome?: string; email?: string } | null;
+    if (error) {
+      // Respostas 4xx/429 trazem o `outcome` no corpo; o SDK só entrega o Response em `context`.
+      const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+      payload = null;
+      if (ctx && typeof ctx.json === 'function') {
+        try {
+          payload = (await ctx.json()) as { outcome?: string; email?: string };
+        } catch {
+          payload = null;
+        }
+      }
+      if (!payload?.outcome) throw error;
+    }
+    const outcome = payload?.outcome as ProvisionAccountOutcome | undefined;
+    if (!outcome || !PROVISION_OUTCOMES.includes(outcome)) return { outcome: 'error' };
+    return { outcome, email: outcome === 'created' ? payload?.email : undefined };
+  } catch (err) {
+    logError('teamMembersService.provisionTeamInviteAccount', err);
     return { outcome: 'error' };
   }
 }
@@ -342,6 +392,7 @@ export async function listMembers(
       confirmedAt: m.confirmed_at,
       removedAt: m.removed_at,
       confirmationExpiresAt: m.confirmation_expires_at ?? null,
+      invitedEmail: m.invited_email,
     }));
     return { outcome: 'ok', items, elencoLinkRotationPending: row?.elenco_link_rotation_pending === true };
   } catch (err) {
@@ -387,16 +438,14 @@ export function normalizeBrazilPhone(raw: string | null | undefined): string | n
   return `55${national}`;
 }
 
-export function buildInviteMessage(params: {
-  displayName: string;
-  companyName: string;
-  role: TeamMemberRole;
-  link: string;
-}): string {
-  return (
-    `Oi, ${params.displayName}! ${params.companyName} te convidou para o Worki como ` +
-    `${ROLE_LABEL[params.role]}. Entre por aqui: ${params.link}. O link é só seu, não repasse.`
-  );
+/** E-mail do convite: o servidor normaliza igual (lower+trim) e valida de novo. */
+export function normalizeInviteEmail(raw: string | null | undefined): string {
+  return (raw ?? '').trim().toLowerCase();
+}
+
+export function isValidInviteEmail(raw: string | null | undefined): boolean {
+  const value = (raw ?? '').trim();
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
 }
 
 /** `https://wa.me/55XXXXXXXXXXX?text=...` com telefone; `https://wa.me/?text=...` sem. */

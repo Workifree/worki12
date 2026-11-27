@@ -145,7 +145,7 @@ describe('CompanyTeamMembers', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('pending_expired: rótulo "Expirado", sem Confirmar, e "Convidar de novo" gera link', async () => {
+  it('pending_expired: rótulo "Expirado", sem Confirmar, e "Convidar de novo" reabre o formulário com o nome e pede o e-mail', async () => {
     vi.mocked(svc.listMembers).mockResolvedValue({
       outcome: 'ok', elencoLinkRotationPending: false,
       items: [member({ state: 'pending_expired', confirmed: false })],
@@ -155,8 +155,13 @@ describe('CompanyTeamMembers', () => {
     expect(await screen.findByText('Expirado')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Confirmar$/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Convidar de novo/ }));
+    expect((await screen.findByLabelText(/Nome da pessoa/) as HTMLInputElement).value).toBe('Ana');
+    // O convite exige e-mail: sem ele, nada é enviado ao banco.
+    expect(svc.inviteMember).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/E-mail do encarregado/), { target: { value: 'ana@x.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('tok-novo');
-    expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado');
+    expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado', 'ana@x.com');
   });
 
   it('linha de Gestor ativa não tem Confirmar nem Revogar', async () => {
@@ -192,9 +197,10 @@ describe('CompanyTeamMembers', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Convidar alguém da equipe/ }));
     fireEvent.change(screen.getByLabelText(/Nome da pessoa/), { target: { value: 'jose' } });
+    fireEvent.change(screen.getByLabelText(/E-mail do encarregado/), { target: { value: 'jose@x.com' } });
     fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
     expect(await screen.findByText(/Este é o mesmo link/)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Envie o link para José.'));
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Envie este link para José.'));
   });
 
   it('remover o último Gestor (last_manager) explica o motivo', async () => {
@@ -223,36 +229,67 @@ describe('CompanyTeamMembers', () => {
     await waitFor(() => expect(svc.rejectMember).toHaveBeenCalledWith('c1', 'u1'));
   });
 
-  it('convidar: gera o link e abre o wa.me com telefone normalizado (DDI 55, só dígitos)', async () => {
+  it('convidar: e-mail é obrigatório e nada vai ao banco sem ele', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Convidar alguém da equipe/ }));
+    fireEvent.change(screen.getByLabelText(/Nome da pessoa/), { target: { value: 'Ana' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
+    expect(await screen.findByText(/Digite um e-mail válido/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/E-mail do encarregado/), { target: { value: 'sem-arroba' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
+    expect(await screen.findByText(/Digite um e-mail válido/)).toBeInTheDocument();
+    expect(svc.inviteMember).not.toHaveBeenCalled();
+  });
+
+  it('convidar: mostra SÓ o link com Copiar link e o texto do e-mail, sem WhatsApp nem mailto', async () => {
     vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'invited', inviteToken: 'tok123' });
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Convidar alguém da equipe/ }));
     fireEvent.change(screen.getByLabelText(/Nome da pessoa/), { target: { value: 'Ana' } });
-    fireEvent.change(screen.getByLabelText(/WhatsApp da pessoa/), { target: { value: '(11) 91234-5678' } });
+    fireEvent.change(screen.getByLabelText(/E-mail do encarregado/), { target: { value: '  Ana@Exemplo.com ' } });
     fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
 
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('/convite-equipe/tok123');
-    expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado');
-
-    fireEvent.click(screen.getByRole('button', { name: /Enviar no WhatsApp/ }));
-    const url = open.mock.calls[0][0] as string;
-    expect(url).toMatch(/^https:\/\/wa\.me\/5511912345678\?text=/);
-    expect(decodeURIComponent(url)).toContain('Divino Fogão te convidou para o Worki como Encarregado');
+    expect(svc.inviteMember).toHaveBeenCalledWith('c1', 'Ana', 'encarregado', 'ana@exemplo.com');
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Envie este link para Ana.');
+    expect(dialog).toHaveTextContent('Ele entra com o e-mail ana@exemplo.com e cria uma senha.');
+    expect(screen.getByRole('button', { name: /Copiar link/ })).toBeInTheDocument();
+    expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
+    expect(dialog.querySelector('a[href^="mailto:"]')).toBeNull();
+    expect(open).not.toHaveBeenCalled();
     open.mockRestore();
   });
 
-  it('convidar sem telefone abre wa.me sem número (link não exige e-mail)', async () => {
-    vi.mocked(svc.inviteMember).mockResolvedValue({ outcome: 'invited', inviteToken: 'tok123' });
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+  it.each([
+    ['email_required', /Informe o e-mail/],
+    ['invalid_email', /não parece válido/],
+    ['worker_cannot_be_manager', /conta de freela/],
+    ['already_member', /já faz parte da equipe/],
+    ['name_already_invited', /convite pendente com esse nome e outro e-mail/],
+  ] as const)('convite recusado (%s): toast próprio e nenhum link', async (outcome, msg) => {
+    vi.mocked(svc.inviteMember).mockResolvedValue({ outcome });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Convidar alguém da equipe/ }));
     fireEvent.change(screen.getByLabelText(/Nome da pessoa/), { target: { value: 'Ana' } });
+    fireEvent.change(screen.getByLabelText(/E-mail do encarregado/), { target: { value: 'ana@x.com' } });
     fireEvent.click(screen.getByRole('button', { name: /Gerar convite/ }));
-    await screen.findByTestId('invite-link');
-    fireEvent.click(screen.getByRole('button', { name: /Enviar no WhatsApp/ }));
-    expect(open.mock.calls[0][0] as string).toMatch(/^https:\/\/wa\.me\/\?text=/);
-    open.mockRestore();
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(msg), 'error'));
+    expect(screen.queryByTestId('invite-link')).not.toBeInTheDocument();
+  });
+
+  it('convite pendente mostra o e-mail e o antigo (sem e-mail) avisa para revogar e convidar de novo', async () => {
+    vi.mocked(svc.listMembers).mockResolvedValue({
+      outcome: 'ok', elencoLinkRotationPending: false,
+      items: [
+        member({ memberId: 'm5', userId: null, displayName: 'Bia', state: 'invited', status: 'invited', invitedEmail: 'bia@x.com' }),
+        member({ memberId: 'm6', userId: null, displayName: 'Caio', state: 'invited', status: 'invited', invitedEmail: null }),
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText('bia@x.com')).toBeInTheDocument();
+    expect(screen.getByText(/Convite antigo, sem e-mail/)).toBeInTheDocument();
   });
 
   it('remover: faz dry-run, informa os turnos abertos e só então remove (nunca bloqueia)', async () => {
@@ -279,6 +316,7 @@ describe('CompanyTeamMembers', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Gerar novo link/ }));
     expect(await screen.findByTestId('invite-link')).toHaveTextContent('/convite-equipe/novo-token');
+    expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
   });
 
   it('modal de convite fecha com Escape e devolve o foco ao botão que abriu', async () => {
