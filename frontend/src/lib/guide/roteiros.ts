@@ -413,10 +413,10 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'encarregado-menus', papeis: ENCARREGADO,
         titulo: 'Entender por que não vejo alguns menus',
         descricao: 'O que fica só com o Gestor.',
-        frases: ['nao aparece relatorio', 'sumiu mensagens', 'sem acesso', 'equipe indicacoes unidades'],
+        frases: ['nao aparece relatorio', 'sumiu mensagens', 'sem acesso', 'equipe indicacoes'],
         passos: [{
             rota: 'empresa.gestao', alvos: [], titulo: 'Acesso de encarregado',
-            explicacao: 'Relatórios, Mensagens, Equipe, Indicações, Unidades e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
+            explicacao: 'Relatórios, Mensagens, Equipe, Indicações e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
             aoTocar: 'Nada muda por aqui.',
         }],
     },

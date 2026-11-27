@@ -30,13 +30,13 @@ describe('CompanyGestao', () => {
     mockTrail = false;
   });
 
-  it('dono único: pode convidar, vê dados, unidades e ajuda; sem trilha', () => {
+  it('dono único: pode convidar, vê dados e ajuda; sem trilha', () => {
     mockCompany = company();
     renderPage();
 
     expect(card(/Equipe e acessos.*Convidar quem te ajuda/)).toHaveAttribute('href', '/company/configuracoes/equipe');
     expect(card(/Dados da empresa/)).toHaveAttribute('href', '/company/profile');
-    expect(card(/Unidades/)).toHaveAttribute('href', '/company/organization');
+    expect(card(/Unidades/)).not.toBeInTheDocument();
     expect(card(/Ajuda/)).toHaveAttribute('href', '/ajuda');
     expect(card(/Trilha/)).not.toBeInTheDocument();
   });

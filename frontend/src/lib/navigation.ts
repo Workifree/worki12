@@ -7,7 +7,7 @@
  */
 import {
     BarChart3, Briefcase, Building2, Contact, HelpCircle, Home, Inbox, LayoutGrid, MessageSquare,
-    MapPin, Network, Receipt, Trophy, UserCog, Users, type LucideIcon,
+    MapPin, Receipt, Trophy, UserCog, Users, type LucideIcon,
 } from 'lucide-react';
 import { matchPath } from 'react-router-dom';
 
@@ -45,11 +45,9 @@ export interface CompanyNavContext {
 
 export const COMPANY_GESTAO_PATH = '/company/gestao';
 
-export const ORGANIZATION_PATH = '/company/organization';
-
 /** Rotas só do Gestor (guarda única em `GestorRouteGuard`). Indicações: as RPCs são Gestor-only. */
 export const GESTOR_ONLY_ROUTES: readonly string[] = [
-    '/company/indicacoes', '/company/relatorio', '/company/operacao', ORGANIZATION_PATH,
+    '/company/indicacoes', '/company/relatorio', '/company/operacao',
     '/company/configuracoes/*', '/company/messages',
 ];
 
@@ -134,7 +132,7 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             id: 'gestao', label: 'Gestão', icon: LayoutGrid, path: COMPANY_GESTAO_PATH,
             matches: [
                 COMPANY_GESTAO_PATH, '/company/configuracoes/equipe', '/company/profile',
-                '/company/organization', '/company/trilha', '/company/locais/*',
+                '/company/trilha', '/company/locais/*',
             ],
         },
     ];
@@ -179,8 +177,6 @@ export interface GestaoGroup {
 export interface GestaoAccess {
     /** Dono, operador ou gerente (`isGestor`). */
     gestor: boolean;
-    /** `canSeeOrganization`. */
-    units: boolean;
     /** A empresa já tem alguém na equipe. */
     teamInvited: boolean;
     /** `useBonusTrailAccess`. */
@@ -189,7 +185,7 @@ export interface GestaoAccess {
     sites?: boolean;
 }
 
-export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = false }: GestaoAccess): GestaoGroup[] {
+export function getGestaoGroups({ gestor, teamInvited, trail, sites = false }: GestaoAccess): GestaoGroup[] {
     const groups: GestaoGroup[] = [
         {
             id: 'pessoas', label: 'Pessoas',
@@ -208,10 +204,6 @@ export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = fal
                 ...(gestor && sites ? [{
                     id: 'locais', title: 'Locais', icon: MapPin, path: '/company/locais',
                     description: 'QR e localização para confirmar presença',
-                }] : []),
-                ...(units ? [{
-                    id: 'unidades', title: 'Unidades', icon: Network, path: '/company/organization',
-                    description: 'Visão das lojas da sua rede',
                 }] : []),
                 ...(gestor ? [{
                     id: 'relatorios', title: 'Relatórios', icon: BarChart3, path: '/company/relatorio',

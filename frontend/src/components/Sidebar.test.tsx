@@ -43,7 +43,7 @@ function renderSidebar(path = '/company/dashboard', type: 'company' | 'worker' =
   );
 }
 
-describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)', () => {
+describe('Sidebar — empresa e papéis', () => {
   beforeEach(() => {
         invalidateCompanyScope()  // o cache de rajada do seam nao pode vazar entre testes
     vi.clearAllMocks();
@@ -51,18 +51,7 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email_confirmed_at: '2026-01-01' } } });
   });
 
-  it('conta com UMA unidade: seletor não aparece (zero mudança visual, caso dominante)', async () => {
-    mockRpc.mockResolvedValue({ data: [companyRow()], error: null });
-
-    renderSidebar();
-
-    await waitFor(() => {
-      expect(screen.getByText('Divino Fogão — Unidade 1')).toBeInTheDocument();
-    });
-    expect(screen.queryByLabelText('Trocar de unidade')).not.toBeInTheDocument();
-  });
-
-  it('sessão com MAIS de uma unidade: seletor aparece com as opções', async () => {
+  it('sessão com mais de uma empresa: nenhum seletor de unidade aparece', async () => {
     mockRpc.mockResolvedValue({
       data: [
         companyRow({ company_id: 'comp-1', company_name: 'Loja Centro' }),
@@ -73,11 +62,8 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
 
     renderSidebar();
 
-    await waitFor(() => {
-      expect(screen.getByLabelText('Trocar de unidade')).toBeInTheDocument();
-    });
-    expect(screen.getByRole('option', { name: 'Loja Centro' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Loja Zona Sul' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Loja Centro')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Trocar de unidade')).not.toBeInTheDocument();
   });
 
   const itens = () =>

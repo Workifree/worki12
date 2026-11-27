@@ -35,7 +35,7 @@ describe('flags desligadas (padrão)', () => {
     });
 
     it('sem cartão Locais', () => {
-        const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: true, trail: true }).flatMap((g) => g.cards);
+        const cards = getGestaoGroups({ gestor: true, teamInvited: true, trail: true }).flatMap((g) => g.cards);
         expect(cards.map((c) => c.id)).not.toContain('locais');
     });
 
@@ -78,7 +78,7 @@ describe('ligadas', () => {
 
     it('cartão Locais só para o Gestor', () => {
         vi.stubEnv('VITE_FEATURE_LOTE', 'true');
-        const ids = (gestor: boolean) => getGestaoGroups({ gestor, units: false, teamInvited: false, trail: false, sites: true })
+        const ids = (gestor: boolean) => getGestaoGroups({ gestor, teamInvited: false, trail: false, sites: true })
             .flatMap((g) => g.cards.map((c) => c.id));
         expect(ids(true)).toContain('locais');
         expect(ids(false)).not.toContain('locais');

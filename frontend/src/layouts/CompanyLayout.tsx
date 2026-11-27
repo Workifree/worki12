@@ -3,7 +3,6 @@ import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import SkipLink, { MAIN_CONTENT_ID } from '../components/SkipLink';
 import NotificationBell from '../components/NotificationBell';
-import CompanySwitcher from '../components/company/CompanySwitcher';
 import FormerCompanyNotice from '../components/company/FormerCompanyNotice';
 import GestorRouteGuard from '../components/company/GestorRouteGuard';
 import { GuideRoleEmpresa } from '../components/guide/GuideRole';
@@ -44,7 +43,6 @@ export default function CompanyLayout() {
                 <div className="hidden md:flex md:empty:hidden justify-end mb-2">
                     <HelpButton variante="linha" />
                 </div>
-                <CompanySwitcher className="min-[1100px]:hidden mb-4" />
                 <FormerCompanyNotice />
                 {/* `key` por rota: a tela nova entra com um fade curto (`worki-page-enter`, index.css). */}
                 <div key={pathname} className="worki-page-enter">

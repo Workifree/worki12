@@ -1,4 +1,4 @@
-import { User, PlusCircle, Building2, LogOut, HelpCircle, ChevronDown, BadgeCheck, CircleDashed, UserCircle } from 'lucide-react';
+import { User, PlusCircle, Building2, LogOut, HelpCircle, BadgeCheck, CircleDashed, UserCircle } from 'lucide-react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +9,7 @@ import { ButtonLink, Menu } from './ui';
 import { useEffect, useState } from 'react';
 import { useCompanyNavContext } from '../hooks/useCompanyNavContext';
 import { COMPANY_CREATE_ACTION, COMPANY_GESTAO_PATH, WORKER_PROFILE_LINK, getCompanyNav, getWorkerNav, isNavActive } from '../lib/navigation';
-import { getMyCompanies, pickCurrentCompany, switchCompanyUnit, subscribeCompanyScope } from '../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, subscribeCompanyScope } from '../services/companyScopeService';
 import type { MyCompany } from '../types';
 
 interface SidebarProps {
@@ -35,9 +35,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     }
 
     const [workerData, setWorkerData] = useState<WorkerData | null>(null);
-    // F13 (R13) — seletor de unidade: só aparece quando a sessão opera mais de UMA empresa
-    // (gerente de duas lojas, ou sócio navegando por unidade). Para 100% das contas de hoje
-    // (uma linha), `myCompanies.length <= 1` e o seletor nunca renderiza.
+    // Empresa corrente da sessão (alimenta o menu).
     const [myCompanies, setMyCompanies] = useState<MyCompany[]>([]);
     const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -110,16 +108,6 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const companyNav = useCompanyNavContext(isCompany ? currentCompany : null);
     const navItems = isCompany ? getCompanyNav(companyNav) : getWorkerNav();
 
-    // F13 (R13) — troca de unidade: grava a seleção (companyScopeService, singleton + sessionStorage)
-    // e recarrega a página. Um reload total é a forma mais simples e segura de garantir que TODA
-    // tela já montada (que resolve `company_id` no próprio `useEffect` de montagem) releia o dado
-    // da unidade nova, sem precisar plumbar um contexto reativo por todas as páginas de empresa.
-    const handleSwitchCompany = (companyId: string) => {
-        if (companyId === currentCompanyId) return;
-        switchCompanyUnit(companyId);
-        window.location.assign('/company/dashboard');
-    };
-
     // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
     // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).
     const activeNavClass = isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white';
@@ -148,29 +136,6 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                 </div>
                 <NotificationBell className="text-gray-700 hover:bg-gray-100" />
             </div>
-
-            {/* Seletor de unidade (F13 R13): só com mais de uma empresa. Recolhida, o seletor vive no
-                topo da página (CompanyLayout), onde cabe o nome. */}
-            {isCompany && myCompanies.length > 1 && (
-                <div className="shrink-0 px-3 pt-3 max-[1099px]:hidden">
-                    <label htmlFor="sidebar-company-switch" className="sr-only">Trocar de unidade</label>
-                    <div className="relative">
-                        <select
-                            id="sidebar-company-switch"
-                            value={currentCompanyId ?? ''}
-                            onChange={(e) => handleSwitchCompany(e.target.value)}
-                            className="h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 hover:border-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
-                        >
-                            {myCompanies.map((c) => (
-                                <option key={c.company_id} value={c.company_id}>
-                                    {c.company_name || 'Unidade sem nome'}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                    </div>
-                </div>
-            )}
 
             {isCompany && (
                 <div className="shrink-0 px-3 pt-3">

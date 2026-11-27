@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useBonusTrailAccess } from '../../hooks/useBonusTrailAccess';
-import { canSeeOrganization, isGestor } from '../../services/companyScopeService';
+import { isGestor } from '../../services/companyScopeService';
 import { getGestaoGroups } from '../../lib/navigation';
 import { isPresencaEnabled } from '../../lib/features';
 import { logError } from '../../lib/logger';
@@ -35,7 +35,6 @@ export default function CompanyGestao() {
 
     const groups = getGestaoGroups({
         gestor: isGestor(company),
-        units: canSeeOrganization(company),
         teamInvited: company?.team_enabled === true,
         trail: hasTrail,
         sites: isPresencaEnabled(),

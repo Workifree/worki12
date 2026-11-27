@@ -34,7 +34,7 @@ chamado chamados convidar convide convidado convidada convidados convite convite
 respostas respondeu respondeu aguardando aguarde pendente pendentes expirado expirada andamento
 ajuda ajudar explicar mostrar mostre fazer faca feito pronto tentar tente novamente ok
 inicio painel visao geral turno turnos vaga vagas trabalho trabalhos servico servicos diaria diarias
-escala serie evento eventos empresa empresas unidade unidades equipe elenco freela freelas
+escala serie evento eventos empresa empresas equipe elenco freela freelas
 freelancer freelancers trabalhador pessoa pessoas membro membros gestor gerente encarregado
 responsavel cliente clientes operacao operacoes relatorio relatorios gestao indicacao indicacoes
 indicar mensagem mensagens conversa conversas notificacao notificacoes aviso avisos perfil conta

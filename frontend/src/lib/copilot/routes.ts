@@ -49,7 +49,6 @@ const ROUTES: readonly RouteDef[] = [
   { pattern: '/company/notifications', name: 'Notificações', policy: 'readonly' },
   { pattern: '/company/trilha', name: 'Trilha de bônus', policy: 'readonly', confirmToOpen: true },
   { pattern: '/company/configuracoes/equipe', name: 'Equipe e acessos', policy: 'readonly' },
-  { pattern: '/company/organization', name: 'Unidades', policy: 'readonly' },
 ]
 
 /** Destinos que a ferramenta `navigate` aceita. O modelo escolhe um id, nunca uma URL. */
