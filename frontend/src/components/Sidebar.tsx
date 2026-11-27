@@ -35,7 +35,12 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     }
 
     const [workerData, setWorkerData] = useState<WorkerData | null>(null);
-    // Empresa corrente da sessão (alimenta o menu).
+    // Quem é a PESSOA da sessão (o `name` acima é o da empresa) e o papel dela, para o rodapé.
+    const [personName, setPersonName] = useState('');
+    const [companyRole, setCompanyRole] = useState<MyCompany['role'] | null>(null);
+    // F13 (R13) — seletor de unidade: só aparece quando a sessão opera mais de UMA empresa
+    // (gerente de duas lojas, ou sócio navegando por unidade). Para 100% das contas de hoje
+    // (uma linha), `myCompanies.length <= 1` e o seletor nunca renderiza.
     const [myCompanies, setMyCompanies] = useState<MyCompany[]>([]);
     const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -80,6 +85,23 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     if (current) {
                         setName(current.company_name ?? '');
                         setCurrentCompanyId(current.company_id);
+                        setCompanyRole(current.role);
+                        // Encarregado tem nome na equipe (`display_name`); o Gestor, o do cadastro; senão o e-mail.
+                        let memberName: string | null = null;
+                        if (current.role === 'encarregado') {
+                            try {
+                                const { data: rows } = await supabase
+                                    .from('company_members')
+                                    .select('company_id, display_name')
+                                    .eq('user_id', user.id);
+                                memberName = ((rows ?? []) as { company_id: string; display_name: string | null }[])
+                                    .find((r) => r.company_id === current.company_id)?.display_name?.trim() || null;
+                            } catch (error) {
+                                logError('Sidebar.fetchMemberName', error);
+                            }
+                        }
+                        const metaName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : '';
+                        setPersonName(memberName || metaName || user.email || '');
                     }
                 } catch (error) {
                     logError('Sidebar.fetchCompanyScope', error);
@@ -115,6 +137,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     // Recolhida (768 a 1099px): só ícones. O texto continua no DOM (`sr-only`) para leitor de tela.
     const label = 'max-[1099px]:sr-only';
 
+    const roleLabel = isCompany ? (companyRole === 'encarregado' ? 'Encarregado' : companyRole ? 'Gestor' : '') : 'Freela';
     const accountItems = [
         !isCompany && { label: WORKER_PROFILE_LINK.label, icon: UserCircle, onSelect: () => navigate(WORKER_PROFILE_LINK.path) },
         { label: 'Ajuda', icon: HelpCircle, onSelect: () => navigate('/ajuda') },
@@ -177,7 +200,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             <div className="flex shrink-0 items-center gap-1 border-t border-gray-200 p-2 max-[1099px]:flex-col max-[1099px]:gap-0">
                 <NavLink
                     to={isCompany ? COMPANY_GESTAO_PATH : WORKER_PROFILE_LINK.path}
-                    title={name || undefined}
+                    title={(isCompany ? personName || name : name) || undefined}
                     className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl p-1.5 transition-colors duration-fast hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black max-[1099px]:flex-none"
                     // No lado da empresa, quem marca "página atual" é o item Gestão do menu.
                     {...(isCompany ? { 'aria-current': undefined } : {})}
@@ -198,20 +221,25 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                                 <span className="h-3 w-16 rounded bg-gray-200" />
                             </span>
                         ) : (
-                            <span className="truncate text-sm font-semibold leading-tight text-black">{name || (isCompany ? 'Empresa' : '...')}</span>
+                            <span className="truncate text-sm font-semibold leading-tight text-black">
+                                {isCompany ? (personName || 'Minha conta') : (name || '...')}
+                            </span>
                         )}
                         {isCompany ? (isVerified !== null && (
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium leading-tight ${isVerified ? 'text-blue-700' : 'text-gray-600'}`}>
+                            <span className="flex min-w-0 items-center gap-1 text-xs font-medium leading-tight text-gray-600">
                                 {isVerified
                                     ? <BadgeCheck size={13} aria-hidden="true" className="shrink-0 text-blue-600" />
                                     : <CircleDashed size={13} aria-hidden="true" className="shrink-0 text-gray-500" />}
-                                {isVerified ? 'Verificado' : 'Não verificado'}
+                                <span className="shrink-0 font-semibold text-gray-800">{roleLabel}</span>
+                                {name && <span aria-hidden="true" className="shrink-0">·</span>}
+                                {name && <span className="truncate">{name}</span>}
+                                <span className="sr-only">{isVerified ? ', verificado' : ', não verificado'}</span>
                             </span>
                         )) : (
                             // Sem dado ainda: esqueleto, nunca "Nível 1 · 0 XP" inventado.
                             workerData ? (
                                 <span className="truncate text-xs font-medium leading-tight text-gray-600">
-                                    {`Nível ${workerData.level || 1} · ${workerData.xp || 0} XP`}
+                                    {`${roleLabel} · Nível ${workerData.level || 1} · ${workerData.xp || 0} XP`}
                                 </span>
                             ) : (
                                 <span aria-hidden="true" className="mt-0.5 block h-3 w-20 rounded bg-gray-200 motion-safe:animate-pulse" />

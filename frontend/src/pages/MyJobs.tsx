@@ -34,20 +34,31 @@ import type {
 } from '../types';
 import { Dialog } from '../components/ui/Dialog';
 
-const RATE_PROMPTED_KEY = 'worki_rate_prompted';
-function readRatePrompted(): boolean {
+// O pedido automático de avaliação é POR TURNO (nunca por sessão) e só para turno recente:
+// abrir o modal por um turno de semanas atrás, a cada sessão nova, cobria a navegação sem motivo.
+// Quem fechou sem avaliar continua com o botão "Avaliar" no histórico; o modal não volta sozinho.
+const RATE_PROMPTED_KEY = 'worki_rate_prompted_jobs';
+const RATE_PROMPT_WINDOW_DAYS = 3;
+function readRatePrompted(): string[] {
     try {
-        return sessionStorage.getItem(RATE_PROMPTED_KEY) === '1';
+        const parsed: unknown = JSON.parse(localStorage.getItem(RATE_PROMPTED_KEY) ?? '[]');
+        return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
     } catch {
-        return false;
+        return [];
     }
 }
-function markRatePrompted(): void {
+function markRatePrompted(jobId: string): void {
     try {
-        sessionStorage.setItem(RATE_PROMPTED_KEY, '1');
+        localStorage.setItem(RATE_PROMPTED_KEY, JSON.stringify([...readRatePrompted(), jobId].slice(-100)));
     } catch {
         // sem storage vale só a trava por visita (ref)
     }
+}
+function isRecentShift(job: JobApplication, now = Date.now()): boolean {
+    const ref = job.company_checkout_confirmed_at ?? job.worker_checkout_at ?? job.raw_date;
+    if (!ref) return false;
+    const t = new Date(ref.length === 10 ? `${ref}T12:00:00` : ref).getTime();
+    return Number.isFinite(t) && now - t <= RATE_PROMPT_WINDOW_DAYS * 86_400_000;
 }
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
@@ -570,16 +581,16 @@ export default function MyJobs() {
         }
     };
 
-    // Pedido de avaliação pós-pagamento: assim que o turno é concluído/pago pela
-    // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
-    // abrimos o modal (1x por sessão, dispensável). Convite pendente tem prazo: vem antes.
+    // Pedido de avaliação logo após o turno concluído: 1x por turno, só se for recente (3 dias) e sem
+    // avaliação, e nunca com convite pendente (tem prazo e vem antes). O modal fecha por X, Esc e fora.
     useEffect(() => {
         if (autoRatePrompted.current || loading || invitesLoading || pendingInvites.length > 0) return;
-        if (readRatePrompted()) return;
-        const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id));
+        const already = readRatePrompted();
+        const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id)
+            && !already.includes(j.job_id) && isRecentShift(j));
         if (pending) {
             autoRatePrompted.current = true;
-            markRatePrompted();
+            markRatePrompted(pending.job_id);
             setSelectedJobToRate(pending);
             setRateModalOpen(true);
         }
@@ -927,7 +938,7 @@ export default function MyJobs() {
                                 <Card key={invite.id} className={isSos ? 'border-status-warning-line' : undefined}>
                                     {isSos && (
                                         <Alert tone="warning" title="Urgência (SOS)" className="mb-4">
-                                            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+                                            Você não está no Elenco desta empresa. Recebeu porque ativou os chamados de urgência.
                                         </Alert>
                                     )}
                                     {/* Empresa */}

@@ -238,7 +238,7 @@ describe('ProtectedRoute - Onboarding Gate', () => {
             expect(screen.queryByText('Seu acesso a essa empresa foi encerrado')).not.toBeInTheDocument()
         })
 
-        it('encarregado confirmado é barrado em /company/onboarding e /company/profile', async () => {
+        it('encarregado confirmado é barrado em /company/onboarding (Dados da empresa mostra sem acesso no GestorRouteGuard)', async () => {
             mockGetSession.mockResolvedValue({
                 data: { session: { user: { id: 'enc-2', user_metadata: { user_type: 'hire' } } } },
             })

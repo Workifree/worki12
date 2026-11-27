@@ -39,7 +39,7 @@ function setup(brain: Brain = () => done(), props: CopilotRootProps = {}, availa
 }
 
 const open = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: 'Abrir o copiloto' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Copiloto' }))
 }
 const acceptNotice = async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Entendi, quero usar' }))
@@ -58,18 +58,18 @@ describe('ativação', () => {
   it('some em rota de convite', async () => {
     setup(undefined, {}, true, null, '/convite/abc')
     await act(async () => {})
-    expect(screen.queryByRole('button', { name: 'Abrir o copiloto' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Abrir o Copiloto' })).toBeNull()
   })
 
   it('some com o aceite de Termos na tela', async () => {
     setup(undefined, {}, true, <div data-testid="tos-gate-modal" />)
     await act(async () => {})
-    expect(screen.queryByRole('button', { name: 'Abrir o copiloto' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Abrir o Copiloto' })).toBeNull()
   })
 
   it('só consulta o servidor quando a pessoa abre', async () => {
     const { services } = setup()
-    await screen.findByRole('button', { name: 'Abrir o copiloto' })
+    await screen.findByRole('button', { name: 'Abrir o Copiloto' })
     expect(services.checkAvailability).not.toHaveBeenCalled()
   })
 })
@@ -241,8 +241,8 @@ describe('D-8: Recentes', () => {
     expect(readHistory()).toHaveLength(5)
     expect(window.localStorage.getItem('worki:copilot:historico-v1')).not.toMatch(/123|9876/)
     // Gravação antiga com dado pessoal não volta à tela.
-    window.localStorage.setItem('worki:copilot:historico-v1', JSON.stringify(['paga o [cpf]', 'abrir elenco']))
-    expect(readHistory()).toEqual(['abrir elenco'])
+    window.localStorage.setItem('worki:copilot:historico-v1', JSON.stringify(['paga o [cpf]', 'abrir Elenco']))
+    expect(readHistory()).toEqual(['abrir Elenco'])
     setup()
     await open()
     await acceptNotice()
@@ -256,7 +256,7 @@ describe('D-8: Recentes', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('bloqueado') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('bloqueado') })
     expect(readHistory()).toEqual([])
-    expect(() => rememberRequest('abrir elenco')).not.toThrow()
+    expect(() => rememberRequest('abrir Elenco')).not.toThrow()
   })
 })
 
@@ -267,17 +267,17 @@ describe('barra de comando e duas experiências', () => {
       await import('./CopilotPanel')
     })
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    const dialog = await screen.findByRole('dialog', { name: 'Copiloto' })
     expect(within(dialog).getByRole('heading', { name: 'Como posso ajudar?' })).toBeInTheDocument()
     // Esc fecha e devolve o foco.
     fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto' })).toBeNull())
   })
 
   it('PC usa a seta; celular usa o dedo virtual e o bottom sheet (sem seta de mouse)', async () => {
     const desktop = setup()
     await open()
-    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    await screen.findByRole('dialog', { name: 'Copiloto' })
     expect(document.querySelector('[data-copilot-pointer="cursor"]')).not.toBeNull()
     expect(document.querySelector('[data-copilot-pointer="finger"]')).toBeNull()
     desktop.unmount()
@@ -285,7 +285,7 @@ describe('barra de comando e duas experiências', () => {
 
     setup(undefined, { overrides: { isHuman, stepDelaySeconds: 0, navigationSettleMs: 0, pointerTimeScale: 0, deviceMode: 'mobile' } })
     await open()
-    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    await screen.findByRole('dialog', { name: 'Copiloto' })
     expect(document.querySelector('[data-copilot-pointer="finger"]')).not.toBeNull()
     expect(document.querySelector('[data-copilot-pointer="cursor"]')).toBeNull()
   })
@@ -353,25 +353,25 @@ describe('barra de comando e duas experiências', () => {
     const names: string[] = []
     const start = vi.fn((update: () => void) => {
       // O nome de transição precisa estar no elemento de origem ANTES da troca (estado antigo).
-      names.push(`antes:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      names.push(`antes:${screen.queryByRole('button', { name: 'Abrir o Copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
       update()
-      names.push(`depois:${screen.queryByRole('button', { name: 'Abrir o copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
+      names.push(`depois:${screen.queryByRole('button', { name: 'Abrir o Copiloto' })?.style.viewTransitionName ?? 'sem-botão'}`)
       expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(true)
       return { finished: Promise.resolve() }
     })
     doc.startViewTransition = start
     try {
       setup()
-      await screen.findByRole('button', { name: 'Abrir o copiloto' })
+      await screen.findByRole('button', { name: 'Abrir o Copiloto' })
       act(() => requestOpen({ x: 10, y: 10 }))
-      const dialog = await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+      const dialog = await screen.findByRole('dialog', { name: 'Copiloto' })
       expect(start).toHaveBeenCalledTimes(1)
       expect(names[0]).toBe('antes:wk-cmd-vt')
       expect(dialog).toHaveAttribute('data-copilot-palette')
       await waitFor(() => expect(document.documentElement.hasAttribute('data-wk-vt')).toBe(false))
       // Fechar também faz o morph de volta (a barra → o botão).
       fireEvent.keyDown(document, { key: 'Escape' })
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto do Worki' })).toBeNull())
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copiloto' })).toBeNull())
       expect(start).toHaveBeenCalledTimes(2)
       expect(names.at(-1)).toBe('depois:wk-cmd-vt')
     } finally {
@@ -379,8 +379,8 @@ describe('barra de comando e duas experiências', () => {
     }
     cleanup()
     setup()
-    await screen.findByRole('button', { name: 'Abrir o copiloto' })
+    await screen.findByRole('button', { name: 'Abrir o Copiloto' })
     act(() => requestOpen())
-    await screen.findByRole('dialog', { name: 'Copiloto do Worki' })
+    await screen.findByRole('dialog', { name: 'Copiloto' })
   })
 })

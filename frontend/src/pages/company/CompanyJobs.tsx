@@ -683,7 +683,7 @@ export default function CompanyJobs() {
                             size="page"
                             icon={CalendarClock}
                             title="Você ainda não tem turnos."
-                            description="Crie o primeiro turno e chame quem está no seu elenco."
+                            description="Crie o primeiro turno e chame quem está no seu Elenco."
                             action={<Button variant="dark" data-copilot="empresa.turnos.criar-turno" onClick={() => navigate('/company/create')}>Criar turno</Button>}
                         />
                     ) : (

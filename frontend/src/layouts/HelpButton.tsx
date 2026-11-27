@@ -23,7 +23,7 @@ export default function HelpButton(props: Pick<BotaoComoFacoProps, 'variante' | 
     return (
         <button
             type="button"
-            aria-label="Ajuda e copiloto"
+            aria-label="Abrir o Copiloto"
             aria-haspopup="dialog"
             data-page-agent-ignore="true"
             onClick={(evento) => {

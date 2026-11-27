@@ -220,7 +220,7 @@ describe('ShiftBatchFlow', () => {
         renderFlow();
         await repeatFromHistory();
         fireEvent.click(screen.getByRole('button', { name: /^Amanhã/ }));
-        expect(await screen.findByText(/Seu elenco está vazio: o turno fica aberto/)).toBeTruthy();
+        expect(await screen.findByText(/Seu Elenco está vazio: o turno fica aberto/)).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
         expect(await screen.findByText('1 turno publicado')).toBeTruthy();
         expect(service.dispatchCall).not.toHaveBeenCalled();

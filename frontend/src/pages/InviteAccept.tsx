@@ -331,7 +331,7 @@ export default function InviteAccept() {
         )}
 
         {state === 'already_exists' && outcome(
-          isWorkerLink ? 'Já está no seu elenco' : 'Você já está no elenco',
+          isWorkerLink ? 'Já está no seu Elenco' : 'Você já está no Elenco',
           isWorkerLink
             ? 'Já existe uma conexão com este freela. Veja no Elenco se ela está aceita ou aguardando resposta.'
             : 'Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.',

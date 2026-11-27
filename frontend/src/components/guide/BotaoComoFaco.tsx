@@ -15,7 +15,7 @@ export interface BotaoComoFacoProps {
 }
 
 /** ÚNICO botão de ajuda do app (do guia hoje, do copiloto depois). */
-export function BotaoComoFaco({ variante = 'icone', aoAbrir, rotulo = 'Como faço…?', icone, className }: BotaoComoFacoProps) {
+export function BotaoComoFaco({ variante = 'icone', aoAbrir, rotulo = 'Copiloto', icone, className }: BotaoComoFacoProps) {
     const contexto = useGuide();
     if (!contexto?.papel) return null;
     const abrir = (evento: { currentTarget: HTMLElement }) => {

@@ -157,7 +157,7 @@ export default function CopilotPanel({
     const visible = (node: HTMLElement | null | undefined) => (node && node.getBoundingClientRect().width > 0 ? node : null)
     const hit = at ? document.elementFromPoint(at.x, at.y)?.closest<HTMLElement>('button,a,[role="button"]') : null
     return (
-      Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o copiloto"],button[aria-label="Ajuda e copiloto"]')).find((node) => visible(node)) ??
+      Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o Copiloto"],button[aria-label="Abrir o Copiloto"]')).find((node) => visible(node)) ??
       visible(hit) ??
       null
     )

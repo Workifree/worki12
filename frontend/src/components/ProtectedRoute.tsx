@@ -318,14 +318,12 @@ export default function ProtectedRoute() {
         userType === 'hire'
         && companyRole === 'encarregado'
         && (
-            // As demais telas do Gestor mostram "sem acesso" (GestorRouteGuard, no CompanyLayout).
-            // Onboarding de CNPJ e perfil da empresa também são do Gestor: a empresa não é dele.
+            // As telas do Gestor (inclusive Dados da empresa) mostram "sem acesso" (GestorRouteGuard, no
+            // CompanyLayout). Só o onboarding de CNPJ redireciona: a empresa não é dele.
             pathname === '/company/onboarding'
-            || pathname === '/company/profile'
-            || pathname.startsWith('/company/profile/')
         )
     ) {
-        // Onboarding e perfil da empresa são do Gestor.
+        // Onboarding da empresa é do Gestor.
         roleRedirectTarget = '/company/dashboard';
     }
 

@@ -1022,7 +1022,7 @@ describe('A6/R12 — aceite por freela: amostra mínima e ordenação alfabétic
     expect(result.acceptanceByWorker.state).toBe('ok');
     if (result.acceptanceByWorker.state === 'ok') {
       const ana = result.acceptanceByWorker.rows.find((r) => r.workerName === 'Ana');
-      expect(ana?.received).toBe(2);        // só os do chamado de elenco
+      expect(ana?.received).toBe(2);        // só os do chamado de Elenco
       expect(ana?.accepted).toBe(1);
       expect(ana?.acceptanceRate).toBe(0.5); // seria 2/3 = 0.67 se o SOS entrasse
     }

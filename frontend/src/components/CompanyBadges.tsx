@@ -192,7 +192,7 @@ export default function CompanyBadges({ workerId, mode }: CompanyBadgesProps) {
             disabled={savingGlobal}
           />
           <p className="mt-2 text-xs text-gray-600">
-            Desligado, nenhuma empresa vê esta seção, mesmo as do seu elenco. Você continua vendo tudo aqui.
+            Desligado, nenhuma empresa vê esta seção, mesmo as do seu Elenco. Você continua vendo tudo aqui.
           </p>
         </div>
       )}

@@ -1,5 +1,5 @@
 /**
- * Peças leves do gatilho do copiloto (orbe e a pílula "Pergunte ao Worki"). Ficam fora do painel
+ * Peças leves do gatilho do copiloto (orbe e a pílula "Copiloto"). Ficam fora do painel
  * para o cabeçalho poder usá-las sem puxar o painel completo (que carrega sob demanda).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -37,7 +37,7 @@ export function Shimmer({ text }: { text: string }) {
 }
 
 /** Mensagens que rodam na pílula do cabeçalho (celular): deixam claro que é uma IA que age. */
-export const HEADER_MESSAGES = ['Copiloto Worki', 'Eu faço por você'] as const
+export const HEADER_MESSAGES = ['Copiloto'] as const
 
 function RotatingMessage() {
   const [index, setIndex] = useState(0)
@@ -50,7 +50,7 @@ function RotatingMessage() {
   return <Shimmer text={HEADER_MESSAGES[index]} />
 }
 
-/** Conteúdo da pílula: brilho do espectro em volta, orbe, texto e o atalho. `compact` = "Copiloto Worki" com IA e brilho (cabeçalho do celular). */
+/** Conteúdo da pílula: brilho do espectro em volta, orbe, texto e o atalho. `compact` = "Copiloto" com IA e brilho (cabeçalho do celular). */
 export function TriggerBody({ compact = false }: { compact?: boolean }) {
   return (
     <>
@@ -67,7 +67,7 @@ export function TriggerBody({ compact = false }: { compact?: boolean }) {
           </>
         ) : (
           <>
-            Precisa de ajuda? <small>Pergunte ao Worki</small>
+            Copiloto <small>Precisa de ajuda?</small>
           </>
         )}
       </span>

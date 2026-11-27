@@ -16,13 +16,13 @@ const FEATURES = [
   },
   {
     icon: <Users className="w-8 h-8 text-primary" aria-hidden="true" />,
-    title: 'Seu elenco de confiança',
+    title: 'Seu Elenco de confiança',
     description: 'Só quem você já conhece e testou — sem depender de estranho de plataforma.',
   },
   {
     icon: <UserPlus className="w-8 h-8 text-blue-600" aria-hidden="true" />,
     title: 'Convite em segundos',
-    description: 'Chame o freela direto pro seu elenco — sem grupo de WhatsApp, sem renegociar tudo de novo.',
+    description: 'Chame o freela direto pro seu Elenco — sem grupo de WhatsApp, sem renegociar tudo de novo.',
   },
   {
     icon: <CreditCard className="w-8 h-8 text-primary" aria-hidden="true" />,
@@ -37,8 +37,8 @@ const FEATURES = [
 ]
 
 const STEPS_COMPANY = [
-  { step: '1', title: 'Monte seu elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
-  { step: '2', title: 'Convide pra um turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
+  { step: '1', title: 'Monte seu Elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
+  { step: '2', title: 'Convide pra um turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu Elenco — sem esperar candidatura de estranho.' },
   { step: '3', title: 'Pague e registre', desc: 'Confirme o turno, pague o freela direto (PIX ou dinheiro) e registre no Worki — recibo automático pra seu controle.' },
 ]
 

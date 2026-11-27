@@ -367,7 +367,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
             titulo: 'Indicar freela',
             explicacao: 'Escolha a pessoa e a empresa. O freela decide se aceita.',
             aoTocar: 'Abre o formulário. Nada é enviado até você confirmar.',
-            semAlvo: 'O botão aparece quando a tela de Indicações termina de carregar.',
+            semAlvo: 'O botão aparece quando a tela Indicar freela termina de carregar.',
         }],
     },
     {
@@ -413,10 +413,10 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'encarregado-menus', papeis: ENCARREGADO,
         titulo: 'Entender por que não vejo alguns menus',
         descricao: 'O que fica só com o Gestor.',
-        frases: ['nao aparece relatorio', 'sumiu mensagens', 'sem acesso', 'equipe indicacoes'],
+        frases: ['sem acesso', 'nao consigo abrir', 'equipe indicacoes'],
         passos: [{
             rota: 'empresa.gestao', alvos: [], titulo: 'Acesso de encarregado',
-            explicacao: 'Relatórios, Mensagens, Equipe, Indicações e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
+            explicacao: 'Equipe, Indicar freela e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
             aoTocar: 'Nada muda por aqui.',
         }],
     },

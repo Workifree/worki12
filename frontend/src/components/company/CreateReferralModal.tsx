@@ -193,12 +193,12 @@ export default function CreateReferralModal({
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Apresente um freela do seu elenco a outra empresa. Quem decide se a conexão acontece é
+          Apresente um freela do seu Elenco a outra empresa. Quem decide se a conexão acontece é
           sempre o freela.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Freela do seu elenco">
+          <Field label="Freela do seu Elenco">
             <select
               id="referral-worker"
               value={workerId}

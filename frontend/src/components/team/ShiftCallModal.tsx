@@ -578,7 +578,7 @@ export function ShiftCallModal({
             </Button>
           }
         >
-          {teamError ? 'Não conseguimos carregar o seu elenco.' : 'Não conseguimos carregar as listas do elenco.'}
+          {teamError ? 'Não conseguimos carregar o seu Elenco.' : 'Não conseguimos carregar as listas do Elenco.'}
         </Alert>
       )}
 
@@ -586,11 +586,11 @@ export function ShiftCallModal({
         <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <Users size={32} className="mx-auto mb-2 text-gray-400" />
           <p className="font-semibold text-sm">
-            {members.length === 0 ? 'Nenhum freela apareceu no seu elenco.' : 'Ninguém disponível no elenco para este turno.'}
+            {members.length === 0 ? 'Nenhum freela apareceu no seu Elenco.' : 'Ninguém disponível no Elenco para este turno.'}
           </p>
           <p className="text-xs mt-1">
             {members.length === 0
-              ? 'Adicione freelas ao elenco. Se você já tem freelas, feche e abra esta janela de novo.'
+              ? 'Adicione freelas ao Elenco. Se você já tem freelas, feche e abra esta janela de novo.'
               : 'Todos os seus freelas já estão neste turno ou já foram chamados.'}
           </p>
           {members.length === 0 && (

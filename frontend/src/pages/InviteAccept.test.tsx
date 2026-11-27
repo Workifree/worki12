@@ -15,7 +15,7 @@ vi.mock('../lib/supabase', () => ({
 
 // Mock TeamConnectionService — InviteAccept chama os métodos direto, sem passar por supabase.from.
 vi.mock('../services/teamConnectionService', () => ({
-  NOT_A_WORKER_ERROR: 'Apenas freelas entram em um elenco por este link.',
+  NOT_A_WORKER_ERROR: 'Apenas freelas entram em um Elenco por este link.',
   TeamConnectionService: {
     isWorkerInviteToken: vi.fn((token: string) => token.startsWith('w_')),
     resolveWorkerInviteToken: vi.fn((t: string) => (t === 'w_quebrado' ? null : 'worker-id')),
@@ -68,7 +68,7 @@ describe('InviteAccept — veto do freela (R-05)', () => {
     })
 
     // Não pode sugerir sucesso nem revelar que houve bloqueio.
-    expect(screen.queryByText('Já está no seu elenco')).not.toBeInTheDocument()
+    expect(screen.queryByText('Já está no seu Elenco')).not.toBeInTheDocument()
     expect(screen.queryByText('Convite enviado')).not.toBeInTheDocument()
     expect(screen.queryByText(/bloque/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/vet/i)).not.toBeInTheDocument()
@@ -85,7 +85,7 @@ describe('InviteAccept — veto do freela (R-05)', () => {
     await convidar()
 
     await waitFor(() => {
-      expect(screen.getByText('Já está no seu elenco')).toBeInTheDocument()
+      expect(screen.getByText('Já está no seu Elenco')).toBeInTheDocument()
     })
   })
 
@@ -108,7 +108,7 @@ describe('InviteAccept — caminhos do link', () => {
     vi.mocked(supabase.auth.getUser).mockResolvedValueOnce({ data: { user: null }, error: null } as never)
   }
 
-  it('deslogado com link do elenco: vai ao login guardando o convite, sem forçar papel', async () => {
+  it('deslogado com link do Elenco: vai ao login guardando o convite, sem forçar papel', async () => {
     deslogado()
     renderWithToken('abc123')
 
@@ -128,12 +128,12 @@ describe('InviteAccept — caminhos do link', () => {
     sessionStorage.setItem('pending_invite_token', 'abc123')
     vi.mocked(TeamConnectionService.addToTeamByToken).mockResolvedValue({
       connection: null,
-      error: 'Apenas freelas entram em um elenco por este link.',
+      error: 'Apenas freelas entram em um Elenco por este link.',
     })
     renderWithToken('abc123')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Entrar no Elenco' }))
-    expect(await screen.findByText('Apenas freelas entram em um elenco por este link.')).toBeInTheDocument()
+    expect(await screen.findByText('Apenas freelas entram em um Elenco por este link.')).toBeInTheDocument()
     expect(screen.queryByText(/peça um novo link/i)).not.toBeInTheDocument()
     expect(sessionStorage.getItem('pending_invite_token')).toBeNull()
   })

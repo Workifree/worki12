@@ -225,7 +225,7 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                 {!result && (
                     <>
                         <p className="text-sm text-gray-600 mb-4">
-                            Escolha um freela do seu elenco para convidar de uma vez para {targetJobIds.length} turno{targetJobIds.length !== 1 ? 's' : ''} desta
+                            Escolha um freela do seu Elenco para convidar de uma vez para {targetJobIds.length} turno{targetJobIds.length !== 1 ? 's' : ''} desta
                             série ainda sem freela.
                         </p>
 
@@ -241,14 +241,14 @@ export default function InviteSeriesModal({ targets, onClose, onDone }: InviteSe
                                 role="alert"
                                 action={<Button variant="secondary" onClick={() => { void refreshTeam(); }}>Tentar de novo</Button>}
                             >
-                                Não conseguimos carregar o seu elenco.
+                                Não conseguimos carregar o seu Elenco.
                             </Alert>
                         )}
 
                         {!teamLoading && !teamError && teamMembers.length === 0 && (
                             <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl text-gray-600">
                                 <Users size={32} className="mx-auto mb-2 opacity-30" />
-                                <p className="font-bold text-sm">Seu elenco está vazio.</p>
+                                <p className="font-bold text-sm">Seu Elenco está vazio.</p>
                             </div>
                         )}
 

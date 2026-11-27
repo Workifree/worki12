@@ -12,14 +12,14 @@ const WORKER: Array<[RegExp, string[]]> = [
 const COMPANY: Array<[RegExp, string[]]> = [
   [/^\/company\/jobs/, ['Chamar freelas para um turno', 'Onde vejo quem aceitou?']],
   [/^\/company\/create/, ['Me ajude a criar um turno', 'Como repito um turno?']],
-  [/^\/company\/team/, ['Como convido alguém para o elenco?', 'Criar uma lista do elenco']],
+  [/^\/company\/team/, ['Como convido alguém para o Elenco?', 'Criar uma lista do Elenco']],
   [/^\/company\/hoje|^\/company\/dashboard/, ['Quem trabalha amanhã?', 'Me ajude a criar um turno']],
   [/^\/company\/relatorio/, ['Onde vejo o que paguei no mês?']],
 ]
 
 const BASE: Record<CopilotRole, string[]> = {
   worker: ['Tenho algum convite?', 'Onde vejo meus recebimentos?', 'Como mudo minha disponibilidade?'],
-  company: ['Me ajude a criar um turno', 'Como chamo freelas para um turno?', 'Onde vejo meu elenco?'],
+  company: ['Me ajude a criar um turno', 'Como chamo freelas para um turno?', 'Onde vejo meu Elenco?'],
 }
 
 export function suggestionsFor(role: CopilotRole, pathname: string, max = 4): string[] {

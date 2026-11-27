@@ -18,9 +18,12 @@ function Guard({ children }: { children: ReactNode }) {
     return <>{children}</>;
 }
 
+const isCompanyProfilePath = (path: string) => path === '/company/profile' || path.startsWith('/company/profile/');
+
 /** Guarda ÚNICA das rotas só do Gestor; a lista vem de `lib/navigation`. */
 export default function GestorRouteGuard({ children }: { children: ReactNode }) {
     const { pathname } = useLocation();
     const path = pathname.replace(/\/+$/, '') || '/';
-    return isGestorOnlyPath(path) ? <Guard key={path}>{children}</Guard> : <>{children}</>;
+    // Dados da empresa (/company/profile) também é do Gestor; antes o Encarregado era redirecionado em silêncio.
+    return isGestorOnlyPath(path) || isCompanyProfilePath(path) ? <Guard key={path}>{children}</Guard> : <>{children}</>;
 }
