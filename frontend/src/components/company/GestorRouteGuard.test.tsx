@@ -31,6 +31,14 @@ describe('D-5: guarda única das rotas do Gestor', () => {
     expect(mounted).not.toHaveBeenCalled()
   })
 
+  it('encarregado em Dados da empresa: mensagem padrão do Gestor, sem redirecionar em silêncio', async () => {
+    as('encarregado')
+    open('/company/profile')
+    expect(await screen.findByRole('heading', { name: /não tem acesso a esta tela/i })).toBeInTheDocument()
+    expect(screen.getByText('Esta área é do Gestor da empresa.')).toBeInTheDocument()
+    expect(mounted).not.toHaveBeenCalled()
+  })
+
   it('encarregado entra no Elenco (R7/R10b)', () => {
     as('encarregado')
     open('/company/team')

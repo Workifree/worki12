@@ -129,7 +129,7 @@ vi.mock('../../services/companyScopeService', () => ({
 }))
 
 describe('CompanyTeam - Histórico com a empresa', () => {
-  it('mostra quantos turnos concluídos e a data do último (batch, 1 query pro elenco todo)', async () => {
+  it('mostra quantos turnos concluídos e a data do último (batch, 1 query pro Elenco todo)', async () => {
     teamMembersFixture = [member('worker-1')]
 
     const applicationsHistoryChain = buildChain({
@@ -166,7 +166,7 @@ describe('CompanyTeam - Histórico com a empresa', () => {
   })
 })
 
-describe('CompanyTeam - Convidar direto do elenco', () => {
+describe('CompanyTeam - Convidar direto do Elenco', () => {
   it('lista só turnos open/paused elegíveis, exclui os com data passada e os com application existente', async () => {
     teamMembersFixture = [member('worker-1')]
 
@@ -280,7 +280,7 @@ describe('CompanyTeam - Convidar direto do elenco', () => {
   })
 })
 
-describe('CompanyTeam - Link do elenco', () => {
+describe('CompanyTeam - Link do Elenco', () => {
   const url = 'https://app.test/convite/tok123'
 
   async function preparar(writeText: () => Promise<void>) {
@@ -311,7 +311,7 @@ describe('CompanyTeam - Link do elenco', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Copiar link' }))
 
-    expect(await screen.findByLabelText('Link do elenco para copiar à mão')).toHaveValue(url)
+    expect(await screen.findByLabelText('Link do Elenco para copiar à mão')).toHaveValue(url)
     spy.mockRestore()
   })
 })

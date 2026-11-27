@@ -110,7 +110,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
           <ListChecks size={20} /> {isEditing ? 'Editar Lista' : 'Nova Lista'}
         </>
       }
-      subtitle="Agrupe freelas do elenco para chamar todos de uma vez em um turno."
+      subtitle="Agrupe freelas do Elenco para chamar todos de uma vez em um turno."
       onClose={onClose}
       locked={saving}
       size="lg"
@@ -164,7 +164,7 @@ export function TeamListModal({ list, teamMembers, onClose, onSaved }: TeamListM
       {teamMembers.length === 0 && (
         <div className="text-center py-8 px-4 border-2 border-dashed border-gray-300 rounded-2xl text-gray-600">
           <ListChecks size={32} className="mx-auto mb-2 text-gray-400" />
-          <p className="font-semibold text-sm">Nenhum freela aceito no elenco ainda.</p>
+          <p className="font-semibold text-sm">Nenhum freela aceito no Elenco ainda.</p>
           <p className="text-xs mt-1">Você pode salvar a lista vazia e adicionar membros depois.</p>
         </div>
       )}

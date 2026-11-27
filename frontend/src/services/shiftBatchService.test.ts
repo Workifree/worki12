@@ -68,7 +68,7 @@ describe('chamar depois de publicar', () => {
   const eligible = new Set(['a', 'b', 'c']);
   const list = () => ['a', 'b', 'saiu-do-elenco'];
 
-  it('a linha vence a escolha geral e quem saiu do elenco fica fora', () => {
+  it('a linha vence a escolha geral e quem saiu do Elenco fica fora', () => {
     const call = { mode: 'list' as const, list_id: 'l' };
     expect(resolveInvitees(rows[0], call, list, eligible)).toEqual(['a', 'b']);
     expect(resolveInvitees({ ...rows[0], invite_worker_ids: ['c', 'c'] }, call, list, eligible)).toEqual(['c']);

@@ -42,7 +42,7 @@ export function Palette(view: CopilotViewProps) {
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-label="Copiloto do Worki"
+        aria-label="Copiloto"
         data-copilot-palette=""
         className="wk-glass wk-rise relative flex max-h-[min(78dvh,680px)] w-[min(440px,100%)] flex-col wk-cluely overflow-hidden"
       >
@@ -164,7 +164,7 @@ function Working(view: CopilotViewProps) {
 function Launcher({ onOpen }: { onOpen: () => void }) {
   return (
     // Voando no topo, centralizada, como a busca do laboratório: o clique ou Ctrl+K a transformam na barra (morph).
-    <button type="button" aria-label="Abrir o copiloto" aria-haspopup="dialog" onClick={onOpen} className="wk-trigger fixed left-1/2 top-3 z-[1] -translate-x-1/2">
+    <button type="button" aria-label="Abrir o Copiloto" aria-haspopup="dialog" onClick={onOpen} className="wk-trigger fixed left-1/2 top-3 z-[1] -translate-x-1/2">
       <TriggerBody />
     </button>
   )

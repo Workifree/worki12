@@ -90,7 +90,7 @@ function Launcher({ onOpen }: { onOpen: () => void }) {
     // Aba na borda, no meio da tela (só quando não há a pílula do cabeçalho): um botão no rodapé cobriria a barra de ações.
     <button
       type="button"
-      aria-label="Abrir o copiloto"
+      aria-label="Abrir o Copiloto"
       onClick={onOpen}
       className="wk-trigger fixed right-0 top-[58%] z-[1] !min-h-14 !w-11 !justify-center !rounded-l-[18px] !rounded-r-none !border-r-0 !p-0"
     >

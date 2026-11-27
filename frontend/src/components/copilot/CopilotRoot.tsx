@@ -58,7 +58,7 @@ function useOpenRequests(enabled: boolean) {
       if (!isOpenShortcut(event) || event.defaultPrevented) return
       event.preventDefault()
       // Com o atalho, a gota nasce na pílula (ou no botão de ajuda) em vez de um ponto qualquer da página.
-      const pill = Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o copiloto"],button[aria-label="Ajuda e copiloto"]')).find((node) => node.getBoundingClientRect().width > 0)
+      const pill = Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Abrir o Copiloto"],button[aria-label="Abrir o Copiloto"]')).find((node) => node.getBoundingClientRect().width > 0)
       const box = pill?.getBoundingClientRect()
       requestOpen(box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight * 0.4 })
     }

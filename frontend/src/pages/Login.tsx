@@ -19,7 +19,7 @@ import { safeInternalPath } from '../lib/safeRedirect';
  * chamado 1→N para quem ela já confia. Número inflado atrai a expectativa que o produto não
  * entrega e afunda a que ele entrega.
  */
-const SUBTITULO_EMPRESA = 'Monte seu elenco e preencha turnos com quem você já confia.';
+const SUBTITULO_EMPRESA = 'Monte seu Elenco e preencha turnos com quem você já confia.';
 
 /**
  * Rede de segurança do item 11 (GTM): se o freela chegou ao login sem o ?redirect=

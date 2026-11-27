@@ -423,7 +423,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   value={trainingNote}
                   onChange={(e) => setTrainingNote(e.target.value)}
                   className="!h-auto min-h-20 resize-none py-3"
-                  placeholder="Ex: treinamento presencial de 2h com o gerente da unidade"
+                  placeholder="Ex: treinamento presencial de 2h com o Gestor da empresa"
                 />
               </Field>
               <div className="worki-dialog-actions">

@@ -6,12 +6,12 @@ import { getContactEmail } from '../lib/contact';
 
 const faqs = [
     {
-        q: 'Como monto meu elenco e convido para um turno?',
-        a: 'Em Elenco > Meu Elenco você adiciona freelas de confiança à sua lista (por QR, código do freela ou link de perfil). Depois de aceito, ele passa a fazer parte do elenco: ao criar um turno, você convida diretamente quem já está lá, sem precisar abrir vaga pública nem esperar candidaturas.',
+        q: 'Como monto meu Elenco e convido para um turno?',
+        a: 'Em Elenco > Meu Elenco você adiciona freelas de confiança à sua lista (por QR, código do freela ou link de perfil). Depois de aceito, ele passa a fazer parte do Elenco: ao criar um turno, você convida diretamente quem já está lá, sem precisar abrir vaga pública nem esperar candidaturas.',
     },
     {
         q: 'Como o freela aceita ou recusa um convite de turno?',
-        a: 'O freela recebe o convite no app e escolhe aceitar ou recusar. Se aceitar, o turno é confirmado e ele aparece em "Meus Turnos". Se recusar, o convite simplesmente fica em aberto para você chamar outra pessoa do elenco — recusar não afeta a reputação nem a nota do freela.',
+        a: 'O freela recebe o convite no app e escolhe aceitar ou recusar. Se aceitar, o turno é confirmado e ele aparece em "Meus Turnos". Se recusar, o convite simplesmente fica em aberto para você chamar outra pessoa do Elenco — recusar não afeta a reputação nem a nota do freela.',
     },
     {
         q: 'Como funciona a chegada e a saída no turno?',
@@ -34,8 +34,8 @@ const faqs = [
         a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela acompanha isso em "Recebimentos" e, ao abrir o recibo, pode confirmar que recebeu o pagamento — o que fecha o ciclo do turno com um comprovante para ambos os lados.',
     },
     {
-        q: 'Como saio do elenco de uma empresa, ou como a empresa remove alguém?',
-        a: 'O freela pode sair do elenco de uma empresa a qualquer momento em Empresas > Minhas empresas, encerrando a conexão. A empresa também pode remover um freela do elenco em Elenco > Meu Elenco. Em ambos os casos, isso não afeta turnos já combinados nem o histórico de avaliações.',
+        q: 'Como saio do Elenco de uma empresa, ou como a empresa remove alguém?',
+        a: 'O freela pode sair do Elenco de uma empresa a qualquer momento em Empresas > Minhas empresas, encerrando a conexão. A empresa também pode remover um freela do Elenco em Elenco > Meu Elenco. Em ambos os casos, isso não afeta turnos já combinados nem o histórico de avaliações.',
     },
 ];
 
@@ -63,7 +63,7 @@ export default function Help() {
 
                 <PageHeader
                     title="Ajuda"
-                    subtitle="Respostas rápidas sobre elenco, turnos e pagamento."
+                    subtitle="Respostas rápidas sobre Elenco, turnos e pagamento."
                 />
 
                 {/* FAQ */}

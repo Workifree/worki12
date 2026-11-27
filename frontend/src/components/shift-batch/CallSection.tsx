@@ -43,7 +43,7 @@ export function PeopleDialog({
     return (
         <Dialog labelledBy="lote-pessoas" onClose={onClose}>
             <DialogHeader titleId="lote-pessoas" title={title} onClose={onClose} />
-            <Field label="Buscar no elenco">
+            <Field label="Buscar no Elenco">
                 <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} />
             </Field>
             <ul className="mt-3 flex flex-col gap-2">
@@ -112,7 +112,7 @@ export function CallSection({
             {data.loading && <SkeletonList count={2} itemClassName="h-11" />}
             {!data.loading && data.error && !wantsCall && (
                 <Alert tone="warning" action={<Button variant="secondary" onClick={data.retry}>Tentar de novo</Button>}>
-                    Não conseguimos carregar o seu elenco. Dá para publicar agora e chamar depois.
+                    Não conseguimos carregar o seu Elenco. Dá para publicar agora e chamar depois.
                 </Alert>
             )}
             {!data.loading && data.error && wantsCall && (
@@ -132,12 +132,12 @@ export function CallSection({
             )}
             {!data.loading && !data.error && data.members.length === 0 && (
                 <Alert tone="info" action={<ButtonLink variant="secondary" to="/company/team">Ir para Meu Elenco</ButtonLink>}>
-                    Seu elenco está vazio: o turno fica aberto. Traga freelas em Elenco.
+                    Seu Elenco está vazio: o turno fica aberto. Traga freelas em Elenco.
                 </Alert>
             )}
             {!data.loading && data.members.length > 0 && (
                 <>
-                    <p className="text-sm text-gray-600">Escolha uma lista e/ou pessoas do elenco. Elas são chamadas assim que o turno for publicado.</p>
+                    <p className="text-sm text-gray-600">Escolha uma lista e/ou pessoas do Elenco. Elas são chamadas assim que o turno for publicado.</p>
                     {data.lists.map((list) => (
                         <ChoiceCard
                             key={list.id}

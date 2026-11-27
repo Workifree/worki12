@@ -214,7 +214,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
                 <Dialog labelledBy={tituloAjuda} onClose={() => setAjudaDe(null)}>
                     <DialogHeader
                         titleId={tituloAjuda}
-                        title="Como faço…?"
+                        title="Copiloto"
                         subtitle="Escolha um guia: o app mostra onde tocar."
                         onClose={() => setAjudaDe(null)}
                     />

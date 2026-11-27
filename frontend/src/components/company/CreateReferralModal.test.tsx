@@ -39,7 +39,7 @@ const TEAM_MEMBERS = [
 ] as unknown as TeamMember[];
 
 function selectWorkerAndCompany() {
-  fireEvent.change(screen.getByLabelText('Freela do seu elenco'), { target: { value: 'worker-1' } });
+  fireEvent.change(screen.getByLabelText('Freela do seu Elenco'), { target: { value: 'worker-1' } });
 }
 
 beforeEach(() => {

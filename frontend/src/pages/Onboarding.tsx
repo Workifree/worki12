@@ -109,7 +109,7 @@ export default function Onboarding() {
               <Briefcase size={22} strokeWidth={2.5} aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-1">Quero contratar</h3>
-            <p className="text-gray-300 text-sm pr-8">Monte seu elenco de freelas de confiança. Contrate direto, registre cada turno e controle o gasto — tudo num lugar só.</p>
+            <p className="text-gray-300 text-sm pr-8">Monte seu Elenco de freelas de confiança. Contrate direto, registre cada turno e controle o gasto — tudo num lugar só.</p>
             <span className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white px-4 text-sm font-bold text-black">
               Entrar como empresa <ArrowRight size={18} aria-hidden="true" />
             </span>
@@ -125,7 +125,7 @@ export default function Onboarding() {
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Como funciona</h2>
             <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">
-              Sem feed de vagas públicas: a empresa monta o próprio elenco de freelas de confiança e convida
+              Sem feed de vagas públicas: a empresa monta o próprio Elenco de freelas de confiança e convida
               direto pra cada turno.
             </p>
           </div>
@@ -142,7 +142,7 @@ export default function Onboarding() {
                     <UserPlus size={18} strokeWidth={2.5} aria-hidden="true" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm">Monte seu elenco</p>
+                    <p className="font-bold text-sm">Monte seu Elenco</p>
                     <p className="text-sm text-gray-600">Convide pelo link os freelas com quem você já trabalha.</p>
                   </div>
                 </li>

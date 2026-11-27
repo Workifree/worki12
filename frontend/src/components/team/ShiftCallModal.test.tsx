@@ -146,7 +146,7 @@ describe('ShiftCallModal — chips de listas salvas (F2)', () => {
     expect(screen.queryByRole('button', { name: /Cozinha/ })).not.toBeInTheDocument()
   })
 
-  it('chip mostra a contagem de DISPONÍVEIS, ignorando membro que saiu do elenco (R10/R11)', async () => {
+  it('chip mostra a contagem de DISPONÍVEIS, ignorando membro que saiu do Elenco (R10/R11)', async () => {
     // Lista salva tem 6 membros, mas só 5 seguem 'accepted' hoje (worker-6 saiu/bloqueou —
     // não aparece mais em listTeamMembers, que já filtra status='accepted').
     const members = [1, 2, 3, 4, 5].map((n) => worker(`w${n}`, `Freela ${n}`))
@@ -347,7 +347,7 @@ describe('ShiftCallModal — guarda de risco de vínculo (F5)', () => {
   // rejeição). Aqui simulamos a RPC falhando no nível do MODAL (rejeição crua no mock, não o
   // fallback interno do service real) e provamos que a lista renderiza, a seleção funciona e o
   // disparo continua funcionando (A7) — a guarda nunca pode travar o gesto central do F1.
-  it('RPC de config falhando: a lista do elenco renderiza, a seleção funciona e o disparo dispara normalmente', async () => {
+  it('RPC de config falhando: a lista do Elenco renderiza, a seleção funciona e o disparo dispara normalmente', async () => {
     mockListTeamMembers.mockResolvedValue([worker('w1', 'Elis')])
     mockListLists.mockResolvedValue([])
     mockGetConfig.mockRejectedValueOnce(new Error('PGRST202 — RPC ausente (deploy adiantado)'))

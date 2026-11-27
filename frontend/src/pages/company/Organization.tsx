@@ -110,7 +110,7 @@ export default function Organization() {
   const handleInvite = async (companyId: string) => {
     const email = (inviteEmail[companyId] || '').trim();
     if (!email) {
-      addToast('Informe o e-mail do gerente.', 'error');
+      addToast('Informe o e-mail do Gestor.', 'error');
       return;
     }
     setInvitingFor(companyId);
@@ -124,9 +124,9 @@ export default function Organization() {
         setInviteEmail((prev) => ({ ...prev, [companyId]: '' }));
         await loadUnits();
       } else if (result.outcome === 'forbidden') {
-        addToast('Só sócio/operador pode convidar gerente.', 'error');
+        addToast('Só sócio/operador pode convidar Gestor.', 'error');
       } else if (result.outcome === 'not_found') {
-        addToast('Unidade não encontrada.', 'error');
+        addToast('Empresa não encontrada.', 'error');
       } else {
         addToast(result.error || 'Não foi possível enviar o convite.', 'error');
       }
@@ -140,12 +140,12 @@ export default function Organization() {
     try {
       const result = await revokeManager(companyId, userId);
       if (result.outcome === 'revoked') {
-        addToast('Gerente removido da unidade.', 'success');
+        addToast('Gestor removido da empresa.', 'success');
         await loadUnits();
       } else if (result.outcome === 'forbidden') {
-        addToast('Só sócio/operador pode remover gerente.', 'error');
+        addToast('Só sócio/operador pode remover Gestor.', 'error');
       } else {
-        addToast('Não foi possível remover o gerente.', 'error');
+        addToast('Não foi possível remover o Gestor.', 'error');
       }
     } finally {
       setRevokingId(null);
@@ -181,19 +181,19 @@ export default function Organization() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8">
-      <PageMeta title="Unidades" description="Unidades da sua organização no Worki." />
+      <PageMeta title="Empresas da rede" description="Empresas da sua rede no Worki." />
       <BackToGestao />
 
       <PageHeader
-        title="Unidades"
-        subtitle="Visão das unidades da sua rede — turnos abertos, elenco e gerentes de cada loja."
+        title="Empresas da rede"
+        subtitle="Visão das empresas da sua rede — turnos abertos, Elenco e Gestores de cada loja."
       />
 
       {loadError && <ErrorState onRetry={() => void loadUnits()} />}
 
       {!loadError && units.length === 0 && (
         <Card padding="lg" className="text-center text-sm text-gray-600">
-          Nenhuma unidade encontrada.
+          Nenhuma empresa encontrada.
         </Card>
       )}
 
@@ -203,10 +203,10 @@ export default function Organization() {
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">
-                  {company.company_name || 'Unidade sem nome'}
+                  {company.company_name || 'Empresa sem nome'}
                 </h2>
                 <span className="inline-block mt-1 px-3 py-1 rounded-pill bg-blue-50 text-blue-700 font-semibold text-xs">
-                  {company.role === 'owner' ? 'Dono' : company.role === 'operator' ? 'Operador' : 'Gerente'}
+                  {company.role === 'owner' ? 'Dono' : company.role === 'operator' ? 'Operador' : 'Gestor'}
                 </span>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -218,18 +218,18 @@ export default function Organization() {
                 <div className="flex items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-2">
                   <Users size={18} className="text-gray-500" />
                   <span className="font-bold tabular-nums text-gray-900">{teamSize ?? '—'}</span>
-                  <span className="text-xs text-gray-600">No elenco</span>
+                  <span className="text-xs text-gray-600">No Elenco</span>
                 </div>
               </div>
             </div>
 
             <div className="border-t-2 border-gray-200 pt-4">
               <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                <Mail size={16} /> Gerentes da unidade
+                <Mail size={16} /> Gestores da empresa
               </h3>
 
               {managers.length === 0 && (
-                <p className="text-sm text-gray-600 mb-4">Nenhum gerente convidado ainda.</p>
+                <p className="text-sm text-gray-600 mb-4">Nenhum Gestor convidado ainda.</p>
               )}
 
               <ul className="space-y-2 mb-4">
@@ -278,7 +278,7 @@ export default function Organization() {
               </ul>
 
               <label htmlFor={`invite-email-${company.company_id}`} className="mb-1.5 block text-sm font-bold">
-                E-mail do gerente
+                E-mail do Gestor
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
@@ -287,7 +287,7 @@ export default function Organization() {
                   type="email"
                   value={inviteEmail[company.company_id] || ''}
                   onChange={(e) => setInviteEmail((prev) => ({ ...prev, [company.company_id]: e.target.value }))}
-                  placeholder="email@gerente.com"
+                  placeholder="email@gestor.com"
                   className={`${FIELD_CONTROL_CLASS} min-h-11 shrink-0 sm:min-w-0 sm:flex-1`}
                 />
                 <Button

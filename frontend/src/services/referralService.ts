@@ -152,7 +152,7 @@ export const CREATE_REFERRAL_ERRORS: Partial<Record<CreateReferralOutcome, strin
   invalid_target: 'Indicação inválida.',
   forbidden: 'Você não tem permissão para indicar por esta empresa.',
   company_not_found: 'Empresa de destino não encontrada.',
-  not_in_roster: 'Este freela não faz parte do seu elenco.',
+  not_in_roster: 'Este freela não faz parte do seu Elenco.',
   already_pending: 'Já existe uma indicação sua pendente para esta empresa.',
   rate_limited: 'Limite de indicações atingido. Tente novamente mais tarde.',
   not_available: GENERIC_NOT_AVAILABLE,

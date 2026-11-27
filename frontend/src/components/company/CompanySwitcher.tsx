@@ -29,7 +29,7 @@ export default function CompanySwitcher({ className = '' }: { className?: string
 
     return (
         <div className={`relative ${className}`}>
-            <label htmlFor="mobile-company-switch" className="sr-only">Trocar de unidade</label>
+            <label htmlFor="mobile-company-switch" className="sr-only">Trocar de empresa</label>
             <select
                 id="mobile-company-switch"
                 value={current}
@@ -41,7 +41,7 @@ export default function CompanySwitcher({ className = '' }: { className?: string
                 className="h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-black bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
             >
                 {companies.map((c) => (
-                    <option key={c.company_id} value={c.company_id}>{c.company_name || 'Unidade sem nome'}</option>
+                    <option key={c.company_id} value={c.company_id}>{c.company_name || 'Empresa sem nome'}</option>
                 ))}
             </select>
             <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" />

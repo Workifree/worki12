@@ -156,12 +156,12 @@ export default function AcceptManagerInvite() {
       title: 'Convite Aceito!',
       body: companyName
         ? `Você agora opera ${companyName} como Gestor. Boas-vindas.`
-        : 'Você agora opera esta unidade como Gestor. Boas-vindas.',
+        : 'Você agora opera esta empresa como Gestor. Boas-vindas.',
       tone: 'success',
     },
     already_accepted: {
       title: 'Convite já aceito',
-      body: 'Você já opera esta unidade — não é necessário aceitar novamente.',
+      body: 'Você já opera esta empresa — não é necessário aceitar novamente.',
       tone: 'success',
     },
     token_already_used: {

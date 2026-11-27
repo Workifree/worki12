@@ -195,7 +195,7 @@ export default function InviteTakeover() {
 
         {isSos && (
           <Alert tone="warning" className="mb-4">
-            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+            Você não está no Elenco desta empresa. Recebeu porque ativou os chamados de urgência.
           </Alert>
         )}
         {visibleInvite.disputed && (

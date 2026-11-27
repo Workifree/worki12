@@ -163,7 +163,7 @@ export function MemberCard({ member, onRemove, history, historyUnavailable = fal
             items={[
               { label: 'Copiar link para outra empresa', icon: Share2, onSelect: () => void handleShareLink() },
               // Destrutivo por último; a confirmação é o RemoveMemberDialog.
-              { label: 'Remover do elenco', icon: Trash2, onSelect: () => onRemove(member), danger: true },
+              { label: 'Remover do Elenco', icon: Trash2, onSelect: () => onRemove(member), danger: true },
             ]}
           />
         )}

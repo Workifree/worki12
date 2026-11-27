@@ -1530,7 +1530,7 @@ export default function CompanyJobCandidates() {
                     <EmptyState
                         icon={Users}
                         title="Nenhum freela neste turno."
-                        description={filledCount < jobSlots ? 'Use "Chamar freelas" para convidar quem está no seu elenco.' : undefined}
+                        description={filledCount < jobSlots ? 'Use "Chamar freelas" para convidar quem está no seu Elenco.' : undefined}
                     />
                 ) : (
                     candidates.map((app) => {
@@ -1859,7 +1859,7 @@ export default function CompanyJobCandidates() {
                             com ele. Ao dispensar, o turno sai da agenda dessa pessoa imediatamente.
                         </p>
                         {dismissThenCall && (
-                            <p>Em seguida, o chamado deste turno abre para você chamar um substituto do elenco.</p>
+                            <p>Em seguida, o chamado deste turno abre para você chamar um substituto do Elenco.</p>
                         )}
                         <Alert tone="warning">
                             O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,

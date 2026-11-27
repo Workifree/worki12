@@ -24,7 +24,7 @@ describe('D-2: seletor de unidade no celular', () => {
     sessionStorage.setItem('worki_team_nav_hint', '1')
     render(<CompanySwitcher />)
 
-    fireEvent.change(await screen.findByLabelText('Trocar de unidade'), { target: { value: 'outra' } })
+    fireEvent.change(await screen.findByLabelText('Trocar de empresa'), { target: { value: 'outra' } })
 
     expect(getSelectedCompanyId()).toBe('outra')
     expect(sessionStorage.getItem('worki_nav_role_hint')).toBeNull()

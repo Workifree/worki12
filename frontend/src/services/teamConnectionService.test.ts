@@ -140,7 +140,7 @@ describe('TeamConnectionService', () => {
       const result = await TeamConnectionService.removeFromTeam('worker-abc-123');
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Erro ao remover freela do elenco.');
+      expect(result.error).toBe('Erro ao remover freela do Elenco.');
     });
 
     it('retorna erro quando o DELETE afeta 0 linhas (RLS negou silenciosamente — freela bloqueou a empresa)', async () => {
@@ -448,7 +448,7 @@ describe('TeamConnectionService', () => {
     });
   });
 
-  describe('generateInviteToken (link do elenco)', () => {
+  describe('generateInviteToken (link do Elenco)', () => {
     const COMPANY = 'comp-12345678-1234-1234-1234-123456789012';
     const TOKEN = 'a'.repeat(48);
 

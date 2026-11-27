@@ -59,7 +59,7 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     await waitFor(() => {
       expect(screen.getByText('Divino Fogão — Unidade 1')).toBeInTheDocument();
     });
-    expect(screen.queryByLabelText('Trocar de unidade')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Trocar de empresa')).not.toBeInTheDocument();
   });
 
   it('sessão com MAIS de uma unidade: seletor aparece com as opções', async () => {
@@ -74,7 +74,7 @@ describe('Sidebar — F13 (R13 seletor de unidade / R16 gate de Organização)',
     renderSidebar();
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Trocar de unidade')).toBeInTheDocument();
+      expect(screen.getByLabelText('Trocar de empresa')).toBeInTheDocument();
     });
     expect(screen.getByRole('option', { name: 'Loja Centro' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Loja Zona Sul' })).toBeInTheDocument();

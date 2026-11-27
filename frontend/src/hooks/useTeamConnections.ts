@@ -121,7 +121,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
         return false;
       }
       if (result.alreadyExists) {
-        addToast('Este freela já está no seu elenco.', 'info');
+        addToast('Este freela já está no seu Elenco.', 'info');
         return true;
       }
       if (result.error) {
@@ -129,7 +129,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
         return false;
       }
 
-      addToast('Convite de elenco enviado! Aguardando aceite do freela.', 'success');
+      addToast('Convite de Elenco enviado! Aguardando aceite do freela.', 'success');
       load();
       return true;
     },
@@ -145,7 +145,7 @@ export function useCompanyTeam(): UseCompanyTeamResult {
         return false;
       }
 
-      addToast('Freela removido do elenco.', 'success');
+      addToast('Freela removido do Elenco.', 'success');
       load();
       return true;
     },

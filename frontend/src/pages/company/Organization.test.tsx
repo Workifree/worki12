@@ -74,7 +74,7 @@ describe('Organization (F13 R16)', () => {
     });
   });
 
-  it('lista a unidade com contagens de turnos abertos e elenco', async () => {
+  it('lista a unidade com contagens de turnos abertos e Elenco', async () => {
     render(<Organization />, { wrapper: MemoryRouter });
 
     await waitFor(() => {
@@ -115,7 +115,7 @@ describe('Organization (F13 R16)', () => {
       expect(screen.getByText('Loja Centro')).toBeInTheDocument();
     });
 
-    const emailInput = screen.getByLabelText('E-mail do gerente');
+    const emailInput = screen.getByLabelText('E-mail do Gestor');
     fireEvent.change(emailInput, { target: { value: 'novo@ex.com' } });
     fireEvent.click(screen.getByRole('button', { name: /Convidar/i }));
 

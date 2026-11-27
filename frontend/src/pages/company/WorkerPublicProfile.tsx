@@ -285,7 +285,7 @@ export default function WorkerPublicProfile() {
             </Button>
             <div className="text-center text-gray-700 font-semibold border-2 border-dashed border-gray-300 rounded-2xl py-16 px-4">
                 Não foi possível abrir este perfil agora.<br />
-                <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
+                <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu Elenco, ou a conexão falhou. Tente de novo.</span>
             </div>
         </div>
     );
@@ -448,7 +448,7 @@ export default function WorkerPublicProfile() {
                                 <p>
                                     {connectionStatus === 'pending'
                                         ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
-                                        : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                                        : 'Adicione este freela ao seu Elenco para ver os dados de pagamento.'}
                                 </p>
                                 {connectionStatus !== 'pending' && (
                                     <Button variant="secondary" size="sm" onClick={() => navigate('/company/team')}>

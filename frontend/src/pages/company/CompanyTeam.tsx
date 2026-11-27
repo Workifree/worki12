@@ -178,7 +178,7 @@ export default function CompanyTeam() {
     if (!url) {
       const gerado = await TeamConnectionService.generateInviteToken(companyId);
       if (!gerado) {
-        addToast('Não foi possível obter o link do seu elenco agora.', 'error');
+        addToast('Não foi possível obter o link do seu Elenco agora.', 'error');
         return;
       }
       url = gerado.url;
@@ -188,7 +188,7 @@ export default function CompanyTeam() {
       await navigator.clipboard.writeText(url);
       setManualLink(null);
       setLinkCopied(true);
-      addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
+      addToast('Link copiado! Envie para um freela ser adicionado ao seu Elenco.', 'success');
       setTimeout(() => setLinkCopied(false), 2500);
     } catch {
       setManualLink({ companyId, url });
@@ -223,7 +223,7 @@ export default function CompanyTeam() {
       {!restricted && <SectionTabs section="elenco" />}
       <PageHeader
         title="Meu Elenco"
-        subtitle={`${teamMembers.length} freela${teamMembers.length !== 1 ? 's' : ''} no elenco${
+        subtitle={`${teamMembers.length} freela${teamMembers.length !== 1 ? 's' : ''} no Elenco${
           pendingConnections.length > 0 ? ` · ${pendingConnections.length} aguardando aceite` : ''
         }`}
         action={
@@ -233,12 +233,12 @@ export default function CompanyTeam() {
         }
       />
 
-      {/* Link do elenco — antes só existia nos dados da empresa. Discreto: secundário, sem competir com a ação principal. */}
-      <Card as="section" padding="sm" aria-label="Link do elenco" className="mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+      {/* Link do Elenco — antes só existia nos dados da empresa. Discreto: secundário, sem competir com a ação principal. */}
+      <Card as="section" padding="sm" aria-label="Link do Elenco" className="mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do seu elenco</p>
+          <p className="font-bold text-sm flex items-center gap-2"><Link2 size={16} aria-hidden="true" /> Link do Elenco</p>
           <p className="text-xs text-gray-600 mt-1">
-            Mande por WhatsApp: o freela abre o link e entra no seu elenco.
+            Mande por WhatsApp: o freela abre o link e entra no seu Elenco.
           </p>
         </div>
         <Button
@@ -255,7 +255,7 @@ export default function CompanyTeam() {
           <input
             readOnly
             value={manualLink.url}
-            aria-label="Link do elenco para copiar à mão"
+            aria-label="Link do Elenco para copiar à mão"
             onFocus={(e) => e.currentTarget.select()}
             className="w-full min-h-11 min-w-0 rounded-xl border-2 border-black bg-white px-3 text-sm"
           />
@@ -270,7 +270,7 @@ export default function CompanyTeam() {
           className="mb-4"
           action={<Button variant="secondary" onClick={() => { void refresh(); }}>Tentar de novo</Button>}
         >
-          Não conseguimos atualizar o elenco. O que está abaixo pode estar desatualizado.
+          Não conseguimos atualizar o Elenco. O que está abaixo pode estar desatualizado.
         </Alert>
       )}
 
@@ -310,7 +310,7 @@ export default function CompanyTeam() {
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <ListChecks size={20} aria-hidden="true" /> Listas do elenco
+            <ListChecks size={20} aria-hidden="true" /> Listas do Elenco
           </h2>
           {!restricted && (
             <Button variant="secondary" size="md" onClick={() => setShowListModal(true)} iconLeft={<Plus size={16} aria-hidden="true" />}>
@@ -334,7 +334,7 @@ export default function CompanyTeam() {
             className="mb-4"
             action={<Button variant="secondary" onClick={() => void refreshLists()}>Tentar de novo</Button>}
           >
-            Não conseguimos carregar as listas do elenco.
+            Não conseguimos carregar as listas do Elenco.
           </Alert>
         )}
 

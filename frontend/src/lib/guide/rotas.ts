@@ -38,7 +38,7 @@ export const ROTAS: Readonly<Record<RotaId, RotaDef>> = {
         comoChegar: 'Em Turnos, escolha o turno e abra a tela Presença e pagamento.',
     },
     'empresa.elenco': { padrao: '/company/team', destino: '/company/team', nome: 'Meu Elenco' },
-    'empresa.indicacoes': { padrao: '/company/indicacoes', destino: '/company/indicacoes', nome: 'Indicações' },
+    'empresa.indicacoes': { padrao: '/company/indicacoes', destino: '/company/indicacoes', nome: 'Indicar freela' },
     'empresa.relatorio': { padrao: '/company/relatorio', destino: '/company/relatorio', nome: 'Pagamentos' },
     'empresa.operacao': { padrao: '/company/operacao', destino: '/company/operacao', nome: 'Operação' },
     'empresa.equipe': {

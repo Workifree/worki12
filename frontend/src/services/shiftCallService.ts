@@ -245,7 +245,7 @@ export const ShiftCallService = {
           call: null,
           invited: 0,
           error:
-            'Não foi possível convidar os freelas selecionados. Verifique se todos ainda estão no seu elenco.',
+            'Não foi possível convidar os freelas selecionados. Verifique se todos ainda estão no seu Elenco.',
         };
       }
 

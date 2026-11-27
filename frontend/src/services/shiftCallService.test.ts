@@ -129,7 +129,7 @@ describe('ShiftCallService.createShiftCall', () => {
     expect(targetsChain.insert).toHaveBeenCalledWith([{ call_id: 'call-1', worker_id: 'w1' }]);
   });
 
-  it('cancela o chamado quando nenhum alvo pôde ser gravado (elenco desatualizado)', async () => {
+  it('cancela o chamado quando nenhum alvo pôde ser gravado (Elenco desatualizado)', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'companies') return makeChain({ data: { id: 'company-1' }, error: null });
       if (table === 'jobs') {

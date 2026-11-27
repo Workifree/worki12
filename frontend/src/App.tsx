@@ -217,7 +217,7 @@ function App() {
                       <Route path="profile" element={titled('Dados da empresa', <CompanyProfile />)} />
                       <Route path="messages" element={titled('Mensagens', <CompanyMessages />)} />
                       <Route path="team" element={titled('Meu Elenco', <CompanyTeam />)} />
-                      <Route path="indicacoes" element={titled('Indicações', <CompanyReferrals />)} />
+                      <Route path="indicacoes" element={titled('Indicar freela', <CompanyReferrals />)} />
                       <Route path="organization" element={<Organization />} />
                       <Route path="configuracoes/equipe" element={<CompanyTeamMembers />} />
                       {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As

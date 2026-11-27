@@ -117,7 +117,7 @@ describe('validateBatch', () => {
     expect(hasBlockingIssue(validate([row({ end_time: '18:00' })]))).toBe(true);
   });
 
-  it('quem vai trabalhar: sem ninguém escolhido só avisa (uma vez), com elenco vazio ou não', () => {
+  it('quem vai trabalhar: sem ninguém escolhido só avisa (uma vez), com Elenco vazio ou não', () => {
     const rows = [row(), row({ key: 'k2', date: '2026-12-05' })];
     expect(validate(rows)).toEqual([]); // sem contexto: nada a avisar
     const withInvite = (teamSize: number, countFor: () => number) =>
