@@ -1,7 +1,7 @@
 # ADR-20261127 — Relatório financeiro e planilha de pagamento por RPC DEFINER com dois níveis de PII
 
 ## Status
-PROPOSTO
+APROVADO (revisado após security-review: B1, M1, M2, m1, m2)
 
 ## Contexto
 O dono vai apresentar ao financeiro da Momma Doces um relatório que pede: horas e valor/hora (check-in/out),
@@ -70,7 +70,7 @@ para o Encarregado. Com duas funções, a de PII nem é chamável com sucesso po
   silêncio: a coluna `hours_estimated` vem separada (de `jobs.estimated_hours`) para a UI rotular.
 - `checkout_confirmed` = `company_checkout_confirmed_at IS NOT NULL` (a empresa conferiu). Exibido; não filtra.
 - `hourly_rate = amount / hours` quando `hours > 0`; senão `NULL`. Calculado na RPC, arredondado a 2 casas.
-- `amount`: `shift_payments.amount` do marcador ativo; sem marcador, `jobs.budget` com `amount_kind='estimated'`
+- `amount`: `shift_payments.amount` do marcador ativo; sem marcador: `daily/project` = `jobs.budget` (`'estimated'`); `hourly` = `round(budget * COALESCE(horas medidas, estimated_hours), 2)`, NULL se nenhuma (`'estimated_by_planned_hours'` quando sem horas medidas)
   (mantém a separação realizado × estimado do ADR-20260816).
 
 ### 4. Definições de status e "turno completo" (planilha)
@@ -105,8 +105,7 @@ para o Encarregado. Com duas funções, a de PII nem é chamável com sucesso po
   exportado**. A RPC devolve completo (o mascaramento é UX); a fronteira de segurança é o Gestor-only.
 - **Log de geração: sim.** Tabela nova `payment_sheet_exports(id, company_id, generated_by, generated_at,
   period_from, period_to, filters jsonb, workers_count)`, sem nenhum CPF/PIX nela. Escrita só pela RPC.
-  RLS SELECT para `is_company_owner(company_id)`; sem policy de INSERT/UPDATE/DELETE. `ON DELETE RESTRICT`
-  nas FKs (auditoria). Responde "quem extraiu CPF/PIX de quem e quando" — obrigação de controlador.
+  RLS SELECT para `is_company_owner(company_id)`; sem policy de INSERT/UPDATE/DELETE. FK de `company_id` com `ON DELETE RESTRICT`; **sem FK em `generated_by`** (pseudônimo retido, convenção H2 LGPD); trigger bloqueia UPDATE/DELETE. Responde "quem extraiu CPF/PIX de quem e quando" — obrigação de controlador.
 - Tipo da chave PIX: inferido no client a partir do valor (`cpf`/`cnpj`/`email`/`telefone`/`aleatoria`),
   reaproveitando `PixKeyType` de `lib/validation.ts`. Não criar coluna nesta entrega.
 - Freela anonimizado (`anonymize_account`): aparece com nome anonimizado e CPF/PIX nulos; a linha segue

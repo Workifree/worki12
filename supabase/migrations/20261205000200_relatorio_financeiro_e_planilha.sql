@@ -6,6 +6,18 @@
 -- (is_company_owner, session_can_operate_job, session_company_member_role,
 --  internal_company_confirmed_operator, job_local_date).
 --
+-- PREMISSAS / NOTAS
+--  * Dia local (M3): jobs.start_date e convertido para America/Sao_Paulo. Premissa: o horario
+--    gravado e instante real; em producao so 4 de 57 jobs tem start_date 00:00 UTC.
+--  * Filtro por responsavel (m4): p_responsible_id NULL = TODOS. Nao existe filtro "so Gestor";
+--    turnos sem responsavel ativo aparecem com responsible_id NULL e responsible_name 'Gestor'.
+--  * Valor estimado (M1): budget_type='hourly' => budget e valor da HORA;
+--    amount = round(budget * COALESCE(horas_medidas, estimated_hours), 2), NULL se nenhuma existir.
+--    amount_kind: 'realized' | 'estimated' | 'estimated_by_planned_hours' (hourly sem horas medidas).
+--    daily/project: amount = budget.
+--  * Totais (M2) cobrem o conjunto filtrado INTEIRO; rows e limitado a 5000 (truncated).
+--  * payment_sheet_exports.generated_by sem FK para auth.users (B1).
+--
 -- Modo A puro: nao toca wallets/escrow/saldo (Article 8 intacto).
 --
 -- get_financial_report : Gestor (company inteira) OU Encarregado confirmado (so turnos que opera).
@@ -19,7 +31,7 @@
 CREATE TABLE IF NOT EXISTS public.payment_sheet_exports (
     id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id    uuid        NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
-    generated_by  uuid        NOT NULL REFERENCES auth.users(id)      ON DELETE RESTRICT,
+    generated_by  uuid        NOT NULL,  -- pseudonimo retido, SEM FK para auth.users (convencao H2 LGPD, 20260821000000)
     generated_at  timestamptz NOT NULL DEFAULT now(),
     period_from   date        NOT NULL,
     period_to     date        NOT NULL,
@@ -40,7 +52,19 @@ CREATE POLICY pse_select_owner ON public.payment_sheet_exports
 
 REVOKE ALL ON public.payment_sheet_exports FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.payment_sheet_exports TO authenticated;
-GRANT ALL    ON public.payment_sheet_exports TO service_role;
+GRANT SELECT, INSERT ON public.payment_sheet_exports TO service_role;
+
+-- Auditoria imutavel: nenhum UPDATE/DELETE, nem de service_role/DEFINER.
+CREATE OR REPLACE FUNCTION public.payment_sheet_exports_immutable()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $f$
+BEGIN
+    RAISE EXCEPTION 'payment_sheet_exports e imutavel (auditoria)';
+END;
+$f$;
+DROP TRIGGER IF EXISTS trg_payment_sheet_exports_immutable ON public.payment_sheet_exports;
+CREATE TRIGGER trg_payment_sheet_exports_immutable
+    BEFORE UPDATE OR DELETE ON public.payment_sheet_exports
+    FOR EACH ROW EXECUTE FUNCTION public.payment_sheet_exports_immutable();
 
 CREATE INDEX IF NOT EXISTS idx_pse_company_generated
     ON public.payment_sheet_exports (company_id, generated_at DESC);
@@ -123,14 +147,14 @@ BEGIN
             a.worker_checkin_at                                         AS checkin_at,
             a.worker_checkout_at                                        AS checkout_at,
             (a.company_checkout_confirmed_at IS NOT NULL)               AS checkout_confirmed,
-            CASE WHEN a.worker_checkin_at IS NOT NULL
-                  AND a.worker_checkout_at IS NOT NULL
-                  AND a.worker_checkout_at > a.worker_checkin_at
-                 THEN round(extract(epoch FROM (a.worker_checkout_at - a.worker_checkin_at))::numeric / 3600, 2)
-            END                                                         AS hours,
+            hm.h                                                        AS hours,
             j.estimated_hours                                           AS hours_estimated,
-            COALESCE(sp.amount, j.budget)                               AS amount,
-            CASE WHEN sp.id IS NOT NULL THEN 'realized' ELSE 'estimated' END AS amount_kind,
+            CASE WHEN sp.id IS NOT NULL THEN sp.amount
+                 WHEN j.budget_type = 'hourly' THEN round(j.budget * COALESCE(hm.h, j.estimated_hours), 2)
+                 ELSE j.budget END                                      AS amount,
+            CASE WHEN sp.id IS NOT NULL THEN 'realized'
+                 WHEN j.budget_type = 'hourly' AND hm.h IS NULL THEN 'estimated_by_planned_hours'
+                 ELSE 'estimated' END                                   AS amount_kind,
             sp.id                                                       AS payment_id,
             sp.status                                                   AS payment_status,
             sp.source,
@@ -150,6 +174,13 @@ BEGIN
            AND j.status <> 'deleted'
           LEFT JOIN public.applications a
             ON a.job_id = pr.job_id AND a.worker_id = pr.worker_id
+          LEFT JOIN LATERAL (
+                SELECT CASE WHEN a.worker_checkin_at IS NOT NULL
+                             AND a.worker_checkout_at IS NOT NULL
+                             AND a.worker_checkout_at > a.worker_checkin_at
+                            THEN round(extract(epoch FROM (a.worker_checkout_at - a.worker_checkin_at))::numeric / 3600, 2)
+                       END AS h
+          ) hm ON TRUE
           LEFT JOIN public.shift_payments sp
             ON sp.job_id = pr.job_id AND sp.worker_id = pr.worker_id
            AND sp.status IN ('scheduled', 'recorded') AND sp.purged_at IS NULL
@@ -194,7 +225,7 @@ BEGIN
                COALESCE(sum(k.amount), 0)                                  AS total_amount,
                COALESCE(sum(k.amount) FILTER (WHERE k.payment_status = 'recorded'), 0) AS total_paid,
                COALESCE(sum(k.amount) FILTER (WHERE k.payment_status IS DISTINCT FROM 'recorded'), 0) AS total_to_pay
-          FROM kept k GROUP BY k.worker_id
+          FROM numbered k GROUP BY k.worker_id
     ),
     by_day AS (
         SELECT k.job_date,
@@ -204,7 +235,7 @@ BEGIN
                COALESCE(sum(k.amount), 0)                                  AS total_amount,
                COALESCE(sum(k.amount) FILTER (WHERE k.payment_status = 'recorded'), 0) AS total_paid,
                COALESCE(sum(k.amount) FILTER (WHERE k.payment_status IS DISTINCT FROM 'recorded'), 0) AS total_to_pay
-          FROM kept k GROUP BY k.job_date
+          FROM numbered k GROUP BY k.job_date
     )
     SELECT jsonb_build_object(
         'outcome',   'ok',
@@ -247,12 +278,12 @@ BEGIN
                 ) ORDER BY bd.job_date) FROM by_day bd
             ), '[]'::jsonb),
             'overall', jsonb_build_object(
-                'shifts_count',        (SELECT count(*) FROM kept),
-                'hours_total',         (SELECT COALESCE(sum(hours), 0) FROM kept),
-                'hours_missing_count', (SELECT count(*) FROM kept WHERE hours IS NULL),
-                'total_amount',        (SELECT COALESCE(sum(amount), 0) FROM kept),
-                'total_paid',          (SELECT COALESCE(sum(amount) FILTER (WHERE payment_status = 'recorded'), 0) FROM kept),
-                'total_to_pay',        (SELECT COALESCE(sum(amount) FILTER (WHERE payment_status IS DISTINCT FROM 'recorded'), 0) FROM kept)
+                'shifts_count',        (SELECT count(*) FROM numbered),
+                'hours_total',         (SELECT COALESCE(sum(hours), 0) FROM numbered),
+                'hours_missing_count', (SELECT count(*) FROM numbered WHERE hours IS NULL),
+                'total_amount',        (SELECT COALESCE(sum(amount), 0) FROM numbered),
+                'total_paid',          (SELECT COALESCE(sum(amount) FILTER (WHERE payment_status = 'recorded'), 0) FROM numbered),
+                'total_to_pay',        (SELECT COALESCE(sum(amount) FILTER (WHERE payment_status IS DISTINCT FROM 'recorded'), 0) FROM numbered)
             )
         )
     ) INTO v_result;
@@ -310,20 +341,25 @@ BEGIN
             t.name                                                      AS tag_name,
             j.tag_id,
             cm.user_id                                                  AS responsible_id,
-            CASE WHEN a.worker_checkin_at IS NOT NULL
-                  AND a.worker_checkout_at IS NOT NULL
-                  AND a.worker_checkout_at > a.worker_checkin_at
-                 THEN round(extract(epoch FROM (a.worker_checkout_at - a.worker_checkin_at))::numeric / 3600, 2)
-            END                                                         AS hours,
+            hm.h                                                        AS hours,
             sp.id                                                       AS payment_id,
             sp.status                                                   AS payment_status,
-            COALESCE(sp.amount, j.budget)                               AS amount,
+            CASE WHEN sp.id IS NOT NULL THEN sp.amount
+                 WHEN j.budget_type = 'hourly' THEN round(j.budget * COALESCE(hm.h, j.estimated_hours), 2)
+                 ELSE j.budget END                                      AS amount,
             (sp.id IS NULL)                                             AS is_estimated
           FROM public.applications a
           JOIN public.jobs j
             ON j.id = a.job_id
            AND j.company_id = p_company_id
            AND j.status <> 'deleted'
+          LEFT JOIN LATERAL (
+                SELECT CASE WHEN a.worker_checkin_at IS NOT NULL
+                             AND a.worker_checkout_at IS NOT NULL
+                             AND a.worker_checkout_at > a.worker_checkin_at
+                            THEN round(extract(epoch FROM (a.worker_checkout_at - a.worker_checkin_at))::numeric / 3600, 2)
+                       END AS h
+          ) hm ON TRUE
           LEFT JOIN public.shift_payments sp
             ON sp.job_id = a.job_id AND sp.worker_id = a.worker_id
            AND sp.status IN ('scheduled', 'recorded') AND sp.purged_at IS NULL
@@ -380,6 +416,11 @@ BEGIN
         COALESCE(max(r.total_n), 0)
       INTO v_rows, v_count, v_total
       FROM ranked r;
+
+    IF v_total = 0 THEN
+        RETURN jsonb_build_object('outcome', 'ok', 'truncated', false, 'rows', '[]'::jsonb,
+                                  'generated_at', v_now, 'log_id', NULL);
+    END IF;
 
     -- Log sem PII. Falha no log aborta a transacao: nao entrega CPF/PIX sem rastro.
     INSERT INTO public.payment_sheet_exports
