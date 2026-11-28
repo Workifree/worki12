@@ -33,7 +33,7 @@ export interface BonusRulesSection {
 export const BONUS_RULES_TITLE = 'Regulamento da Trilha de bônus'
 
 export const BONUS_RULES_INTRO =
-  'A Trilha de bônus é um programa do Worki que paga um valor em dinheiro a cada marco que você conquista ao organizar a operação da sua empresa no app.'
+  'A Trilha de bônus é um programa do Workyn que paga um valor em dinheiro a cada marco que você conquista ao organizar a operação da sua empresa no app.'
 
 export const BONUS_RULES_SECTIONS: BonusRulesSection[] = [
   {
@@ -133,4 +133,4 @@ export const BONUS_RULES_MILESTONE_GROUPS: BonusRulesMilestoneGroup[] = [
   },
 ]
 
-export const BONUS_RULES_FOOTER = 'Dúvidas? Fale com a equipe do Worki pela Ajuda do app.'
+export const BONUS_RULES_FOOTER = 'Dúvidas? Fale com a equipe do Workyn pela Ajuda do app.'

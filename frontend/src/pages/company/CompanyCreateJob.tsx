@@ -659,7 +659,7 @@ export default function CompanyCreateJob() {
             </Button>
             <PageHeader
                 title={isEditing ? 'Editar turno' : 'Criar turno'}
-                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Worki registra e emite o recibo.'}
+                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Workyn registra e emite o recibo.'}
             />
 
             {erroCarga && (

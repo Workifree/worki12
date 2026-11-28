@@ -63,7 +63,7 @@ export function SiteQrPrint({ siteId }: { siteId: string }) {
                 <div role="img" aria-label="QR fixo do local" className="mx-auto my-6 w-full max-w-sm bg-white p-3">
                     <QRCodeSVG value={qr.token} level="M" marginSize={0} className="h-auto w-full" />
                 </div>
-                <p className="text-base font-bold text-black">Freela: leia este código no Worki ao chegar e ao sair.</p>
+                <p className="text-base font-bold text-black">Freela: leia este código no Workyn ao chegar e ao sair.</p>
             </Card>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <Button variant="dangerOutline" onClick={() => setConfirming(true)} iconLeft={<RefreshCw size={16} aria-hidden="true" />}>

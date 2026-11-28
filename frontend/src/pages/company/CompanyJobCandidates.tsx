@@ -1805,7 +1805,7 @@ export default function CompanyJobCandidates() {
                 <Dialog labelledBy="entrega-titulo" onClose={fecharModalAberto}>
                     <DialogHeader titleId="entrega-titulo" title="Confirmar entrega" subtitle={confirmDeliveryApp.worker?.full_name} />
                     <p className="text-sm text-gray-600">
-                        Confirmar que o turno foi cumprido? Ele será marcado como concluído. O pagamento pelo Worki está pausado: a plataforma não envia dinheiro ao freela. Pague por fora (PIX ou dinheiro) e guarde o comprovante.
+                        Confirmar que o turno foi cumprido? Ele será marcado como concluído. O pagamento pelo Workyn está pausado: a plataforma não envia dinheiro ao freela. Pague por fora (PIX ou dinheiro) e guarde o comprovante.
                     </p>
                     <DialogActions>
                         <Button variant="secondary" onClick={() => setConfirmDeliveryApp(null)} disabled={releasing}>
@@ -1875,7 +1875,7 @@ export default function CompanyJobCandidates() {
                             <p>Em seguida, o chamado deste turno abre para você chamar um substituto do Elenco.</p>
                         )}
                         <Alert tone="warning">
-                            O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
+                            O freela é avisado pelo Workyn assim que você confirmar. Se o turno for logo,
                             vale reforçar por telefone ou WhatsApp.
                         </Alert>
                     </div>
@@ -1933,7 +1933,7 @@ export default function CompanyJobCandidates() {
                                 subtitle={
                                     <>
                                         <span className="block font-bold text-black">{paymentModalApp.worker?.full_name || 'Freela'} · {jobTitle}</span>
-                                        {shiftWhen(jobStartDate, jobStartTime, jobEndTime)}. Você paga por fora do Worki; aqui fica só o registro.
+                                        {shiftWhen(jobStartDate, jobStartTime, jobEndTime)}. Você paga por fora do Workyn; aqui fica só o registro.
                                     </>
                                 }
                             />
@@ -2079,7 +2079,7 @@ export default function CompanyJobCandidates() {
                                 </Field>
 
                                 <Alert tone="warning">
-                                    Isto é uma promessa, ainda não um pagamento. O dinheiro não passa pelo Worki; quando pagar, toque em "Marcar como pago".
+                                    Isto é uma promessa, ainda não um pagamento. O dinheiro não passa pelo Workyn; quando pagar, toque em "Marcar como pago".
                                 </Alert>
                                 <p className="text-sm font-bold">Ao confirmar, o turno é marcado como concluído.</p>
                             </div>

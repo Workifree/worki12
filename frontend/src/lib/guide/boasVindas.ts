@@ -13,7 +13,7 @@ const AJUDA: CartaoBoasVindas = {
 
 export const BOAS_VINDAS: Readonly<Record<PapelGuia, readonly CartaoBoasVindas[]>> = {
     gestor: [
-        { titulo: 'Boas-vindas ao Worki', texto: 'Aqui você cria turnos, chama seu Elenco, confere presença e registra pagamentos.' },
+        { titulo: 'Boas-vindas ao Workyn', texto: 'Aqui você cria turnos, chama seu Elenco, confere presença e registra pagamentos.' },
         { titulo: 'O pagamento é por fora', texto: 'Você paga por PIX ou dinheiro e registra no Worki. O recibo fica guardado para os dois lados.' },
         AJUDA,
     ],
@@ -23,7 +23,7 @@ export const BOAS_VINDAS: Readonly<Record<PapelGuia, readonly CartaoBoasVindas[]
         AJUDA,
     ],
     freela: [
-        { titulo: 'Boas-vindas ao Worki', texto: 'Aqui chegam seus convites de turno. Você decide se aceita e registra chegada e saída. Em Empresas (onde você está no Elenco) ficam as empresas que te chamam.' },
+        { titulo: 'Boas-vindas ao Workyn', texto: 'Aqui chegam seus convites de turno. Você decide se aceita e registra chegada e saída. Em Empresas (onde você está no Elenco) ficam as empresas que te chamam.' },
         { titulo: 'Seu pagamento', texto: 'A empresa paga direto a você e registra aqui. Cadastre sua chave PIX e só confirme depois que o dinheiro chegar.' },
         AJUDA,
     ],

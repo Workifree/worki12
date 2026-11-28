@@ -7,14 +7,14 @@ afterEach(() => {
 })
 
 describe('PageMeta', () => {
-  it('renderiza title com sufixo " — Worki" quando não incluído', () => {
+  it('renderiza title com sufixo " — Workyn" quando não incluído', () => {
     render(<PageMeta title="Entrar" />)
-    expect(document.title).toBe('Entrar — Worki')
+    expect(document.title).toBe('Entrar — Workyn')
   })
 
-  it('não duplica sufixo quando title já contém Worki', () => {
-    render(<PageMeta title="Worki — Marketplace" />)
-    expect(document.title).toBe('Worki — Marketplace')
+  it('não duplica sufixo quando title já contém Workyn', () => {
+    render(<PageMeta title="Workyn — Marketplace" />)
+    expect(document.title).toBe('Workyn — Marketplace')
   })
 
   it('renderiza meta description quando prop description fornecida', () => {

@@ -29,7 +29,7 @@ export function formatHistoryDate(value: string): string {
   return date.toLocaleDateString('pt-BR');
 }
 
-// UUID "solto" — mesmo formato usado como Worki ID (auth.uid()). O QR de
+// UUID "solto" — mesmo formato usado como Workyn ID (auth.uid()). O QR de
 // identidade (Profile.tsx) codifica o workerId cru, sem prefixo/URL.
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

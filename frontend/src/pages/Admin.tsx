@@ -465,9 +465,9 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
 
     return (
         <>
-            {/* Financial Summary - Receita Worki */}
+            {/* Financial Summary - Receita Workyn */}
             <div className="bg-white border-2 border-purple-300 rounded-2xl p-4 sm:p-6 mb-6">
-                <h2 className="text-lg font-bold mb-4 text-purple-800">Receita Worki (taxas de serviço)</h2>
+                <h2 className="text-lg font-bold mb-4 text-purple-800">Receita Workyn (taxas de serviço)</h2>
                 {loadingFinancial ? (
                     <div className="flex justify-center py-4"><Loader2 className="animate-spin" size={24} /></div>
                 ) : financialSummary ? (
@@ -482,7 +482,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                             <p className="text-xs text-red-600 mt-1">{financialSummary.depositCount} depósitos + {financialSummary.withdrawalCount} saques x R$ 1,99</p>
                         </div>
                         <div className={`p-4 rounded-xl border-2 ${financialSummary.netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Lucro líquido Worki</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Lucro líquido Workyn</p>
                             <p className={`text-2xl font-black ${financialSummary.netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatBRL(financialSummary.netProfit)}</p>
                             <p className="text-xs text-gray-500 mt-1">Receita taxas - Custo Asaas</p>
                         </div>

@@ -173,8 +173,8 @@ export default function CompanyPublicProfile() {
         <div className="max-w-4xl mx-auto pb-24 font-sans text-accent">
             <PageMeta
                 title={company.name}
-                description={company.description || `Conheça ${company.name} na Worki antes de aceitar o convite.`}
-                ogTitle={`${company.name} — Worki`}
+                description={company.description || `Conheça ${company.name} na Workyn antes de aceitar o convite.`}
+                ogTitle={`${company.name} — Workyn`}
                 ogImage={company.logo_url || undefined}
             />
 

@@ -275,7 +275,7 @@ export default function Profile() {
         }
     }, [workerId, addToast]);
 
-    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Worki ID".
+    // Copia o Workyn ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Workyn ID".
     // Distinto de handleCopyMyLink (que copia a URL do convite).
     const handleCopyWorkiId = useCallback(async () => {
         if (!workerId) return;
@@ -828,7 +828,7 @@ export default function Profile() {
                 </section>
             )}
 
-            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
+            {/* Como a empresa te encontra — link e Workyn ID no topo (pedido dos usuarios: o link
                 do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
             {!isEditing && (
                 <Card
@@ -998,7 +998,7 @@ export default function Profile() {
                             </Field>
                         )}
 
-                        {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
+                        {/* Chave PIX — como a empresa paga o freela por fora do Workyn (modo A) */}
                         <Field label="Tipo de chave PIX">
                             <select
                                 value={pixKeyType}
@@ -1018,7 +1018,7 @@ export default function Profile() {
                         <Field
                             label="Chave PIX"
                             error={formData.pix_key.trim() && !isValidPixKey() ? 'Chave inválida para o tipo selecionado.' : undefined}
-                            hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
+                            hint="É assim que as empresas vão te pagar por fora do Workyn (PIX)."
                         >
                             <input
                                 data-copilot-private

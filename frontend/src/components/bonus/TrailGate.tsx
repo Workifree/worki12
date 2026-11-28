@@ -61,7 +61,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
         <div>
           <h2 className="text-xl font-bold">Você recebeu um convite para a trilha de bônus</h2>
           <p className="mt-1 text-sm text-gray-700">
-            Cada passo que você conclui no Worki vira um marco, e cada marco vale um bônus em dinheiro, pago por PIX toda segunda.
+            Cada passo que você conclui no Workyn vira um marco, e cada marco vale um bônus em dinheiro, pago por PIX toda segunda.
           </p>
         </div>
       </div>
@@ -71,7 +71,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
         <li>Contam turnos reais, com presença confirmada dos dois lados.</li>
         <li>Nada que você conquista se perde. Sem pegadinha e sem penalidade.</li>
         <li>O pedido de PIX tem o mínimo de {centsToBRL(minPayoutCents)}.</li>
-        <li>O bônus é pago pelo próprio Worki, direto na sua chave PIX.</li>
+        <li>O bônus é pago pelo próprio Workyn, direto na sua chave PIX.</li>
       </ul>
 
       <p className="text-sm">

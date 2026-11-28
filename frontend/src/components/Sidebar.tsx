@@ -148,7 +148,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                 <div className="flex min-w-0 items-center gap-2.5">
                     <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-blue-600 text-white' : 'bg-primary-dark text-white'}`}>W.</span>
                     <div className={`min-w-0 leading-none ${label}`}>
-                        <p className="text-base font-bold tracking-tight text-black">Worki</p>
+                        <p className="text-base font-bold tracking-tight text-black">Workyn</p>
                         {isCompany && <p className="mt-1 text-xs font-semibold text-gray-600">Empresa</p>}
                     </div>
                 </div>

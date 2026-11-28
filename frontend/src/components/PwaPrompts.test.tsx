@@ -78,7 +78,7 @@ describe('PwaPrompts', () => {
   it('não renderiza nada quando não há o que oferecer', () => {
     renderAt()
     expect(screen.queryByText('Nova versão disponível')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
@@ -116,7 +116,7 @@ describe('PwaPrompts', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
 
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /Instalar/ }))
 
       await waitFor(() => expect(pwaMock.promptInstall).toHaveBeenCalledTimes(1))
@@ -130,7 +130,7 @@ describe('PwaPrompts', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Instalar/ }))
 
-      await waitFor(() => expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument())
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
     })
 
@@ -140,7 +140,7 @@ describe('PwaPrompts', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
 
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
     })
 
@@ -149,7 +149,7 @@ describe('PwaPrompts', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
 
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
 
     it('volta a aparecer depois que a dispensa expirou (30 dias)', () => {
@@ -157,7 +157,7 @@ describe('PwaPrompts', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
 
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
     })
 
     it('funciona mesmo com localStorage quebrado (modo privado)', () => {
@@ -170,9 +170,9 @@ describe('PwaPrompts', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
 
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Agora não' }))
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
   })
 
@@ -182,7 +182,7 @@ describe('PwaPrompts', () => {
     it('explica "Compartilhar → Adicionar à Tela de Início" (não há API de instalação no iOS)', () => {
       renderAt()
 
-      const card = screen.getByLabelText('Instalar o Worki')
+      const card = screen.getByLabelText('Instalar o Workyn')
       expect(card).toHaveTextContent('Compartilhar')
       expect(card).toHaveTextContent('Adicionar à Tela de Início')
       expect(screen.queryByRole('button', { name: /^Instalar$/ })).not.toBeInTheDocument()
@@ -192,7 +192,7 @@ describe('PwaPrompts', () => {
       renderAt()
       fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
 
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
     })
   })
@@ -201,7 +201,7 @@ describe('PwaPrompts', () => {
     it.each(['/login', '/convite/abc123', '/convite-gerente/abc123', '/worker/onboarding'])('em %s', (path) => {
       renderAt(path)
       act(() => pwaMock.set({ installAvailable: true }))
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
 
     it('quando o app já roda instalado (display-mode: standalone)', () => {
@@ -209,14 +209,14 @@ describe('PwaPrompts', () => {
       pwaMock.isIosSafari.mockReturnValue(true)
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
 
     it('quando acabou de instalar (appinstalled)', () => {
       renderAt()
       act(() => pwaMock.set({ installAvailable: true }))
       act(() => pwaMock.set({ installed: true, installAvailable: false }))
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
 
     it('enquanto há atualização pendente (um cartão por vez)', () => {
@@ -224,7 +224,7 @@ describe('PwaPrompts', () => {
       act(() => pwaMock.set({ installAvailable: true, updateAvailable: true }))
 
       expect(screen.getByText('Nova versão disponível')).toBeInTheDocument()
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
     })
 
     it('só depois de 20s de uso na sessão E nunca na primeira tela carregada', () => {
@@ -244,16 +244,16 @@ describe('PwaPrompts', () => {
       act(() => {
         vi.advanceTimersByTime(19000)
       })
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
 
       // 20s passaram, mas ainda é a primeira tela da página: nada.
       act(() => {
         vi.advanceTimersByTime(1500)
       })
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: 'ir' }))
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
     })
 
     it('a contagem de 20s é da sessão: recarregar não zera', () => {
@@ -274,7 +274,7 @@ describe('PwaPrompts', () => {
         vi.advanceTimersByTime(0)
       })
       fireEvent.click(screen.getByRole('button', { name: 'ir' }))
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
     })
   })
 
@@ -340,7 +340,7 @@ describe('PwaPrompts', () => {
         .mockImplementation(() => ({ height: altura, width: 366, top: 0, left: 0, right: 366, bottom: altura, x: 0, y: 0, toJSON: () => ({}) }))
       pwaMock.set({ installAvailable: true })
       renderAt('/company/jobs')
-      expect(screen.getByLabelText('Instalar o Worki')).toBeInTheDocument()
+      expect(screen.getByLabelText('Instalar o Workyn')).toBeInTheDocument()
       expect(document.documentElement.style.getPropertyValue('--worki-pwa-h')).toBe('126px')
 
       altura = 170
@@ -384,7 +384,7 @@ describe('PwaPrompts', () => {
     it('convite é UMA linha de 56px (h-14) com Instalar e dispensar de 44px; texto completo na folha', () => {
       pwaMock.set({ installAvailable: true })
       renderAt('/company/jobs')
-      const linha = screen.getByLabelText('Instalar o Worki')
+      const linha = screen.getByLabelText('Instalar o Workyn')
       expect(linha).toHaveClass('h-14')
       expect(linha).not.toHaveTextContent('Abra seus turnos')
       const dispensar = screen.getByRole('button', { name: 'Agora não' })
@@ -404,7 +404,7 @@ describe('PwaPrompts', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Instalar' }))
       expect(screen.getByText(/Adicionar à Tela de Início/)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
-      expect(screen.queryByLabelText('Instalar o Worki')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Instalar o Workyn')).not.toBeInTheDocument()
       expect(window.localStorage.getItem(INSTALL_DISMISS_KEY)).not.toBeNull()
     })
 

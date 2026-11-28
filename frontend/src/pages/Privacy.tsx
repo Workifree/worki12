@@ -24,7 +24,7 @@ export default function Privacy() {
         <PageHeader title="Política de Privacidade" subtitle="Última atualização: 25 de novembro de 2026" />
         <Card padding="lg" className="space-y-4 text-sm sm:text-base leading-relaxed text-gray-800">
 
-          <p>Esta Política de Privacidade descreve como a Worki ("nós", "nossa Plataforma") coleta, utiliza, compartilha e protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).</p>
+          <p>Esta Política de Privacidade descreve como a Workyn ("nós", "nossa Plataforma") coleta, utiliza, compartilha e protege seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">1. Dados Coletados</h2>
           <p>Coletamos os seguintes dados pessoais:</p>
@@ -32,7 +32,7 @@ export default function Privacy() {
             <li><strong>Dados de cadastro:</strong> nome completo, e-mail, telefone, CPF (Workers) e data de nascimento (Workers)</li>
             <li><strong>Dados profissionais (Workers):</strong> habilidades, especialidades, experiência, foto, cidade/localização</li>
             <li><strong>Dados empresariais (Contratantes):</strong> razão social, CNPJ ou CPF, setor de atuação</li>
-            <li><strong>Dados de pagamento (Workers):</strong> chave PIX e telefone cadastrados pelo Worker, usados para viabilizar o pagamento direto feito pela Contratante (a Worki não processa nem custodia esse pagamento — veja a Seção 2)</li>
+            <li><strong>Dados de pagamento (Workers):</strong> chave PIX e telefone cadastrados pelo Worker, usados para viabilizar o pagamento direto feito pela Contratante (a Workyn não processa nem custodia esse pagamento — veja a Seção 2)</li>
             <li><strong>Histórico de turnos e pagamentos declarados:</strong> vagas, candidaturas, convites, registros de pagamento (valor, forma e data informados pela Contratante) e confirmações de recebimento pelo Worker</li>
             <li><strong>Disponibilidade declarada (Workers):</strong> os dias da semana e períodos (manhã, tarde, noite) em que o Worker informa estar disponível para trabalhar. É uma informação opcional, preenchida por ele, visível às Contratantes com quem ele tem vínculo, e serve para evitar convites em dias que ele já indicou não atender. O Worker pode alterá-la ou removê-la a qualquer momento no perfil.</li>
             <li><strong>Certificações e treinamentos (Workers):</strong> título, instituição emissora, número de registro em conselho e data de validade das certificações que o Worker declara; e o registro de treinamentos internos que uma Contratante informa ter ministrado a ele. <strong>Não coletamos nem armazenamos o arquivo do certificado</strong> — apenas os dados acima, digitados. E <strong>não coletamos documento de saúde de nenhum tipo</strong>: atestado, ASO, exame, carteira de vacinação ou laudo não devem ser informados nesses campos e não são tratados pela Plataforma.</li>
@@ -66,7 +66,7 @@ export default function Privacy() {
           <p>Compartilhamos seus dados apenas com:</p>
           <ul className="list-disc pl-6 space-y-1">
             <li><strong>Contratante com vínculo:</strong> a chave PIX e o telefone do Worker ficam visíveis apenas para a Contratante com quem ele tem <strong>elenco aceito</strong> (um convite de Elenco ainda pendente NÃO dá esse acesso — só o aceite do Worker dá), ou pelo menos uma candidatura/convite de turno em comum (incluindo turnos já concluídos ou cancelados, para manter o recibo e o histórico legíveis) — com a finalidade exclusiva de permitir que essa Contratante efetue o pagamento combinado pelo turno. A base legal é a execução do contrato entre as partes. Nenhuma outra conta da Plataforma tem acesso a esses dados. Quando o vínculo é só de Elenco (sem turno já registrado), o Worker pode encerrar esse acesso a qualquer momento saindo do Elenco ou bloqueando a Contratante — e o bloqueio feito pelo Worker não pode ser desfeito pela Contratante</li>
-            <li><strong>CPF e data de nascimento do Worker:</strong> essa mesma regra de vínculo controla o acesso no banco de dados a esses dois campos, mas nenhuma tela da Plataforma hoje os exibe para a Contratante — eles ficam armazenados para verificação de identidade e obrigações legais da Worki, não para consulta pela Contratante</li>
+            <li><strong>CPF e data de nascimento do Worker:</strong> essa mesma regra de vínculo controla o acesso no banco de dados a esses dois campos, mas nenhuma tela da Plataforma hoje os exibe para a Contratante — eles ficam armazenados para verificação de identidade e obrigações legais da Workyn, não para consulta pela Contratante</li>
             <li><strong>Supabase:</strong> infraestrutura de banco de dados e autenticação (dados criptografados)</li>
             <li><strong>Resend e provedor de inteligência artificial:</strong> só quando os recursos descritos na Seção 4-A estiverem ativos, e apenas para as finalidades e com os dados ali informados</li>
             <li><strong>Sentry:</strong> monitoramento de erros (dados anonimizados, sem dados pessoais)</li>

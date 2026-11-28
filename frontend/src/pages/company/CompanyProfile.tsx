@@ -644,7 +644,7 @@ export default function CompanyProfile() {
                     <ShieldAlert size={20} /> Preferências
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                    O Worki nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
+                    O Workyn nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
                     chamar continua sua; consulte seu contador/jurídico se tiver dúvida.
                 </p>
 

@@ -10,7 +10,7 @@ import { logError } from '../../lib/logger';
 const QR_READER_ELEMENT_ID = 'add-worker-qr-reader';
 
 export interface QrScannerPaneProps {
-  /** Chamado com o texto decodificado do QR (deve ser um Worki ID / UUID). */
+  /** Chamado com o texto decodificado do QR (deve ser um Workyn ID / UUID). */
   onDecoded: (decodedText: string) => void;
   /** true enquanto a última leitura está sendo processada (pausa a câmera). */
   processing: boolean;

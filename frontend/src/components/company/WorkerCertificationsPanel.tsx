@@ -262,7 +262,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                       <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                       Conferida por {verifierNames[cert.verified_by_company_id as string] ?? 'uma empresa'} em{' '}
                       {formatTimestampBR(cert.verified_at as string)} — confirma ter visto o documento
-                      original. O Worki não verifica diplomas nem consulta conselhos profissionais.
+                      original. O Workyn não verifica diplomas nem consulta conselhos profissionais.
                     </p>
                   ) : (
                     <p className="mt-2 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">

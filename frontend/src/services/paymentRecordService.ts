@@ -231,7 +231,7 @@ function mapReceiptRow(data: unknown): ShiftPaymentReceipt | null {
 
 export const PaymentRecordService = {
   /**
-   * Registra que o pagamento de um turno foi feito FORA do Worki (PIX/dinheiro/outro).
+   * Registra que o pagamento de um turno foi feito FORA do Workyn (PIX/dinheiro/outro).
    * NÃO move saldo, NÃO chama RPC, NÃO toca wallets/escrow_transactions.
    *
    * Validação defensiva (decisão do HALT #4 — "exige turno concluído"): a guarda dura

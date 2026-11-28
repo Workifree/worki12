@@ -27,7 +27,7 @@ describe('Licenses', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(TEXTO, { status: 200 })))
     renderPage()
 
-    expect(screen.getByText(/O Worki usa código aberto/)).toBeInTheDocument()
+    expect(screen.getByText(/O Workyn usa código aberto/)).toBeInTheDocument()
     expect(await screen.findByText(/MIT License/)).toBeInTheDocument()
     expect(screen.getByText(/@page-agent\/core@1\.12\.4 \(MIT\)/)).toBeInTheDocument()
     expect(screen.getAllByText(/page-agent/).length).toBeGreaterThan(0)

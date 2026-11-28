@@ -265,7 +265,7 @@ describe('ServiceTermSection', () => {
     mockGetByShiftPayment.mockResolvedValue({ term: buildTerm(), failed: false });
     mockAcceptServiceTerm.mockResolvedValue({
       outcome: 'missing_cpf',
-      error: 'Seu cadastro está sem um CPF válido. Fale com a empresa ou com o suporte do Worki para regularizar seu cadastro.',
+      error: 'Seu cadastro está sem um CPF válido. Fale com a empresa ou com o suporte do Workyn para regularizar seu cadastro.',
     });
 
     render(

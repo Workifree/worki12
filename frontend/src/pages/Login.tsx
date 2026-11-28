@@ -13,7 +13,7 @@ import { safeInternalPath } from '../lib/safeRedirect';
  * Subtítulo da tela de acesso da EMPRESA.
  *
  * Dizia "Acesse 10k+ profissionais avaliados." — e em 22/08/2026 havia **16** freelas cadastrados.
- * Era a primeira frase que um cliente do piloto lia, e prometia o produto errado: o Worki não é
+ * Era a primeira frase que um cliente do piloto lia, e prometia o produto errado: o Workyn não é
  * um pool aberto onde a empresa garimpa desconhecidos, é elenco próprio montado por convite, com
  * chamado 1→N para quem ela já confia. Número inflado atrai a expectativa que o produto não
  * entrega e afunda a que ele entrega.
@@ -267,7 +267,7 @@ export default function Login() {
     return (
         <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
                     ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
-            <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
+            <PageMeta title="Entrar" description="Entre na sua conta Workyn para acessar vagas e gerenciar seus freelancers." />
 
             {/* Voltar no fluxo: nunca cobre o título, nem a 320px. */}
             <Button
@@ -468,7 +468,7 @@ export default function Login() {
                 </div>
 
                 <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
+                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Workyn</Link>
                     <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
                     <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
                     <Link to="/licencas" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Licenças</Link>

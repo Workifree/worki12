@@ -19,7 +19,7 @@ interface PreferenciasDeAvisosProps {
 const TEXTO_PUSH: Record<ReturnType<typeof getPushAvailability>, string | null> = {
     off: null,
     unsupported: 'Este navegador não recebe avisos no celular.',
-    ios_needs_install: 'No iPhone, adicione o Worki à Tela de Início e abra pelo ícone para ligar os avisos.',
+    ios_needs_install: 'No iPhone, adicione o Workyn à Tela de Início e abra pelo ícone para ligar os avisos.',
     denied: 'Os avisos estão bloqueados. Libere nas configurações do navegador para este site.',
     available: null,
 }
@@ -213,7 +213,7 @@ export default function PreferenciasDeAvisos({ whatsappDisponivel = false }: Pre
                                     onChange={(e) => setAceite(e.target.checked)}
                                 />
                                 <span>
-                                    Autorizo o Worki a me enviar pelo WhatsApp avisos de turno urgente neste número.
+                                    Autorizo o Workyn a me enviar pelo WhatsApp avisos de turno urgente neste número.
                                     Posso parar quando quiser, aqui ou respondendo PARAR.
                                 </span>
                             </label>

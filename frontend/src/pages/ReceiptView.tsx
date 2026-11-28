@@ -370,14 +370,14 @@ export default function ReceiptView() {
                 className="shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] print:shadow-none print:border-black"
             >
                 <div className="text-center border-b-2 border-black pb-6 mb-6">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1">Worki</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-1">Workyn</p>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                         {isScheduled ? 'Comprovante de Agendamento' : 'Recibo de Pagamento'}
                     </h1>
                     {/* Nome do freela logo abaixo do título — turno com mais de um freela nunca
                         fica ambíguo sobre de quem é este recibo (ADR-20260816). */}
                     <p className="text-base font-semibold mt-1">{worker?.full_name || 'Freela não identificado'}</p>
-                    <p className="text-xs text-gray-600 mt-1">Registro Worki (declaratório)</p>
+                    <p className="text-xs text-gray-600 mt-1">Registro Workyn (declaratório)</p>
                 </div>
 
                 {isScheduled && payment.scheduled_for && (
@@ -517,7 +517,7 @@ export default function ReceiptView() {
                     <p className="text-xs text-yellow-800">
                         {isScheduled
                             ? 'Este comprovante é o respaldo de que a empresa se comprometeu a pagar na data prevista — não é garantia de pagamento nem documento fiscal.'
-                            : 'O Worki registra a declaração de pagamento entre as partes; o dinheiro não passou pela plataforma. Não é documento fiscal.'}
+                            : 'O Workyn registra a declaração de pagamento entre as partes; o dinheiro não passou pela plataforma. Não é documento fiscal.'}
                     </p>
                 </div>
             </Card>

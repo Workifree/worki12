@@ -62,7 +62,7 @@ function Vetos({ adapter }: Props) {
                 <div>
                     <label htmlFor="veto-reason" className="block text-sm font-bold mb-1">Motivo</label>
                     <input id="veto-reason" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)}
-                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary" placeholder="Ex.: sócio do Worki" />
+                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary" placeholder="Ex.: sócio do Workyn" />
                     <p className="text-xs text-gray-600 mt-1">Não escreva dado pessoal (CPF, telefone, endereço) no motivo.</p>
                 </div>
                 <button type="submit" disabled={busy}

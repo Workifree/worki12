@@ -184,7 +184,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
     {
         id: 'empresa-pagamento', papeis: EMPRESA,
         titulo: 'Registrar um pagamento',
-        descricao: 'Você paga por fora (PIX ou dinheiro) e registra aqui. O Worki não paga por você.',
+        descricao: 'Você paga por fora (PIX ou dinheiro) e registra aqui. O Workyn não paga por você.',
         frases: ['pagar freela', 'pix', 'acerto', 'dei o dinheiro', 'agendar pagamento', 'marcar como pago', 'recibo'],
         passos: [
             abrirPresenca,
@@ -214,7 +214,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
             naPresenca({
                 alvos: ['empresa.presenca.estornar'],
                 titulo: 'Estornar', risco: 'D',
-                explicacao: 'Só o Gestor faz. Isso corrige o registro no Worki, não movimenta dinheiro.',
+                explicacao: 'Só o Gestor faz. Isso corrige o registro no Workyn, não movimenta dinheiro.',
                 aoTocar: 'Pede o motivo e a confirmação. O freela é avisado.',
                 semAlvo: 'Não há pagamento registrado ou agendado neste turno.',
             }),
@@ -525,7 +525,7 @@ const FREELA_ROTEIROS: readonly RoteiroGuia[] = [
             {
                 rota: 'freela.recebimentos', alvos: ['freela.recebimentos.confirmar'],
                 titulo: 'Abra o recibo',
-                explicacao: 'O Worki não deposita nem tem saque: a empresa paga direto a você e registra aqui.',
+                explicacao: 'O Workyn não deposita nem tem saque: a empresa paga direto a você e registra aqui.',
                 aoTocar: 'Abre o recibo para conferir.',
                 semAlvo: 'Não há pagamento esperando sua confirmação. Se a empresa ainda não registrou, fale com ela.',
                 avancaAoTocar: true,

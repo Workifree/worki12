@@ -302,7 +302,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     expect(screen.getByRole('heading', { name: /Confirmar entrega/i })).toBeInTheDocument()
-    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
   })
 
   it('modal fecha ao clicar Cancelar sem chamar releaseEscrow', async () => {
@@ -315,12 +315,12 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
-    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
-      expect(screen.queryByText(/O pagamento pelo Worki está pausado/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/O pagamento pelo Workyn está pausado/)).not.toBeInTheDocument()
     })
 
     expect(WalletService.releaseOrCaptureEscrow).not.toHaveBeenCalled()
@@ -339,7 +339,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
     })
 
     // Get "Confirmar" button inside modal (not the list button)
@@ -369,7 +369,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
     })
 
     const buttons = screen.getAllByRole('button')

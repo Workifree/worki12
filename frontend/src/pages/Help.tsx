@@ -19,7 +19,7 @@ const faqs = [
     },
     {
         q: 'Como funciona o pagamento?',
-        a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Worki. Depois de pagar, a empresa registra o pagamento no app, e o Worki emite um recibo para os dois lados como comprovante.',
+        a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Worki. Depois de pagar, a empresa registra o pagamento no app, e o Workyn emite um recibo para os dois lados como comprovante.',
     },
     {
         q: 'Sou freela: o valor do recibo está errado ou não recebi. E agora?',
@@ -31,7 +31,7 @@ const faqs = [
     },
     {
         q: 'O que é o recibo e a confirmação de recebimento?',
-        a: 'Ao registrar um pagamento, o Worki gera um recibo com os detalhes do turno e do valor pago. O freela acompanha isso em "Recebimentos" e, ao abrir o recibo, pode confirmar que recebeu o pagamento — o que fecha o ciclo do turno com um comprovante para ambos os lados.',
+        a: 'Ao registrar um pagamento, o Workyn gera um recibo com os detalhes do turno e do valor pago. O freela acompanha isso em "Recebimentos" e, ao abrir o recibo, pode confirmar que recebeu o pagamento — o que fecha o ciclo do turno com um comprovante para ambos os lados.',
     },
     {
         q: 'Como saio do Elenco de uma empresa, ou como a empresa remove alguém?',

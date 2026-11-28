@@ -14,7 +14,7 @@ export interface GuideChecklistProps {
 /** Ícones dos passos, em ordem; o último nó é sempre o troféu (a meta). */
 const ICONES: readonly LucideIcon[] = [Users, CalendarPlus, Send, BadgeCheck];
 
-/** Cores do Worki, chapadas (schapado): freela = verde da marca; empresa e encarregado = azul. */
+/** Cores do Workyn, chapadas (schapado): freela = verde da marca; empresa e encarregado = azul. */
 const CORES = {
     freela: { a: '#008840', b: '#008840' },
     empresa: { a: '#2563EB', b: '#2563EB' },

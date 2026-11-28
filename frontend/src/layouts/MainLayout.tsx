@@ -35,7 +35,7 @@ export default function MainLayout() {
             <header className="md:hidden sticky top-0 z-40 flex h-[var(--worki-header-h,3.5rem)] items-center justify-between gap-2 border-b-2 border-black bg-white/95 pl-4 pr-2 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md">
                 <div className="flex min-w-0 items-center gap-2">
                     <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold bg-primary-dark text-white">W.</span>
-                    <p className="text-lg font-bold tracking-tight text-black">Worki</p>
+                    <p className="text-lg font-bold tracking-tight text-black">Workyn</p>
                 </div>
                 <div className="flex shrink-0 items-center">
                     <HelpButton />

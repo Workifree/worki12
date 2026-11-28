@@ -4,7 +4,7 @@
  * Rota: /convite-equipe/:token (PÚBLICA — fora do ProtectedRoute, mesmo motivo de InviteAccept:
  * sob o guard, sem sessão o token do link se perderia).
  *
- * Fluxo, SEM OTP e sem nenhum e-mail enviado pelo Worki: prévia pública ("{Empresa} te convidou
+ * Fluxo, SEM OTP e sem nenhum e-mail enviado pelo Workyn: prévia pública ("{Empresa} te convidou
  * como Encarregado" + e-mail mascarado) → senha + Termos → Edge Function `accept-team-invite` cria a
  * conta com o e-mail do convite (`user_type='hire'`) → `signInWithPassword` →
  * `accept_company_member_invite(token, true)` → Hoje. Conta que já existe: a pessoa entra com a

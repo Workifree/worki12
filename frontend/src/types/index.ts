@@ -1,4 +1,4 @@
-// Worki - Shared TypeScript Interfaces
+// Workyn - Shared TypeScript Interfaces
 // Centralized types for database entities
 
 // =============================================
@@ -1248,7 +1248,7 @@ export type AttendanceConfirmationOutcome =
 // =============================================
 
 /**
- * Espelha `public.service_terms`. REGISTRO DECLARATÓRIO entre empresa e freela — a Worki
+ * Espelha `public.service_terms`. REGISTRO DECLARATÓRIO entre empresa e freela — a Workyn
  * NÃO é parte, não valida e não garante validade jurídica (a cláusula está DENTRO de
  * `term_text`, item 4 do render). NÃO move saldo (Article 8): `amount` é cópia declaratória
  * de `shift_payments.amount`, não é saldo, não entra em soma alguma.
@@ -1261,7 +1261,7 @@ export type AttendanceConfirmationOutcome =
  *
  * NÃO existe coluna `status`: o estado do termo é a presença de `accepted_at`, e nada mais.
  * Não adicionar `validated_by`, `company_accepted_at`, `signature_hash`, `is_valid` etc. —
- * qualquer campo que sugira que o Worki valida/garante o termo é violação da fronteira
+ * qualquer campo que sugira que o Workyn valida/garante o termo é violação da fronteira
  * jurídica (ver DDL aprovado §1 pergunta 5).
  */
 export interface ServiceTerm {
@@ -1270,7 +1270,7 @@ export interface ServiceTerm {
   job_id: string;
   worker_id: string;
   company_id: string;
-  /** 'modelo-worki-v1' — MODELO (sugestão), não "termo oficial da Worki". */
+  /** 'modelo-worki-v1' — MODELO (sugestão), não "termo oficial da Workyn". */
   term_version: string;
   /** Rascunho enquanto accepted_at é null; snapshot CONGELADO desde o aceite depois. */
   term_text: string;
@@ -1344,7 +1344,7 @@ export interface WorkerTraining {
  * Certificação EXTERNA do freela (CREF, manipulação de alimentos, curso técnico).
  * AUTO-DECLARADA pelo próprio freela. Uma empresa com vínculo pode CONFERIR visualmente
  * — sempre ATRIBUÍDA a uma empresa nomeada + data (`verified_by_company_id`/`verified_at`
- * são par: nulos juntos ou preenchidos juntos, CHECK no banco). O Worki NUNCA atesta —
+ * são par: nulos juntos ou preenchidos juntos, CHECK no banco). O Workyn NUNCA atesta —
  * proibido exibir selo genérico de "verificado" na UI.
  *
  * v1 SEM ARQUIVO (D1): não existe `document_path` nem bucket. `registration_number`

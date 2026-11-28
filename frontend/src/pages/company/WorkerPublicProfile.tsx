@@ -300,7 +300,7 @@ export default function WorkerPublicProfile() {
             <PageMeta
               title={profile ? profile.full_name : 'Perfil do Profissional'}
               description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Worki.` : undefined}
-              ogTitle={profile ? `${profile.full_name} — Worki` : undefined}
+              ogTitle={profile ? `${profile.full_name} — Workyn` : undefined}
             />
             {/* Header / Nav */}
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
@@ -360,7 +360,7 @@ export default function WorkerPublicProfile() {
                                 )}
                             </div>
                         )}
-                        <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Worki'}</p>
+                        <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Workyn'}</p>
 
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
                             <span className="flex items-center gap-2"><MapPin size={18} /> {profile.location || 'Localização não definida'}</span>
@@ -408,7 +408,7 @@ export default function WorkerPublicProfile() {
                     )}
 
                     {/* R1.2: Contato e pagamento — o piloto roda no modo A (pagamento por fora,
-                        registrado no Worki), então a empresa precisa do telefone e da chave PIX
+                        registrado no Workyn), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
                     <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
