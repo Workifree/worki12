@@ -55,6 +55,7 @@ function renderRoute(path = '/dashboard', state?: { entrada: boolean }) {
                     <Route path="/company/onboarding" element={<div data-testid="company-onboarding">Company Onboarding</div>} />
                 </Route>
                 <Route path="/convite-equipe/:token" element={<div data-testid="convite-equipe">Convite</div>} />
+                <Route path="/login" element={<div data-testid="login-page">Login</div>} />
                 <Route path="/" element={<div data-testid="home-page">Home</div>} />
             </Routes>
         </MemoryRouter>
@@ -129,7 +130,7 @@ describe('ProtectedRoute - Onboarding Gate', () => {
         })
     })
 
-    it('usuario nao autenticado redireciona para /', async () => {
+    it('usuario nao autenticado redireciona para /login preservando destino', async () => {
         mockGetSession.mockResolvedValue({
             data: { session: null },
         })
@@ -137,7 +138,7 @@ describe('ProtectedRoute - Onboarding Gate', () => {
         renderRoute('/dashboard')
 
         await waitFor(() => {
-            expect(screen.getByTestId('home-page')).toBeInTheDocument()
+            expect(screen.getByTestId('login-page')).toBeInTheDocument()
         })
     })
 

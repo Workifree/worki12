@@ -313,7 +313,14 @@ export default function ProtectedRoute() {
         );
     }
 
-    if (!user) return <Navigate to="/" replace />;
+    if (!user) {
+        const target = `${location.pathname}${location.search}${location.hash}`;
+        const hintedType = location.pathname.startsWith('/company/') ? 'hire' : 'work';
+        const loginUrl = target && target !== '/'
+            ? `/login?type=${hintedType}&redirect=${encodeURIComponent(target)}`
+            : `/login?type=${hintedType}`;
+        return <Navigate to={loginUrl} replace />;
+    }
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
     if (awaitingConfirmation) return <AguardandoConfirmacao papel={companyRole ?? undefined} />;

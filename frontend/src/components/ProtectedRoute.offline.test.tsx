@@ -45,6 +45,7 @@ function renderGate() {
                     <Route path="/dashboard" element={<div>Area protegida</div>} />
                     <Route path="/worker/onboarding" element={<div>Tela de onboarding</div>} />
                 </Route>
+                <Route path="/login" element={<div>Login</div>} />
                 <Route path="/" element={<div>Home</div>} />
             </Routes>
         </MemoryRouter>,
@@ -145,7 +146,7 @@ describe('gates sem rede', () => {
         act(() => { authListener('INITIAL_SESSION', null) })
         expect(screen.getByText('Area protegida')).toBeInTheDocument()
         act(() => { authListener('SIGNED_OUT', null) })
-        expect(await screen.findByText('Home')).toBeInTheDocument()
+        expect(await screen.findByText('Login')).toBeInTheDocument()
     })
 
     it('HomeRedirect: sem rede mostra erro, nao a pagina publica', async () => {
