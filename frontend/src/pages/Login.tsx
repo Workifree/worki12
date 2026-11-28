@@ -7,6 +7,7 @@ import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { Alert, Button, Card, Field, FilterChip } from '../components/ui';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
+import { isStandalone } from '../lib/pwa';
 import { safeInternalPath } from '../lib/safeRedirect';
 
 /**
@@ -100,6 +101,7 @@ export default function Login() {
     const [roleMismatch, setRoleMismatch] = useState<{ actualType: 'work' | 'hire' } | null>(null);
 
     const isHire = type === 'hire';
+    const standalone = isStandalone();
 
     const reenviarConfirmacao = async () => {
         setReenvio('enviando');
@@ -269,16 +271,31 @@ export default function Login() {
                     ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
             <PageMeta title="Entrar" description="Entre na sua conta Workyn para acessar vagas e gerenciar seus freelancers." />
 
-            {/* Voltar no fluxo: nunca cobre o título, nem a 320px. */}
-            <Button
-                variant="secondary"
-                size="md"
-                onClick={() => navigate('/')}
-                iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
-                className="self-start mb-4"
-            >
-                Voltar
-            </Button>
+            {/* No navegador web, mostra "Voltar" para a landing; no app instalado, exibe a marca direto. */}
+            {standalone ? (
+                <div className="mb-5 flex items-center gap-2.5">
+                    <img
+                        src="/favicon.svg"
+                        alt=""
+                        width={36}
+                        height={36}
+                        className="w-9 h-9 border-2 border-black rounded-xl shadow-[2px_2px_0_0_#000] bg-white"
+                    />
+                    <span className={`text-2xl font-black tracking-tight ${isHire ? 'text-white' : 'text-slate-950'}`}>
+                        Workyn.
+                    </span>
+                </div>
+            ) : (
+                <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => navigate('/')}
+                    iconLeft={<ArrowLeft size={16} strokeWidth={2.5} />}
+                    className="self-start mb-4"
+                >
+                    Voltar
+                </Button>
+            )}
 
             {/* Main Card */}
             <Card
@@ -468,7 +485,9 @@ export default function Login() {
                 </div>
 
                 <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Workyn</Link>
+                    {!standalone && (
+                        <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Workyn</Link>
+                    )}
                     <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
                     <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
                     <Link to="/licencas" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Licenças</Link>
