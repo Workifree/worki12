@@ -58,7 +58,10 @@ interface FreelaSummary {
     name: string;
     avatarUrl: string | null;
     state: FreelaState;
+    /** Outros que OCUPAM vaga (hired/in_progress/completed), além do principal. */
     extraCount: number;
+    /** Convidados/chamados que ainda não responderam (não ocupam vaga). */
+    pendingCount: number;
 }
 
 interface AppRow {
@@ -81,6 +84,7 @@ function isExpiredInvite(app: AppRow): boolean {
 }
 
 const INACTIVE_STATUSES = new Set(['declined', 'rejected', 'cancelled']);
+const OCCUPYING_STATUSES = new Set(['hired', 'in_progress', 'completed']);
 const STATUS_RANK: Record<string, number> = { invited: 1, pending: 1, interview: 1, hired: 2, in_progress: 3, completed: 4 };
 
 function stateForStatus(status: string): FreelaState {
@@ -91,15 +95,20 @@ function stateForStatus(status: string): FreelaState {
 
 // Resume o freela "principal" de uma vaga: ignora recusas/expirados e escolhe o de
 // status mais avançado. `null` = vaga sem freela ativo (pode convidar).
-function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
+// eslint-disable-next-line react-refresh/only-export-components -- exportada para teste
+export function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
     const active = apps.filter((a) => !INACTIVE_STATUSES.has(a.status) && !isExpiredInvite(a));
     if (active.length === 0) return null;
-    const best = active.reduce((b, a) => ((STATUS_RANK[a.status] ?? 0) > (STATUS_RANK[b.status] ?? 0) ? a : b));
+    const occupying = active.filter((a) => OCCUPYING_STATUSES.has(a.status));
+    const pending = active.length - occupying.length;
+    const pool = occupying.length > 0 ? occupying : active;
+    const best = pool.reduce((b, a) => ((STATUS_RANK[a.status] ?? 0) > (STATUS_RANK[b.status] ?? 0) ? a : b));
     return {
         name: best.worker?.full_name || 'Freela',
         avatarUrl: best.worker?.avatar_url ?? null,
         state: stateForStatus(best.status),
-        extraCount: active.length - 1,
+        extraCount: pool.length - 1,
+        pendingCount: occupying.length > 0 ? pending : 0,
     };
 }
 
@@ -300,7 +309,7 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
                         </div>
                         <div className="flex min-w-0 flex-col">
                             <span className="truncate text-sm font-bold">
-                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
+                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}{job.freela.pendingCount > 0 ? ` · ${job.freela.pendingCount} aguardando` : ''}
                             </span>
                             <span className="text-xs text-gray-600">
                                 {job.freela.state === 'confirmed' ? (job.inProgress ? 'Em andamento' : 'Contratado') : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}

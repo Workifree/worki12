@@ -967,14 +967,14 @@ describe('A4/A5 — fillTime exclui chamados sem first_claim_at; expired nunca o
 // ---------------------------------------------------------------------------
 
 describe('A6/R12 — aceite por freela: amostra mínima e ordenação alfabética (nunca por métrica)', () => {
-  it('1 alvo recebido → acceptanceRate null (amostra insuficiente)', () => {
+  it('1 alvo recebido e aceito → 100%', () => {
     const call = { id: 'call-1', job_id: 'job-1', company_id: 'company-1', reason: 'outro', status: 'filled', created_at: '2026-08-05T10:00:00.000Z', first_claim_at: '2026-08-05T10:05:00.000Z', origin: 'team' };
     const target = { call_id: 'call-1', worker_id: 'worker-1', responded_at: '2026-08-05T10:05:00.000Z', response: 'accepted' };
     const raw = emptyRaw({ shiftCalls: [call], shiftCallTargets: [target], workers: new Map([['worker-1', { id: 'worker-1', full_name: 'Helo', rating_average: null }]]) });
     const result = aggregate(raw, PERIOD_AUGUST, DEPS);
     expect(result.acceptanceByWorker.state).toBe('ok');
     if (result.acceptanceByWorker.state === 'ok') {
-      expect(result.acceptanceByWorker.rows[0].acceptanceRate).toBeNull();
+      expect(result.acceptanceByWorker.rows[0].acceptanceRate).toBe(1);
       expect(result.acceptanceByWorker.rows[0].received).toBe(1);
     }
   });

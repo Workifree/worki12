@@ -967,7 +967,7 @@ function buildAcceptanceBlock(raw: RawAnalyticsData, start: Date, end: Date): Wo
       accepted: v.accepted,
       declined: v.declined,
       noResponse: v.noResponse,
-      acceptanceRate: v.received >= MIN_SAMPLE_SIZE ? v.accepted / v.received : null,
+      acceptanceRate: v.received >= 1 ? v.accepted / v.received : null,
     }))
     .sort((a, b) => a.workerName.localeCompare(b.workerName, 'pt-BR'));
 

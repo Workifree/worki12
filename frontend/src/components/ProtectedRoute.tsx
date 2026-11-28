@@ -28,10 +28,10 @@ import type { CompanyRole } from '../types';
  * recomputado a cada render (nunca guardado em state, ver comentário acima), então chamar
  * `addToast` ali disparava o toast em loop enquanto a navegação não completava.
  */
-function RoleRedirect({ to }: { to: string }) {
+function RoleRedirect({ to, silent = false }: { to: string; silent?: boolean }) {
     const { addToast } = useToast();
     useEffect(() => {
-        addToast('Você não tem permissão para acessar esta página.', 'error');
+        if (!silent) addToast('Você não tem permissão para acessar esta página.', 'error');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [to]);
     return <Navigate to={to} replace />;
@@ -370,15 +370,17 @@ export default function ProtectedRoute() {
 
     // Entrada (login, raiz): o Encarregado começa em "Hoje", não na visão geral. Navegar
     // depois para "Visão geral" pela aba continua funcionando (sem `entrada`).
+    let entradaAutomatica = false;
     const entrada = (location.state as { entrada?: boolean } | null)?.entrada === true;
     if (
         !roleRedirectTarget && userType === 'hire' && companyRole === 'encarregado'
         && pathname === '/company/dashboard' && entrada
     ) {
         roleRedirectTarget = '/company/hoje';
+        entradaAutomatica = true;
     }
 
-    if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} />;
+    if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} silent={entradaAutomatica} />;
 
     // Pular gate de TOS durante onboarding para nao confundir o usuario
     const isOnboardingRoute = location.pathname.includes('/onboarding');
