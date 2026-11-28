@@ -340,6 +340,47 @@ serve(async (req) => {
             }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
+        if (action === 'impersonate_user') {
+            const targetEmail = String(body.target_email ?? '').trim().toLowerCase();
+            const reason = String(body.reason ?? 'Suporte SysAdmin').trim().slice(0, 200);
+            if (!targetEmail || !targetEmail.includes('@')) {
+                return new Response(JSON.stringify({ error: 'E-mail de destino inválido' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400
+                });
+            }
+            if (ADMIN_EMAILS.includes(targetEmail)) {
+                return new Response(JSON.stringify({ error: 'Não é permitido acessar outra conta de administrador' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403
+                });
+            }
+
+            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                type: 'magiclink',
+                email: targetEmail,
+            });
+            if (linkError || !linkData?.properties?.hashed_token) {
+                console.error('Impersonate generateLink error:', linkError?.message);
+                return new Response(JSON.stringify({ error: linkError?.message || 'Não foi possível gerar acesso' }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400
+                });
+            }
+
+            console.info(JSON.stringify({
+                event: 'admin_impersonate',
+                admin_user_id: adminUserId,
+                target_email: targetEmail,
+                target_user_id: linkData.user?.id ?? null,
+                reason,
+                at: new Date().toISOString(),
+            }));
+
+            return new Response(JSON.stringify({
+                token_hash: linkData.properties.hashed_token,
+                email: targetEmail,
+                type: 'magiclink',
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
         if (action === 'financial_summary') {
             // Fetch Asaas real balance
             let asaasBalance = null;

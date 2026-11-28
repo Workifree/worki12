@@ -4,6 +4,7 @@ import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, ToastRouteDismiss } from './contexts/ToastContext';
+import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
@@ -129,6 +130,7 @@ function App() {
           <ToastProvider>
             <BrowserRouter>
               <GuideProvider>
+              <ImpersonationBanner />
               <PwaPrompts />
               <CopilotRoot mobileLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
               <RouteFocus />

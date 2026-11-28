@@ -39,7 +39,7 @@ enable_signup = true
 # Enable email confirmations
 enable_confirmations = false
 # Seconds before a signup confirmation link expires (default: 86400 = 24h)
-max_frequency = 60
+max_frequency = "60s"
 
 [auth.external.google]
 enabled = false
