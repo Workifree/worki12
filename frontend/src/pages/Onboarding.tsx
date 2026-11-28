@@ -280,8 +280,8 @@ export default function Onboarding() {
       </header>
 
       <main>
-        {/* Hero com gradiente sutil esmeralda + cobalto */}
-        <section className="relative px-4 sm:px-6 md:px-10 pt-10 pb-16 md:pt-16 md:pb-24 bg-gradient-to-br from-emerald-50/75 via-white to-blue-50/75 overflow-hidden">
+        {/* Hero sólido no estilo do app */}
+        <section className="relative px-4 sm:px-6 md:px-10 pt-10 pb-16 md:pt-16 md:pb-24 bg-[#F5FAF7] overflow-hidden">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 opacity-40"
@@ -303,7 +303,7 @@ export default function Onboarding() {
 
               <h1 className="text-4xl sm:text-5xl md:text-[3.5rem] font-black leading-[1.03] tracking-tight text-slate-950">
                 Nunca mais perca a abertura da loja por{' '}
-                <span className="bg-gradient-to-r from-[#00A651] via-emerald-600 to-blue-600 bg-clip-text text-transparent">
+                <span className="text-[#00A651]">
                   falta de freela.
                 </span>
               </h1>
@@ -354,7 +354,7 @@ export default function Onboarding() {
                 type="button"
                 data-copilot="publico.entrada.escolher-empresa"
                 onClick={() => navigate('/login?type=hire&cadastro=1')}
-                className="group relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-brutal transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                className="group relative bg-[#0F172A] text-white border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-brutal transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
               >
                 <div className="flex items-center justify-between gap-2 mb-4">
                   <div className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center border-2 border-blue-400/70">
@@ -427,10 +427,10 @@ export default function Onboarding() {
           </IconButton>
         </div>
 
-        {/* Destaque do Copiloto com IA — Violeta + Indigo sofisticado */}
+        {/* Destaque do Copiloto com IA — Violeta sólido */}
         <section
           id="copiloto"
-          className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-gradient-to-br from-violet-50/80 via-white to-blue-50/60 border-b-2 border-black"
+          className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-violet-50/60 border-b-2 border-black"
         >
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
             <div className="lg:col-span-6 space-y-5">
@@ -488,7 +488,7 @@ export default function Onboarding() {
                   </span>
                 </div>
 
-                <div className="p-5 sm:p-6 space-y-4 bg-gradient-to-b from-slate-50 to-white">
+                <div className="p-5 sm:p-6 space-y-4 bg-slate-50">
                   {/* Mensagem do gestor */}
                   <div className="ml-auto max-w-[88%] rounded-2xl rounded-tr-sm border-2 border-black bg-blue-600 p-3.5 text-sm font-medium text-white">
                     &ldquo;Preciso de 2 garçons na sexta e no sábado às 18h na Loja Centro, R$ 150 a
@@ -675,7 +675,7 @@ export default function Onboarding() {
         {/* Como Funciona — Azul (Empresas) x Esmeralda Profundo (Freelas) */}
         <section
           id="como-funciona"
-          className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-gradient-to-b from-slate-50 to-emerald-50/40 border-b-2 border-black"
+          className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-slate-50 border-b-2 border-black"
         >
           <div className="max-w-7xl mx-auto">
             <div className="text-center max-w-2xl mx-auto mb-12">
@@ -746,7 +746,7 @@ export default function Onboarding() {
               </div>
 
               {/* Para Freelas */}
-              <div className="rounded-2xl border-2 border-black bg-gradient-to-br from-[#064E3B] via-slate-950 to-slate-900 text-white p-6 sm:p-8 shadow-brutal">
+              <div className="rounded-2xl border-2 border-black bg-[#064E3B] text-white p-6 sm:p-8 shadow-brutal">
                 <div className="flex items-center justify-between gap-2 mb-7 pb-4 border-b-2 border-white/15">
                   <h3 className="text-xl font-black flex items-center gap-2.5 text-emerald-300">
                     <Users size={22} strokeWidth={2.5} aria-hidden="true" />
@@ -840,8 +840,8 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* CTA Final — Gradiente sofisticado Esmeralda -> Slate -> Azul (botões padrão!) */}
-        <section className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-gradient-to-br from-[#064E3B] via-slate-950 to-blue-950 text-white text-center border-b-2 border-black">
+        {/* CTA Final — Fundo escuro sólido no estilo do app (botões padrão!) */}
+        <section className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-[#0F172A] text-white text-center border-b-2 border-black">
           <div className="max-w-3xl mx-auto space-y-6">
             <span className="inline-block rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200">
               Cadastro gratuito
