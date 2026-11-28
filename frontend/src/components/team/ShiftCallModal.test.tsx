@@ -42,6 +42,7 @@ vi.mock('../../services/shiftCallService', () => ({
   ],
   DEFAULT_CALL_EXPIRY_HOURS: 2,
   calcExpiryAtShiftStart: vi.fn(() => '2026-08-20T00:00:00.000Z'),
+  calcExpiryBeforeShiftStart: vi.fn(() => '2026-08-19T23:00:00.000Z'),
 }))
 
 // F5 — guarda de risco de vínculo. Território de outro agente (services/linkRiskService.ts);

@@ -6,8 +6,8 @@ import { LinkRiskService, type LinkRiskConfig } from '../../services/linkRiskSer
 import {
   ShiftCallService,
   CALL_EXPIRY_PRESETS,
-  DEFAULT_CALL_EXPIRY_HOURS,
   calcExpiryAtShiftStart,
+  calcExpiryBeforeShiftStart,
 } from '../../services/shiftCallService';
 import { useToast } from '../../contexts/ToastContext';
 import { SHIFT_CALL_REASON_LABELS } from '../../types';
@@ -97,8 +97,8 @@ export function ShiftCallModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState<ShiftCallReason>('falta');
-  // `null` = "até o início do turno"; número = horas.
-  const [expiryHours, setExpiryHours] = useState<number | null>(DEFAULT_CALL_EXPIRY_HOURS);
+  // 'before_shift_1h' = em aberto até 1h antes do turno (padrão); 'shift_start' = até o início; número = horas.
+  const [expiryChoice, setExpiryChoice] = useState<'before_shift_1h' | 'shift_start' | number>('before_shift_1h');
   const [dispatching, setDispatching] = useState(false);
   // Trava SÍNCRONA: dois cliques no mesmo instante passam antes de o React re-renderizar o botão
   // desabilitado e criariam dois chamados.
@@ -352,9 +352,11 @@ export function ShiftCallModal({
 
     const result = await ShiftCallService.createShiftCall(job.id, Array.from(selected), {
       reason,
-      ...(expiryHours === null
-        ? { expiresAt: calcExpiryAtShiftStart(job.start_date, job.work_start_time) }
-        : { expiresInHours: expiryHours }),
+      ...(expiryChoice === 'before_shift_1h'
+        ? { expiresAt: calcExpiryBeforeShiftStart(job.start_date, job.work_start_time, 1) }
+        : expiryChoice === 'shift_start'
+          ? { expiresAt: calcExpiryAtShiftStart(job.start_date, job.work_start_time) }
+          : { expiresInHours: expiryChoice }),
     });
 
     setDispatching(false);
@@ -475,21 +477,25 @@ export function ShiftCallModal({
             ))}
           </select>
         </Field>
-        <Field label="Expira em">
+        <Field label="Convite válido até">
           <select
             id="call-expiry"
-            value={expiryHours === null ? 'shift_start' : String(expiryHours)}
-            onChange={(e) =>
-              setExpiryHours(e.target.value === 'shift_start' ? null : Number(e.target.value))
-            }
+            value={String(expiryChoice)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setExpiryChoice(
+                v === 'before_shift_1h' || v === 'shift_start' ? v : Number(v),
+              );
+            }}
             disabled={dispatching}
           >
+            <option value="before_shift_1h">Em aberto (até 1h antes do turno)</option>
+            <option value="shift_start">Até o início do turno</option>
             {CALL_EXPIRY_PRESETS.map((preset) => (
               <option key={preset.value} value={String(preset.value)}>
                 {preset.label}
               </option>
             ))}
-            <option value="shift_start">Até o início do turno</option>
           </select>
         </Field>
       </div>

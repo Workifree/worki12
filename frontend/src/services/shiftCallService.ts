@@ -115,6 +115,35 @@ export function calcExpiryAtShiftStart(
 }
 
 /**
+ * "Em aberto (até N horas antes do turno)": deixa o convite válido até `hoursBefore` antes do
+ * início do turno (padrão: 1h antes). Se já faltar menos de 1h30 para o turno, garante pelo menos
+ * 30 minutos a partir de agora para o chamado não nascer expirado.
+ */
+export function calcExpiryBeforeShiftStart(
+  startDate: string | null | undefined,
+  workStartTime: string | null | undefined,
+  hoursBefore: number = 1,
+): string {
+  const fallback = calcExpiry(DEFAULT_CALL_EXPIRY_HOURS);
+  if (!startDate) return fallback;
+
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return fallback;
+
+  if (workStartTime) {
+    const [h, m] = workStartTime.split(':');
+    const hours = Number(h);
+    const minutes = Number(m ?? '0');
+    if (!Number.isNaN(hours)) start.setHours(hours, Number.isNaN(minutes) ? 0 : minutes, 0, 0);
+  }
+
+  const target = new Date(start.getTime() - Math.round(hoursBefore * 60) * 60_000);
+  const minimum = new Date();
+  minimum.setMinutes(minimum.getMinutes() + 30);
+  return target.getTime() > minimum.getTime() ? target.toISOString() : minimum.toISOString();
+}
+
+/**
  * O turno já começou? Data do turno em Brasília + horário de início. Sem data (ou sem horário
  * utilizável) devolve false: na dúvida não esconde a vaga.
  */
