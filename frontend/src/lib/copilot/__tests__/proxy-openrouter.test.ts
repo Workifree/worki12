@@ -47,7 +47,7 @@ describe('openrouter: pedido', () => {
     expect(call.url).toBe('https://openrouter.ai/api/v1/chat/completions')
     // Só o nome público do app (atribuição no OpenRouter): nada da pessoa, do turno ou da empresa vai nos cabeçalhos.
     expect(Object.keys(call.init.headers).sort()).toEqual(['authorization', 'content-type', 'http-referer', 'x-title'])
-    expect(call.init.headers['x-title']).toBe('Worki Copiloto')
+    expect(call.init.headers['x-title']).toBe('Workyn Copiloto')
     const sent = JSON.parse(call.init.body)
     expect(sent.provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true, allow_fallbacks: true })
     expect(Object.keys(sent).sort()).toEqual(['max_tokens', 'messages', 'model', 'provider', 'tool_choice', 'tools'])

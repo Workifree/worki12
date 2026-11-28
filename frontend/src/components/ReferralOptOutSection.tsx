@@ -77,7 +77,7 @@ export default function ReferralOptOutSection() {
     setAccepts(next);
     addToast(
       next
-        ? 'Você pode ser indicado por empresas do seu elenco a partir de agora.'
+        ? 'Você pode ser indicado por empresas do seu Elenco a partir de agora.'
         : 'Você não será mais indicado a novas empresas.',
       'success',
     );
@@ -101,12 +101,12 @@ export default function ReferralOptOutSection() {
         <Share2 size={20} aria-hidden="true" /> Indicação entre empresas
       </h3>
       <p className="text-sm text-gray-600 mb-4">
-        Empresas do seu elenco podem indicar você a outras empresas que confiam nelas. Você
+        Empresas do seu Elenco podem indicar você a outras empresas que confiam nelas. Você
         sempre decide: a empresa que recebe a indicação só te conhece se você aceitar.
       </p>
       <WorkerSwitch
         checked={accepts}
-        label="Aceitar indicações de empresas do meu elenco"
+        label="Aceitar indicações de empresas do meu Elenco"
         text={accepts ? 'Aceito ser indicado' : 'Não quero ser indicado'}
         data-copilot="freela.perfil.indicacoes"
         onToggle={() => void handleToggle()}

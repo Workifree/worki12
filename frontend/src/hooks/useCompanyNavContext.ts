@@ -17,5 +17,8 @@ export function useCompanyNavContext(company: MyCompany | null): CompanyNavConte
     if (company) {
         return { isEncarregado: company.role === 'encarregado', hasTeam: hasTeamNav(company) };
     }
-    return { isEncarregado: readNavRoleHint() !== 'gestor', hasTeam: readTeamNavHint() };
+    // Sem dica de papel, o menu é o restrito (Encarregado) e o Início já aponta para Hoje, como ele
+    // apontará depois de resolvido: o destino não pisca entre Visão geral e Hoje.
+    const roleHint = readNavRoleHint();
+    return { isEncarregado: roleHint !== 'gestor', hasTeam: roleHint === null ? true : readTeamNavHint() };
 }

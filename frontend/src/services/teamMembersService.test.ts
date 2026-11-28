@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockRpc = vi.fn();
+const mockInvoke = vi.fn();
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
     rpc: (...args: unknown[]) => mockRpc(...args),
     auth: { onAuthStateChange: vi.fn() },
+    functions: { invoke: (...args: unknown[]) => mockInvoke(...args) },
   },
 }));
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }));
@@ -18,7 +20,6 @@ vi.mock('./companyScopeService', () => ({
 import {
   acceptMemberInvite,
   buildInviteLink,
-  buildInviteMessage,
   buildWhatsAppUrl,
   confirmMember,
   getInvitePreview,
@@ -26,11 +27,13 @@ import {
   listMembers,
   memberActionMessage,
   normalizeBrazilPhone,
+  provisionTeamInviteAccount,
   rotateElencoLink,
   rejectMember,
   removeMember,
   resendInvite,
   revokeInvite,
+  setMemberDefaultTag,
 } from './teamMembersService';
 
 beforeEach(() => {
@@ -47,7 +50,17 @@ describe('getInvitePreview', () => {
     expect(args[1]).toEqual({ p_token: 'a'.repeat(64) });
     // Nenhum terceiro argumento: `{ get: true }` poria o token na URL.
     expect(args.length).toBe(2);
-    expect(r).toEqual({ outcome: 'ok', companyName: 'Divino Fogão', role: 'encarregado' });
+    expect(r).toEqual({
+      outcome: 'ok', companyName: 'Divino Fogão', role: 'encarregado', emailMasked: undefined, emailBound: false,
+    });
+  });
+
+  it('traz o e-mail MASCARADO e se o convite está preso a e-mail', async () => {
+    mockRpc.mockResolvedValue({
+      data: { outcome: 'ok', company_name: 'X', role: 'encarregado', email_masked: 'jo***@x.com', email_bound: true },
+      error: null,
+    });
+    expect(await getInvitePreview('t')).toMatchObject({ emailMasked: 'jo***@x.com', emailBound: true });
   });
 
   it.each(['expired', 'not_found'] as const)('repassa outcome %s', async (outcome) => {
@@ -69,11 +82,12 @@ describe('inviteMember / resendInvite / revokeInvite', () => {
       data: { outcome: 'invited', member_id: 'm1', invite_token: 'tok', expires_at: '2026-12-07T00:00:00Z' },
       error: null,
     });
-    const r = await inviteMember('c1', 'Ana');
+    const r = await inviteMember('c1', 'Ana', 'encarregado', '  Ana@Exemplo.COM ');
     expect(mockRpc).toHaveBeenCalledWith('invite_company_member', {
       p_company_id: 'c1',
       p_display_name: 'Ana',
       p_role: 'encarregado',
+      p_email: 'ana@exemplo.com',
     });
     expect(r).toMatchObject({ outcome: 'invited', memberId: 'm1', inviteToken: 'tok' });
   });
@@ -83,6 +97,16 @@ describe('inviteMember / resendInvite / revokeInvite', () => {
     const r = await inviteMember('c1', 'Ana');
     expect(r.outcome).toBe('forbidden');
     expect(r.inviteToken).toBeUndefined();
+  });
+
+  it.each([
+    'email_required', 'invalid_email', 'name_already_invited', 'already_member', 'worker_cannot_be_manager',
+  ])('invite repassa o outcome %s sem token', async (outcome) => {
+    mockRpc.mockResolvedValue({ data: { outcome }, error: null });
+    const r = await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com');
+    expect(r.outcome).toBe(outcome);
+    expect(r.inviteToken).toBeUndefined();
+    expect(mockInvalidate).not.toHaveBeenCalled();
   });
 
   it('resend rotaciona e devolve o novo token', async () => {
@@ -123,7 +147,7 @@ describe('acceptMemberInvite', () => {
 
   it.each([
     'already_accepted', 'already_operator', 'token_already_used', 'revoked', 'expired', 'not_found',
-    'use_manager_invite', 'tos_required', 'worker_cannot_be_manager', 'email_not_verified',
+    'use_manager_invite', 'tos_required', 'worker_cannot_be_manager', 'email_not_verified', 'email_mismatch',
     'invalid_input', 'unauthenticated',
   ])('repassa o outcome %s', async (outcome) => {
     mockRpc.mockResolvedValue({ data: { outcome }, error: null });
@@ -249,12 +273,7 @@ describe('compartilhamento (wa.me)', () => {
   });
 
   it('wa.me com telefone e sem telefone', () => {
-    const msg = buildInviteMessage({
-      displayName: 'Ana', companyName: 'Divino Fogão', role: 'encarregado', link: 'https://x.app/convite-equipe/t',
-    });
-    expect(msg).toBe(
-      'Oi, Ana! Divino Fogão te convidou para o Worki como Encarregado. Entre por aqui: https://x.app/convite-equipe/t. O link é só seu, não repasse.',
-    );
+    const msg = 'Oi, Ana!';
     expect(buildWhatsAppUrl(msg, '(11) 91234-5678')).toMatch(/^https:\/\/wa\.me\/5511912345678\?text=Oi%2C%20Ana/);
     expect(buildWhatsAppUrl(msg)).toMatch(/^https:\/\/wa\.me\/\?text=/);
     expect(buildWhatsAppUrl(msg, 'lixo')).toMatch(/^https:\/\/wa\.me\/\?text=/);
@@ -265,10 +284,54 @@ describe('compartilhamento (wa.me)', () => {
   });
 });
 
+describe('provisionTeamInviteAccount', () => {
+  it('chama a Edge Function accept-team-invite com token, senha e accept_tos', async () => {
+    mockInvoke.mockResolvedValue({ data: { outcome: 'created', email: 'ana@x.com' }, error: null });
+    const r = await provisionTeamInviteAccount('tok', 'senha-forte-1');
+    expect(mockInvoke).toHaveBeenCalledWith('accept-team-invite', {
+      body: { token: 'tok', password: 'senha-forte-1', accept_tos: true },
+    });
+    expect(r).toEqual({ outcome: 'created', email: 'ana@x.com' });
+  });
+
+  it.each([
+    'existing_account', 'account_pending', 'worker_cannot_be_manager', 'legacy_invite', 'not_found', 'expired',
+    'manager_requires_verified_signup',
+  ])('repassa %s e NÃO devolve e-mail', async (outcome) => {
+    mockInvoke.mockResolvedValue({ data: { outcome, email: 'vazou@x.com' }, error: null });
+    expect(await provisionTeamInviteAccount('tok', 'senha-forte-1')).toEqual({ outcome, email: undefined });
+  });
+
+  it('429 do gateway: lê o outcome do corpo da resposta', async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: { message: 'non-2xx', context: { json: async () => ({ outcome: 'rate_limited' }) } },
+    });
+    expect((await provisionTeamInviteAccount('tok', 'senha-forte-1')).outcome).toBe('rate_limited');
+  });
+
+  it('400 invalid_input vem do corpo', async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: { message: 'non-2xx', context: { json: async () => ({ outcome: 'invalid_input' }) } },
+    });
+    expect((await provisionTeamInviteAccount('tok', 'x')).outcome).toBe('invalid_input');
+  });
+
+  it('erro de rede, corpo ilegível ou outcome desconhecido viram error (sem lançar)', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: new Error('rede') });
+    expect((await provisionTeamInviteAccount('t', 'p')).outcome).toBe('error');
+    mockInvoke.mockResolvedValueOnce({ data: { outcome: 'qualquer' }, error: null });
+    expect((await provisionTeamInviteAccount('t', 'p')).outcome).toBe('error');
+    mockInvoke.mockRejectedValueOnce(new Error('boom'));
+    expect((await provisionTeamInviteAccount('t', 'p')).outcome).toBe('error');
+  });
+});
+
 describe('invalida o escopo (Sidebar reflete team_enabled sem recarregar)', () => {
   it('derruba o cache após cada ação que muda a equipe', async () => {
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'invited', invite_token: 't' }, error: null });
-    await inviteMember('c1', 'Ana');
+    await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com');
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'resent', invite_token: 't' }, error: null });
     await resendInvite('m1');
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'confirmed' }, error: null });
@@ -286,5 +349,71 @@ describe('invalida o escopo (Sidebar reflete team_enabled sem recarregar)', () =
     mockRpc.mockResolvedValueOnce({ data: { outcome: 'not_pending' }, error: null });
     await resendInvite('m1');
     expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('equipe unificada e loja padrão (ADR-20261127)', () => {
+  it('convite de Encarregado manda p_default_tag_id; de Gestor nunca manda', async () => {
+    mockRpc.mockResolvedValue({ data: { outcome: 'invited', member_id: 'm1', invite_token: 'tok' }, error: null });
+    await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com', 't1');
+    expect(mockRpc).toHaveBeenLastCalledWith('invite_company_member', {
+      p_company_id: 'c1', p_display_name: 'Ana', p_role: 'encarregado', p_email: 'ana@x.com', p_default_tag_id: 't1',
+    });
+    await inviteMember('c1', 'Gil', 'manager', 'gil@x.com', 't1');
+    expect(mockRpc).toHaveBeenLastCalledWith('invite_company_member', {
+      p_company_id: 'c1', p_display_name: 'Gil', p_role: 'manager', p_email: 'gil@x.com',
+    });
+  });
+
+  it.each(['already_invited_other_role', 'invalid_tag'])('invite repassa %s sem token', async (outcome) => {
+    mockRpc.mockResolvedValue({ data: { outcome }, error: null });
+    const r = await inviteMember('c1', 'Ana', 'encarregado', 'ana@x.com');
+    expect(r.outcome).toBe(outcome);
+    expect(r.inviteToken).toBeUndefined();
+  });
+
+  it('setMemberDefaultTag usa (empresa, membro, loja) e aceita null para remover', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'updated' }, error: null });
+    expect(await setMemberDefaultTag('c1', 'm1', 't1')).toEqual({ outcome: 'updated' });
+    expect(mockRpc).toHaveBeenLastCalledWith('set_member_default_tag', {
+      p_company_id: 'c1', p_member_id: 'm1', p_tag_id: 't1',
+    });
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'updated' }, error: null });
+    await setMemberDefaultTag('c1', 'm1', null);
+    expect(mockRpc).toHaveBeenLastCalledWith('set_member_default_tag', {
+      p_company_id: 'c1', p_member_id: 'm1', p_tag_id: null,
+    });
+  });
+
+  it('setMemberDefaultTag: outcome do banco e erro de rede', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { outcome: 'not_encarregado' }, error: null });
+    expect((await setMemberDefaultTag('c1', 'm1', 't1')).outcome).toBe('not_encarregado');
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('x') });
+    expect((await setMemberDefaultTag('c1', 'm1', 't1')).outcome).toBe('error');
+  });
+
+  it('list traz a loja padrão e Gestor aguardando confirmação', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        outcome: 'ok',
+        items: [
+          { member_id: 'm1', user_id: 'u1', display_name: 'Ana', role: 'encarregado', status: 'active',
+            state: 'active', confirmed: true, accepted_email: null, invited_at: null, expires_at: null,
+            accepted_at: null, confirmed_at: null, removed_at: null, default_tag_id: 't1', default_tag_name: 'Loja A' },
+          { member_id: 'm2', user_id: 'u2', display_name: 'Gil', role: 'manager', status: 'active',
+            state: 'awaiting_confirmation', confirmed: false, accepted_email: null, invited_at: null, expires_at: null,
+            accepted_at: null, confirmed_at: null, removed_at: null },
+        ],
+      },
+      error: null,
+    });
+    const r = await listMembers('c1');
+    expect(r.items[0]).toMatchObject({ defaultTagId: 't1', defaultTagName: 'Loja A' });
+    expect(r.items[1]).toMatchObject({ role: 'manager', state: 'awaiting_confirmation', defaultTagId: null });
+  });
+
+  it('memberActionMessage: invalid_tag e not_encarregado', () => {
+    expect(memberActionMessage('invalid_tag', 'x')).toMatch(/loja/i);
+    expect(memberActionMessage('not_encarregado', 'x')).toMatch(/Encarregado/);
   });
 });

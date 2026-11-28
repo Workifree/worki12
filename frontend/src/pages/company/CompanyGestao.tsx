@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { useBonusTrailAccess } from '../../hooks/useBonusTrailAccess';
-import { canSeeOrganization, isGestor } from '../../services/companyScopeService';
+import { isGestor } from '../../services/companyScopeService';
 import { getGestaoGroups } from '../../lib/navigation';
 import { isPresencaEnabled } from '../../lib/features';
 import { logError } from '../../lib/logger';
@@ -33,9 +33,12 @@ export default function CompanyGestao() {
         }
     };
 
+    const gestorView = isGestor(company);
+    const hubTitle = gestorView ? 'Gestão' : 'Mais';
+    const hubSubtitle = gestorView ? 'Pessoas, dados da empresa e suporte.' : 'Relatórios e ajuda';
+
     const groups = getGestaoGroups({
         gestor: isGestor(company),
-        units: canSeeOrganization(company),
         teamInvited: company?.team_enabled === true,
         trail: hasTrail,
         sites: isPresencaEnabled(),
@@ -43,8 +46,8 @@ export default function CompanyGestao() {
 
     return (
         <div className="mx-auto max-w-4xl pb-6">
-            <PageMeta title="Gestão" description="Pessoas, dados da empresa e suporte." />
-            <PageHeader title="Gestão" subtitle="Pessoas, dados da empresa e suporte." />
+            <PageMeta title={hubTitle} description={hubSubtitle} />
+            <PageHeader title={hubTitle} subtitle={hubSubtitle} />
 
             {error && (
                 <p role="alert" className="mb-4 rounded-xl border-2 border-black bg-yellow-50 p-3 text-sm font-semibold">

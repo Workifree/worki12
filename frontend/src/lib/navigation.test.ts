@@ -45,7 +45,7 @@ function expandTabs(paths: string[]): Set<string> {
 function companyReachable(device: 'desktop' | 'mobile', hasTeam: boolean): Set<string> {
     const items = getCompanyNav({ isEncarregado: false, hasTeam });
     const nav = device === 'desktop' ? items : toBottomNav(items);
-    const cards = getGestaoGroups({ gestor: true, units: true, teamInvited: hasTeam, trail: true, sites: true })
+    const cards = getGestaoGroups({ gestor: true, teamInvited: hasTeam, trail: true, sites: true })
         .flatMap((g) => g.cards)
         .filter((c) => device === 'mobile' || !c.mobileOnly);
     const direct = [
@@ -125,14 +125,22 @@ describe('navegação — estado ativo', () => {
         expect(activeIds(bottom, '/company/relatorio')).toEqual(['gestao']);
     });
 
-    it('encarregado: quatro itens (com Elenco, sem Mensagens e Relatórios) e, em Gestão, só trilha e ajuda', () => {
+    it('encarregado: com Elenco e Relatórios (visão própria), sem Mensagens; em Gestão, relatório, trilha e ajuda', () => {
         const items = getCompanyNav({ isEncarregado: true, hasTeam: true });
-        expect(items.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Gestão']);
-        expect(isGestorOnlyPath('/company/messages')).toBe(true);
-        expect(toBottomNav(items)).toHaveLength(4);
-        const cards = getGestaoGroups({ gestor: false, units: false, teamInvited: false, trail: true })
+        expect(items.filter((i) => !i.mobileOnly).map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Relatórios', 'Ajuda']);
+        expect(isGestorOnlyPath('/company/messages')).toBe(false);
+        expect(isGestorOnlyPath('/company/profile')).toBe(true);
+        expect(isGestorOnlyPath('/company/relatorio')).toBe(false);
+        expect(isGestorOnlyPath('/company/operacao')).toBe(true);
+        // Desktop com todos os itens; celular com 5 (Relatórios e Ajuda sob "Mais", que não existe na lateral).
+        const bottom = toBottomNav(items);
+        expect(bottom.map((i) => i.label)).toEqual(['Início', 'Turnos', 'Elenco', 'Mensagens', 'Mais']);
+        expect(activeIds(bottom, '/company/relatorio')).toEqual(['mais']);
+        expect(activeIds(bottom, '/ajuda')).toEqual(['mais']);
+        expect(activeIds(bottom, '/company/trilha')).toEqual(['mais']);
+        const cards = getGestaoGroups({ gestor: false, teamInvited: false, trail: true })
             .flatMap((g) => g.cards.map((c) => c.id));
-        expect(cards).toEqual(['trilha', 'ajuda']);
+        expect(cards).toEqual(['relatorios', 'trilha', 'ajuda']);
     });
 
     it('Início aponta para Hoje só com equipe', () => {

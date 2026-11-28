@@ -10,9 +10,8 @@ const ALVOS_D: ReadonlySet<string> = new Set([
   'publico.recuperar-senha.enviar-link',
   'publico.login.criar-conta',
   'publico.login.entrar',
-  'publico.convite-gerente.aceitar',
   'publico.convite-equipe.entrar',
-  'publico.convite-equipe.confirmar-codigo',
+  'publico.convite-equipe.entrar-conta',
   'publico.convite-equipe.aceitar',
   'publico.convite-elenco.aceitar',
   'freela.turno.registrar-chegada',
@@ -49,7 +48,6 @@ const ALVOS_D: ReadonlySet<string> = new Set([
   'empresa.serie.encerrar-confirmar',
   'empresa.passar-turnos.confirmar',
   'empresa.hoje.cobrir',
-  'empresa.unidades.convidar-gerente',
 ])
 
 export const alvoEhRiscoD = (alvo: string): boolean => ALVOS_D.has(alvo)

@@ -86,7 +86,7 @@ export const STATUS = {
     },
     invite: {
         pending: AGUARDANDO,
-        accepted: s('No elenco', 'success', CheckCircle2),
+        accepted: s('No Elenco', 'success', CheckCircle2),
         declined: RECUSADO,
         blocked: s('Bloqueado', 'danger', Ban),
         cancelled: CANCELADO,

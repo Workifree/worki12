@@ -7,7 +7,7 @@
  */
 import {
     BarChart3, Briefcase, Building2, Contact, HelpCircle, Home, Inbox, LayoutGrid, MessageSquare,
-    MapPin, Network, Receipt, Trophy, UserCog, Users, type LucideIcon,
+    MapPin, Receipt, Trophy, UserCog, Users, type LucideIcon,
 } from 'lucide-react';
 import { matchPath } from 'react-router-dom';
 
@@ -29,6 +29,8 @@ export interface NavItem {
     matches: readonly string[];
     /** Fora da barra inferior: no celular a rota "pertence" a este outro item. */
     mobileParent?: string;
+    /** Só no celular (barra inferior): na lateral do desktop os filhos já são itens próprios. */
+    mobileOnly?: boolean;
 }
 
 export interface NavTab {
@@ -45,12 +47,12 @@ export interface CompanyNavContext {
 
 export const COMPANY_GESTAO_PATH = '/company/gestao';
 
-export const ORGANIZATION_PATH = '/company/organization';
-
 /** Rotas só do Gestor (guarda única em `GestorRouteGuard`). Indicações: as RPCs são Gestor-only. */
 export const GESTOR_ONLY_ROUTES: readonly string[] = [
-    '/company/indicacoes', '/company/relatorio', '/company/operacao', ORGANIZATION_PATH,
-    '/company/configuracoes/*', '/company/messages',
+    // `/company/relatorio` e `/company/messages` NÃO estão aqui: o Encarregado confirmado vê só os próprios
+    // turnos (ADR-20261127). O escopo e a ausência de PII são decididos nas RPCs.
+    '/company/indicacoes', '/company/operacao', '/company/profile',
+    '/company/configuracoes/*',
 ];
 
 export function isGestorOnlyPath(pathname: string): boolean {
@@ -76,7 +78,7 @@ export const SECTION_TABS = {
     ],
     elenco: [
         { label: 'Meu Elenco', path: '/company/team' },
-        { label: 'Indicações', path: '/company/indicacoes' },
+        { label: 'Indicar freela', path: '/company/indicacoes' },
     ],
     relatorios: [
         { label: 'Pagamentos', path: '/company/relatorio' },
@@ -95,9 +97,9 @@ const tabPaths = (section: SectionId): string[] => SECTION_TABS[section].map((t)
 const WORKER_NAV: readonly NavItem[] = [
     { id: 'inicio', label: 'Início', icon: Home, path: '/dashboard', matches: ['/dashboard'] },
     // "Meus Turnos", não "Convites": o rótulo descreve o DESTINO (information scent).
-    { id: 'turnos', label: 'Meus Turnos', shortLabel: 'Turnos', icon: Inbox, path: '/my-jobs', matches: ['/my-jobs'] },
+    { id: 'turnos', label: 'Meus Turnos', icon: Inbox, path: '/my-jobs', matches: ['/my-jobs'] },
     { id: 'empresas', label: 'Empresas', icon: Contact, path: '/carteira', matches: [...tabPaths('empresas'), '/empresa/:id'] },
-    { id: 'recebimentos', label: 'Recebimentos', tinyLabel: 'Recibos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
+    { id: 'recebimentos', label: 'Recebimentos', icon: Receipt, path: '/recebimentos', matches: ['/recebimentos'] },
     { id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/messages', matches: ['/messages'] },
 ];
 
@@ -106,7 +108,7 @@ export function getWorkerNav(): NavItem[] {
 }
 
 export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): NavItem[] {
-    const items: Array<NavItem & { gestorOnly?: boolean }> = [
+    const items: NavItem[] = [
         {
             id: 'inicio', label: 'Início', icon: Home,
             path: hasTeam ? '/company/hoje' : '/company/dashboard',
@@ -121,24 +123,39 @@ export function getCompanyNav({ isEncarregado, hasTeam }: CompanyNavContext): Na
             id: 'elenco', label: 'Elenco', icon: Users, path: '/company/team',
             matches: [...tabPaths('elenco'), '/company/worker/:id', '/company/empresa/:id'],
         },
-        // Chat da empresa fica fora da v1 para o Encarregado (spec equipe-encarregados).
+        // O Encarregado confirmado vê só os freelas dos turnos que cuida (ADR-20261127; escopo na RPC).
         {
             id: 'mensagens', label: 'Mensagens', icon: MessageSquare, path: '/company/messages',
-            matches: ['/company/messages'], gestorOnly: true,
+            matches: ['/company/messages'],
         },
         {
-            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio', gestorOnly: true,
+            id: 'relatorios', label: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
             matches: tabPaths('relatorios'), mobileParent: 'gestao',
         },
         {
             id: 'gestao', label: 'Gestão', icon: LayoutGrid, path: COMPANY_GESTAO_PATH,
             matches: [
                 COMPANY_GESTAO_PATH, '/company/configuracoes/equipe', '/company/profile',
-                '/company/organization', '/company/trilha', '/company/locais/*',
+                '/company/trilha', '/company/locais/*',
             ],
         },
     ];
-    return items.filter((item) => !(isEncarregado && item.gestorOnly));
+    if (isEncarregado) {
+        // Barra inferior com no máximo 5: Relatórios e Ajuda ficam sob "Mais" (hub /company/gestao, que
+        // já lista "Meus relatórios", trilha e Ajuda para quem não é Gestor). No desktop seguem como itens.
+        const base = items
+            .filter((item) => item.id !== 'gestao')
+            .map((item) => (item.id === 'relatorios' ? { ...item, mobileParent: 'mais' } : item));
+        return [
+            ...base,
+            { id: 'ajuda', label: 'Ajuda', icon: HelpCircle, path: '/ajuda', matches: ['/ajuda'], mobileParent: 'mais' },
+            {
+                id: 'mais', label: 'Mais', icon: LayoutGrid, path: COMPANY_GESTAO_PATH, mobileOnly: true,
+                matches: [COMPANY_GESTAO_PATH, '/company/trilha'],
+            },
+        ];
+    }
+    return items;
 }
 
 /** Itens da barra inferior: quem tem `mobileParent` sai e empresta os `matches` ao pai. */
@@ -179,8 +196,6 @@ export interface GestaoGroup {
 export interface GestaoAccess {
     /** Dono, operador ou gerente (`isGestor`). */
     gestor: boolean;
-    /** `canSeeOrganization`. */
-    units: boolean;
     /** A empresa já tem alguém na equipe. */
     teamInvited: boolean;
     /** `useBonusTrailAccess`. */
@@ -189,13 +204,13 @@ export interface GestaoAccess {
     sites?: boolean;
 }
 
-export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = false }: GestaoAccess): GestaoGroup[] {
+export function getGestaoGroups({ gestor, teamInvited, trail, sites = false }: GestaoAccess): GestaoGroup[] {
     const groups: GestaoGroup[] = [
         {
             id: 'pessoas', label: 'Pessoas',
             cards: gestor ? [{
-                id: 'equipe', title: 'Equipe e acessos', icon: UserCog, path: '/company/configuracoes/equipe',
-                description: teamInvited ? 'Quem opera a empresa com você' : 'Convidar quem te ajuda',
+                id: 'equipe', title: 'Equipe', icon: UserCog, path: '/company/configuracoes/equipe',
+                description: teamInvited ? 'Funcionários, papéis e lojas' : 'Convide seu primeiro encarregado',
             }] : [],
         },
         {
@@ -209,15 +224,14 @@ export function getGestaoGroups({ gestor, units, teamInvited, trail, sites = fal
                     id: 'locais', title: 'Locais', icon: MapPin, path: '/company/locais',
                     description: 'QR e localização para confirmar presença',
                 }] : []),
-                ...(units ? [{
-                    id: 'unidades', title: 'Unidades', icon: Network, path: '/company/organization',
-                    description: 'Visão das lojas da sua rede',
-                }] : []),
-                ...(gestor ? [{
-                    id: 'relatorios', title: 'Relatórios', icon: BarChart3, path: '/company/relatorio',
-                    description: 'Pagamentos e operação', mobileOnly: true,
-                }] : []),
             ],
+        },
+        {
+            id: 'financeiro', label: 'Financeiro',
+            cards: [{
+                id: 'relatorios', title: gestor ? 'Relatórios' : 'Meus relatórios', icon: BarChart3, path: '/company/relatorio',
+                description: gestor ? 'Pagamentos, horas e operação' : 'Pagamentos e horas dos seus turnos', mobileOnly: true,
+            }],
         },
         {
             id: 'bonus', label: 'Meus bônus',

@@ -841,7 +841,7 @@ export function buildShiftInviteWhatsAppMessage(params: ShiftInviteWhatsAppMessa
       : null;
 
   const lines = [
-    `Oi! Aqui é ${companyName || 'a empresa'} pelo Worki.`,
+    `Oi! Aqui é ${companyName || 'a empresa'} pelo Workyn.`,
     `Te convidei para o turno "${jobTitle}"${dateLabel ? `, ${dateLabel}` : ''}${timeLabel ? ` (${timeLabel})` : ''}.`,
     location ? `Local: ${location}` : null,
     valueLabel,

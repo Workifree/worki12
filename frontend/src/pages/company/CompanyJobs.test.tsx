@@ -76,7 +76,7 @@ function applicationsUpdateChain(result: { data: unknown; error: unknown } = { d
   }
 }
 
-function setupMocks() {
+function setupMocks(apps: unknown[] = []) {
   const mockAddToast = vi.fn()
   vi.mocked(useToast).mockReturnValue({ addToast: mockAddToast, removeToast: vi.fn() })
 
@@ -98,7 +98,7 @@ function setupMocks() {
 
   const applicationsChain = {
     select: vi.fn().mockReturnValue({
-      in: vi.fn().mockResolvedValue({ data: [], error: null }),
+      in: vi.fn().mockResolvedValue({ data: apps, error: null }),
     }),
     update: vi.fn().mockReturnValue(applicationsUpdateChain()),
   }
@@ -180,6 +180,36 @@ describe('CompanyJobs — pausar/reativar (alto risco)', () => {
   })
 })
 
+describe('CompanyJobs — "Excluir" só para turno vazio; com freela o gesto é "Cancelar turno"', () => {
+  const comFreela = (status: string) => [{
+    job_id: 'job-1', worker_id: 'w1', status, worker: { full_name: 'Maria', avatar_url: null },
+    worker_checkin_at: null, company_checkin_confirmed_at: null, company_checkout_confirmed_at: null,
+    invitation_expires_at: null, invitation_response: null,
+  }]
+
+  async function abrirMenu() {
+    renderComponent()
+    await waitFor(() => expect(screen.getByText('Garcom para Evento')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /mais opções do turno/i }))
+  }
+
+  it('turno com 0 freelas: o menu oferece "Excluir" e não "Cancelar turno"', async () => {
+    setupMocks([])
+    await abrirMenu()
+
+    await waitFor(() => expect(screen.getByText('Excluir')).toBeInTheDocument())
+    expect(screen.queryByText('Cancelar turno')).not.toBeInTheDocument()
+  })
+
+  it.each(['invited', 'hired'])('turno com freela (%s): o menu oferece "Cancelar turno" e não "Excluir"', async (status) => {
+    setupMocks(comFreela(status))
+    await abrirMenu()
+
+    await waitFor(() => expect(screen.getByText('Cancelar turno')).toBeInTheDocument())
+    expect(screen.queryByText('Excluir')).not.toBeInTheDocument()
+  })
+})
+
 describe('CompanyJobs — excluir turno (alto risco)', () => {
   it('exclui pela RPC cancel_job e mostra sucesso', async () => {
     const { mockAddToast } = setupMocks()
@@ -201,7 +231,7 @@ describe('CompanyJobs — excluir turno (alto risco)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
   })
 
@@ -233,7 +263,7 @@ describe('CompanyJobs — excluir turno (alto risco)', () => {
         'error'
       )
     })
-    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído.', 'success')
   })
 })
 
@@ -258,7 +288,7 @@ describe('CompanyJobs — cancelar candidaturas ao excluir (lote — 0 linhas é
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
   })
 
@@ -287,7 +317,7 @@ describe('CompanyJobs — cancelar candidaturas ao excluir (lote — 0 linhas é
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso. 2 freelas notificados.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno cancelado. 2 freelas avisados.', 'success')
     })
     // sem escrow reservado: nada de estorno
     expect(WalletService.refundEscrow).not.toHaveBeenCalled()

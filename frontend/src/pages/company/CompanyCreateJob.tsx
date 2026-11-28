@@ -10,6 +10,7 @@ import { ArrowLeft, Check, ChevronDown, ChevronUp, Send, Users, X, Repeat, Megap
 import { useToast } from '../../contexts/ToastContext';
 import { logError } from '../../lib/logger';
 import { jobDraftKey } from '../../lib/jobDraft';
+import { isNotVisibleError } from '../../lib/notVisible';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
 import { todayLocalDate, formatDateOnly, localDateToTimestamp, shiftMinutes, formatShiftDuration } from '../../lib/dateUtils';
@@ -21,6 +22,13 @@ import { SHIFT_CATEGORIES } from '../../components/company/shiftCategories';
 import type { TeamMember, RecurrenceType } from '../../types';
 import { getAuthenticatedCompanyId } from '../../services/companyScopeService';
 import { listTags, setJobTag, tagMessage, type CompanyTag } from '../../services/shiftOperationService';
+import { extraTeamMessage } from '../../lib/teamMessages';
+
+/** Texto da falha ao aplicar a loja: encarregado com loja padrão não escolhe (o banco recusa com 42501). */
+function lojaFalhaMessage(outcome: string, souEncarregado: boolean): string {
+    if (souEncarregado && (outcome === 'forbidden' || outcome === 'error')) return 'Sua loja é definida pelo Gestor.';
+    return extraTeamMessage(outcome) ?? tagMessage(outcome as Parameters<typeof tagMessage>[0], 'assign');
+}
 import { useCurrentCompany } from '../../hooks/useCurrentCompany';
 import { rotuloDeDias, WEEKDAY_FULL_LABELS } from '../../lib/weekdayLabels';
 import { Alert, Button, Card, Field, PageHeader, ActionBar } from '../../components/ui';
@@ -89,10 +97,17 @@ export default function CompanyCreateJob() {
     // Etiqueta (E5/R20, R26): opcional e só com equipe (divulgação progressiva). Não vale para série
     // (cada ocorrência é um turno; a etiqueta se aplica turno a turno depois).
     const currentCompany = useCurrentCompany();
-    const tagsEnabled = currentCompany?.team_enabled === true || currentCompany?.role === 'encarregado';
+    // Loja (etiqueta do turno): sempre disponível. Encarregado com loja padrão: vem preenchida e travada
+    // (o servidor também herda e recusa troca). `default_tag_id` vem do seam da empresa (contrato do ADR).
+    const tagsEnabled = currentCompany != null;
+    const myDefaultTagId = (currentCompany as ({ default_tag_id?: string | null } | null))?.default_tag_id ?? null;
+    const lojaTravada = currentCompany?.role === 'encarregado' && !!myDefaultTagId;
     const [tagOptions, setTagOptions] = useState<CompanyTag[]>([]);
     const [tagId, setTagId] = useState('');
     const [initialTagId, setInitialTagId] = useState('');
+    useEffect(() => {
+        if (lojaTravada && !isEditing && myDefaultTagId) setTagId(myDefaultTagId);
+    }, [lojaTravada, isEditing, myDefaultTagId]);
     useEffect(() => {
         if (!tagsEnabled || !currentCompany) return;
         let active = true;
@@ -259,6 +274,7 @@ export default function CompanyCreateJob() {
     const [erroCarga, setErroCarga] = useState<{ jobId: string; modo: 'editar' | 'repetir' } | null>(null);
 
     const [semAcesso, setSemAcesso] = useState(false);
+    const [indisponivel, setIndisponivel] = useState(false);
 
     const [mostrarOpcionais, setMostrarOpcionais] = useState(false);
     useEffect(() => {
@@ -316,6 +332,7 @@ export default function CompanyCreateJob() {
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
 
+            if (error && isNotVisibleError(error)) { setIndisponivel(true); return; }
             if (error) throw error;
             setErroCarga(null);
             if (data && !canSeeJob(await getJobScope(), data)) { setSemAcesso(true); return; }
@@ -351,9 +368,7 @@ export default function CompanyCreateJob() {
             }
         } catch (error) {
             logError('Error fetching job:', error);
-            // PGRST116 = turno inexistente/sem acesso. O resto é falha de carga: fica na tela.
-            if ((error as { code?: string } | null)?.code === 'PGRST116') navigate('/company/jobs');
-            else setErroCarga({ jobId, modo });
+            setErroCarga({ jobId, modo });
         }
     };
 
@@ -575,9 +590,9 @@ export default function CompanyCreateJob() {
                 }
                 // Invalida o cache do React Query (staleTime 5min) para o dashboard não
                 // continuar mostrando o título/dados ANTIGOS do turno em "Turnos Recentes".
-                if (tagsEnabled && tagId !== initialTagId) {
+                if (tagsEnabled && !lojaTravada && tagId !== initialTagId) {
                     const tagResult = await setJobTag(id as string, tagId || null);
-                    if (tagResult.outcome !== 'ok') addToast(tagMessage(tagResult.outcome, 'assign'), 'info');
+                    if (tagResult.outcome !== 'ok') addToast(lojaFalhaMessage(tagResult.outcome, currentCompany?.role === 'encarregado'), 'info');
                 }
                 await queryClient.invalidateQueries({ queryKey: ['companyJobs'] });
                 await queryClient.invalidateQueries({ queryKey: ['companyApplications'] });
@@ -590,9 +605,9 @@ export default function CompanyCreateJob() {
                 const { data: newJob, error } = await supabase.from('jobs').insert({ ...payload, status: 'open' }).select().single();
                 if (error) throw error;
 
-                if (tagsEnabled && tagId) {
+                if (tagsEnabled && !lojaTravada && tagId) {
                     const tagResult = await setJobTag(newJob.id, tagId);
-                    if (tagResult.outcome !== 'ok') addToast(`O turno foi criado, mas a etiqueta não foi aplicada. ${tagMessage(tagResult.outcome, 'assign')}`, 'info');
+                    if (tagResult.outcome !== 'ok') addToast(`O turno foi criado, mas a loja não foi aplicada. ${lojaFalhaMessage(tagResult.outcome, currentCompany?.role === 'encarregado')}`, 'info');
                 }
 
                 // Novo turno deve aparecer imediatamente no dashboard (invalida cache).
@@ -625,6 +640,9 @@ export default function CompanyCreateJob() {
 
     const rotuloEnviar = isEditing ? 'Salvar alterações' : (isRecurring ? 'Criar série de turnos' : 'Criar turno');
 
+    if (indisponivel) {
+        return <SemAcesso titulo="Turno indisponível" mensagem="Você não tem acesso a este turno ou ele foi removido." voltarPara="/company/jobs" rotulo="Voltar para Turnos" />;
+    }
     if (semAcesso) {
         return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
     }
@@ -641,7 +659,7 @@ export default function CompanyCreateJob() {
             </Button>
             <PageHeader
                 title={isEditing ? 'Editar turno' : 'Criar turno'}
-                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Worki registra e emite o recibo.'}
+                subtitle={isEditing ? 'Ajuste os dados do turno.' : 'Turno presencial. Você combina e paga o freela direto. O Workyn registra e emite o recibo.'}
             />
 
             {erroCarga && (
@@ -728,9 +746,12 @@ export default function CompanyCreateJob() {
                     </Field>
 
                     {tagsEnabled && !(!isEditing && isRecurring) && (tagOptions.length > 0 || tagId) && (
-                        <Field label="Etiqueta (opcional)" hint="Agrupa turnos para filtrar na tela Hoje.">
-                            <select aria-label="Etiqueta" value={tagId} onChange={(e) => setTagId(e.target.value)}>
-                                <option value="">Sem etiqueta</option>
+                        <Field
+                            label={lojaTravada ? 'Loja' : 'Loja (opcional)'}
+                            hint={lojaTravada ? 'Definida pelo Gestor para você.' : 'Separa os turnos nos relatórios e no financeiro.'}
+                        >
+                            <select aria-label="Loja" value={tagId} disabled={lojaTravada} onChange={(e) => setTagId(e.target.value)}>
+                                <option value="">Sem loja</option>
                                 {/* Arquivada some do seletor de turnos novos; fica só se já for a deste turno. */}
                                 {tagOptions.filter((t) => !t.archivedAt || t.id === tagId).map((t) => (
                                     <option key={t.id} value={t.id}>{t.archivedAt ? `${t.name} (arquivada)` : t.name}</option>

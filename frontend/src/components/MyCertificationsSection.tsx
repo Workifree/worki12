@@ -307,7 +307,7 @@ export default function MyCertificationsSection() {
                     <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                     Conferida por {verifierNames[cert.verified_by_company_id as string] ?? 'uma empresa'} em{' '}
                     {formatTimestampBR(cert.verified_at as string)} — a empresa confirma ter visto o
-                    documento original. O Worki não verifica diplomas nem consulta conselhos
+                    documento original. O Workyn não verifica diplomas nem consulta conselhos
                     profissionais.
                   </p>
                 ) : (

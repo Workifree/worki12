@@ -158,7 +158,7 @@ export default function QuemTeIndicou() {
       <SectionTabs section="empresas" role="worker" />
       <PageHeader
         title="Quem te indicou"
-        subtitle="Empresas do seu elenco podem te indicar para outras empresas. Você decide se aceita."
+        subtitle="Empresas do seu Elenco podem te indicar para outras empresas. Você decide se aceita."
       />
 
       {erroCarga && !loading && <ErroDeCarga onRetry={load} />}
@@ -187,7 +187,7 @@ export default function QuemTeIndicou() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-base truncate">{item.referringCompanyName ?? 'Uma empresa do seu elenco'}</p>
+                  <p className="font-bold text-base truncate">{item.referringCompanyName ?? 'Uma empresa do seu Elenco'}</p>
                   <p className="text-sm text-gray-600">
                     indicou você para{' '}
                     <Link
@@ -204,8 +204,8 @@ export default function QuemTeIndicou() {
 
               <div className="bg-primary-light text-primary-dark rounded-xl p-4 text-sm font-semibold leading-relaxed">
                 Se aceitar, {item.requestingCompanyName ?? 'a empresa indicada'} passa a te ver e
-                pode te chamar para turnos — assim como qualquer empresa do seu elenco hoje. Se
-                recusar, nada muda: você continua no elenco de quem te indicou normalmente.
+                pode te chamar para turnos — assim como qualquer empresa do seu Elenco hoje. Se
+                recusar, nada muda: você continua no Elenco de quem te indicou normalmente.
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row gap-3">

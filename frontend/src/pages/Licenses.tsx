@@ -42,10 +42,10 @@ export default function Licenses() {
         >
           Voltar
         </Button>
-        <PageHeader title="Licenças de código aberto" subtitle="Software de terceiros usado pelo Worki" />
+        <PageHeader title="Licenças de código aberto" subtitle="Software de terceiros usado pelo Workyn" />
         <Card padding="lg" className="space-y-4 text-sm sm:text-base leading-relaxed text-gray-800">
           <p>
-            O Worki usa código aberto. Abaixo estão os avisos de copyright e as licenças dos projetos
+            O Workyn usa código aberto. Abaixo estão os avisos de copyright e as licenças dos projetos
             que fazem parte do aplicativo, como o page-agent, que sustenta o assistente da tela.
           </p>
 

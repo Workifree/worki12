@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Briefcase, Bell, AlertTriangle, RefreshCw, PlayCircle, Share2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
+import PedidoDeAvisos from '../../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../../lib/features';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -19,7 +21,7 @@ import { Button, ButtonLink, Card, EmptyState, ErrorState, IconButton, ListRow, 
 import { applicationStep, occupancy, shiftWhen } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
 import { GuideChecklist } from '../../components/guide/GuideChecklist';
-import { isJobActive, isShiftInProgress } from '../../lib/shiftProgress';
+import { attendanceLabel, isJobActive, isShiftInProgress, shiftTimeState } from '../../lib/shiftProgress';
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { companyShiftSources } from '../../lib/realtime/liveSources';
 
@@ -230,12 +232,18 @@ export default function CompanyDashboard() {
     const jobsPending = loading || isLoadingJobs || (!company && !isErrorCompany);
 
     // Contratado não é "em andamento": só conta quem já chegou e não teve a saída confirmada.
+    const now = new Date();
+    const rowJob = (row: ActiveShiftRow) => (Array.isArray(row.jobs) ? row.jobs[0] : row.jobs) ?? {};
+    const isPastRow = (row: ActiveShiftRow) => shiftTimeState(rowJob(row), now) === 'past';
     const shiftsInProgress = activeShifts.filter(isShiftInProgress);
-    const shiftsContracted = activeShifts.filter((row) => !isShiftInProgress(row));
+    // Turno que já passou sem nenhuma presença: a empresa decide (dispensar / marcar falta) no turno.
+    const shiftsNoRecord = activeShifts.filter((row) => isPastRow(row) && !isShiftInProgress(row) && !row.company_checkout_confirmed_at && !row.worker_checkin_at && !row.company_checkin_confirmed_at);
+    // Contratado = ainda vai acontecer (ou está acontecendo). Turno passado já encerrado não entra.
+    const shiftsContracted = activeShifts.filter((row) => !isShiftInProgress(row) && !isPastRow(row));
     const inProgressCount = new Set(shiftsInProgress.map((row) => row.job_id)).size;
     const kpiPending = jobsPending || isLoadingShifts;
 
-    const activeJobList = jobs.filter(j => isJobActive(j, j.applications));
+    const activeJobList = jobs.filter(j => isJobActive(j, j.applications, now));
     const filledOf = (apps: Array<{ status: string }> | null | undefined) =>
         (apps ?? []).filter((a) => ['hired', 'in_progress', 'completed'].includes(a.status)).length;
     const withoutPeople = activeJobList.filter((j) => occupancy(j.slots, filledOf(j.applications)).needsPeople).length;
@@ -281,6 +289,7 @@ export default function CompanyDashboard() {
 
             <div className="space-y-8">
                 <GuideChecklist ocultavel />
+                {isAvisosEnabled() && <PedidoDeAvisos papel="empresa" />}
                 <TrailShortcutCard />
 
                 {isErrorPending && (
@@ -356,6 +365,7 @@ export default function CompanyDashboard() {
                 {!isErrorShifts && [
                     { key: 'andamento', title: 'Turnos em andamento', rows: shiftsInProgress, link: '/company/jobs?filter=andamento' },
                     { key: 'contratados', title: 'Contratados', rows: shiftsContracted, link: '/company/jobs' },
+                    { key: 'sem-registro', title: 'Sem registro de presença', rows: shiftsNoRecord, link: '/company/jobs' },
                 ].filter((group) => group.rows.length > 0).map((group, groupIndex) => (
                     <section key={group.key} aria-label={group.title}>
                         <div className="flex items-center justify-between gap-3 mb-3">
@@ -370,21 +380,8 @@ export default function CompanyDashboard() {
                             {group.rows.slice(0, 4).map((app, rowIndex) => {
                                 const worker = Array.isArray(app.worker) ? app.worker[0] : app.worker;
                                 const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
-                                // Quatro estados, nao dois: "Aguardando Chegada" pintava IGUAL o freela
-                                // que ainda nao veio e o que JA registrou chegada e so espera a empresa
-                                // confirmar — escondendo justamente o passo que e da empresa (NN/g #1,
-                                // visibilidade do estado do sistema). Âmbar = a acao e SUA.
-                                const chegouConfirme = !!app.worker_checkin_at && !app.company_checkin_confirmed_at;
-                                const saiuConfirme = !!app.company_checkin_confirmed_at && !!app.worker_checkout_at && !app.company_checkout_confirmed_at;
-                                const estadoPresenca = saiuConfirme
-                                    ? { rotulo: 'Saiu — confirme', tone: 'warning' as const }
-                                    : chegouConfirme
-                                        ? { rotulo: 'Chegou — confirme', tone: 'warning' as const }
-                                        : app.company_checkout_confirmed_at
-                                            ? { rotulo: 'Saída confirmada', tone: 'neutral' as const }
-                                            : app.company_checkin_confirmed_at
-                                                ? { rotulo: 'Presença OK', tone: 'success' as const }
-                                                : { rotulo: 'Aguardando chegada', tone: 'warning' as const };
+                                // Âmbar = a ação é SUA; turno passado sem chegada = sem registro (neutro/perigo).
+                                const estadoPresenca = attendanceLabel(app, job ?? {}, now);
                                 // Pagamento não é lido aqui: sem o marcador, o rótulo não oferece pagar.
                                 const step = applicationStep(app);
                                 const stepLabel = step.kind === 'view' ? 'Presença e pagamento' : step.label;
@@ -482,7 +479,7 @@ export default function CompanyDashboard() {
                                         <li key={job.id}>
                                             <ListRow
                                                 title={job.title}
-                                                meta={`${shiftWhen(job.start_date, job.work_start_time, job.work_end_time)} · ${isJobActive(job, job.applications) ? 'Ativo' : job.status === 'open' ? 'Concluído' : 'Fechado'}`}
+                                                meta={`${shiftWhen(job.start_date, job.work_start_time, job.work_end_time)} · ${isJobActive(job, job.applications, now) ? 'Ativo' : job.status === 'open' ? 'Concluído' : 'Fechado'}`}
                                                 to={`/company/jobs/${job.id}/candidates`}
                                                 trailing={
                                                     // Repetir no ponto de contexto: mesmo motor do ?repetir= (data em branco).
@@ -535,8 +532,8 @@ export default function CompanyDashboard() {
                                             <span className="text-xs font-semibold text-yellow-700">Alguns dados podem estar incompletos.</span>
                                         </div>
                                     )}
-                                    {activities.map((activity, i) => (
-                                        <div key={i} className="flex gap-3 items-start">
+                                    {activities.map((activity) => (
+                                        <div key={`${activity.type}:${activity.id}`} className="flex gap-3 items-start">
                                             <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${activity.type === 'job_created' ? 'bg-blue-500' : 'bg-green-500'}`} aria-hidden="true" />
                                             <div>
                                                 <p className="text-sm font-semibold leading-snug">{activity.text}</p>

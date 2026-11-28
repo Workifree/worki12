@@ -103,7 +103,7 @@ export default function TosGateModal({ userRole, onAccepted }: TosGateModalProps
                 <h2 id="tos-gate-title" className="text-2xl font-bold tracking-tight mb-3">Termos de Uso Atualizados</h2>
 
                 <p className="text-sm sm:text-base text-gray-700 mb-3 leading-relaxed">
-                    Para continuar usando a Worki, você precisa aceitar nossos Termos de Uso. Eles definem suas responsabilidades e direitos na plataforma.
+                    Para continuar usando a Workyn, você precisa aceitar nossos Termos de Uso. Eles definem suas responsabilidades e direitos na plataforma.
                 </p>
 
                 <a

@@ -2,7 +2,13 @@
 // Nunca CPF, PIX, valor, endereco ou nome de terceiro: o payload do banco nem tem esses campos.
 
 export type NoticeEventKind =
-    | 'shift_call_target' | 'sos_call_target' | 'attendance_request' | 'shift_cancelled' | 'payment_recorded';
+    | 'shift_call_target'
+    | 'sos_call_target'
+    | 'attendance_request'
+    | 'shift_cancelled'
+    | 'payment_recorded'
+    | 'shift_accepted'
+    | 'team_member_waiting';
 
 export interface NoticePayload {
     company_name?: string | null;
@@ -50,32 +56,42 @@ export function noticeText(kind: NoticeEventKind, payload: NoticePayload): Notic
         case 'shift_call_target':
             return {
                 path, cta: 'Ver turno', title: 'Chamado de turno',
-                body: `${company} chamou você para um turno em ${when}${where}. Abra o Worki para responder.`,
+                body: `${company} chamou você para um turno em ${when}${where}. Abra o Workyn para responder.`,
             };
         case 'sos_call_target':
             return {
                 path, cta: 'Ver turno', title: 'Turno urgente',
-                body: `${company} precisa de alguém para um turno em ${when}${where}. Abra o Worki para responder.`,
+                body: `${company} precisa de alguém para um turno em ${when}${where}. Abra o Workyn para responder.`,
             };
         case 'attendance_request':
             return {
                 path, cta: 'Responder', title: 'Confirme sua presença',
-                body: `${company} pede a confirmação do seu turno em ${when}${where}. Abra o Worki para responder.`,
+                body: `${company} pede a confirmação do seu turno em ${when}${where}. Abra o Workyn para responder.`,
             };
         case 'shift_cancelled':
             return path.startsWith('/company/')
                 ? {
                     path, cta: 'Ver turno', title: 'Cancelamento em um turno',
-                    body: `Houve um cancelamento no turno de ${when}. Abra o Worki para ver.`,
+                    body: `Houve um cancelamento no turno de ${when}. Abra o Workyn para ver.`,
                 }
                 : {
                     path, cta: 'Ver meus turnos', title: 'Turno cancelado',
-                    body: `O turno de ${when} com ${company} foi cancelado. Abra o Worki para ver.`,
+                    body: `O turno de ${when} com ${company} foi cancelado. Abra o Workyn para ver.`,
                 };
         case 'payment_recorded':
             return {
                 path, cta: 'Ver recibo', title: 'Pagamento registrado',
-                body: `${company} registrou o pagamento do turno de ${day}. Abra o Worki para conferir o recibo.`,
+                body: `${company} registrou o pagamento do turno de ${day}. Abra o Workyn para conferir o recibo.`,
+            };
+        case 'shift_accepted':
+            return {
+                path, cta: 'Ver turno', title: 'Vaga preenchida no turno',
+                body: `Um freela confirmou presença no turno de ${when}${where}. Abra o Workyn para conferir.`,
+            };
+        case 'team_member_waiting':
+            return {
+                path, cta: 'Confirmar na Equipe', title: 'Confirme novo membro da equipe',
+                body: `Uma pessoa convidada entrou em ${company} e aguarda sua confirmação para operar.`,
             };
     }
 }
@@ -103,13 +119,13 @@ export function renderEmail(
 <body style="margin:0;padding:24px 12px;background:#F4F4F0;font-family:Arial,Helvetica,sans-serif;color:#111111">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto">
 <tr><td style="background:#ffffff;border:2px solid #111111;border-radius:16px;box-shadow:6px 6px 0 0 #111111;padding:24px">
-<p style="margin:0 0 16px;font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px">Worki</p>
+<p style="margin:0 0 16px;font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px">Workyn</p>
 <h1 style="margin:0 0 12px;font-size:22px;font-weight:900;text-transform:uppercase">${escapeHtml(t.title)}</h1>
 <p style="margin:0 0 20px;font-size:16px;line-height:1.5">${escapeHtml(t.body)}</p>
 <a href="${escapeHtml(link)}" style="display:inline-block;background:${accent};color:#ffffff;border:2px solid #111111;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:900;text-transform:uppercase;text-decoration:none">${escapeHtml(t.cta)}</a>
 </td></tr>
 <tr><td style="padding:20px 4px 0;font-size:12px;line-height:1.6;color:#555555">
-Você recebeu este e-mail por causa de um turno no Worki${escapeHtml(address)}.<br>
+Você recebeu este e-mail por causa de um turno no Workyn${escapeHtml(address)}.<br>
 <a href="${escapeHtml(options.unsubscribePageUrl)}" style="color:#555555">Não quero mais receber avisos por e-mail</a>
 </td></tr></table></body></html>`;
     const text = `${t.title}\n\n${t.body}\n\n${t.cta}: ${link}\n\n` +

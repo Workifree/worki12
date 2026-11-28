@@ -53,7 +53,7 @@ interface ServiceTermSectionProps {
  * de leitura (`showFullText`) é pré-condição do botão combinado: ninguém confirma sem ter
  * aberto o termo inteiro.
  *
- * O Worki NÃO é parte deste termo, não valida e não garante — a cláusula já está DENTRO
+ * O Workyn NÃO é parte deste termo, não valida e não garante — a cláusula já está DENTRO
  * de `term_text` (congelado no aceite, ver ADR-20260818). Este componente só EXIBE e
  * dispara o aceite; nunca decide localmente se o CPF é válido, se o termo pode ser aceito
  * ou se está "verificado" — isso é autoridade da RPC `accept_service_term`.
@@ -383,10 +383,10 @@ export default function ServiceTermSection({
 
                     {/* Fronteira jurídica — a cláusula equivalente já está DENTRO de term_text (item 4),
                         mas o aviso na UI é reforço, não substituto (A6). Não usar palavras como
-                        "validado"/"verificado pela Worki"/"documento oficial". */}
+                        "validado"/"verificado pela Workyn"/"documento oficial". */}
                     <div className="mt-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-yellow-800">
-                            O Worki apenas registra o aceite entre as partes — não é parte deste termo, não valida
+                            O Workyn apenas registra o aceite entre as partes — não é parte deste termo, não valida
                             e não garante sua validade jurídica.
                         </p>
                     </div>

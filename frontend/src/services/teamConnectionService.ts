@@ -86,7 +86,7 @@ async function getAuthenticatedCompanyId(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /** Quem abriu o link do elenco não é conta de freela (ex.: a própria empresa testando). */
-export const NOT_A_WORKER_ERROR = 'Apenas freelas entram em um elenco por este link.';
+export const NOT_A_WORKER_ERROR = 'Apenas freelas entram em um Elenco por este link.';
 
 export const TeamConnectionService = {
   // -------------------------------------------------------------------------
@@ -796,7 +796,7 @@ export const TeamConnectionService = {
 
       if (error) {
         logError('teamConnection.removeFromTeam', error);
-        return { success: false, error: 'Erro ao remover freela do elenco.' };
+        return { success: false, error: 'Erro ao remover freela do Elenco.' };
       }
 
       if (!data || data.length === 0) {

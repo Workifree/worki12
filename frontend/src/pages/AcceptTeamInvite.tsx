@@ -1,49 +1,54 @@
 /**
- * AcceptTeamInvite — entrada de Encarregado por link, SEM senha (Equipe e encarregados, E4).
+ * AcceptTeamInvite — entrada de Encarregado ou Gestor por link, com e-mail preso ao convite (E4 + ADR-20261127).
  *
- * Rota: /convite-equipe/:token (PÚBLICA — fora do ProtectedRoute, mesmo motivo de InviteAccept e
- * AcceptManagerInvite: sob o guard, sem sessão o token do link se perderia).
+ * Rota: /convite-equipe/:token (PÚBLICA — fora do ProtectedRoute, mesmo motivo de InviteAccept:
+ * sob o guard, sem sessão o token do link se perderia).
  *
- * Fluxo (spec R13): prévia pública ("{Empresa} te convidou como Encarregado") → e-mail + Termos →
- * código de 6 dígitos enviado por e-mail (`signInWithOtp`/`verifyOtp`, conta nasce com
- * `user_type='hire'`, nunca de freela) → `accept_company_member_invite(token, true)` → cai na tela da
- * empresa, sem onboarding de CNPJ. Se o Gestor ainda não confirmou, o ProtectedRoute mostra a tela de
- * espera (R22).
+ * Fluxo, SEM OTP e sem nenhum e-mail enviado pelo Workyn: prévia pública ("{Empresa} te convidou
+ * como Encarregado" + e-mail mascarado) → senha + Termos → Edge Function `accept-team-invite` cria a
+ * conta com o e-mail do convite (`user_type='hire'`) → `signInWithPassword` →
+ * `accept_company_member_invite(token, true)` → Hoje. Conta que já existe: a pessoa entra com a
+ * própria senha e o banco confere que a sessão é o e-mail do convite (`email_mismatch`, sem queimar
+ * o token). Se o Gestor ainda não confirmou, o ProtectedRoute mostra a tela de espera (R22).
  *
- * CONSENTIMENTO: abrir o link nunca aceita. A retomada automática depois do código só existe quando
- * a pessoa já tocou em "Aceitar e receber código" nesta mesma jornada (marca por token+e-mail, 1h,
- * uso único; apagada em "Agora não" e na troca de e-mail).
- *
- * O botão do e-mail volta para ESTA rota (`emailRedirectTo`): o token vai no caminho, então sobrevive
- * a uma aba nova; com a sessão aberta e os Termos já marcados antes do envio, o aceite se conclui.
- *
+ * CONSENTIMENTO: abrir o link nunca aceita; só o clique no botão (com os Termos marcados).
  * O token nunca vai em URL de RPC: a prévia e o aceite saem por POST (`.rpc()`), ver service.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, Building2, Loader2, Mail, XCircle } from 'lucide-react';
+import { ArrowRight, Building2, Eye, EyeOff, Loader2, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logError } from '../lib/logger';
+import { focusFirstInvalid } from '../lib/formErrors';
 import PageMeta from '../components/PageMeta';
 import { Button, Card, Field } from '../components/ui';
 import {
   clearPendingTeamInviteToken,
-  consumeTeamInviteTos,
   readPendingTeamInviteToken,
-  rememberTeamInviteTos,
   storePendingTeamInviteToken,
 } from '../lib/teamInviteToken';
-import { acceptMemberInvite, getInvitePreview, ROLE_LABEL } from '../services/teamMembersService';
-import { invalidateCompanyScope, switchCompanyUnit } from '../services/companyScopeService';
-import type { AcceptMemberInviteOutcome, InvitePreviewResult } from '../types';
+import {
+  acceptMemberInvite,
+  getInvitePreview,
+  provisionTeamInviteAccount,
+  ROLE_LABEL,
+} from '../services/teamMembersService';
+import { invalidateCompanyScope, switchCompany } from '../services/companyScopeService';
+import type { InvitePreviewResult } from '../types';
 
-type Step = 'form' | 'code' | 'working';
+type Step = 'form' | 'working';
+/** `create`: conta nova com o e-mail do convite. `login`: a pessoa já tem conta e entra com ela. */
+type Mode = 'create' | 'login';
+
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 72;
 
 /** Desfechos que encerram o fluxo com uma mensagem (tudo menos accepted/already_accepted/already_operator). */
 const OUTCOME_COPY: Record<
-  Exclude<AcceptMemberInviteOutcome, 'accepted' | 'already_accepted' | 'already_operator' | 'tos_required'>,
+  string,
   { title: string; body: string }
 > = {
   expired: {
@@ -64,15 +69,31 @@ const OUTCOME_COPY: Record<
   },
   worker_cannot_be_manager: {
     title: 'Este e-mail é de uma conta de freela',
-    body: 'Este e-mail já é de uma conta de freela. Use outro e-mail para entrar na equipe.',
+    body: 'Este e-mail já é de uma conta de freela e não pode entrar na equipe de uma empresa. Peça ao Gestor um convite com outro e-mail.',
   },
-  use_manager_invite: {
-    title: 'Este convite é de Gestor',
-    body: 'Convites de Gestor têm outro caminho de entrada. Toque abaixo para continuar.',
+  manager_requires_verified_signup: {
+    title: 'Cadastre-se primeiro',
+    body: 'Para entrar como Gestor, cadastre-se primeiro com este e-mail e confirme o e-mail. Depois abra este link de novo.',
   },
   email_not_verified: {
     title: 'Não conseguimos confirmar seu e-mail',
-    body: 'Peça um novo código e tente de novo. Se continuar, avise o Gestor.',
+    body: 'Sua conta ainda não está confirmada. Peça ao Gestor um convite com outro e-mail ou use "Esqueci a senha" na tela de login.',
+  },
+  email_mismatch: {
+    title: 'Este convite é para outro e-mail',
+    body: 'Você entrou com um e-mail diferente do que o Gestor informou. O convite continua valendo: entre com a conta certa.',
+  },
+  account_pending: {
+    title: 'Já existe uma conta com este e-mail',
+    body: 'Já existe uma conta com este e-mail ainda não confirmada. Peça ao Gestor um convite com outro e-mail ou use "Esqueci a senha" na tela de entrada.',
+  },
+  rate_limited: {
+    title: 'Muitas tentativas',
+    body: 'Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.',
+  },
+  legacy_invite: {
+    title: 'Convite antigo',
+    body: 'Este convite é de um modelo antigo e não funciona mais. Peça ao Gestor um novo link.',
   },
   invalid_input: {
     title: 'Não foi possível entrar',
@@ -80,7 +101,7 @@ const OUTCOME_COPY: Record<
   },
   unauthenticated: {
     title: 'Sua sessão expirou',
-    body: 'Entre de novo com o código do e-mail para continuar.',
+    body: 'Entre de novo com seu e-mail e senha para continuar.',
   },
   error: {
     title: 'Não foi possível processar',
@@ -103,20 +124,18 @@ export default function AcceptTeamInvite() {
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [sessionIsWorker, setSessionIsWorker] = useState(false);
   const [step, setStep] = useState<Step>('form');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [mode, setMode] = useState<Mode>('create');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [acceptedTos, setAcceptedTos] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [confirmError, setConfirmError] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
   const [terminal, setTerminal] = useState<TerminalOutcome | null>(null);
-  // Segundos até poder pedir outro código.
-  const [cooldown, setCooldown] = useState(0);
-
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = window.setTimeout(() => setCooldown((s) => s - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [cooldown]);
 
   const loadPreview = useCallback(async () => {
     if (!token) {
@@ -146,7 +165,7 @@ export default function AcceptTeamInvite() {
     ) {
       clearStoredToken();
       // Quem já tem empresa própria cairia nela (`pickPrimaryCompany`): abre a do convite.
-      if (result.companyId) switchCompanyUnit(result.companyId);
+      if (result.companyId) switchCompany(result.companyId);
       invalidateCompanyScope();
       // Cai direto na Hoje (E5); sem onboarding de CNPJ (o ProtectedRoute resolve pelo seam
       // e, se o Gestor ainda não confirmou, mostra a tela de espera).
@@ -160,8 +179,15 @@ export default function AcceptTeamInvite() {
       setFormError('Para entrar, aceite os Termos de Uso e a Política de Privacidade.');
       return;
     }
-    // Todo desfecho terminal (not_found, expired, revoked, token_already_used...) descarta o token.
-    if (result.outcome !== 'error' && result.outcome !== 'unauthenticated') clearStoredToken();
+    // `email_mismatch` NÃO queima o token (o banco recusa antes de consumir): mantém guardado.
+    // Todo outro desfecho terminal (not_found, expired, revoked, token_already_used...) o descarta.
+    if (
+      result.outcome !== 'error'
+      && result.outcome !== 'unauthenticated'
+      && result.outcome !== 'email_mismatch'
+    ) {
+      clearStoredToken();
+    }
     // Desfecho fora do contrato (RPC nova, resposta estranha) cai em 'error' em vez de tela branca.
     setTerminal(result.outcome in OUTCOME_COPY ? (result.outcome as TerminalOutcome) : 'error');
     setStep('form');
@@ -170,30 +196,52 @@ export default function AcceptTeamInvite() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const result = await loadPreview();
+      await loadPreview();
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!active || !user) return;
-        const isWorker = user.user_metadata?.user_type === 'work';
         setSessionEmail(user.email ?? null);
-        setSessionIsWorker(isWorker);
-        // Voltou pelo botão do e-mail: conclui o aceite que a própria pessoa iniciou.
-        if (!isWorker && token && user.email && result?.outcome === 'ok' && consumeTeamInviteTos(token, user.email)) {
-          await finish();
-        }
+        setSessionIsWorker(user.user_metadata?.user_type === 'work');
       } catch (err) {
         logError('AcceptTeamInvite.getUser', err);
       }
     })();
     return () => { active = false; };
-  }, [loadPreview, finish, token]);
+  }, [loadPreview]);
 
-  const sendCode = async (e?: FormEvent) => {
-    e?.preventDefault();
+  /** Entra com e-mail e senha e conclui o aceite. Devolve `false` se o login em si falhou. */
+  const signInAndFinish = async (email: string, pass: string): Promise<boolean> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error || !data.user) {
+      if (error) logError('AcceptTeamInvite.signIn', error);
+      return false;
+    }
+    setSessionEmail(data.user.email ?? email);
+    if (data.user.user_metadata?.user_type === 'work') {
+      // Conta de freela: não cria nem move conta de empresa (Article 1).
+      setSessionIsWorker(true);
+      clearStoredToken();
+      setTerminal('worker_cannot_be_manager');
+      return true;
+    }
+    await finish();
+    return true;
+  };
+
+  const submitCreate = async (e: FormEvent) => {
+    e.preventDefault();
     setFormError(undefined);
-    const clean = email.trim().toLowerCase();
-    if (!clean || !clean.includes('@')) {
-      setFormError('Digite um e-mail válido.');
+    setPasswordError(undefined);
+    setConfirmError(undefined);
+    const form = e.currentTarget as HTMLFormElement;
+    if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+      flushSync(() => setPasswordError(`A senha precisa ter de ${MIN_PASSWORD} a ${MAX_PASSWORD} caracteres.`));
+      focusFirstInvalid(form);
+      return;
+    }
+    if (password !== confirmPassword) {
+      flushSync(() => setConfirmError('As senhas não são iguais.'));
+      focusFirstInvalid(form);
       return;
     }
     if (!acceptedTos) {
@@ -202,75 +250,68 @@ export default function AcceptTeamInvite() {
     }
     if (!token) return;
     setSending(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: clean,
-      options: {
-        shouldCreateUser: true,
-        // A conta nasce como EMPRESA ('hire'): quem entra na equipe nunca é conta de freela.
-        data: { user_type: 'hire' },
-        // Sem isto o botão do e-mail cai na Site URL e o convite se perde. Precisa estar na
-        // allowlist de redirect do Supabase (docs/ops-supabase-smtp-e-emails.md).
-        emailRedirectTo: `${window.location.origin}/convite-equipe/${encodeURIComponent(token)}`,
-      },
-    });
-    setSending(false);
-    if (error) {
-      logError('AcceptTeamInvite.sendCode', error);
-      const limitado = error.status === 429 || /rate limit|security purposes|too many/i.test(error.message ?? '');
-      setFormError(
-        limitado
-          ? 'Aguarde um minuto para pedir outro código.'
-          : 'Não conseguimos enviar o código. Confira o e-mail e tente de novo.',
-      );
+    const result = await provisionTeamInviteAccount(token, password);
+    if (result.outcome === 'created' && result.email) {
+      const entered = await signInAndFinish(result.email, password);
+      setSending(false);
+      if (!entered) {
+        // Conta criada, mas o login falhou: a criação não se repete, então segue pelo login.
+        setLoginEmail(result.email);
+        setMode('login');
+        setFormError('Sua conta foi criada, mas não conseguimos entrar agora. Digite a senha que você acabou de criar.');
+      }
       return;
     }
-    rememberTeamInviteTos(token, clean);
-    setCooldown(60);
-    setEmail(clean);
-    setCode('');
-    setStep('code');
+    setSending(false);
+    switch (result.outcome) {
+      case 'existing_account':
+        setMode('login');
+        return;
+      case 'account_pending':
+      case 'worker_cannot_be_manager':
+      case 'legacy_invite':
+      case 'not_found':
+      case 'expired':
+        clearStoredToken();
+        setTerminal(result.outcome);
+        return;
+      case 'rate_limited':
+        setTerminal('rate_limited');
+        return;
+      case 'invalid_input':
+        setFormError('Confira a senha (8 a 72 caracteres) e os Termos e tente de novo.');
+        return;
+      default:
+        setFormError('Não foi possível criar sua conta agora. Tente de novo em instantes.');
+    }
   };
 
-  const verifyCode = async (e: FormEvent) => {
+  const submitLogin = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(undefined);
-    const clean = code.replace(/\s/g, '');
-    if (clean.length < 6) {
-      setFormError('Digite o código que chegou no seu e-mail.');
+    const clean = loginEmail.trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !loginPassword) {
+      setFormError('Digite o e-mail e a senha da sua conta.');
+      return;
+    }
+    if (!acceptedTos) {
+      setFormError('Aceite os Termos de Uso e a Política de Privacidade para continuar.');
       return;
     }
     setSending(true);
-    // Entrando pelo código nesta aba, a marca para o botão do e-mail não é mais necessária.
-    if (token) consumeTeamInviteTos(token, email);
-    const { data, error } = await supabase.auth.verifyOtp({ email, token: clean, type: 'email' });
+    const entered = await signInAndFinish(clean, loginPassword);
     setSending(false);
-    if (error || !data.user) {
-      if (error) logError('AcceptTeamInvite.verifyCode', error);
-      setFormError('Código incorreto ou vencido. Confira ou peça um novo código.');
-      return;
-    }
-    // A partir daqui há sessão: se o aceite falhar, "tentar de novo"/Termos não pedem outro código.
-    setSessionEmail(data.user.email ?? email);
-    if (data.user.user_metadata?.user_type === 'work') {
-      // E-mail que já é de freela: não cria nem move conta de empresa (Article 1).
-      setSessionIsWorker(true);
-      clearStoredToken();
-      setTerminal('worker_cannot_be_manager');
-      return;
-    }
-    await finish();
+    if (!entered) setFormError('E-mail ou senha incorretos. Confira e tente de novo.');
   };
 
-  /** Desiste: apaga a marca do aceite pendente e o token guardado. Nada é gravado no banco. */
+  /** Desiste: apaga o token guardado. Nada é gravado no banco. */
   const agoraNao = () => {
-    const dono = email || sessionEmail;
-    if (token && dono) consumeTeamInviteTos(token, dono);
     clearStoredToken();
     navigate('/');
   };
 
-  const trocarDeEmail = async () => {
-    if (token && email) consumeTeamInviteTos(token, email);
+  /** Sai da sessão atual e abre o login para entrar com a conta do convite. */
+  const trocarDeConta = async () => {
     try {
       await supabase.auth.signOut();
     } catch (err) {
@@ -279,8 +320,9 @@ export default function AcceptTeamInvite() {
     setSessionEmail(null);
     setSessionIsWorker(false);
     setTerminal(null);
-    setEmail('');
-    setCode('');
+    setLoginEmail('');
+    setLoginPassword('');
+    setMode('login');
     setFormError(undefined);
     setStep('form');
   };
@@ -289,7 +331,7 @@ export default function AcceptTeamInvite() {
 
   const frame = (children: ReactNode) => (
     <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
-      <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Worki." noindex />
+      <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Workyn." noindex />
       <div className="w-full max-w-md">
         <Card padding="lg" className="shadow-brutal-lg [overflow-wrap:anywhere]">
           {children}
@@ -314,6 +356,12 @@ export default function AcceptTeamInvite() {
       <h1 className="text-2xl font-bold tracking-tight mb-2">{title}</h1>
       <p className="text-base text-gray-700 mb-6">{body}</p>
     </div>
+  );
+
+  const irParaInicio = (
+    <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/')} iconRight={<ArrowRight size={18} />}>
+      Ir para o início
+    </Button>
   );
 
   if (preview === null) {
@@ -346,27 +394,36 @@ export default function AcceptTeamInvite() {
     return frame(
       <>
         {alerta('error', copy.title, copy.body)}
-        <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/')} iconRight={<ArrowRight size={18} />}>
-          Ir para o início
-        </Button>
+        {irParaInicio}
+      </>,
+    );
+  }
+
+  // Convite antigo (sem e-mail preso): o ramo por código está morto, então não há como aceitar.
+  if (!preview.emailBound) {
+    const copy = OUTCOME_COPY.legacy_invite;
+    return frame(
+      <>
+        {alerta('error', copy.title, copy.body)}
+        {irParaInicio}
       </>,
     );
   }
 
   if (terminal) {
-    const copy = OUTCOME_COPY[terminal];
+    const copy = OUTCOME_COPY[terminal] ?? OUTCOME_COPY.error;
     return frame(
       <>
-        {alerta(terminal === 'use_manager_invite' ? 'neutral' : 'error', copy.title, copy.body)}
-        {terminal === 'use_manager_invite' && token ? (
+        {alerta('error', copy.title, copy.body)}
+        {terminal === 'manager_requires_verified_signup' ? (
           <Button
             variant="dark"
             size="lg"
             fullWidth
-            onClick={() => navigate(`/convite-gerente/${token}`)}
+            onClick={() => navigate(`/login?type=hire&cadastro=1&redirect=${encodeURIComponent(`/convite-equipe/${token ?? ''}`)}`)}
             iconRight={<ArrowRight size={18} />}
           >
-            Continuar como Gestor
+            Cadastrar com este e-mail
           </Button>
         ) : terminal === 'error' && sessionEmail && !sessionIsWorker ? (
           <Button
@@ -377,14 +434,23 @@ export default function AcceptTeamInvite() {
           >
             Tentar de novo
           </Button>
-        ) : terminal === 'worker_cannot_be_manager' || terminal === 'email_not_verified' || terminal === 'unauthenticated' ? (
-          <Button variant="dark" size="lg" fullWidth onClick={() => void trocarDeEmail()}>
-            Usar outro e-mail
+        ) : terminal === 'rate_limited' ? (
+          <Button variant="dark" size="lg" fullWidth onClick={() => setTerminal(null)}>
+            Voltar ao convite
+          </Button>
+        ) : terminal === 'account_pending' ? (
+          <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/login')} iconRight={<ArrowRight size={18} />}>
+            Ir para o login
+          </Button>
+        ) : terminal === 'email_mismatch'
+          || terminal === 'worker_cannot_be_manager'
+          || terminal === 'email_not_verified'
+          || terminal === 'unauthenticated' ? (
+          <Button variant="dark" size="lg" fullWidth onClick={() => void trocarDeConta()}>
+            Entrar com outra conta
           </Button>
         ) : (
-          <Button variant="dark" size="lg" fullWidth onClick={() => navigate('/')} iconRight={<ArrowRight size={18} />}>
-            Ir para o início
-          </Button>
+          irParaInicio
         )}
       </>,
     );
@@ -402,8 +468,15 @@ export default function AcceptTeamInvite() {
         {company} te convidou como {roleLabel}
       </h1>
       <p className="text-sm text-gray-600 mt-2">
-        Entre com um código enviado ao seu e-mail. Não precisa criar senha.
+        {mode === 'login' || sessionEmail
+          ? 'Entre com a sua conta para aceitar o convite.'
+          : 'Crie uma senha para entrar.'}
       </p>
+      {preview.role === 'manager' && (
+        <p className="text-sm font-bold mt-2">
+          Como Gestor você terá acesso total à empresa. Só começa a operar depois que o dono confirmar.
+        </p>
+      )}
     </div>
   );
 
@@ -461,7 +534,7 @@ export default function AcceptTeamInvite() {
     );
   }
 
-  // Já há sessão: não precisa de e-mail nem de código; só os Termos e entrar.
+  // Já há sessão: não precisa de senha; só os Termos e entrar.
   if (sessionEmail) {
     if (sessionIsWorker) {
       return frame(
@@ -471,8 +544,8 @@ export default function AcceptTeamInvite() {
             OUTCOME_COPY.worker_cannot_be_manager.title,
             OUTCOME_COPY.worker_cannot_be_manager.body,
           )}
-          <Button variant="dark" size="lg" fullWidth onClick={() => void trocarDeEmail()}>
-            Usar outro e-mail
+          <Button variant="dark" size="lg" fullWidth onClick={() => void trocarDeConta()}>
+            Entrar com outra conta
           </Button>
         </>,
       );
@@ -500,52 +573,55 @@ export default function AcceptTeamInvite() {
             Entrar na equipe
           </Button>
           {naoAgora}
-          <Button variant="ghost" size="lg" fullWidth onClick={() => void trocarDeEmail()}>
-            Não sou eu — usar outro e-mail
+          <Button variant="ghost" size="lg" fullWidth onClick={() => void trocarDeConta()}>
+            Não sou eu — usar outra conta
           </Button>
         </div>
       </>,
     );
   }
 
-  if (step === 'code') {
+  if (mode === 'login') {
     return frame(
       <>
         {header}
-        <form onSubmit={(e) => void verifyCode(e)} className="space-y-4" noValidate>
+        <form onSubmit={(e) => void submitLogin(e)} className="space-y-4" noValidate>
           <p className="text-sm text-gray-800">
-            Enviamos um código para <strong>{email}</strong>. Digite abaixo. Se não chegar, confira o spam.
+            Já existe uma conta com o e-mail do convite
+            {preview.emailMasked ? <> (<strong>{preview.emailMasked}</strong>)</> : null}. Entre com ela.
           </p>
-          <Field label="Código do e-mail" required>
+          <Field label="Seu e-mail" required>
             <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={10}
-              value={code}
-              onChange={(e) => { setCode(e.target.value.replace(/[^\d\s]/g, '')); setFormError(undefined); }}
-              className="text-center text-2xl font-bold tracking-[0.3em] h-14"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={loginEmail}
+              onChange={(e) => { setLoginEmail(e.target.value); setFormError(undefined); }}
             />
           </Field>
+          <Field label="Sua senha" required>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={loginPassword}
+              onChange={(e) => { setLoginPassword(e.target.value); setFormError(undefined); }}
+            />
+          </Field>
+          {oQueAEmpresaVe}
+          {termsBox}
           {errorLine}
-          <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconRight={<ArrowRight size={18} />} data-copilot="publico.convite-equipe.confirmar-codigo">
-            Entrar na equipe
-          </Button>
-          <Button variant="secondary" size="lg" fullWidth disabled={cooldown > 0 || sending} onClick={() => void sendCode()}>
-            {cooldown > 0 ? `Pedir novo código em ${cooldown}s` : 'Pedir novo código'}
-          </Button>
           <Button
-            variant="ghost"
+            type="submit"
+            variant="dark"
             size="lg"
             fullWidth
-            onClick={() => {
-              if (token) consumeTeamInviteTos(token, email);
-              setStep('form');
-              setFormError(undefined);
-            }}
+            loading={sending}
+            iconRight={<ArrowRight size={18} />}
+            data-copilot="publico.convite-equipe.entrar-conta"
           >
-            Trocar e-mail
+            Entrar na equipe
           </Button>
+          {naoAgora}
         </form>
       </>,
     );
@@ -554,21 +630,55 @@ export default function AcceptTeamInvite() {
   return frame(
     <>
       {header}
-      <form onSubmit={(e) => void sendCode(e)} className="space-y-4" noValidate>
-        <Field label="Seu e-mail" required>
+      <form onSubmit={(e) => void submitCreate(e)} className="space-y-4" noValidate>
+        <div>
+          <p className="text-sm font-bold text-black">E-mail do convite</p>
+          <p className="mt-1 text-base font-semibold break-all" data-testid="convite-email">{preview.emailMasked ?? ''}</p>
+          <p className="mt-1 text-sm text-gray-600">Definido por quem te convidou. Não dá para trocar aqui.</p>
+        </div>
+        <Field label="Crie uma senha" required hint="De 8 a 72 caracteres." error={passwordError}>
           <input
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setFormError(undefined); }}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            maxLength={MAX_PASSWORD}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setFormError(undefined); setPasswordError(undefined); }}
           />
         </Field>
+        <Field label="Repita a senha" required error={confirmError}>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            maxLength={MAX_PASSWORD}
+            value={confirmPassword}
+            onChange={(e) => { setConfirmPassword(e.target.value); setFormError(undefined); setConfirmError(undefined); }}
+          />
+        </Field>
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => setShowPassword((v) => !v)}
+          iconLeft={showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+        >
+          {showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+        </Button>
         {oQueAEmpresaVe}
         {termsBox}
         {errorLine}
-        <Button type="submit" variant="dark" size="lg" fullWidth loading={sending} iconLeft={<Mail size={18} />} data-copilot="publico.convite-equipe.aceitar">
-          Aceitar e receber código
+        <Button
+          type="submit"
+          variant="dark"
+          size="lg"
+          fullWidth
+          loading={sending}
+          iconRight={<ArrowRight size={18} />}
+          data-copilot="publico.convite-equipe.aceitar"
+        >
+          Criar senha e entrar na equipe
+        </Button>
+        <Button variant="ghost" size="lg" fullWidth onClick={() => { setMode('login'); setFormError(undefined); }}>
+          Já tenho conta com este e-mail
         </Button>
         {naoAgora}
       </form>

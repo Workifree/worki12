@@ -3,7 +3,6 @@ import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import SkipLink, { MAIN_CONTENT_ID } from '../components/SkipLink';
 import NotificationBell from '../components/NotificationBell';
-import CompanySwitcher from '../components/company/CompanySwitcher';
 import FormerCompanyNotice from '../components/company/FormerCompanyNotice';
 import GestorRouteGuard from '../components/company/GestorRouteGuard';
 import { GuideRoleEmpresa } from '../components/guide/GuideRole';
@@ -30,7 +29,7 @@ export default function CompanyLayout() {
             <header className="md:hidden sticky top-0 z-40 flex h-[var(--worki-header-h,3.5rem)] items-center justify-between gap-2 border-b-2 border-black bg-white/95 pl-4 pr-2 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md">
                 <div className="flex min-w-0 items-center gap-2">
                     <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold bg-black text-white">W.</span>
-                    <p className="text-lg font-bold tracking-tight text-black">Worki</p>
+                    <p className="text-lg font-bold tracking-tight text-black">Workyn</p>
                     <span className="hidden min-[430px]:inline rounded-pill bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">Empresa</span>
                 </div>
                 <div className="flex shrink-0 items-center">
@@ -44,7 +43,6 @@ export default function CompanyLayout() {
                 <div className="hidden md:flex md:empty:hidden justify-end mb-2">
                     <HelpButton variante="linha" />
                 </div>
-                <CompanySwitcher className="min-[1100px]:hidden mb-4" />
                 <FormerCompanyNotice />
                 {/* `key` por rota: a tela nova entra com um fade curto (`worki-page-enter`, index.css). */}
                 <div key={pathname} className="worki-page-enter">

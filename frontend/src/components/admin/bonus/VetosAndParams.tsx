@@ -52,7 +52,7 @@ function Vetos({ adapter }: Props) {
     return (
         <section aria-labelledby="bonus-vetos" className="space-y-4">
             <h2 id="bonus-vetos" className="text-xl font-black uppercase">Lista de vetos</h2>
-            <p className="text-sm text-gray-700">Sócios e donos do Worki. Turnos feitos por eles não entram na contagem do bônus.</p>
+            <p className="text-sm text-gray-700">Sócios e donos do Workyn. Turnos feitos por eles não entram na contagem do bônus.</p>
             <form onSubmit={add} className="bg-white border-2 border-black rounded-2xl p-4 sm:p-6 space-y-3">
                 <div>
                     <label htmlFor="veto-person" className="block text-sm font-bold mb-1">ID da pessoa</label>
@@ -62,7 +62,7 @@ function Vetos({ adapter }: Props) {
                 <div>
                     <label htmlFor="veto-reason" className="block text-sm font-bold mb-1">Motivo</label>
                     <input id="veto-reason" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)}
-                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary" placeholder="Ex.: sócio do Worki" />
+                        className="w-full border-2 border-black rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary" placeholder="Ex.: sócio do Workyn" />
                     <p className="text-xs text-gray-600 mt-1">Não escreva dado pessoal (CPF, telefone, endereço) no motivo.</p>
                 </div>
                 <button type="submit" disabled={busy}

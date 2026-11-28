@@ -138,6 +138,8 @@ export type TagOutcome =
   | 'already_exists'
   | 'archived'
   | 'already_archived'
+  | 'renamed'
+  | 'default_of_members'
   | 'ok'
   | 'invalid_tag'
   | 'job_deleted'
@@ -192,6 +194,7 @@ interface RpcJson {
   cancelled_calls?: number;
   closed_candidates?: number;
   tag_id?: string;
+  count?: number;
   truncated?: boolean;
   items?: RpcJobItem[];
 }
@@ -485,7 +488,7 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
         ? 'Esse turno tem pagamento agendado ou registrado. Estorne o pagamento registrado antes de cancelar o turno.'
         : 'Esse turno tem pagamento agendado ou registrado. Peça ao Gestor para estornar o pagamento antes de cancelar.';
     case 'active_escrow':
-      return 'Este turno tem uma reserva de saldo ativa; fale com o suporte do Worki.';
+      return 'Este turno tem uma reserva de saldo ativa; fale com o suporte do Workyn.';
     case 'attendance_started':
       return 'Esse turno já teve presença registrada. Não dá para cancelar um turno que já começou.';
     case 'job_in_the_past':
@@ -507,8 +510,8 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
 /** Aviso do gesto "Excluir turno". */
 export function deleteShiftToast(result: CancelJobResult): string {
   const total = result.cancelledApplications + result.closedCandidates;
-  if (total === 0) return 'Turno excluído com sucesso.';
-  return `Turno excluído com sucesso. ${total} freela${total > 1 ? 's' : ''} notificado${total > 1 ? 's' : ''}.`;
+  if (total === 0) return 'Turno excluído.';
+  return `Turno cancelado. ${total} freela${total > 1 ? 's' : ''} avisado${total > 1 ? 's' : ''}.`;
 }
 
 export function cancelJobWasRefused(outcome: CancelJobOutcome): boolean {
@@ -614,13 +617,28 @@ export async function createTag(companyId: string, name: string): Promise<{ outc
   }
 }
 
-export async function archiveTag(tagId: string): Promise<{ outcome: TagOutcome }> {
+/** `count` só vem em `default_of_members`: quantas pessoas (convidadas ou ativas) têm a loja como padrão. */
+export async function archiveTag(tagId: string): Promise<{ outcome: TagOutcome; count?: number }> {
   try {
     const { data, error } = await supabase.rpc('archive_company_tag', { p_tag_id: tagId });
     if (error) throw error;
-    return { outcome: outcomeOf<TagOutcome>((data ?? null) as RpcJson | null) };
+    const row = (data ?? null) as RpcJson | null;
+    const outcome = outcomeOf<TagOutcome>(row);
+    return outcome === 'default_of_members' ? { outcome, count: num(row?.count) } : { outcome };
   } catch (err) {
     logError('shiftOperation.archiveTag', err);
+    return { outcome: 'error' };
+  }
+}
+
+/** Renomeia a loja (só Gestor). O id é a chave fiscal: relatórios passados passam a mostrar o nome novo. */
+export async function renameTag(tagId: string, name: string): Promise<{ outcome: TagOutcome }> {
+  try {
+    const { data, error } = await supabase.rpc('rename_company_tag', { p_tag_id: tagId, p_name: name });
+    if (error) throw error;
+    return { outcome: outcomeOf<TagOutcome>((data ?? null) as RpcJson | null) };
+  } catch (err) {
+    logError('shiftOperation.renameTag', err);
     return { outcome: 'error' };
   }
 }
@@ -641,25 +659,29 @@ export async function setJobTag(jobId: string, tagId: string | null): Promise<{ 
 export function tagMessage(outcome: TagOutcome, context: 'manage' | 'assign' = 'manage'): string {
   switch (outcome) {
     case 'created':
-      return 'Etiqueta criada.';
+      return 'Loja criada.';
     case 'reactivated':
-      return 'Essa etiqueta já existia arquivada. Ela voltou a ficar disponível.';
+      return 'Essa loja já existia arquivada. Ela voltou a ficar disponível.';
     case 'already_exists':
-      return 'Já existe uma etiqueta com esse nome.';
+      return 'Já existe uma loja com esse nome.';
     case 'archived':
-      return 'Etiqueta arquivada. Os turnos antigos continuam com ela.';
+      return 'Loja arquivada. Os turnos antigos continuam com ela.';
     case 'already_archived':
-      return 'Essa etiqueta já estava arquivada.';
+      return 'Essa loja já estava arquivada.';
+    case 'renamed':
+      return 'Nome atualizado. Os relatórios passados passam a mostrar o nome novo.';
+    case 'default_of_members':
+      return 'Essa loja é o padrão de alguém da equipe. Troque a loja dessa pessoa antes de arquivar.';
     case 'invalid_input':
       return 'Use um nome de 1 a 40 caracteres.';
     case 'invalid_tag':
-      return 'Essa etiqueta não está mais disponível. Escolha outra.';
+      return 'Essa loja não está mais disponível. Escolha outra.';
     case 'job_deleted':
       return 'Esse turno foi cancelado.';
     case 'forbidden':
       return context === 'assign'
-        ? 'Você não pode alterar a etiqueta deste turno.'
-        : 'Só o Gestor pode criar ou arquivar etiquetas.';
+        ? 'Você não pode alterar a loja deste turno.'
+        : 'Só o Gestor pode criar ou arquivar lojas.';
     case 'not_found':
       return 'Não encontramos o item. A lista foi atualizada.';
     case 'unauthenticated':

@@ -54,7 +54,7 @@ describe('useWorkerInvites — aceite', () => {
   it.each([
     [{ outcome: 'filled' }, true, 'Você já está neste turno.'],
     [{ outcome: 'already_responded', response: 'accepted' }, true, 'Você já está neste turno.'],
-    [{ outcome: 'filled' }, false, 'Outro freela aceitou primeiro. Você continua no elenco e recebe os próximos.'],
+    [{ outcome: 'filled' }, false, 'Outro freela aceitou primeiro. Você continua no Elenco e recebe os próximos.'],
     [{ outcome: 'filled' }, null, 'A vaga deste chamado já foi preenchida. Confira em Meus Turnos.'],
   ])('%o com a pessoa no turno = %s', async (rpc, noTurno, texto) => {
     claimSlot.mockResolvedValue(rpc)

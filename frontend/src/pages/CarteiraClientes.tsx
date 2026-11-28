@@ -233,7 +233,7 @@ export default function CarteiraClientes() {
     try {
       await navigator.clipboard.writeText(url);
       setMyLinkCopied(true);
-      addToast('Link copiado! Envie para uma empresa te adicionar ao elenco.', 'success');
+      addToast('Link copiado! Envie para uma empresa te adicionar ao Elenco.', 'success');
       setTimeout(() => setMyLinkCopied(false), 2500);
     } catch {
       addToast('Não foi possível copiar o link.', 'error');
@@ -267,7 +267,7 @@ export default function CarteiraClientes() {
     <div className="max-w-4xl mx-auto pb-24 font-sans text-accent">
       <PageMeta
         title="Minhas empresas"
-        description="Acompanhe as empresas que têm você no elenco e responda a convites de novas empresas."
+        description="Acompanhe as empresas que têm você no Elenco e responda a convites de novas empresas."
       />
 
       <SectionTabs section="empresas" role="worker" />
@@ -318,7 +318,7 @@ export default function CarteiraClientes() {
               convites pendentes acima, para separar os dois grupos. */}
           {pendingConnections.length > 0 && (
             <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <Users size={18} /> No elenco delas
+              <Users size={18} /> No Elenco delas
             </h2>
           )}
           <div className="grid grid-cols-1 gap-4">
@@ -359,7 +359,7 @@ export default function CarteiraClientes() {
               Sair de {myStores.find((s) => s.connection.id === confirmLeaveId)?.company.name ?? 'esta empresa'}?
             </h3>
             <p className="text-sm text-gray-600 mb-6">
-              Você deixa o elenco e não recebe novos convites dela. Seus recibos continuam em Recebimentos.
+              Você deixa o Elenco e não recebe novos convites dela. Seus recibos continuam em Recebimentos.
               Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-3">

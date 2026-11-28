@@ -26,7 +26,7 @@ export function RemoveMemberDialog({ member, isDeleting, onCancel, onConfirm }: 
     >
         <DialogHeader titleId="remove-member-title" title="Remover do Elenco?" />
         <p className="text-sm text-gray-600">
-          Tem certeza que deseja remover <span className="text-black font-bold">{member.worker.full_name}</span> do seu elenco? Você poderá convidá-lo novamente depois.
+          Tem certeza que deseja remover <span className="text-black font-bold">{member.worker.full_name}</span> do seu Elenco? Você poderá convidá-lo novamente depois.
         </p>
         <DialogActions>
           <Button variant="secondary" data-autofocus onClick={onCancel} disabled={isDeleting}>

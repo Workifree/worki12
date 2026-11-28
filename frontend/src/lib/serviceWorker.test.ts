@@ -370,7 +370,7 @@ describe('sw.js — ciclo de vida e mensagens', () => {
     expect(skipWaiting).not.toHaveBeenCalled()
   })
 
-  it('activate apaga caches antigos do Worki, preserva os atuais e os de terceiros, e assume o controle', async () => {
+  it('activate apaga caches antigos do Workyn, preserva os atuais e os de terceiros, e assume o controle', async () => {
     await runLifecycle('install')
     await caches.open('worki-core-v1-build-antigo')
     await caches.open('worki-assets-v0')
@@ -388,7 +388,7 @@ describe('sw.js — ciclo de vida e mensagens', () => {
     expect(claim).toHaveBeenCalled()
   })
 
-  it('CLEAR_CACHES (logout) apaga tudo do Worki e recompõe só o essencial offline', async () => {
+  it('CLEAR_CACHES (logout) apaga tudo do Workyn e recompõe só o essencial offline', async () => {
     await runLifecycle('install')
     await dispatchFetch(makeRequest('/logo.png', { destination: 'image' }))
     await caches.open('outro-app-cache')

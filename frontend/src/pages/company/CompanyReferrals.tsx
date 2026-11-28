@@ -201,7 +201,7 @@ export default function CompanyReferrals() {
     <div className="max-w-4xl mx-auto pb-20">
       <SectionTabs section="elenco" />
       <PageHeader
-        title="Indicações"
+        title="Indicar freela"
         subtitle="Apresente freelas de confiança a outras empresas, ou veja quem te indicou."
         action={
           <Button variant="dark" iconLeft={<Send size={18} />} onClick={() => setShowCreateModal(true)} data-copilot="empresa.indicacoes.indicar">
@@ -217,7 +217,7 @@ export default function CompanyReferrals() {
           className="mb-4"
           action={<Button variant="secondary" onClick={() => { void recarregarElenco(); }}>Tentar de novo</Button>}
         >
-          Não conseguimos carregar o seu elenco.
+          Não conseguimos carregar o seu Elenco.
         </Alert>
       )}
 

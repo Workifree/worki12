@@ -440,7 +440,7 @@ export default function WorkerOnboarding() {
                 </div>
 
                 <PageHeader
-                    title="Bem-vindo ao Worki"
+                    title="Bem-vindo ao Workyn"
                     subtitle="Vamos criar seu perfil pra empresas te chamarem pros turnos."
                 />
 
@@ -561,7 +561,7 @@ export default function WorkerOnboarding() {
                                         </Field>
                                     </div>
                                     <p className="text-xs text-gray-600">
-                                        É assim que a empresa vai te pagar por fora do Worki (PIX). Escolha o tipo e informe a chave correspondente.
+                                        É assim que a empresa vai te pagar por fora do Workyn (PIX). Escolha o tipo e informe a chave correspondente.
                                     </p>
                                 </div>
                             </div>

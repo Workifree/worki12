@@ -33,7 +33,7 @@ export interface BonusRulesSection {
 export const BONUS_RULES_TITLE = 'Regulamento da Trilha de bônus'
 
 export const BONUS_RULES_INTRO =
-  'A Trilha de bônus é um programa do Worki que paga um valor em dinheiro a cada marco que você conquista ao organizar a operação da sua empresa no app.'
+  'A Trilha de bônus é um programa do Workyn que paga um valor em dinheiro a cada marco que você conquista ao organizar a operação da sua empresa no app.'
 
 export const BONUS_RULES_SECTIONS: BonusRulesSection[] = [
   {
@@ -59,7 +59,7 @@ export const BONUS_RULES_SECTIONS: BonusRulesSection[] = [
       `O pagamento é feito por PIX, uma vez por semana, toda segunda-feira, a partir do pedido que você faz na tela da Trilha. O valor mínimo por pedido é R$ ${BONUS_MIN_PAYOUT_REAIS},00.`,
       'Entram no PIX de segunda os valores que já saíram da conferência até a sexta-feira anterior. O que for liberado depois entra na segunda seguinte.',
       'No fim da trilha, o último pedido pode ser de qualquer valor, sem mínimo.',
-      'O dinheiro do bônus vem do próprio Worki.',
+      'O dinheiro do bônus vem do próprio Workyn.',
     ],
   },
   {
@@ -81,7 +81,7 @@ export const BONUS_RULES_SECTIONS: BonusRulesSection[] = [
     id: 'como-sair',
     title: 'Como encerrar',
     paragraphs: [
-      'Você pode sair da trilha quando quiser, falando com a equipe do Worki. O que já foi pago continua com você.',
+      'Você pode sair da trilha quando quiser, falando com a equipe do Workyn. O que já foi pago continua com você.',
     ],
   },
 ]
@@ -133,4 +133,4 @@ export const BONUS_RULES_MILESTONE_GROUPS: BonusRulesMilestoneGroup[] = [
   },
 ]
 
-export const BONUS_RULES_FOOTER = 'Dúvidas? Fale com a equipe do Worki pela Ajuda do app.'
+export const BONUS_RULES_FOOTER = 'Dúvidas? Fale com a equipe do Workyn pela Ajuda do app.'

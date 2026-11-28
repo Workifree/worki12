@@ -80,7 +80,7 @@ function messageForOutcome(outcome: ShiftCallOutcome): OutcomeMessage {
       return { text: 'Convite recusado.', tone: 'info', ok: true };
     case 'filled':
       return {
-        text: 'Outro freela aceitou primeiro. Você continua no elenco e recebe os próximos.',
+        text: 'Outro freela aceitou primeiro. Você continua no Elenco e recebe os próximos.',
         tone: 'info',
         ok: true,
       };

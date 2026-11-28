@@ -1,6 +1,6 @@
 /*
  * Base do copiloto, carregada já no cabeçalho do app (o painel completo vem sob demanda):
- * tokens do laboratório visual, orbe e o gatilho "Pergunte ao Worki". Igual a
+ * tokens do laboratório visual, orbe e o gatilho "Copiloto". Igual a
  * scripts/copiloto-vfx-demo/index.html. Só transform e opacity se movem.
  */
 :root {
@@ -68,7 +68,7 @@ html.is-hidden .wk-orb *, html.is-hidden .wk-trigger * { animation-play-state: p
 /* Pílula do cabeçalho no celular (estilo Gemini no estilo Worki): fina, borda preta de 2px, sombra dura, faísca colorida.
    Sem anel nem halo: o destaque é o orbe. O alvo de toque segue com 44px por uma área invisível. */
 .wk-trigger--header {
-  min-height: 34px; padding: 5px 11px 5px 9px; gap: 7px; font-size: 12.5px; font-weight: 700;
+  min-height: 44px; padding: 5px 11px 5px 9px; gap: 7px; font-size: 12.5px; font-weight: 700;
   border: 2px solid var(--wk-ink); border-radius: 999px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 32, 0.14);
   -webkit-backdrop-filter: none; backdrop-filter: none;
 }

@@ -1,7 +1,7 @@
 import { clearJobDrafts } from '../../lib/jobDraft';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, Copy, Check, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
+import { Building2, MapPin, Globe, Mail, Save, Camera, Loader2, Star, Pencil, Lock, LogOut, Link2, ArrowRight, ClipboardList, Settings, ShieldAlert } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { leaveDevice } from '../../lib/leaveDevice';
 import { isAvisosEnabled } from '../../lib/features';
@@ -11,11 +11,10 @@ import { useToast } from '../../contexts/ToastContext';
 import { getPasswordStrength } from '../../lib/validation';
 import { logError } from '../../lib/logger';
 import { toSafeWebsiteHref } from '../../lib/websiteUrl';
-import { TeamConnectionService } from '../../services/teamConnectionService';
 import { getMyCompanies, pickCurrentCompany } from '../../services/companyScopeService';
 import ProfileReviews from '../../components/ProfileReviews';
 import { DEFAULT_LINK_RISK_THRESHOLD } from '../../components/company/seriesWeekRisk';
-import { ActionBar, DialogActions, Button, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
+import { ActionBar, DialogActions, Button, ButtonLink, Card, ErrorState, Field, FIELD_CONTROL_CLASS, PageHeader } from '../../components/ui';
 import BackToGestao from '../../components/company/BackToGestao';
 import { Dialog } from '../../components/ui/Dialog';
 
@@ -62,10 +61,6 @@ export default function CompanyProfile() {
     const [deleteConfirmText, setDeleteConfirmText] = useState('');
     const [deleting, setDeleting] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
-    // "Meu link de perfil" — a EMPRESA compartilha o PRÓPRIO link (nunca o do
-    // freela) para ser encontrada/adicionada por quem abrir (InviteAccept →
-    // addToTeamByToken). Espelha o "meu link" do worker em Profile.tsx.
-    const [linkCopied, setLinkCopied] = useState(false);
     // Seções sensíveis (Segurança, Sessão, Zona de Perigo) ficam ocultas por padrão
     const [showAccountSettings, setShowAccountSettings] = useState(false);
     const [company, setCompany] = useState<Company>({
@@ -312,24 +307,6 @@ export default function CompanyProfile() {
         setCompany({ ...company, [e.target.name]: e.target.value });
     };
 
-    const handleCopyMyLink = useCallback(async () => {
-        if (!companyId) return;
-        const gerado = await TeamConnectionService.generateInviteToken(companyId);
-        if (!gerado) {
-            addToast('Não foi possível obter o link do seu elenco agora.', 'error');
-            return;
-        }
-        const { url } = gerado;
-        try {
-            await navigator.clipboard.writeText(url);
-            setLinkCopied(true);
-            addToast('Link copiado! Envie para um freela ser adicionado ao seu elenco.', 'success');
-            setTimeout(() => setLinkCopied(false), 2500);
-        } catch {
-            addToast('Não foi possível copiar o link.', 'error');
-        }
-    }, [companyId, addToast]);
-
     // R3/R4: logout acessível no mobile (via item "Perfil" do BottomNav) — fonte única
     // AuthContext.signOut, com try/catch + toast de erro + estado de loading (A3/A4).
     const handleLogout = async () => {
@@ -406,7 +383,7 @@ export default function CompanyProfile() {
             <BackToGestao />
             <PageHeader
                 title="Dados da empresa"
-                subtitle="Gerencie as informações públicas da sua organização."
+                subtitle="Gerencie as informações públicas da sua empresa."
                 action={
                     !isEditing ? (
                         <Button variant="dark" onClick={() => setIsEditing(true)} iconLeft={<Pencil size={16} />} data-copilot="empresa.dados.editar">
@@ -667,7 +644,7 @@ export default function CompanyProfile() {
                     <ShieldAlert size={20} /> Preferências
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                    O Worki nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
+                    O Workyn nunca decide risco jurídico de terceiro — só avisa um fato. A decisão de
                     chamar continua sua; consulte seu contador/jurídico se tiver dúvida.
                 </p>
 
@@ -679,7 +656,7 @@ export default function CompanyProfile() {
                                     Avisar sobre frequência do mesmo freela
                                 </span>
                                 <span className="block text-xs text-gray-600 mt-0.5">
-                                    Mostra um selo (não bloqueia) quando um freela do elenco passaria do
+                                    Mostra um selo (não bloqueia) quando um freela do Elenco passaria do
                                     limite de vezes na mesma semana (dom–sáb).
                                 </span>
                             </span>
@@ -787,24 +764,18 @@ export default function CompanyProfile() {
             {/* Avaliações recebidas de freelas */}
             {companyId && <ProfileReviews reviewedId={companyId} reviewerRole="worker" />}
 
-            {/* Meu link de perfil — a empresa compartilha o PRÓPRIO link para ser
+            {/* Atalho: o link do Elenco mora em Meu Elenco (um só lugar). Antes: a empresa compartilhava o link daqui para ser
                 adicionada/conectada por quem abrir (nunca manda o link do freela). */}
             <Card className="mt-6">
                 <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-                    <Link2 size={20} /> Meu link de Elenco
+                    <Link2 size={20} aria-hidden="true" /> Link do Elenco
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                    Compartilhe este link com um freela (WhatsApp, etc.) para ele te encontrar e entrar
-                    para o seu elenco sem precisar de QR ou código.
+                    O link para o freela entrar no seu Elenco fica em Meu Elenco.
                 </p>
-                <Button
-                    variant="secondary"
-                    onClick={handleCopyMyLink}
-                    disabled={!companyId}
-                    iconLeft={linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                >
-                    {linkCopied ? 'Link copiado!' : 'Copiar meu link'}
-                </Button>
+                <ButtonLink variant="secondary" to="/company/team" iconRight={<ArrowRight size={18} aria-hidden="true" />}>
+                    Link do Elenco → Meu Elenco
+                </ButtonLink>
             </Card>
 
             {/* Botão de toggle para as seções sensíveis (Segurança, Sessão, Zona de Perigo) */}

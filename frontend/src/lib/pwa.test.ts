@@ -352,7 +352,7 @@ describe('lib/pwa — service worker', () => {
     expect(container.controller.postMessage).toHaveBeenCalledWith({ type: 'CLEAR_CACHES' })
   })
 
-  it('sem controller, apaga os caches do Worki mas preserva o core offline', async () => {
+  it('sem controller, apaga os caches do Workyn mas preserva o core offline', async () => {
     removeContainer()
     const remove = vi.fn().mockResolvedValue(true)
     vi.stubGlobal('caches', {

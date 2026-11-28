@@ -8,12 +8,15 @@ import {
 
 type Modo = 'oculto' | 'pedir' | 'instalar_ios'
 
+interface PedidoDeAvisosProps {
+    papel?: 'freela' | 'empresa'
+}
+
 /**
- * Cartão "Avisar quando chegar turno?". Montar só no momento certo (há convite pendente ou o
- * freela acabou de aceitar um). A permissão do navegador só é pedida no clique; "Agora não"
- * silencia por 30 dias.
+ * Cartão mobile-first para ligar Web Push no celular (Freela e Empresa).
+ * A permissão do navegador só é pedida no clique; "Agora não" silencia por 30 dias.
  */
-export default function PedidoDeAvisos() {
+export default function PedidoDeAvisos({ papel = 'freela' }: PedidoDeAvisosProps) {
     const { addToast } = useToast()
     const [modo, setModo] = useState<Modo>('oculto')
     const [ativando, setAtivando] = useState(false)
@@ -61,21 +64,23 @@ export default function PedidoDeAvisos() {
                 <Bell size={24} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
                     <h2 id="pedido-avisos-titulo" className="text-base font-black uppercase">
-                        Avisar quando chegar turno?
+                        {papel === 'empresa' ? 'Avisar no celular sobre seus turnos?' : 'Avisar quando chegar turno?'}
                     </h2>
                     {modo === 'pedir' ? (
                         <p className="mt-1 text-sm text-gray-700">
-                            O aviso chega no celular mesmo com o app fechado. Quem responde primeiro fica com a vaga.
+                            {papel === 'empresa'
+                                ? 'Receba aviso na hora quando um freela aceitar vaga, cancelar ou alguém entrar na equipe, mesmo com o app fechado.'
+                                : 'O aviso chega no celular mesmo com o app fechado. Quem responde primeiro fica com a vaga.'}
                         </p>
                     ) : (
                         <div className="mt-1 text-sm text-gray-700">
-                            <p>No iPhone, os avisos só funcionam com o Worki na tela de início:</p>
+                            <p>No iPhone, os avisos só funcionam com o Workyn na tela de início:</p>
                             <ol className="mt-2 list-decimal space-y-1 pl-5">
                                 <li>
                                     No Safari, toque em Compartilhar <Share size={14} aria-hidden="true" className="inline" />
                                 </li>
                                 <li>Escolha &quot;Adicionar à Tela de Início&quot;</li>
-                                <li>Abra o Worki pelo ícone novo e ligue os avisos</li>
+                                <li>Abra o Workyn pelo ícone novo e ligue os avisos</li>
                             </ol>
                         </div>
                     )}

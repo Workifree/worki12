@@ -249,8 +249,8 @@ describe('Login — contexto de convite', () => {
     expect(screen.getByRole('heading', { name: 'Criar conta de freela' })).toBeInTheDocument()
   })
 
-  it('convite de Gestor abre no cadastro de empresa', () => {
-    renderLogin('/login?type=hire&redirect=%2Fconvite-gerente%2Ftok')
+  it('convite de equipe abre no cadastro de empresa', () => {
+    renderLogin('/login?type=hire&redirect=%2Fconvite-equipe%2Ftok')
     expect(screen.getByRole('heading', { name: 'Criar conta de empresa' })).toBeInTheDocument()
   })
 })

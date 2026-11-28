@@ -56,7 +56,7 @@ export interface CopilotFetchOptions {
   fetchImpl?: typeof fetch
 }
 
-/** `customFetch` do page-agent: IGNORA a URL pedida e só fala com o proxy do Worki. */
+/** `customFetch` do page-agent: IGNORA a URL pedida e só fala com o proxy do Workyn. */
 export function createCopilotFetch(options: CopilotFetchOptions): typeof fetch {
   return async (_url, init) => {
     const body = buildSafeRequest(init?.body, options.role)

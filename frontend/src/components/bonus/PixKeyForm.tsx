@@ -59,7 +59,7 @@ export default function PixKeyForm({ onSubmit, submitLabel, busy = false, onCanc
           ))}
         </select>
       </div>
-      <Field label="Chave PIX" error={error} hint="É para onde enviamos o PIX de segunda. Só você e a equipe do Worki enxergam.">
+      <Field label="Chave PIX" error={error} hint="É para onde enviamos o PIX de segunda. Só você e a equipe do Workyn enxergam.">
         <input
           type="text"
           inputMode={type === 'email' ? 'email' : type === 'aleatoria' ? 'text' : 'numeric'}

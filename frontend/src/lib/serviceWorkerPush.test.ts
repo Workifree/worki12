@@ -62,7 +62,7 @@ describe('sw.js — push', () => {
     await dispatch('push', { data: null })
 
     expect(showNotification).toHaveBeenCalledTimes(2)
-    expect(showNotification.mock.calls[0][0]).toBe('Worki')
+    expect(showNotification.mock.calls[0][0]).toBe('Workyn')
   })
 
   it.each([

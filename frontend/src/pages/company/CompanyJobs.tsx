@@ -1,4 +1,4 @@
-import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Megaphone, Clock, Calendar, CalendarClock, ChevronDown, ChevronUp, Repeat, XCircle, Copy } from 'lucide-react';
+import { Search, Eye, Users, Edit2, Trash2, PauseCircle, PlayCircle, Megaphone, Clock, Calendar, CalendarClock, ChevronDown, ChevronUp, Repeat, XCircle, Copy, Tag } from 'lucide-react';
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -13,7 +13,7 @@ import { getSessionUserOrThrow } from '../../lib/authSession';
 import { getJobScope, canSeeJob, scopeResponsibleIds } from '../../services/jobScopeService';
 import { fillMissingWorkers } from '../../services/workerCardsService';
 import { deleteShift } from '../../services/deleteShiftService';
-import { cancelJobMessage, deleteShiftToast } from '../../services/shiftOperationService';
+import { cancelJobMessage, deleteShiftToast, listTags, type CompanyTag } from '../../services/shiftOperationService';
 import { groupJobsByDay, formatDateOnly, parseDateOnly, type DayBucketKey } from '../../lib/jobScheduling';
 import { todayLocalDate } from '../../lib/dateUtils';
 import EditSeriesModal, { type SeriesJobSnapshot } from '../../components/company/EditSeriesModal';
@@ -58,7 +58,10 @@ interface FreelaSummary {
     name: string;
     avatarUrl: string | null;
     state: FreelaState;
+    /** Outros que OCUPAM vaga (hired/in_progress/completed), além do principal. */
     extraCount: number;
+    /** Convidados/chamados que ainda não responderam (não ocupam vaga). */
+    pendingCount: number;
 }
 
 interface AppRow {
@@ -81,6 +84,7 @@ function isExpiredInvite(app: AppRow): boolean {
 }
 
 const INACTIVE_STATUSES = new Set(['declined', 'rejected', 'cancelled']);
+const OCCUPYING_STATUSES = new Set(['hired', 'in_progress', 'completed']);
 const STATUS_RANK: Record<string, number> = { invited: 1, pending: 1, interview: 1, hired: 2, in_progress: 3, completed: 4 };
 
 function stateForStatus(status: string): FreelaState {
@@ -91,15 +95,20 @@ function stateForStatus(status: string): FreelaState {
 
 // Resume o freela "principal" de uma vaga: ignora recusas/expirados e escolhe o de
 // status mais avançado. `null` = vaga sem freela ativo (pode convidar).
-function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
+// eslint-disable-next-line react-refresh/only-export-components -- exportada para teste
+export function summarizeFreela(apps: AppRow[]): FreelaSummary | null {
     const active = apps.filter((a) => !INACTIVE_STATUSES.has(a.status) && !isExpiredInvite(a));
     if (active.length === 0) return null;
-    const best = active.reduce((b, a) => ((STATUS_RANK[a.status] ?? 0) > (STATUS_RANK[b.status] ?? 0) ? a : b));
+    const occupying = active.filter((a) => OCCUPYING_STATUSES.has(a.status));
+    const pending = active.length - occupying.length;
+    const pool = occupying.length > 0 ? occupying : active;
+    const best = pool.reduce((b, a) => ((STATUS_RANK[a.status] ?? 0) > (STATUS_RANK[b.status] ?? 0) ? a : b));
     return {
         name: best.worker?.full_name || 'Freela',
         avatarUrl: best.worker?.avatar_url ?? null,
         state: stateForStatus(best.status),
-        extraCount: active.length - 1,
+        extraCount: pool.length - 1,
+        pendingCount: occupying.length > 0 ? pending : 0,
     };
 }
 
@@ -170,6 +179,8 @@ interface Job {
     concluded?: boolean;
     // Escala Recorrente (F3) — presentes quando o turno é uma ocorrência de série.
     series_id?: string | null;
+    /** Loja (etiqueta) do turno. */
+    tag_id?: string | null;
     series_occurrence_date?: string | null;
     seriesRecurrenceType?: RecurrenceType | null;
     category?: string;
@@ -222,6 +233,8 @@ interface JobRowProps {
     onEditSeries: (job: Job) => void;
     onCancelSeries: (seriesId: string) => void;
     onInviteSeries: (seriesId: string) => void;
+    /** Nome da loja do turno, quando tem. */
+    tagName?: string | null;
 }
 
 function isJobEnded(job: Job): boolean {
@@ -239,7 +252,7 @@ function dayRank(job: Job): number {
 
 // Uma linha da agenda: horário + função + freela (nome/avatar/estado) visíveis sem clicar.
 // Turno sem freela atrelado "grita" — buraco de escala é o problema nº1 da operação diária.
-function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries }: JobRowProps) {
+function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDeleteJobId, onEditSeries, onCancelSeries, onInviteSeries, tagName }: JobRowProps) {
     const timeRange = formatTimeRange(job);
     const isNearTerm = bucketKey === 'today' || bucketKey === 'tomorrow';
     const ended = isJobEnded(job);
@@ -261,6 +274,7 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
                             <StatusBadge domain="job" status={job.concluded ? 'completed' : job.status} />
                         )}
                         {missingFreela && <StatusBadge tone={urgentGap ? 'warning' : 'neutral'}>{gapLabel}</StatusBadge>}
+                        {tagName && <StatusBadge tone="neutral" icon={Tag} title="Loja do turno">{tagName}</StatusBadge>}
                         {job.series_id && (
                             <StatusBadge tone="neutral" icon={Repeat} title="Este turno faz parte de uma série recorrente">
                                 Série · {seriesBadgeLabel(job)}
@@ -295,7 +309,7 @@ function JobRow({ job, bucketKey, navigate, primary, handleStatusChange, setDele
                         </div>
                         <div className="flex min-w-0 flex-col">
                             <span className="truncate text-sm font-bold">
-                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}
+                                {job.freela.name}{job.freela.extraCount > 0 ? ` +${job.freela.extraCount}` : ''}{job.freela.pendingCount > 0 ? ` · ${job.freela.pendingCount} aguardando` : ''}
                             </span>
                             <span className="text-xs text-gray-600">
                                 {job.freela.state === 'confirmed' ? (job.inProgress ? 'Em andamento' : 'Contratado') : job.freela.state === 'completed' ? 'Concluído' : 'Aguardando resposta'}
@@ -361,6 +375,19 @@ export default function CompanyJobs() {
     const [loading, setLoading] = useState(true);
     const [erroCarga, setErroCarga] = useState(false);
     const currentCompany = useCurrentCompany();
+    // Lojas (etiquetas): chip em cada turno e filtro quando a empresa tem alguma.
+    const [tags, setTags] = useState<CompanyTag[]>([]);
+    const [tagFilter, setTagFilter] = useState<string | null>(null);
+    const companyIdForTags = currentCompany?.company_id ?? null;
+    useEffect(() => {
+        if (!companyIdForTags) return;
+        let active = true;
+        void (async () => {
+            const list = await listTags(companyIdForTags, true);
+            if (active) setTags(list);
+        })();
+        return () => { active = false; };
+    }, [companyIdForTags]);
     const [searchParams, setSearchParams] = useSearchParams();
     // Filtro inicial vem do deep-link (?filter=andamento vindo do dashboard, etc.).
     const initialFilter = (['all', 'open', 'closed', 'andamento'] as const).find(f => f === searchParams.get('filter')) ?? 'all';
@@ -517,6 +544,8 @@ export default function CompanyJobs() {
         const result = await deleteShift(jobId);
         if (result.outcome === 'cancelled' || result.outcome === 'already_cancelled') {
             addToast(deleteShiftToast(result), 'success');
+            // O card some na hora; a recarga confirma com o banco.
+            setJobs((current) => current.filter((j) => j.id !== jobId));
             fetchJobs();
         } else {
             addToast(cancelJobMessage(result, isGestor(currentCompany) ? 'gestor' : 'encarregado'), 'error');
@@ -566,7 +595,8 @@ export default function CompanyJobs() {
                 : filter === 'open' ? job.status === 'open' && !job.concluded
                     : filter === 'andamento' ? job.inProgress === true // contratado sozinho não é "em andamento"
                         : job.status !== 'open' || job.concluded === true;
-        return matchesSearch && matchesFilter;
+        const matchesTag = tagFilter === null || job.tag_id === tagFilter;
+        return matchesSearch && matchesFilter && matchesTag;
     });
 
     // Agrupamento por dia — reordenação/reagrupamento sobre os mesmos dados já carregados,
@@ -590,6 +620,7 @@ export default function CompanyJobs() {
             onEditSeries={openEditSeries}
             onCancelSeries={setCancelSeriesId}
             onInviteSeries={openInviteSeries}
+            tagName={job.tag_id ? tags.find((t) => t.id === job.tag_id)?.name ?? null : null}
         />
     );
 
@@ -640,6 +671,15 @@ export default function CompanyJobs() {
                         </FilterChip>
                     ))}
                 </div>
+                {tags.some((t) => !t.archivedAt) && (
+                    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1" role="group" aria-label="Filtrar por loja">
+                        {tags.filter((t) => !t.archivedAt).map((t) => (
+                            <FilterChip key={t.id} pressed={tagFilter === t.id} onClick={() => setTagFilter(tagFilter === t.id ? null : t.id)} className="!px-3">
+                                {t.name}
+                            </FilterChip>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Agenda por dia */}
@@ -654,7 +694,7 @@ export default function CompanyJobs() {
                             size="page"
                             icon={CalendarClock}
                             title="Você ainda não tem turnos."
-                            description="Crie o primeiro turno e chame quem está no seu elenco."
+                            description="Crie o primeiro turno e chame quem está no seu Elenco."
                             action={<Button variant="dark" data-copilot="empresa.turnos.criar-turno" onClick={() => navigate('/company/create')}>Criar turno</Button>}
                         />
                     ) : (

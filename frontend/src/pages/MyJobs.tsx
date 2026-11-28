@@ -33,21 +33,17 @@ import type {
     AttendanceConfirmationOutcome,
 } from '../types';
 import { Dialog } from '../components/ui/Dialog';
+import {
+    isRateDismissed,
+    isWithinRatePromptWindow,
+    markRateDismissed,
+    markRatePromptShownThisSession,
+    ratePromptShownThisSession,
+} from '../lib/ratePrompt';
 
-const RATE_PROMPTED_KEY = 'worki_rate_prompted';
-function readRatePrompted(): boolean {
-    try {
-        return sessionStorage.getItem(RATE_PROMPTED_KEY) === '1';
-    } catch {
-        return false;
-    }
-}
-function markRatePrompted(): void {
-    try {
-        sessionStorage.setItem(RATE_PROMPTED_KEY, '1');
-    } catch {
-        // sem storage vale só a trava por visita (ref)
-    }
+// Pedido automático de avaliação: regras em lib/ratePrompt.ts (1 por sessão, dispensa por 14 dias, janela de 3 dias).
+function isRecentShift(job: JobApplication, now = Date.now()): boolean {
+    return isWithinRatePromptWindow(job.company_checkout_confirmed_at ?? job.worker_checkout_at ?? job.raw_date, now);
 }
 
 // Confirmação de véspera (D-1) — mensagens humanas por outcome da RPC `respond_attendance_confirmation`.
@@ -570,20 +566,20 @@ export default function MyJobs() {
         }
     };
 
-    // Pedido de avaliação pós-pagamento: assim que o turno é concluído/pago pela
-    // empresa, ele cai no histórico. Se houver um turno pago ainda sem avaliação,
-    // abrimos o modal (1x por sessão, dispensável). Convite pendente tem prazo: vem antes.
+    // Pedido de avaliação logo após o turno concluído: 1 por sessão do navegador, só turno recente
+    // (3 dias), sem avaliação e não dispensado (14 dias); nunca com convite pendente nem sobre outro modal.
     useEffect(() => {
-        if (autoRatePrompted.current || loading || invitesLoading || pendingInvites.length > 0) return;
-        if (readRatePrompted()) return;
-        const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id));
+        if (autoRatePrompted.current || ratePromptShownThisSession()) return;
+        if (loading || invitesLoading || pendingInvites.length > 0 || rateModalOpen || detailJob || cancelJob) return;
+        const pending = jobs.history.find(j => j.status === 'completed' && !reviewedJobIds.has(j.job_id)
+            && !isRateDismissed(j.job_id) && isRecentShift(j));
         if (pending) {
             autoRatePrompted.current = true;
-            markRatePrompted();
+            markRatePromptShownThisSession();
             setSelectedJobToRate(pending);
             setRateModalOpen(true);
         }
-    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length]);
+    }, [jobs.history, reviewedJobIds, loading, invitesLoading, pendingInvites.length, rateModalOpen, detailJob, cancelJob]);
 
     // Cancelamento de turno agendado ('hired') pelo freela. A empresa é avisada
     // automaticamente via trigger no banco (trg_notify_company_on_worker_cancel), mas o
@@ -732,12 +728,11 @@ export default function MyJobs() {
 
     return (
         <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-4xl mx-auto">
-            <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
+            <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Workyn." />
 
             <PageHeader title="Meus Turnos" className="mb-0" />
 
-            {/* Permissão de aviso só é oferecida quando há o que avisar. */}
-            {isAvisosEnabled() && pendingInvites.length > 0 && <PedidoDeAvisos />}
+            {isAvisosEnabled() && <PedidoDeAvisos />}
 
             {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
             {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (
@@ -927,7 +922,7 @@ export default function MyJobs() {
                                 <Card key={invite.id} className={isSos ? 'border-status-warning-line' : undefined}>
                                     {isSos && (
                                         <Alert tone="warning" title="Urgência (SOS)" className="mb-4">
-                                            Você não está no elenco desta empresa. Recebeu porque ativou os chamados de urgência.
+                                            Você não está no Elenco desta empresa. Recebeu porque ativou os chamados de urgência.
                                         </Alert>
                                     )}
                                     {/* Empresa */}
@@ -1171,7 +1166,10 @@ export default function MyJobs() {
 
             <RateModal
                 isOpen={rateModalOpen}
-                onClose={() => setRateModalOpen(false)}
+                onClose={() => {
+                    if (selectedJobToRate) markRateDismissed(selectedJobToRate.job_id);
+                    setRateModalOpen(false);
+                }}
                 onSubmit={handleSubmitRate}
                 targetName={selectedJobToRate?.company_name || 'Empresa'}
                 targetPhotoUrl={selectedJobToRate?.company_logo ?? undefined}

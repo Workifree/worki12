@@ -231,7 +231,7 @@ export default function TodayShiftCard({ shift, heading, onChanged, onCheckedOut
 
                 {onShift && (
                     <p className="text-xs text-gray-600">
-                        Pagamento combinado direto com a empresa. O Worki registra o recibo.
+                        Pagamento combinado direto com a empresa. O Workyn registra o recibo.
                     </p>
                 )}
             </div>

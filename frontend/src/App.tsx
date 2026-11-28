@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 
 import HomeRedirect from './components/HomeRedirect';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, ToastRouteDismiss } from './contexts/ToastContext';
+import { ImpersonationBanner } from './components/ImpersonationBanner';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import PwaPrompts from './components/PwaPrompts';
@@ -51,7 +52,6 @@ const CompanyOrdersReport = lazy(() => import('./pages/company/CompanyOrdersRepo
 const CompanyOperationAnalytics = lazy(() => import('./pages/company/CompanyOperationAnalytics'));
 const WorkerPublicProfile = lazy(() => import('./pages/company/WorkerPublicProfile'));
 const CompanyReferrals = lazy(() => import('./pages/company/CompanyReferrals'));
-const Organization = lazy(() => import('./pages/company/Organization'));
 const CompanyTeamMembers = lazy(() => import('./pages/company/CompanyTeamMembers'));
 const CompanyToday = lazy(() => import('./pages/company/CompanyToday'));
 const BonusTrail = lazy(() => import('./pages/company/BonusTrail'));
@@ -69,7 +69,11 @@ const Help = lazy(() => import('./pages/Help'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const InviteAccept = lazy(() => import('./pages/InviteAccept'));
-const AcceptManagerInvite = lazy(() => import('./pages/AcceptManagerInvite'));
+/** Links antigos de convite de gerente: o convite agora é um só (`/convite-equipe`). */
+function LegacyManagerInviteRedirect() {
+  const { token } = useParams();
+  return <Navigate to={`/convite-equipe/${token ?? ''}`} replace />;
+}
 const ReceiptView = lazy(() => import('./pages/ReceiptView'));
 
 // Loading Component - Skeleton placeholder
@@ -126,6 +130,7 @@ function App() {
           <ToastProvider>
             <BrowserRouter>
               <GuideProvider>
+              <ImpersonationBanner />
               <PwaPrompts />
               <CopilotRoot mobileLauncher={false} onOpenGuide={() => { guia.abrirAjuda(); }} />
               <RouteFocus />
@@ -159,7 +164,7 @@ function App() {
                     /convite/:token acima: sem sessão, o guard mandaria o usuário para "/"
                     antes do componente montar e o token se perderia.
                   */}
-                  <Route path="/convite-gerente/:token" element={<AcceptManagerInvite />} />
+                  <Route path="/convite-gerente/:token" element={<LegacyManagerInviteRedirect />} />
 
                   {/*
                     Convite de EQUIPE (Encarregado) — rota PÚBLICA pelo mesmo motivo: o convidado ainda
@@ -217,8 +222,7 @@ function App() {
                       <Route path="profile" element={titled('Dados da empresa', <CompanyProfile />)} />
                       <Route path="messages" element={titled('Mensagens', <CompanyMessages />)} />
                       <Route path="team" element={titled('Meu Elenco', <CompanyTeam />)} />
-                      <Route path="indicacoes" element={titled('Indicações', <CompanyReferrals />)} />
-                      <Route path="organization" element={<Organization />} />
+                      <Route path="indicacoes" element={titled('Indicar freela', <CompanyReferrals />)} />
                       <Route path="configuracoes/equipe" element={<CompanyTeamMembers />} />
                       {/* Hoje (E5/R25): turnos de hoje e dos próximos dias por responsável. As
                           notificações de passar/cobrir apontam para cá. */}

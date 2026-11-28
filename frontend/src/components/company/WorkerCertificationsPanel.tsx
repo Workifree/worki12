@@ -21,7 +21,7 @@ import { Dialog } from '../ui/Dialog';
 // F8 (empresa) — o que a empresa vê no perfil de um freela do seu elenco: as certificações
 // EXTERNAS que ele auto-declarou (CREF, manipulação de alimentos) e os treinamentos INTERNOS
 // que a própria empresa já registrou. v1 SEM ARQUIVO (ADR-20260821, D1): não há documento pra
-// abrir aqui — a "conferência" é a empresa confirmando que VIU o original fora do Worki.
+// abrir aqui — a "conferência" é a empresa confirmando que VIU o original fora do Workyn.
 //
 // D3 é uma regra de produto, não de estilo: proibido "Verificado" isolado ou selo sem empresa
 // nomeada. `verified_by_company_id` é sempre exibido nomeado; e só a MESMA empresa que conferiu
@@ -262,7 +262,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                       <ShieldCheck size={14} className="flex-shrink-0 mt-0.5" />
                       Conferida por {verifierNames[cert.verified_by_company_id as string] ?? 'uma empresa'} em{' '}
                       {formatTimestampBR(cert.verified_at as string)} — confirma ter visto o documento
-                      original. O Worki não verifica diplomas nem consulta conselhos profissionais.
+                      original. O Workyn não verifica diplomas nem consulta conselhos profissionais.
                     </p>
                   ) : (
                     <p className="mt-2 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
@@ -423,7 +423,7 @@ export default function WorkerCertificationsPanel({ workerId }: Props) {
                   value={trainingNote}
                   onChange={(e) => setTrainingNote(e.target.value)}
                   className="!h-auto min-h-20 resize-none py-3"
-                  placeholder="Ex: treinamento presencial de 2h com o gerente da unidade"
+                  placeholder="Ex: treinamento presencial de 2h com o Gestor da empresa"
                 />
               </Field>
               <div className="worki-dialog-actions">

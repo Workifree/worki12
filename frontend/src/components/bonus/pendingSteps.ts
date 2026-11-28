@@ -54,5 +54,5 @@ export function reminderMessage(shift: PendingShift, dateLabel: string, appUrl: 
   if (actions.length === 0) return null
   const name = firstName(shift.workerName)
   const day = dateLabel ? ` de ${dateLabel}` : ''
-  return `Oi${name ? `, ${name}` : ''}! Quando puder, falta ${actions.join(' e ')} do turno "${shift.jobTitle}"${day} no Worki: ${appUrl}`
+  return `Oi${name ? `, ${name}` : ''}! Quando puder, falta ${actions.join(' e ')} do turno "${shift.jobTitle}"${day} no Workyn: ${appUrl}`
 }

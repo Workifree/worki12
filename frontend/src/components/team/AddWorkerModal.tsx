@@ -32,7 +32,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
   const qrLockRef = useRef(false);
   const { addToast } = useToast();
 
-  // A empresa adiciona SEMPRE pelo perfil do freela (QR/Worki ID/link DO
+  // A empresa adiciona SEMPRE pelo perfil do freela (QR/Workyn ID/link DO
   // freela) — nunca mandando o próprio link da empresa (esse é usado para a
   // empresa SER encontrada/adicionada, não para adicionar alguém).
   const handleLinkSubmit = async () => {
@@ -55,7 +55,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
     const raw = workerId.trim();
     if (!raw) return;
 
-    // Tolerante ao erro comum: colar o LINK/token de perfil no campo do Worki ID.
+    // Tolerante ao erro comum: colar o LINK/token de perfil no campo do Workyn ID.
     // Se não for um UUID cru, tenta resolver como token de convite antes de desistir.
     let target = raw;
     if (!UUID_RE.test(raw)) {
@@ -140,7 +140,7 @@ export function AddWorkerModal({ onClose, onAdded, addWorker }: AddWorkerModalPr
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
             Cole o <span className="font-bold text-black">link de perfil</span> que o freela te enviou
-            (ele encontra em Perfil → "Copiar meu link").
+            (ele encontra em Perfil → "Copiar meu link"). Não é o Link do Elenco: esse é o que você manda para o freela, em Meu Elenco.
           </p>
           <Field label="Link de perfil do freela">
             <input

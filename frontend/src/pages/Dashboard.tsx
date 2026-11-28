@@ -6,6 +6,8 @@ import { levelProgress } from '../lib/gamification';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../lib/features';
 import {
     Clock, Star, TrendingUp,
     ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight, CalendarClock
@@ -53,9 +55,10 @@ interface HistoryItem {
     id: string;
     status: string;
     created_at: string;
+    /** `null` quando a RLS não deixa ver o turno (removido ou de outra pessoa). */
     job: {
         title: string;
-    };
+    } | null;
 }
 
 export default function Dashboard() {
@@ -329,6 +332,8 @@ export default function Dashboard() {
                 <ErroDeCarga onRetry={tentarDeNovo} mensagem="Parte das suas informações não carregou. Tente de novo." />
             )}
 
+            {isAvisosEnabled() && <PedidoDeAvisos />}
+
             <section aria-label="Seu nível" className="flex items-center gap-3 rounded-2xl border-2 border-black bg-white p-3 shadow-brutal-sm">
                 <span aria-hidden="true" className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full border-2 border-black bg-[#D7F5E4] leading-none">
                     <span className="text-[10px] font-bold uppercase text-[#0B6B3A]">Nív.</span>
@@ -521,7 +526,7 @@ export default function Dashboard() {
 
                 <Card className={temTurnoHoje ? 'md:col-span-3 flex flex-col' : 'flex flex-col'}>
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <TrendingUp size={18} className="text-primary" /> Ganhos
+                        <TrendingUp size={18} className="text-primary" /> Ganhos em turnos concluídos
                     </h2>
                     <p className="text-3xl font-bold tabular-nums [overflow-wrap:anywhere]">
                         {formatBRL(worker.earnings_total || 0)}
@@ -638,7 +643,7 @@ export default function Dashboard() {
                             className="flex w-full justify-between items-center gap-3 min-h-14 px-2 -mx-2 py-2 text-left hover:bg-gray-50 rounded-xl transition-colors cursor-pointer border-b border-gray-100 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                         >
                             <div className="min-w-0">
-                                <p className="font-semibold text-sm truncate" title={h.job.title}>{h.job.title}</p>
+                                <p className="font-semibold text-sm truncate" title={h.job?.title ?? 'Turno indisponível'}>{h.job?.title ?? 'Turno indisponível'}</p>
                                 <p className="text-xs text-gray-600">{new Date(h.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
                             <StatusBadge domain="application" status={h.status} className="flex-shrink-0" />

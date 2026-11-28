@@ -13,6 +13,8 @@ import { SosCallButton } from '../../components/team/SosCallButton';
 import { ShiftInviteService, normalizePhoneForWhatsApp, buildShiftInviteWhatsAppMessage, hasAttendedShift } from '../../services/shiftInviteService';
 import { AttendanceConfirmationService } from '../../services/attendanceConfirmationService';
 import { logError } from '../../lib/logger';
+import { CHAT_DENIED_MESSAGE, isChatDeniedByRls } from '../../lib/shiftChat';
+import { isNotVisibleError } from '../../lib/notVisible';
 import SemAcesso from '../../components/SemAcesso';
 import { getJobScope, canSeeJob } from '../../services/jobScopeService';
 import { fillMissingWorkers } from '../../services/workerCardsService';
@@ -272,6 +274,7 @@ export default function CompanyJobCandidates() {
     const [jobBudget, setJobBudget] = useState(0);
     const [erroCarga, setErroCarga] = useState(false);
     const [semAcesso, setSemAcesso] = useState(false);
+    const [indisponivel, setIndisponivel] = useState(false);
     // Registro de pagamento externo (modo A) por freela (ADR-20260816 — o marcador é por
     // (job_id, worker_id), não mais por job_id sozinho: um turno com N freelas tem N
     // marcadores independentes). Cada card olha só a própria entrada deste mapa.
@@ -435,8 +438,9 @@ export default function CompanyJobCandidates() {
                 .eq('company_id', await getAuthenticatedCompanyId())
                 .single();
             // PGRST116 = nenhuma linha; outro erro é falha de carga, não "turno inexistente".
-            if (jobError && jobError.code !== 'PGRST116') throw jobError;
-            if (!job) { if (!silent) navigate('/company/jobs'); return; }
+            if (jobError && isNotVisibleError(jobError)) { if (!silent && claim()) setIndisponivel(true); return; }
+            if (jobError) throw jobError;
+            if (!job) { if (!silent && claim()) setIndisponivel(true); return; }
             if (!canSeeJob(await getJobScope(), job)) { if (!silent) setSemAcesso(true); return; }
             if (!claim()) return;
             setJobTitle(job.title);
@@ -596,7 +600,7 @@ export default function CompanyJobCandidates() {
         }
         setConfirmDeliveryApp(null);
         setReleasing(false);
-        addToast('Entrega confirmada. O pagamento é feito por fora do Worki.', 'success');
+        addToast('Entrega confirmada. O pagamento é feito por fora do Workyn.', 'success');
         fetchCandidates();
     };
 
@@ -983,6 +987,10 @@ export default function CompanyJobCandidates() {
                 navigate(`/company/messages?conversation=${newConvId}`);
             }
         } catch (error) {
+            if (isChatDeniedByRls(error)) {
+                addToast(CHAT_DENIED_MESSAGE, 'error');
+                return;
+            }
             logError('CompanyJobCandidates', error);
             addToast('Erro ao iniciar conversa.', 'error');
         }
@@ -1376,6 +1384,9 @@ export default function CompanyJobCandidates() {
         );
     };
 
+    if (indisponivel) {
+        return <SemAcesso titulo="Turno indisponível" mensagem="Você não tem acesso a este turno ou ele foi removido." voltarPara="/company/jobs" rotulo="Voltar para Turnos" />;
+    }
     if (semAcesso) {
         return <SemAcesso mensagem="Este turno é de outra pessoa da equipe." voltarPara="/company/jobs" rotulo="Voltar aos turnos" />;
     }
@@ -1530,7 +1541,7 @@ export default function CompanyJobCandidates() {
                     <EmptyState
                         icon={Users}
                         title="Nenhum freela neste turno."
-                        description={filledCount < jobSlots ? 'Use "Chamar freelas" para convidar quem está no seu elenco.' : undefined}
+                        description={filledCount < jobSlots ? 'Use "Chamar freelas" para convidar quem está no seu Elenco.' : undefined}
                     />
                 ) : (
                     candidates.map((app) => {
@@ -1557,8 +1568,10 @@ export default function CompanyJobCandidates() {
                             <div className="flex items-start gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => navigate(`/company/worker/${app.worker_id}`)}
-                                    aria-label={`Ver perfil de ${app.worker?.full_name || 'freela'}`}
+                                    // O perfil completo é do Gestor; o Encarregado já vê nome, função, nota e cidade aqui.
+                                    onClick={podeEstornar ? () => navigate(`/company/worker/${app.worker_id}`) : undefined}
+                                    disabled={!podeEstornar}
+                                    aria-label={podeEstornar ? `Ver perfil de ${app.worker?.full_name || 'freela'}` : undefined}
                                     className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl text-left active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
                                 >
                                     <span className="block h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-black bg-gray-200">
@@ -1792,7 +1805,7 @@ export default function CompanyJobCandidates() {
                 <Dialog labelledBy="entrega-titulo" onClose={fecharModalAberto}>
                     <DialogHeader titleId="entrega-titulo" title="Confirmar entrega" subtitle={confirmDeliveryApp.worker?.full_name} />
                     <p className="text-sm text-gray-600">
-                        Confirmar que o turno foi cumprido? Ele será marcado como concluído. O pagamento pelo Worki está pausado: a plataforma não envia dinheiro ao freela. Pague por fora (PIX ou dinheiro) e guarde o comprovante.
+                        Confirmar que o turno foi cumprido? Ele será marcado como concluído. O pagamento pelo Workyn está pausado: a plataforma não envia dinheiro ao freela. Pague por fora (PIX ou dinheiro) e guarde o comprovante.
                     </p>
                     <DialogActions>
                         <Button variant="secondary" onClick={() => setConfirmDeliveryApp(null)} disabled={releasing}>
@@ -1859,10 +1872,10 @@ export default function CompanyJobCandidates() {
                             com ele. Ao dispensar, o turno sai da agenda dessa pessoa imediatamente.
                         </p>
                         {dismissThenCall && (
-                            <p>Em seguida, o chamado deste turno abre para você chamar um substituto do elenco.</p>
+                            <p>Em seguida, o chamado deste turno abre para você chamar um substituto do Elenco.</p>
                         )}
                         <Alert tone="warning">
-                            O freela é avisado pelo Worki assim que você confirmar. Se o turno for logo,
+                            O freela é avisado pelo Workyn assim que você confirmar. Se o turno for logo,
                             vale reforçar por telefone ou WhatsApp.
                         </Alert>
                     </div>
@@ -1920,7 +1933,7 @@ export default function CompanyJobCandidates() {
                                 subtitle={
                                     <>
                                         <span className="block font-bold text-black">{paymentModalApp.worker?.full_name || 'Freela'} · {jobTitle}</span>
-                                        {shiftWhen(jobStartDate, jobStartTime, jobEndTime)}. Você paga por fora do Worki; aqui fica só o registro.
+                                        {shiftWhen(jobStartDate, jobStartTime, jobEndTime)}. Você paga por fora do Workyn; aqui fica só o registro.
                                     </>
                                 }
                             />
@@ -1968,7 +1981,7 @@ export default function CompanyJobCandidates() {
                                 </Field>
 
                                 <p className="text-xs text-gray-600">
-                                    O dinheiro não passa pelo Worki. Este registro é declaratório e não é documento fiscal.
+                                    O dinheiro não passa pelo Workyn. Este registro é declaratório e não é documento fiscal.
                                 </p>
                                 <p className="text-sm font-bold">Ao confirmar, o turno é marcado como concluído.</p>
                             </div>
@@ -2066,7 +2079,7 @@ export default function CompanyJobCandidates() {
                                 </Field>
 
                                 <Alert tone="warning">
-                                    Isto é uma promessa, ainda não um pagamento. O dinheiro não passa pelo Worki; quando pagar, toque em "Marcar como pago".
+                                    Isto é uma promessa, ainda não um pagamento. O dinheiro não passa pelo Workyn; quando pagar, toque em "Marcar como pago".
                                 </Alert>
                                 <p className="text-sm font-bold">Ao confirmar, o turno é marcado como concluído.</p>
                             </div>

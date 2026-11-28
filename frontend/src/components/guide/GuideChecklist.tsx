@@ -14,7 +14,7 @@ export interface GuideChecklistProps {
 /** Ícones dos passos, em ordem; o último nó é sempre o troféu (a meta). */
 const ICONES: readonly LucideIcon[] = [Users, CalendarPlus, Send, BadgeCheck];
 
-/** Cores do Worki, chapadas (schapado): freela = verde da marca; empresa e encarregado = azul. */
+/** Cores do Workyn, chapadas (schapado): freela = verde da marca; empresa e encarregado = azul. */
 const CORES = {
     freela: { a: '#008840', b: '#008840' },
     empresa: { a: '#2563EB', b: '#2563EB' },
@@ -54,7 +54,7 @@ export function GuideChecklist({ ocultavel = false, className }: GuideChecklistP
                     <h3 className="text-base font-bold">Seus primeiros passos</h3>
                     <p className="text-xs text-gray-600">{vistos} de {total} guias vistos neste aparelho</p>
                 </div>
-                {ocultavel && <Button variant="ghost" size="sm" onClick={ocultarChecklist}>Esconder</Button>}
+                {ocultavel && <Button className="min-h-11 md:min-h-0" variant="ghost" size="sm" onClick={ocultarChecklist}>Esconder</Button>}
             </div>
 
             <ol className="mt-3 flex items-start" aria-label="Trilha dos guias">
@@ -98,7 +98,7 @@ export function GuideChecklist({ ocultavel = false, className }: GuideChecklistP
                         <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-600">Próximo passo</span>
                         <span className="block break-words font-semibold">{atual.titulo}</span>
                     </p>
-                    <Button className="shrink-0 whitespace-nowrap" variant={papel === 'freela' ? 'primary' : 'dark'} size="sm" iconRight={<ArrowRight size={16} aria-hidden="true" />} onClick={() => iniciar(atual.id, 'checklist')}>
+                    <Button className="min-h-11 shrink-0 whitespace-nowrap md:min-h-0" variant={papel === 'freela' ? 'primary' : 'dark'} size="sm" iconRight={<ArrowRight size={16} aria-hidden="true" />} onClick={() => iniciar(atual.id, 'checklist')}>
                         Me mostre
                     </Button>
                 </div>

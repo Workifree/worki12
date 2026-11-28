@@ -21,7 +21,8 @@ export default function HomeRedirect() {
         void checkSession().then((session) => {
             if (!active) return;
             if (session.status === 'ok') {
-                navigate(session.user.user_metadata?.user_type === 'hire' ? '/company/dashboard' : '/dashboard');
+                if (session.user.user_metadata?.user_type === 'hire') navigate('/company/dashboard', { state: { entrada: true } });
+                else navigate('/dashboard');
             } else {
                 setStatus(session.status);
             }

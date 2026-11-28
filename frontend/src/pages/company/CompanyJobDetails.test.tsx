@@ -236,7 +236,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
     expect(mockNavigate).toHaveBeenCalledWith('/company/jobs')
   })
@@ -279,7 +279,7 @@ describe('CompanyJobDetails — excluir turno (alto risco)', () => {
         'error'
       )
     })
-    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+    expect(mockAddToast).not.toHaveBeenCalledWith('Turno excluído.', 'success')
     expect(mockNavigate).not.toHaveBeenCalledWith('/company/jobs')
   })
 })
@@ -311,7 +311,7 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     // 0 freelas cancelados NÃO produz nenhum toast de erro — é legítimo, a mensagem
     // permanece a genérica (sem contagem).
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído.', 'success')
     })
   })
 
@@ -359,10 +359,46 @@ describe('CompanyJobDetails — cancelar candidaturas ao excluir (lote — 0 lin
     fireEvent.click(screen.getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('Turno excluído com sucesso. 2 freelas notificados.', 'success')
+      expect(mockAddToast).toHaveBeenCalledWith('Turno cancelado. 2 freelas avisados.', 'success')
     })
     // sem escrow reservado: nada de estorno
     expect(WalletService.refundEscrow).not.toHaveBeenCalled()
     expect(supabase.rpc).toHaveBeenCalledWith('cancel_job', { p_job_id: 'job-1', p_reason: null })
+  })
+})
+
+describe('CompanyJobDetails — turno que a pessoa não enxerga (RLS)', () => {
+  function setupBlocked(error: unknown) {
+    setupMocks()
+    const jobsChain = {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error }),
+          }),
+        }),
+      }),
+    }
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'jobs') return jobsChain as unknown as ReturnType<typeof supabase.from>
+      return { select: vi.fn(() => applicationsReadThenable()) } as unknown as ReturnType<typeof supabase.from>
+    })
+  }
+
+  it('0 linhas (PGRST116/406) mostra "Turno indisponível" sem "Tentar de novo"', async () => {
+    setupBlocked({ code: 'PGRST116', status: 406, message: 'The result contains 0 rows' })
+    renderComponent()
+    expect(await screen.findByText('Turno indisponível')).toBeInTheDocument()
+    expect(screen.getByText(/não tem acesso a este turno ou ele foi removido/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Voltar para Turnos' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).toBeNull()
+    expect(screen.queryByText(/verifique sua conexão/i)).toBeNull()
+  })
+
+  it('falha de rede real mantém a mensagem de conexão com "Tentar de novo"', async () => {
+    setupBlocked({ message: 'Failed to fetch' })
+    renderComponent()
+    expect(await screen.findByRole('button', { name: /tentar de novo/i })).toBeInTheDocument()
+    expect(screen.queryByText('Turno indisponível')).toBeNull()
   })
 })

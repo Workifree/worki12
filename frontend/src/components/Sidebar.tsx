@@ -1,4 +1,4 @@
-import { User, PlusCircle, Building2, LogOut, HelpCircle, ChevronDown, BadgeCheck, CircleDashed, UserCircle } from 'lucide-react';
+import { User, PlusCircle, Building2, LogOut, HelpCircle, BadgeCheck, CircleDashed, UserCircle } from 'lucide-react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +9,7 @@ import { ButtonLink, Menu } from './ui';
 import { useEffect, useState } from 'react';
 import { useCompanyNavContext } from '../hooks/useCompanyNavContext';
 import { COMPANY_CREATE_ACTION, COMPANY_GESTAO_PATH, WORKER_PROFILE_LINK, getCompanyNav, getWorkerNav, isNavActive } from '../lib/navigation';
-import { getMyCompanies, pickCurrentCompany, switchCompanyUnit, subscribeCompanyScope } from '../services/companyScopeService';
+import { getMyCompanies, pickCurrentCompany, subscribeCompanyScope } from '../services/companyScopeService';
 import type { MyCompany } from '../types';
 
 interface SidebarProps {
@@ -35,9 +35,10 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     }
 
     const [workerData, setWorkerData] = useState<WorkerData | null>(null);
-    // F13 (R13) — seletor de unidade: só aparece quando a sessão opera mais de UMA empresa
-    // (gerente de duas lojas, ou sócio navegando por unidade). Para 100% das contas de hoje
-    // (uma linha), `myCompanies.length <= 1` e o seletor nunca renderiza.
+    // Quem é a PESSOA da sessão (o `name` acima é o da empresa) e o papel dela, para o rodapé.
+    const [personName, setPersonName] = useState('');
+    const [companyRole, setCompanyRole] = useState<MyCompany['role'] | null>(null);
+    // Empresas que a sessão opera (`get_my_companies`) e a corrente: dão o nome e o papel do rodapé.
     const [myCompanies, setMyCompanies] = useState<MyCompany[]>([]);
     const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -71,10 +72,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             if (!user) return;
 
             if (type === 'company') {
-                // F13 (R11/R13) — `get_my_companies()` é o único resolvedor de escopo de empresa.
-                // `.eq('id', user.id)` nunca casava para um gerente (sem linha própria em
-                // `companies`), deixando o nome preso em "Carregando...". Resolve a lista inteira
-                // aqui: também alimenta o seletor de unidade quando há mais de uma.
+                // `get_my_companies()` é o único resolvedor de escopo de empresa: dá o nome, o papel e a empresa corrente.
                 try {
                     const companies = await getMyCompanies();
                     setMyCompanies(companies);
@@ -82,6 +80,23 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                     if (current) {
                         setName(current.company_name ?? '');
                         setCurrentCompanyId(current.company_id);
+                        setCompanyRole(current.role);
+                        // Encarregado tem nome na equipe (`display_name`); o Gestor, o do cadastro; senão o e-mail.
+                        let memberName: string | null = null;
+                        if (current.role === 'encarregado') {
+                            try {
+                                const { data: rows } = await supabase
+                                    .from('company_members')
+                                    .select('company_id, display_name')
+                                    .eq('user_id', user.id);
+                                memberName = ((rows ?? []) as { company_id: string; display_name: string | null }[])
+                                    .find((r) => r.company_id === current.company_id)?.display_name?.trim() || null;
+                            } catch (error) {
+                                logError('Sidebar.fetchMemberName', error);
+                            }
+                        }
+                        const metaName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : '';
+                        setPersonName(memberName || metaName || user.email || '');
                     }
                 } catch (error) {
                     logError('Sidebar.fetchCompanyScope', error);
@@ -108,25 +123,16 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
     const { pathname } = useLocation();
     const currentCompany = myCompanies.find(c => c.company_id === currentCompanyId) ?? null;
     const companyNav = useCompanyNavContext(isCompany ? currentCompany : null);
-    const navItems = isCompany ? getCompanyNav(companyNav) : getWorkerNav();
-
-    // F13 (R13) — troca de unidade: grava a seleção (companyScopeService, singleton + sessionStorage)
-    // e recarrega a página. Um reload total é a forma mais simples e segura de garantir que TODA
-    // tela já montada (que resolve `company_id` no próprio `useEffect` de montagem) releia o dado
-    // da unidade nova, sem precisar plumbar um contexto reativo por todas as páginas de empresa.
-    const handleSwitchCompany = (companyId: string) => {
-        if (companyId === currentCompanyId) return;
-        switchCompanyUnit(companyId);
-        window.location.assign('/company/dashboard');
-    };
+    const navItems = (isCompany ? getCompanyNav(companyNav) : getWorkerNav()).filter((item) => !item.mobileOnly);
 
     // Item ativo: preenchimento sólido, sem borda nem sombra (a moldura é só da lateral).
     // Empresa preto, freela verde AA (`primary-dark`: texto branco 4,57:1).
-    const activeNavClass = isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white';
+    const activeNavClass = isCompany ? 'bg-blue-600 text-white' : 'bg-primary-dark text-white';
 
     // Recolhida (768 a 1099px): só ícones. O texto continua no DOM (`sr-only`) para leitor de tela.
     const label = 'max-[1099px]:sr-only';
 
+    const roleLabel = isCompany ? (companyRole === 'encarregado' ? 'Encarregado' : companyRole ? 'Gestor' : '') : 'Freela';
     const accountItems = [
         !isCompany && { label: WORKER_PROFILE_LINK.label, icon: UserCircle, onSelect: () => navigate(WORKER_PROFILE_LINK.path) },
         { label: 'Ajuda', icon: HelpCircle, onSelect: () => navigate('/ajuda') },
@@ -140,37 +146,14 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             {/* Cabeçalho compacto: marca + sino. Recolhida: marca em cima, sino embaixo. */}
             <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 pl-4 pr-2 max-[1099px]:h-auto max-[1099px]:flex-col max-[1099px]:justify-center max-[1099px]:gap-0 max-[1099px]:px-0 max-[1099px]:py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-[#2563EB] text-white' : 'bg-primary-dark text-white'}`}>W.</span>
+                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-black text-xs font-bold ${isCompany ? 'bg-blue-600 text-white' : 'bg-primary-dark text-white'}`}>W.</span>
                     <div className={`min-w-0 leading-none ${label}`}>
-                        <p className="text-base font-bold tracking-tight text-black">Worki</p>
+                        <p className="text-base font-bold tracking-tight text-black">Workyn</p>
                         {isCompany && <p className="mt-1 text-xs font-semibold text-gray-600">Empresa</p>}
                     </div>
                 </div>
                 <NotificationBell className="text-gray-700 hover:bg-gray-100" />
             </div>
-
-            {/* Seletor de unidade (F13 R13): só com mais de uma empresa. Recolhida, o seletor vive no
-                topo da página (CompanyLayout), onde cabe o nome. */}
-            {isCompany && myCompanies.length > 1 && (
-                <div className="shrink-0 px-3 pt-3 max-[1099px]:hidden">
-                    <label htmlFor="sidebar-company-switch" className="sr-only">Trocar de unidade</label>
-                    <div className="relative">
-                        <select
-                            id="sidebar-company-switch"
-                            value={currentCompanyId ?? ''}
-                            onChange={(e) => handleSwitchCompany(e.target.value)}
-                            className="h-11 w-full cursor-pointer appearance-none rounded-xl border-2 border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-900 hover:border-black focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
-                        >
-                            {myCompanies.map((c) => (
-                                <option key={c.company_id} value={c.company_id}>
-                                    {c.company_name || 'Unidade sem nome'}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                    </div>
-                </div>
-            )}
 
             {isCompany && (
                 <div className="shrink-0 px-3 pt-3">
@@ -212,7 +195,7 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
             <div className="flex shrink-0 items-center gap-1 border-t border-gray-200 p-2 max-[1099px]:flex-col max-[1099px]:gap-0">
                 <NavLink
                     to={isCompany ? COMPANY_GESTAO_PATH : WORKER_PROFILE_LINK.path}
-                    title={name || undefined}
+                    title={(isCompany ? personName || name : name) || undefined}
                     className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl p-1.5 transition-colors duration-fast hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black max-[1099px]:flex-none"
                     // No lado da empresa, quem marca "página atual" é o item Gestão do menu.
                     {...(isCompany ? { 'aria-current': undefined } : {})}
@@ -233,20 +216,25 @@ export default function Sidebar({ type = 'worker' }: SidebarProps) {
                                 <span className="h-3 w-16 rounded bg-gray-200" />
                             </span>
                         ) : (
-                            <span className="truncate text-sm font-semibold leading-tight text-black">{name || (isCompany ? 'Empresa' : '...')}</span>
+                            <span className="truncate text-sm font-semibold leading-tight text-black">
+                                {isCompany ? (personName || 'Minha conta') : (name || '...')}
+                            </span>
                         )}
                         {isCompany ? (isVerified !== null && (
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium leading-tight ${isVerified ? 'text-blue-700' : 'text-gray-600'}`}>
+                            <span className="flex min-w-0 items-center gap-1 text-xs font-medium leading-tight text-gray-600">
                                 {isVerified
                                     ? <BadgeCheck size={13} aria-hidden="true" className="shrink-0 text-blue-600" />
                                     : <CircleDashed size={13} aria-hidden="true" className="shrink-0 text-gray-500" />}
-                                {isVerified ? 'Verificado' : 'Não verificado'}
+                                <span className="shrink-0 font-semibold text-gray-800">{roleLabel}</span>
+                                {name && <span aria-hidden="true" className="shrink-0">·</span>}
+                                {name && <span className="truncate">{name}</span>}
+                                <span className="sr-only">{isVerified ? ', verificado' : ', não verificado'}</span>
                             </span>
                         )) : (
                             // Sem dado ainda: esqueleto, nunca "Nível 1 · 0 XP" inventado.
                             workerData ? (
                                 <span className="truncate text-xs font-medium leading-tight text-gray-600">
-                                    {`Nível ${workerData.level || 1} · ${workerData.xp || 0} XP`}
+                                    {`${roleLabel} · Nível ${workerData.level || 1} · ${workerData.xp || 0} XP`}
                                 </span>
                             ) : (
                                 <span aria-hidden="true" className="mt-0.5 block h-3 w-20 rounded bg-gray-200 motion-safe:animate-pulse" />

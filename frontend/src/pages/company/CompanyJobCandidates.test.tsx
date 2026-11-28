@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import CompanyJobCandidates from './CompanyJobCandidates'
@@ -213,13 +213,44 @@ beforeEach(() => {
 
 // F13: as paginas de empresa resolvem a unidade OPERADA (gerente nao e dono, e `user.id`
 // deixou de servir como company_id). O duble evita bater na RPC get_my_companies.
+const { mockIsGestor } = vi.hoisted(() => ({ mockIsGestor: vi.fn(() => true) }))
 vi.mock('../../services/companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
   getMyCompanies: vi.fn().mockResolvedValue([]),
   pickCurrentCompany: () => null,
   subscribeCompanyScope: () => () => undefined,
-  isGestor: () => true,
+  isGestor: () => mockIsGestor(),
 }))
+
+describe('CompanyJobCandidates — perfil do freela é só do Gestor', () => {
+  afterEach(() => mockIsGestor.mockReturnValue(true))
+
+  it('Gestor: o avatar/nome do freela é um botão habilitado que leva a /company/worker/:id', async () => {
+    const navigate = vi.fn()
+    setupMocksWithApps(APP_IN_PROGRESS)
+    vi.mocked(useNavigate).mockReturnValue(navigate)
+    renderComponent()
+
+    const botao = await screen.findByRole('button', { name: /Ver perfil de/i })
+    expect(botao).toBeEnabled()
+    fireEvent.click(botao)
+    expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/company\/worker\//))
+  })
+
+  it('Encarregado: sem botão de perfil e sem navegação ao clicar no nome', async () => {
+    mockIsGestor.mockReturnValue(false)
+    const navigate = vi.fn()
+    setupMocksWithApps(APP_IN_PROGRESS)
+    vi.mocked(useNavigate).mockReturnValue(navigate)
+    renderComponent()
+
+    const nome = await screen.findByText('João Silva')
+    expect(screen.queryByRole('button', { name: /Ver perfil de/i })).not.toBeInTheDocument()
+    expect(nome.closest('button')).toBeDisabled()
+    fireEvent.click(nome)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+})
 
 describe('CompanyJobCandidates — renderiza candidatos com status in_progress', () => {
   it('D-14: contratado sem chegada aparece como "Contratado", não "Em Andamento"', async () => {
@@ -271,7 +302,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     expect(screen.getByRole('heading', { name: /Confirmar entrega/i })).toBeInTheDocument()
-    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
   })
 
   it('modal fecha ao clicar Cancelar sem chamar releaseEscrow', async () => {
@@ -284,12 +315,12 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
-    expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+    expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     await waitFor(() => {
-      expect(screen.queryByText(/O pagamento pelo Worki está pausado/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/O pagamento pelo Workyn está pausado/)).not.toBeInTheDocument()
     })
 
     expect(WalletService.releaseOrCaptureEscrow).not.toHaveBeenCalled()
@@ -308,7 +339,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
     })
 
     // Get "Confirmar" button inside modal (not the list button)
@@ -319,7 +350,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Entrega confirmada. O pagamento é feito por fora do Worki.',
+        'Entrega confirmada. O pagamento é feito por fora do Workyn.',
         'success'
       )
     })
@@ -338,7 +369,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
     fireEvent.click(screen.getByText('Confirmar entrega'))
 
     await waitFor(() => {
-      expect(screen.getByText(/O pagamento pelo Worki está pausado/)).toBeInTheDocument()
+      expect(screen.getByText(/O pagamento pelo Workyn está pausado/)).toBeInTheDocument()
     })
 
     const buttons = screen.getAllByRole('button')

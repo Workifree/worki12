@@ -271,12 +271,12 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
         // Celular: UMA linha de 56px (texto curto + Instalar + dispensar). O texto completo e o
         // passo a passo do iPhone ficam na folha que abre em "Instalar".
         <aside
-          aria-label="Instalar o Worki"
+          aria-label="Instalar o Workyn"
           data-page-agent-ignore="true"
           className="worki-pwa-install flex h-14 items-center gap-2 rounded-2xl border border-gray-200 bg-white pl-3 pr-1 shadow-overlay motion-safe:animate-slide-in"
         >
           <Download aria-hidden="true" className="h-5 w-5 shrink-0 text-primary-ink" />
-          <p className="min-w-0 flex-1 truncate text-sm font-bold text-black">Instale o Worki</p>
+          <p className="min-w-0 flex-1 truncate text-sm font-bold text-black">Instale o Workyn</p>
           <Button size="md" variant="secondary" className="h-11 shrink-0 px-4" onClick={() => setSheetOpen(true)}>
             Instalar
           </Button>
@@ -289,7 +289,7 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
       {showInstall && compact && sheetOpen && (
         <Dialog onClose={() => setSheetOpen(false)} labelledBy="pwa-install-sheet-title" className="w-full max-w-md">
           <DialogHeader
-            title={pwa.installAvailable ? 'Instale o Worki' : 'Instale o Worki no iPhone'}
+            title={pwa.installAvailable ? 'Instale o Workyn' : 'Instale o Workyn no iPhone'}
             titleId="pwa-install-sheet-title"
             onClose={() => setSheetOpen(false)}
           />
@@ -321,11 +321,11 @@ export default function PwaPrompts({ installDelayMs = DEFAULT_INSTALL_DELAY_MS }
 
       {showInstall && !compact && (
         <FloatingCard
-          aria-label="Instalar o Worki"
+          aria-label="Instalar o Workyn"
           data-page-agent-ignore="true"
           className="worki-pwa-install"
           icon={<Download className="h-5 w-5" />}
-          title={pwa.installAvailable ? 'Instale o Worki' : 'Instale o Worki no iPhone'}
+          title={pwa.installAvailable ? 'Instale o Workyn' : 'Instale o Workyn no iPhone'}
           actions={
             pwa.installAvailable ? (
               <>

@@ -261,7 +261,7 @@ describe('WorkerPublicProfile — visibilidade de contato/pagamento (R1, defesa 
     })
     expect(screen.getByText('maria@pix.com')).toBeInTheDocument()
     expect(
-      screen.queryByText('Adicione este freela ao seu elenco para ver os dados de pagamento.'),
+      screen.queryByText('Adicione este freela ao seu Elenco para ver os dados de pagamento.'),
     ).not.toBeInTheDocument()
   })
 
@@ -297,7 +297,7 @@ describe('WorkerPublicProfile — visibilidade de contato/pagamento (R1, defesa 
 
     await waitFor(() => {
       expect(
-        screen.getByText('Adicione este freela ao seu elenco para ver os dados de pagamento.'),
+        screen.getByText('Adicione este freela ao seu Elenco para ver os dados de pagamento.'),
       ).toBeInTheDocument()
     })
     expect(screen.queryByText('(11) 99999-9999')).not.toBeInTheDocument()
@@ -341,7 +341,7 @@ describe('WorkerPublicProfile — visibilidade de contato/pagamento (R1, defesa 
       ).toBeInTheDocument()
     })
     expect(
-      screen.queryByText('Adicione este freela ao seu elenco para ver os dados de pagamento.'),
+      screen.queryByText('Adicione este freela ao seu Elenco para ver os dados de pagamento.'),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('(11) 99999-9999')).not.toBeInTheDocument()
     expect(screen.queryByText('maria@pix.com')).not.toBeInTheDocument()

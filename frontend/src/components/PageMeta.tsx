@@ -9,7 +9,7 @@ interface PageMetaProps {
 }
 
 export default function PageMeta({ title, description, ogTitle, ogDescription, ogImage, noindex }: PageMetaProps) {
-  const fullTitle = title.includes('Worki') ? title : `${title} — Worki`
+  const fullTitle = title.includes('Workyn') ? title : `${title} — Workyn`
   return (
     <>
       <title>{fullTitle}</title>

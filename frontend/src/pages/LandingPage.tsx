@@ -12,17 +12,17 @@ const FEATURES = [
   {
     icon: <Zap className="w-8 h-8 text-blue-600" aria-hidden="true" />,
     title: 'Do seu jeito de pagar',
-    description: 'Você paga o freela por fora (PIX ou dinheiro) e registra no Worki — recibo automático pros dois lados.',
+    description: 'Você paga o freela por fora (PIX ou dinheiro) e registra no Workyn — recibo automático pros dois lados.',
   },
   {
     icon: <Users className="w-8 h-8 text-primary" aria-hidden="true" />,
-    title: 'Seu elenco de confiança',
+    title: 'Seu Elenco de confiança',
     description: 'Só quem você já conhece e testou — sem depender de estranho de plataforma.',
   },
   {
     icon: <UserPlus className="w-8 h-8 text-blue-600" aria-hidden="true" />,
     title: 'Convite em segundos',
-    description: 'Chame o freela direto pro seu elenco — sem grupo de WhatsApp, sem renegociar tudo de novo.',
+    description: 'Chame o freela direto pro seu Elenco — sem grupo de WhatsApp, sem renegociar tudo de novo.',
   },
   {
     icon: <CreditCard className="w-8 h-8 text-primary" aria-hidden="true" />,
@@ -37,9 +37,9 @@ const FEATURES = [
 ]
 
 const STEPS_COMPANY = [
-  { step: '1', title: 'Monte seu elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
-  { step: '2', title: 'Convide pra um turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu elenco — sem esperar candidatura de estranho.' },
-  { step: '3', title: 'Pague e registre', desc: 'Confirme o turno, pague o freela direto (PIX ou dinheiro) e registre no Worki — recibo automático pra seu controle.' },
+  { step: '1', title: 'Monte seu Elenco', desc: 'Convide os freelas que você já confia por link ou telefone. Depois de aceitar, eles ficam na sua lista pra sempre.' },
+  { step: '2', title: 'Convide pra um turno', desc: 'Defina data, horário e valor, e envie o convite direto pro freela do seu Elenco — sem esperar candidatura de estranho.' },
+  { step: '3', title: 'Pague e registre', desc: 'Confirme o turno, pague o freela direto (PIX ou dinheiro) e registre no Workyn — recibo automático pra seu controle.' },
 ]
 
 const STEPS_WORKER = [
@@ -88,7 +88,7 @@ export default function LandingPage() {
             onClick={() => navigate('/')}
             className="inline-flex items-center min-h-11 pr-3 text-2xl font-black tracking-tighter hover:text-primary transition-colors"
           >
-            Worki
+            Workyn
           </button>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="md" className="px-3 sm:px-5" onClick={() => navigate('/login?type=work')}>
@@ -126,7 +126,7 @@ export default function LandingPage() {
       <section className="px-4 py-16 md:py-24 bg-white">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-center mb-12">
-            Por que escolher o Worki?
+            Por que escolher o Workyn?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             {FEATURES.map((feature) => (
@@ -188,7 +188,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="px-4 py-8 bg-gray-100 text-center text-sm text-gray-600">
-        <p>&copy; {new Date().getFullYear()} Worki — Confiança e registro para o trabalho freela. Todos os direitos reservados.</p>
+        <p>&copy; {new Date().getFullYear()} Workyn — Confiança e registro para o trabalho freela. Todos os direitos reservados.</p>
         <div className="flex flex-wrap gap-x-2 justify-center mt-3">
           <button onClick={() => navigate('/termos')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Termos de Uso</button>
           <button onClick={() => navigate('/privacidade')} className="min-h-11 px-3 hover:text-black hover:underline transition-colors">Política de Privacidade</button>

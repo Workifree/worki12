@@ -234,7 +234,7 @@ export default function InviteAccept() {
 
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
-      <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Worki." noindex />
+      <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Workyn." noindex />
 
       <div className="w-full max-w-md">
         {state === 'loading' && (
@@ -331,7 +331,7 @@ export default function InviteAccept() {
         )}
 
         {state === 'already_exists' && outcome(
-          isWorkerLink ? 'Já está no seu elenco' : 'Você já está no elenco',
+          isWorkerLink ? 'Já está no seu Elenco' : 'Você já está no Elenco',
           isWorkerLink
             ? 'Já existe uma conexão com este freela. Veja no Elenco se ela está aceita ou aguardando resposta.'
             : 'Você já tem uma conexão com esta empresa. Não é necessário aceitar novamente.',

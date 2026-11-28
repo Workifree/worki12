@@ -20,7 +20,7 @@ import type { PaymentMethod } from '../types';
 /**
  * Dados necessários para tokenizar um cartão de crédito.
  * O PAN (number, ccv) trafega APENAS nesta chamada, server→Asaas.
- * NUNCA persiste no DB do Worki.
+ * NUNCA persiste no DB do Workyn.
  */
 export interface SaveCardInput {
   holderName: string;

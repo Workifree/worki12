@@ -6,6 +6,7 @@ import PageMeta from '../../components/PageMeta';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { logError } from '../../lib/logger'
+import { CHAT_DENIED_MESSAGE, isChatDeniedByRls } from '../../lib/shiftChat'
 import { useToast } from '../../contexts/ToastContext';
 import { TeamConnectionService } from '../../services/teamConnectionService';
 import WorkerCertificationsPanel from '../../components/company/WorkerCertificationsPanel';
@@ -232,6 +233,10 @@ export default function WorkerPublicProfile() {
                 navigate(`/company/messages?conversation=${newConvId}`);
             }
         } catch (error) {
+            if (isChatDeniedByRls(error)) {
+                addToast(CHAT_DENIED_MESSAGE, 'error');
+                return;
+            }
             logError('WorkerPublicProfile.handleChat', error);
             addToast('Erro ao iniciar conversa.', 'error');
         } finally {
@@ -285,7 +290,7 @@ export default function WorkerPublicProfile() {
             </Button>
             <div className="text-center text-gray-700 font-semibold border-2 border-dashed border-gray-300 rounded-2xl py-16 px-4">
                 Não foi possível abrir este perfil agora.<br />
-                <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu elenco, ou a conexão falhou. Tente de novo.</span>
+                <span className="font-normal text-sm text-gray-600">Ele pode não fazer parte do seu Elenco, ou a conexão falhou. Tente de novo.</span>
             </div>
         </div>
     );
@@ -294,8 +299,8 @@ export default function WorkerPublicProfile() {
         <div className="max-w-4xl mx-auto pb-20">
             <PageMeta
               title={profile ? profile.full_name : 'Perfil do Profissional'}
-              description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Worki.` : undefined}
-              ogTitle={profile ? `${profile.full_name} — Worki` : undefined}
+              description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Workyn.` : undefined}
+              ogTitle={profile ? `${profile.full_name} — Workyn` : undefined}
             />
             {/* Header / Nav */}
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)} iconLeft={<ArrowLeft size={16} />} className="mb-4 -ml-3">
@@ -355,7 +360,7 @@ export default function WorkerPublicProfile() {
                                 )}
                             </div>
                         )}
-                        <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Worki'}</p>
+                        <p className="text-sm sm:text-base text-gray-600 mt-1">{profile.bio || 'Profissional Workyn'}</p>
 
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-semibold text-gray-600">
                             <span className="flex items-center gap-2"><MapPin size={18} /> {profile.location || 'Localização não definida'}</span>
@@ -403,7 +408,7 @@ export default function WorkerPublicProfile() {
                     )}
 
                     {/* R1.2: Contato e pagamento — o piloto roda no modo A (pagamento por fora,
-                        registrado no Worki), então a empresa precisa do telefone e da chave PIX
+                        registrado no Workyn), então a empresa precisa do telefone e da chave PIX
                         do freela para de fato conseguir pagar. R1 (visibilidade): só exibido para
                         empresa com vínculo 'accepted' — ver harness-security-reviewer HIGH. */}
                     <div data-copilot-private className="mt-6 bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
@@ -448,7 +453,7 @@ export default function WorkerPublicProfile() {
                                 <p>
                                     {connectionStatus === 'pending'
                                         ? 'Aguardando o freela aceitar o convite para ver os dados de pagamento.'
-                                        : 'Adicione este freela ao seu elenco para ver os dados de pagamento.'}
+                                        : 'Adicione este freela ao seu Elenco para ver os dados de pagamento.'}
                                 </p>
                                 {connectionStatus !== 'pending' && (
                                     <Button variant="secondary" size="sm" onClick={() => navigate('/company/team')}>

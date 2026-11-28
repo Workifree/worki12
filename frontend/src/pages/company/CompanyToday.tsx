@@ -13,6 +13,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PedidoDeAvisos from '../../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../../lib/features';
 import { CalendarClock, LayoutDashboard, Megaphone, Plus, Repeat, Users, X, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import PassJobsModal, { type PassDestination } from '../../components/company/PassJobsModal';
@@ -20,7 +22,7 @@ import CoverageModal, { type CoveragePerson } from '../../components/company/Cov
 import CancelJobModal from '../../components/company/CancelJobModal';
 import { useCancelJobAvailable } from '../../hooks/useCancelJobAvailable';
 import {
-  ActionBar, Alert, Button, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, SlotBadge, StatusPill,
+  ActionBar, Alert, Button, Card, EmptyState, ErrorState, FilterChip, Menu, PageHeader, SkeletonList, SlotBadge, StatusBadge, StatusPill,
 } from '../../components/ui';
 import { occupancy } from '../../lib/nextAction';
 import CreateShiftLink from '../../components/company/CreateShiftLink';
@@ -188,7 +190,7 @@ export default function CompanyToday() {
       if (!companyId || !company) return;
       const claim = beginSide();
       const [tagList, coverageList, members, ops] = await Promise.all([
-        teamEnabled ? listTagsChecked(companyId) : Promise.resolve({ ok: true, items: [] as CompanyTag[] }),
+        listTagsChecked(companyId),
         teamEnabled ? listActiveCoveragesChecked(companyId, today) : Promise.resolve({ ok: true, items: [] as ActiveCoverage[] }),
         gestor && teamEnabled ? listMembers(companyId) : Promise.resolve(null),
         teamEnabled ? listCompanyOperators(companyId) : Promise.resolve({ ok: true, items: [] as CompanyOperator[] }),
@@ -319,7 +321,7 @@ export default function CompanyToday() {
   const othersEncarregados = encarregados.filter((p) => p.userId !== userId).length;
   const canCover =
     teamEnabled && !operatorsFailed && (gestor ? encarregados.length >= 2 : othersEncarregados > 0);
-  const showFilters = teamEnabled && (gestor ? everyone.length > 1 || tags.length > 0 : tags.length > 0);
+  const showFilters = tags.length > 0 || (teamEnabled && gestor && everyone.length > 1);
   const filtered = personFilter !== null || tagFilter !== null;
 
   const groups = useMemo(() => groupByDay(jobs, today), [jobs, today]);
@@ -414,6 +416,11 @@ export default function CompanyToday() {
       />
 
       <GuideChecklist ocultavel className="mb-6" />
+      {isAvisosEnabled() && (
+        <div className="mb-6">
+          <PedidoDeAvisos papel="empresa" />
+        </div>
+      )}
       <TrailShortcutCard className="mb-6" />
 
       {teamEnabled && operatorsFailed && (
@@ -428,7 +435,7 @@ export default function CompanyToday() {
           className="mb-4"
           action={<Button variant="secondary" onClick={reload}>Tentar de novo</Button>}
         >
-          Não foi possível carregar as etiquetas ou as coberturas agora. Os turnos abaixo estão corretos.
+          Não foi possível carregar as lojas ou as coberturas agora. Os turnos abaixo estão corretos.
         </Alert>
       )}
 
@@ -448,7 +455,7 @@ export default function CompanyToday() {
               ))}
           </div>
           {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Etiquetas">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Lojas">
               {tags.map((t) => (
                 <FilterChip key={t.id} pressed={tagFilter === t.id} onClick={() => changeFilters(personFilter, tagFilter === t.id ? null : t.id)}>
                   {t.name}
@@ -551,6 +558,7 @@ export default function CompanyToday() {
                           <div className="flex flex-wrap items-center gap-2">
                             <StatusPill tone={state.tone} label={state.label} live={state.needsPeople} />
                             {job.slots !== null && <SlotBadge filled={job.filled} total={job.slots} />}
+                            {job.tagName && <StatusBadge tone="neutral" title="Loja do turno">{job.tagArchived ? `${job.tagName} (arquivada)` : job.tagName}</StatusBadge>}
                           </div>
                           <p className="mt-1 line-clamp-3 break-words text-base font-bold">{job.title}</p>
                           <p className="mt-0.5 text-sm text-gray-600">

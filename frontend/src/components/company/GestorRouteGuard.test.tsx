@@ -22,12 +22,20 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('D-5: guarda única das rotas do Gestor', () => {
   it.each([
-    '/company/indicacoes', '/company/relatorio', '/company/operacao', '/company/organization', '/company/configuracoes/equipe',
+    '/company/indicacoes', '/company/operacao', '/company/configuracoes/equipe',
   ])('encarregado em %s: sem acesso, e a tela nunca chega a montar', async (path) => {
     as('encarregado')
     open(path)
     expect(await screen.findByRole('heading', { name: /não tem acesso/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Voltar ao Início' })).toBeInTheDocument()
+    expect(mounted).not.toHaveBeenCalled()
+  })
+
+  it('encarregado em Dados da empresa: mensagem padrão do Gestor, sem redirecionar em silêncio', async () => {
+    as('encarregado')
+    open('/company/profile')
+    expect(await screen.findByRole('heading', { name: /não tem acesso a esta tela/i })).toBeInTheDocument()
+    expect(screen.getByText('Esta área é do Gestor da empresa.')).toBeInTheDocument()
     expect(mounted).not.toHaveBeenCalled()
   })
 
@@ -37,10 +45,16 @@ describe('D-5: guarda única das rotas do Gestor', () => {
     expect(screen.getByText('conteúdo do gestor')).toBeInTheDocument()
   })
 
-  it('gerente não vê Unidades; dono vê o relatório', async () => {
+  it('encarregado entra no relatório (visão só dos próprios turnos, escopo decidido na RPC)', () => {
+    as('encarregado')
+    open('/company/relatorio')
+    expect(screen.getByText('conteúdo do gestor')).toBeInTheDocument()
+  })
+
+  it('gerente e dono veem o relatório', async () => {
     as('manager')
-    const first = open('/company/organization')
-    expect(await screen.findByRole('heading', { name: /não tem acesso/i })).toBeInTheDocument()
+    const first = open('/company/relatorio')
+    expect(await screen.findByText('conteúdo do gestor')).toBeInTheDocument()
     first.unmount()
     as('owner')
     open('/company/relatorio')

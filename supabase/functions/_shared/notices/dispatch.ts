@@ -42,7 +42,7 @@ export interface DispatchDeps {
     log: (message: string) => void;
 }
 
-const DEFAULT_APP_URL = 'https://worki-opal.vercel.app';
+const DEFAULT_APP_URL = 'https://www.workyn.app';
 const TIMEOUT_MS = 10_000;
 
 const hasAll = (env: Env, names: string[]) => names.every((n) => !!env(n));

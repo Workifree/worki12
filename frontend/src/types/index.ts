@@ -1,4 +1,4 @@
-// Worki - Shared TypeScript Interfaces
+// Workyn - Shared TypeScript Interfaces
 // Centralized types for database entities
 
 // =============================================
@@ -199,33 +199,14 @@ export interface MyCompany {
   team_enabled?: boolean;
 }
 
-/**
- * Linha de `company_members` (migration 20260818100000) — vínculo gerente x unidade. `user_id`
- * é `null` enquanto o convite não foi aceito (R9). Projeção usada por `organizationService` /
- * `pages/company/Organization.tsx` (R14-R16) — nunca dado financeiro/PII além do e-mail
- * convidado, que a própria empresa digitou.
- */
+/** Estado de uma linha de `company_members`. */
 export type CompanyMemberStatus = 'invited' | 'active' | 'removed';
-
-export interface CompanyMember {
-  id: string;
-  company_id: string;
-  user_id: string | null;
-  role: 'manager';
-  status: CompanyMemberStatus;
-  invited_email: string | null;
-  /** Só não-nulo enquanto `status='invited'` — queima (`NULL`) no aceite (R9). */
-  invite_token: string | null;
-  invited_at: string;
-  accepted_at: string | null;
-  expires_at: string;
-}
 
 // =============================================
 // EQUIPE E ENCARREGADOS (E4) — supabase/migrations/20261123000500_equipe_e4_convites_e_papel.sql
 // "Equipe" = pessoas que operam a empresa; "Elenco" = freelas (nunca misturar rótulos).
 // =============================================
-/** Papel de uma pessoa da equipe. Gestor-por-link não existe (H1): só 'encarregado' é convidado aqui. */
+/** Papel de uma pessoa da equipe. Desde ADR-20261127 os dois entram pelo mesmo convite; Gestor opera zero até ser confirmado. */
 export type TeamMemberRole = 'manager' | 'encarregado';
 
 /** Estado derivado por `list_company_members` (nunca recomputar no client). */
@@ -254,20 +235,57 @@ export interface TeamMemberItem {
   removedAt: string | null;
   /** Prazo (72h) para o Gestor confirmar; só para Encarregado aceito e não confirmado. */
   confirmationExpiresAt?: string | null;
+  /** E-mail do convite pendente (só se o banco devolver). `null` = convite antigo, sem e-mail. */
+  invitedEmail?: string | null;
+  /** Loja padrão (company_tags.id) do Encarregado; `null` = sem padrão. Sempre `null` para Gestor. Nunca concede acesso. */
+  defaultTagId?: string | null;
+  /** Nome atual da loja padrão (derivado no banco). */
+  defaultTagName?: string | null;
 }
 
 /** Prévia pública do convite — projeção fechada, nenhum outro dado (ADR previa-publica-do-convite). */
+export type ProvisionAccountOutcome =
+  | 'created'
+  | 'existing_account'
+  | 'account_pending'
+  | 'worker_cannot_be_manager'
+  /** Convite de GESTOR sem conta verificada: a pessoa precisa se cadastrar (e verificar o e-mail) antes. */
+  | 'manager_requires_verified_signup'
+  | 'legacy_invite'
+  | 'not_found'
+  | 'expired'
+  | 'rate_limited'
+  | 'invalid_input'
+  | 'error';
+
+export interface ProvisionAccountResult {
+  outcome: ProvisionAccountOutcome;
+  /** Só em `created`: e-mail da conta recém-criada, para o `signInWithPassword`. */
+  email?: string;
+}
+
 export type InvitePreviewOutcome = 'ok' | 'expired' | 'not_found' | 'error';
 export interface InvitePreviewResult {
   outcome: InvitePreviewOutcome;
   companyName?: string;
   role?: TeamMemberRole;
+  /** E-mail do convite mascarado (jo***@dominio.com); nunca o completo. */
+  emailMasked?: string;
+  /** `false` = convite antigo, sem e-mail: não dá para aceitar sem OTP. */
+  emailBound?: boolean;
 }
 
 export type InviteMemberOutcome =
   | 'invited'
   | 'reinvited'
   | 'already_invited'
+  | 'email_required'
+  | 'invalid_email'
+  | 'name_already_invited'
+  | 'already_member'
+  | 'already_invited_other_role'
+  | 'invalid_tag'
+  | 'worker_cannot_be_manager'
   | 'invalid_input'
   | 'not_found'
   | 'forbidden'
@@ -309,10 +327,13 @@ export type AcceptMemberInviteOutcome =
   | 'revoked'
   | 'expired'
   | 'not_found'
+  /** Legado (ADR-20261127 D5): o banco não devolve mais; mantido para telas antigas compilarem. */
   | 'use_manager_invite'
+  | 'already_member_other_role'
   | 'tos_required'
   | 'worker_cannot_be_manager'
   | 'email_not_verified'
+  | 'email_mismatch'
   | 'invalid_input'
   | 'unauthenticated'
   | 'error';
@@ -367,6 +388,17 @@ export interface RemoveMemberResult {
   elencoLinkRotationAdvised: boolean;
   alreadyRemoved: boolean;
 }
+
+export type SetMemberDefaultTagOutcome =
+  | 'updated'
+  | 'unchanged'
+  | 'not_found'
+  | 'not_encarregado'
+  | 'invalid_tag'
+  | 'forbidden'
+  | 'invalid_input'
+  | 'unauthenticated'
+  | 'error';
 
 export type ListMembersOutcome = 'ok' | 'forbidden' | 'unauthenticated' | 'error';
 
@@ -509,7 +541,7 @@ export type ShiftCallReason =
 
 /** Rótulos em pt-BR dos motivos — fonte única para dropdown e relatório. */
 export const SHIFT_CALL_REASON_LABELS: Record<ShiftCallReason, string> = {
-  falta: 'Falta de funcionário',
+  falta: 'Falta de freela',
   demissao: 'Demissão / quebra de escala',
   pico_previsto: 'Pico de movimento previsto',
   evento: 'Evento',
@@ -1216,7 +1248,7 @@ export type AttendanceConfirmationOutcome =
 // =============================================
 
 /**
- * Espelha `public.service_terms`. REGISTRO DECLARATÓRIO entre empresa e freela — a Worki
+ * Espelha `public.service_terms`. REGISTRO DECLARATÓRIO entre empresa e freela — a Workyn
  * NÃO é parte, não valida e não garante validade jurídica (a cláusula está DENTRO de
  * `term_text`, item 4 do render). NÃO move saldo (Article 8): `amount` é cópia declaratória
  * de `shift_payments.amount`, não é saldo, não entra em soma alguma.
@@ -1229,7 +1261,7 @@ export type AttendanceConfirmationOutcome =
  *
  * NÃO existe coluna `status`: o estado do termo é a presença de `accepted_at`, e nada mais.
  * Não adicionar `validated_by`, `company_accepted_at`, `signature_hash`, `is_valid` etc. —
- * qualquer campo que sugira que o Worki valida/garante o termo é violação da fronteira
+ * qualquer campo que sugira que o Workyn valida/garante o termo é violação da fronteira
  * jurídica (ver DDL aprovado §1 pergunta 5).
  */
 export interface ServiceTerm {
@@ -1238,7 +1270,7 @@ export interface ServiceTerm {
   job_id: string;
   worker_id: string;
   company_id: string;
-  /** 'modelo-worki-v1' — MODELO (sugestão), não "termo oficial da Worki". */
+  /** 'modelo-worki-v1' — MODELO (sugestão), não "termo oficial da Workyn". */
   term_version: string;
   /** Rascunho enquanto accepted_at é null; snapshot CONGELADO desde o aceite depois. */
   term_text: string;
@@ -1312,7 +1344,7 @@ export interface WorkerTraining {
  * Certificação EXTERNA do freela (CREF, manipulação de alimentos, curso técnico).
  * AUTO-DECLARADA pelo próprio freela. Uma empresa com vínculo pode CONFERIR visualmente
  * — sempre ATRIBUÍDA a uma empresa nomeada + data (`verified_by_company_id`/`verified_at`
- * são par: nulos juntos ou preenchidos juntos, CHECK no banco). O Worki NUNCA atesta —
+ * são par: nulos juntos ou preenchidos juntos, CHECK no banco). O Workyn NUNCA atesta —
  * proibido exibir selo genérico de "verificado" na UI.
  *
  * v1 SEM ARQUIVO (D1): não existe `document_path` nem bucket. `registration_number`
@@ -1594,3 +1626,106 @@ export type {
   ShiftDraftRow, ShiftDraftCall, ShiftDraftSeries, ShiftDraftBatch, ShiftDraftIssueKind, ShiftDraftIssue,
 } from '../lib/shiftDrafts';
 import type { PresenceMode, PresenceQrMode } from '../lib/presence';
+
+// =============================================
+// RELATÓRIO FINANCEIRO e PLANILHA DE PAGAMENTO (ADR-20261127-relatorio-financeiro-e-planilha-de-pagamento)
+// Contrato das RPCs `get_financial_report` e `get_payment_sheet`. Escritos à mão (sem codegen).
+// `get_financial_report` NUNCA carrega CPF/PIX; só `get_payment_sheet` (Gestor) os devolve.
+// =============================================
+export type FinancialReportStatus = 'aberta' | 'agendada' | 'paga' | 'conciliada';
+export type FinancialAmountKind = 'realized' | 'estimated' | 'estimated_by_planned_hours';
+export type FinancialReportOutcome =
+  | 'ok' | 'forbidden' | 'not_confirmed' | 'invalid_range' | 'range_too_large' | 'invalid_status' | 'unauthenticated';
+
+export interface FinancialReportRow {
+  job_id: string;
+  job_title: string | null;
+  job_category: string | null;
+  /** Data LOCAL do turno (America/Sao_Paulo), YYYY-MM-DD. */
+  job_date: string | null;
+  tag_id: string | null;
+  tag_name: string | null;
+  responsible_id: string | null;
+  responsible_name: string | null;
+  worker_id: string | null;
+  worker_name: string | null;
+  checkin_at: string | null;
+  checkout_at: string | null;
+  checkout_confirmed: boolean;
+  /** Medido (check-in/out). `null` = sem check-in/out: nunca 0. */
+  hours: number | null;
+  /** Planejado (jobs.estimated_hours), só para rotular. */
+  hours_estimated: number | null;
+  amount: number;
+  amount_kind: FinancialAmountKind;
+  hourly_rate: number | null;
+  /** = shift_payments.id (número do recibo). */
+  payment_id: string | null;
+  payment_status: 'scheduled' | 'recorded' | null;
+  source: string | null;
+  paid_at: string | null;
+  scheduled_for: string | null;
+  worker_confirmed_at: string | null;
+  status: FinancialReportStatus;
+}
+
+export interface FinancialTotalsBase {
+  shifts_count: number;
+  hours_total: number;
+  hours_missing_count: number;
+  total_amount: number;
+  total_paid: number;
+  total_to_pay: number;
+}
+
+export interface FinancialTotalsByWorker extends FinancialTotalsBase {
+  worker_id: string | null;
+  worker_name: string | null;
+}
+
+export interface FinancialTotalsByDay extends FinancialTotalsBase {
+  /** YYYY-MM-DD (data local). */
+  job_date: string;
+}
+
+export interface FinancialReportTotals {
+  by_worker: FinancialTotalsByWorker[];
+  by_day: FinancialTotalsByDay[];
+  overall: FinancialTotalsBase;
+}
+
+export interface FinancialReport {
+  outcome: FinancialReportOutcome;
+  /** 'company' = Gestor (company inteira); 'own' = Encarregado (só os próprios turnos + cobertos). */
+  scope: 'company' | 'own';
+  truncated: boolean;
+  rows: FinancialReportRow[];
+  totals: FinancialReportTotals;
+}
+
+export type PaymentSheetOutcome = 'ok' | 'forbidden' | 'invalid_range' | 'range_too_large' | 'unauthenticated';
+
+export interface PaymentSheetRow {
+  worker_id: string;
+  full_name: string | null;
+  /** Completos na RPC; a tela mascara, só o arquivo exportado leva inteiro. Nulos se anonimizado. */
+  cpf: string | null;
+  pix_key: string | null;
+  shifts_count: number;
+  hours_total: number;
+  hours_missing_count: number;
+  total_paid: number;
+  total_to_pay: number;
+  has_estimated_amount: boolean;
+  tags: string[];
+  payment_ids: string[];
+}
+
+export interface PaymentSheet {
+  outcome: PaymentSheetOutcome;
+  /** Planilha cortada em 500 freelas. */
+  truncated: boolean;
+  rows: PaymentSheetRow[];
+  generated_at: string | null;
+  log_id: string | null;
+}

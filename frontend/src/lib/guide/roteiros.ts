@@ -184,7 +184,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
     {
         id: 'empresa-pagamento', papeis: EMPRESA,
         titulo: 'Registrar um pagamento',
-        descricao: 'Você paga por fora (PIX ou dinheiro) e registra aqui. O Worki não paga por você.',
+        descricao: 'Você paga por fora (PIX ou dinheiro) e registra aqui. O Workyn não paga por você.',
         frases: ['pagar freela', 'pix', 'acerto', 'dei o dinheiro', 'agendar pagamento', 'marcar como pago', 'recibo'],
         passos: [
             abrirPresenca,
@@ -214,7 +214,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
             naPresenca({
                 alvos: ['empresa.presenca.estornar'],
                 titulo: 'Estornar', risco: 'D',
-                explicacao: 'Só o Gestor faz. Isso corrige o registro no Worki, não movimenta dinheiro.',
+                explicacao: 'Só o Gestor faz. Isso corrige o registro no Workyn, não movimenta dinheiro.',
                 aoTocar: 'Pede o motivo e a confirmação. O freela é avisado.',
                 semAlvo: 'Não há pagamento registrado ou agendado neste turno.',
             }),
@@ -276,7 +276,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'empresa-elenco-adicionar', papeis: EMPRESA,
         titulo: 'Trazer um freela para o Elenco',
         descricao: 'Mandar o seu link ou adicionar pelo código do freela.',
-        frases: ['cadastrar funcionario', 'adicionar pessoa', 'convidar freelancer', 'link da equipe', 'codigo do freela', 'qr'],
+        frases: ['adicionar freela', 'convidar freelancer', 'link do elenco', 'codigo do freela', 'qr'],
         passos: [
             {
                 rota: 'empresa.elenco', alvos: ['empresa.elenco.copiar-link'],
@@ -333,12 +333,12 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
     },
     {
         id: 'empresa-convidar-encarregado', papeis: GESTOR,
-        titulo: 'Dar acesso a quem me ajuda (encarregado)',
-        descricao: 'Convidar uma pessoa para cuidar dos próprios turnos.',
-        frases: ['adicionar gerente', 'equipe e acessos', 'login para funcionario', 'encarregado', 'permissao'],
+        titulo: 'Convidar um funcionário (Gestor ou Encarregado)',
+        descricao: 'Convidar um funcionário por e-mail e, se quiser, definir a loja dele.',
+        frases: ['adicionar gerente', 'equipe', 'cadastrar funcionario', 'adicionar pessoa', 'link da equipe', 'login para funcionario', 'encarregado', 'permissao'],
         passos: [{
             rota: 'empresa.equipe', alvos: ['empresa.equipe.convidar'], risco: 'D',
-            titulo: 'Convidar para a equipe',
+            titulo: 'Convidar para a equipe (funcionários)',
             explicacao: 'Quem entrar passa a operar na sua empresa. Depois do aceite, você ainda confirma se é a pessoa certa.',
             aoTocar: 'Abre o formulário do convite, que gera um link para você enviar.',
             semAlvo: 'Só o Gestor vê este botão.',
@@ -367,18 +367,18 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
             titulo: 'Indicar freela',
             explicacao: 'Escolha a pessoa e a empresa. O freela decide se aceita.',
             aoTocar: 'Abre o formulário. Nada é enviado até você confirmar.',
-            semAlvo: 'O botão aparece quando a tela de Indicações termina de carregar.',
+            semAlvo: 'O botão aparece quando a tela Indicar freela termina de carregar.',
         }],
     },
     {
-        id: 'empresa-mensagens', papeis: GESTOR,
+        id: 'empresa-mensagens', papeis: EMPRESA,
         titulo: 'Responder mensagem de um freela',
-        descricao: 'Conversar pelo chat do Worki.',
+        descricao: 'Conversar pelo chat do Workyn.',
         frases: ['chat', 'falar com freela', 'conversa'],
         passos: [{
             rota: 'empresa.mensagens', alvos: ['empresa.mensagens.enviar'],
             titulo: 'Abra a conversa e responda',
-            explicacao: 'Escolha a conversa na lista, escreva e envie.',
+            explicacao: 'Escolha o freela na lista, escreva e envie. Se ele tem mais de um turno, troque o turno no topo da conversa. O Encarregado vê só os freelas dos turnos que cuida.',
             aoTocar: 'Envia a sua mensagem ao freela.',
             semAlvo: 'Abra uma conversa na lista. Se não há nenhuma, comece pela tela do turno.',
         }],
@@ -413,10 +413,10 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
         id: 'encarregado-menus', papeis: ENCARREGADO,
         titulo: 'Entender por que não vejo alguns menus',
         descricao: 'O que fica só com o Gestor.',
-        frases: ['nao aparece relatorio', 'sumiu mensagens', 'sem acesso', 'equipe indicacoes unidades'],
+        frases: ['sem acesso', 'nao consigo abrir', 'equipe indicacoes'],
         passos: [{
-            rota: 'empresa.gestao', alvos: [], titulo: 'Acesso de encarregado',
-            explicacao: 'Relatórios, Mensagens, Equipe, Indicações, Unidades e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele.',
+            rota: 'empresa.hoje', alvos: [], titulo: 'Acesso de encarregado',
+            explicacao: 'Equipe, Indicar freela e Dados da empresa ficam só com o Gestor. Se precisar de algo daí, peça a ele. Mensagens e Relatórios mostram só os turnos que você cuida. No celular, Relatórios e Ajuda ficam em "Mais".',
             aoTocar: 'Nada muda por aqui.',
         }],
     },
@@ -525,7 +525,7 @@ const FREELA_ROTEIROS: readonly RoteiroGuia[] = [
             {
                 rota: 'freela.recebimentos', alvos: ['freela.recebimentos.confirmar'],
                 titulo: 'Abra o recibo',
-                explicacao: 'O Worki não deposita nem tem saque: a empresa paga direto a você e registra aqui.',
+                explicacao: 'O Workyn não deposita nem tem saque: a empresa paga direto a você e registra aqui.',
                 aoTocar: 'Abre o recibo para conferir.',
                 semAlvo: 'Não há pagamento esperando sua confirmação. Se a empresa ainda não registrou, fale com ela.',
                 avancaAoTocar: true,
@@ -629,6 +629,6 @@ export function roteirosDoPapel(papel: PapelGuia): RoteiroGuia[] {
 /** Primeiros passos por papel (ids do catálogo). */
 export const PRIMEIROS_PASSOS: Readonly<Record<PapelGuia, readonly string[]>> = {
     gestor: ['empresa-elenco-adicionar', 'empresa-criar-turno', 'empresa-chamar-freelas', 'empresa-presenca', 'empresa-pagamento'],
-    encarregado: ['encarregado-meus-turnos', 'empresa-chamar-freelas', 'empresa-presenca', 'encarregado-menus'],
+    encarregado: ['encarregado-meus-turnos', 'empresa-chamar-freelas', 'empresa-presenca', 'empresa-mensagens', 'encarregado-menus'],
     freela: ['freela-pix', 'freela-meu-link', 'freela-convite', 'freela-chegada', 'freela-confirmar-recebimento'],
 };

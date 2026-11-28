@@ -1,473 +1,161 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ---------------------------------------------------------------------------
-// Mock supabase — chain genérica encadeável (select/eq/neq/in) que resolve
-// para `result` no await direto (thenable), no padrão de financialBIService.test.ts.
-// fromMock roteia por nome de tabela.
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeChain(result: { data: any; error: any }) {
-  const promise = Promise.resolve(result)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chain: any = {
-    select: vi.fn(() => chain),
-    eq: vi.fn(() => chain),
-    neq: vi.fn(() => chain),
-    in: vi.fn(() => chain),
-    order: vi.fn(() => chain),
-    then: promise.then.bind(promise),
-    catch: promise.catch.bind(promise),
-  }
-  return chain
-}
-
 const mockGetUser = vi.fn()
+const mockRpc = vi.fn()
 const mockFrom = vi.fn()
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
+    rpc: (...args: unknown[]) => mockRpc(...args),
     from: (...args: unknown[]) => mockFrom(...args),
   },
 }))
 
-// A empresa vem do seam (get_my_companies), nunca de `user.id`: o duble fixa a empresa operada.
 vi.mock('./companyScopeService', () => ({
   getAuthenticatedCompanyId: vi.fn().mockResolvedValue('company-1'),
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function routeFrom(handlers: Record<string, any>) {
-  mockFrom.mockImplementation((table: string) => {
-    const handler = handlers[table]
-    if (!handler) throw new Error(`Tabela não mockada: ${table}`)
-    return handler
-  })
+import { OrderReportService, toCSV, reportOutcomeMessage } from './orderReportService'
+import type { FinancialReportRow } from '../types'
+
+function row(over: Partial<FinancialReportRow> = {}): FinancialReportRow {
+  return {
+    job_id: 'job-1', job_title: 'Evento sábado', job_category: 'garcom', job_date: '2026-11-21',
+    tag_id: 'tag-1', tag_name: 'Loja Centro', responsible_id: 'u-1', responsible_name: 'Sabrina',
+    worker_id: 'w-1', worker_name: 'Ana Souza',
+    checkin_at: '2026-11-21T20:00:00Z', checkout_at: '2026-11-22T04:00:00Z', checkout_confirmed: true,
+    hours: 8, hours_estimated: 6, amount: 160, amount_kind: 'realized', hourly_rate: 20,
+    payment_id: 'pay-aaaa-bbbb', payment_status: 'recorded', source: 'external_pix',
+    paid_at: '2026-11-22T15:00:00Z', scheduled_for: null, worker_confirmed_at: null, status: 'paga',
+    ...over,
+  }
+}
+
+const SUMS = { shifts_count: 1, hours_total: 8, hours_missing_count: 0, total_amount: 160, total_paid: 160, total_to_pay: 0 }
+const TOTALS = {
+  by_worker: [{ worker_id: 'w-1', worker_name: 'Ana Souza', ...SUMS }],
+  by_day: [{ job_date: '2026-11-21', ...SUMS }],
+  overall: SUMS,
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetUser.mockResolvedValue({ data: { user: { id: 'company-1' } } })
+  mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1' } }, error: null })
 })
 
-// ---------------------------------------------------------------------------
-// Fixtures — 3 turnos no período: aberta (sem marcador), paga (recorded sem
-// confirmação do freela) e conciliada (recorded + worker_confirmed_at).
-// ---------------------------------------------------------------------------
+describe('OrderReportService.getReport', () => {
+  it('chama get_financial_report com a empresa do seam e filtros, sem ler tabelas', async () => {
+    mockRpc.mockResolvedValue({ data: { outcome: 'ok', scope: 'company', truncated: false, rows: [row()], totals: TOTALS }, error: null })
 
-const JOBS_ROWS = [
-  {
-    id: 'job-aberta',
-    title: 'Garçom Evento X',
-    category: 'Garçom',
-    budget: 200,
-    start_date: '2026-07-10',
-    created_at: '2026-07-01T10:00:00Z',
-    status: 'open',
-  },
-  {
-    id: 'job-paga',
-    title: 'Cozinheiro Evento Y',
-    category: null,
-    budget: 300,
-    start_date: '2026-07-11',
-    created_at: '2026-07-02T10:00:00Z',
-    status: 'completed',
-  },
-  {
-    id: 'job-conciliada',
-    title: 'Segurança Evento Z',
-    category: 'Segurança',
-    budget: 250,
-    start_date: '2026-07-12',
-    created_at: '2026-07-03T10:00:00Z',
-    status: 'completed',
-  },
-  {
-    id: 'job-fora-do-periodo',
-    title: 'Fora do período',
-    category: null,
-    budget: 100,
-    start_date: '2026-05-01',
-    created_at: '2026-05-01T10:00:00Z',
-    status: 'completed',
-  },
-]
-
-const SHIFT_PAYMENTS_ROWS = [
-  {
-    job_id: 'job-paga',
-    worker_id: 'worker-paga',
-    amount: 300,
-    source: 'external_pix',
-    status: 'recorded',
-    paid_at: '2026-07-11T18:00:00Z',
-    scheduled_for: null,
-    worker_confirmed_at: null,
-    created_at: '2026-07-11T10:00:00Z',
-  },
-  {
-    job_id: 'job-conciliada',
-    worker_id: 'worker-conciliada',
-    amount: 250,
-    source: 'cash',
-    status: 'recorded',
-    paid_at: '2026-07-12T18:00:00Z',
-    scheduled_for: null,
-    worker_confirmed_at: '2026-07-13T09:00:00Z',
-    created_at: '2026-07-12T10:00:00Z',
-  },
-]
-
-const APPLICATIONS_ROWS = [
-  {
-    job_id: 'job-aberta',
-    worker_id: 'worker-aberta',
-    status: 'hired',
-    invitation_response: 'accepted',
-  },
-  {
-    job_id: 'job-paga',
-    worker_id: 'worker-paga',
-    status: 'completed',
-    invitation_response: 'accepted',
-  },
-  {
-    job_id: 'job-conciliada',
-    worker_id: 'worker-conciliada',
-    status: 'completed',
-    invitation_response: 'accepted',
-  },
-]
-
-const WORKERS_ROWS = [
-  { id: 'worker-aberta', full_name: 'Freela Aberta' },
-  { id: 'worker-paga', full_name: 'Freela Paga' },
-  { id: 'worker-conciliada', full_name: 'Freela Conciliada' },
-]
-
-function mockAllTables() {
-  routeFrom({
-    jobs: makeChain({ data: JOBS_ROWS, error: null }),
-    shift_payments: makeChain({ data: SHIFT_PAYMENTS_ROWS, error: null }),
-    applications: makeChain({ data: APPLICATIONS_ROWS, error: null }),
-    workers: makeChain({ data: WORKERS_ROWS, error: null }),
-  })
-}
-
-const PERIOD = { from: '2026-07-01', to: '2026-07-31' }
-
-describe('OrderReportService.getReport — derivação de status e período', () => {
-  it('deriva aberta/paga/conciliada corretamente e ignora turnos fora do período', async () => {
-    mockAllTables()
-    const { OrderReportService } = await import('./orderReportService')
-
-    const report = await OrderReportService.getReport(PERIOD)
-
-    expect(report.rows).toHaveLength(3)
-    expect(report.rows.find((r) => r.jobId === 'job-fora-do-periodo')).toBeUndefined()
-
-    const aberta = report.rows.find((r) => r.jobId === 'job-aberta')
-    expect(aberta?.status).toBe('aberta')
-    expect(aberta?.amount).toBe(200) // fallback pro budget do job
-    expect(aberta?.workerName).toBe('Freela Aberta')
-    expect(aberta?.workerId).toBe('worker-aberta')
-    expect(aberta?.source).toBeNull()
-
-    const paga = report.rows.find((r) => r.jobId === 'job-paga')
-    expect(paga?.status).toBe('paga')
-    expect(paga?.amount).toBe(300)
-    expect(paga?.workerId).toBe('worker-paga')
-    expect(paga?.source).toBe('external_pix')
-    expect(paga?.paidAt).toBe('2026-07-11T18:00:00Z')
-
-    const conciliada = report.rows.find((r) => r.jobId === 'job-conciliada')
-    expect(conciliada?.status).toBe('conciliada')
-    expect(conciliada?.workerName).toBe('Freela Conciliada')
-    expect(conciliada?.workerId).toBe('worker-conciliada')
-
-    expect(report.summary).toEqual({
-      total: 3,
-      abertas: 1,
-      pagas: 1,
-      conciliadas: 1,
-      valorPago: 300 + 250,
-      valorPrevisto: 200,
+    const report = await OrderReportService.getReport({
+      from: '2026-11-01', to: '2026-11-30', status: 'paga', workerId: 'w-1', responsibleId: '', tagId: 'tag-1',
     })
-  })
 
-  it('filtra `rows` por status mas mantém `summary` com o período completo', async () => {
-    mockAllTables()
-    const { OrderReportService } = await import('./orderReportService')
-
-    const report = await OrderReportService.getReport({ ...PERIOD, status: 'conciliada' })
-
+    expect(mockRpc).toHaveBeenCalledWith('get_financial_report', {
+      p_company_id: 'company-1', p_from: '2026-11-01', p_to: '2026-11-30',
+      p_worker_id: 'w-1', p_responsible_id: null, p_tag_id: 'tag-1', p_status: 'paga',
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(report.outcome).toBe('ok')
     expect(report.rows).toHaveLength(1)
-    expect(report.rows[0].jobId).toBe('job-conciliada')
-    // summary continua refletindo os 3 turnos do período, não só o filtro aplicado
-    expect(report.summary.total).toBe(3)
+    expect(report.totals.overall.total_paid).toBe(160)
+    expect(report.totals.by_day[0].job_date).toBe('2026-11-21')
   })
 
-  it('retorna vazio quando não há usuário autenticado', async () => {
-    mockGetUser.mockResolvedValueOnce({ data: { user: null } })
-    mockAllTables()
-    const { OrderReportService } = await import('./orderReportService')
+  it("status 'todas' vira null", async () => {
+    mockRpc.mockResolvedValue({ data: { outcome: 'ok', rows: [], totals: TOTALS }, error: null })
+    await OrderReportService.getReport({ from: '2026-11-01', to: '2026-11-02', status: 'todas' })
+    expect(mockRpc.mock.calls[0][1].p_status).toBeNull()
+  })
 
-    const report = await OrderReportService.getReport(PERIOD)
+  it('devolve o outcome não-ok como dado (forbidden / not_confirmed / range_too_large)', async () => {
+    mockRpc.mockResolvedValue({ data: { outcome: 'not_confirmed', rows: [] }, error: null })
+    const report = await OrderReportService.getReport({ from: '2026-11-01', to: '2026-11-02' })
+    expect(report.outcome).toBe('not_confirmed')
     expect(report.rows).toEqual([])
-    expect(report.summary.total).toBe(0)
+    expect(reportOutcomeMessage('not_confirmed')).toMatch(/confirmado/i)
+    expect(reportOutcomeMessage('range_too_large')).toMatch(/92/)
+    expect(reportOutcomeMessage('invalid_range')).toMatch(/datas/)
   })
 
-  it('lança quando a query de jobs falha (falha nunca vira relatório vazio)', async () => {
-    routeFrom({
-      jobs: makeChain({ data: null, error: { message: 'boom' } }),
+  it('normaliza numéricos que chegam como string e preserva horas nulas (nunca 0)', async () => {
+    mockRpc.mockResolvedValue({
+      data: { outcome: 'ok', scope: 'own', truncated: true, rows: [row({ hours: null, hourly_rate: null, amount: '90.5' as unknown as number })], totals: TOTALS },
+      error: null,
     })
-    const { OrderReportService } = await import('./orderReportService')
-
-    await expect(OrderReportService.getReport(PERIOD)).rejects.toMatchObject({ message: 'boom' })
+    const report = await OrderReportService.getReport({ from: '2026-11-01', to: '2026-11-02' })
+    expect(report.scope).toBe('own')
+    expect(report.truncated).toBe(true)
+    expect(report.rows[0].hours).toBeNull()
+    expect(report.rows[0].hourly_rate).toBeNull()
+    expect(report.rows[0].amount).toBe(90.5)
   })
 
-  it.each(['shift_payments', 'applications'])('lança quando a query de %s falha (nunca "R$ 0 pago")', async (table) => {
-    routeFrom({
-      jobs: makeChain({
-        data: [{ id: 'j1', title: 'T', category: null, budget: 100, start_date: PERIOD.from, created_at: null, status: 'open' }],
-        error: null,
-      }),
-      shift_payments: makeChain({ data: [], error: null }),
-      applications: makeChain({ data: [], error: null }),
-      [table]: makeChain({ data: null, error: { message: 'boom' } }),
-    })
-    const { OrderReportService } = await import('./orderReportService')
-
-    await expect(OrderReportService.getReport(PERIOD)).rejects.toMatchObject({ message: 'boom' })
+  it('erro da RPC lança (a tela mostra erro, não relatório vazio)', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'boom' } })
+    await expect(OrderReportService.getReport({ from: '2026-11-01', to: '2026-11-02' })).rejects.toBeTruthy()
   })
-})
 
-// ---------------------------------------------------------------------------
-// ADR-20260816 — marcador de pagamento por (turno, freela): um turno com N
-// freelas pagos vira N linhas; turno sem NENHUM marcador continua com 1 linha
-// (fallback pro freela "primário"), pra não sumir do relatório.
-// ---------------------------------------------------------------------------
-
-const JOBS_MULTI = [
-  {
-    id: 'job-dois-freelas',
-    title: 'Evento Duplo',
-    category: 'Garçom',
-    budget: 500,
-    start_date: '2026-07-20',
-    created_at: '2026-07-15T10:00:00Z',
-    status: 'completed',
-  },
-  {
-    id: 'job-sem-pagamento',
-    title: 'Turno Solo',
-    category: 'Cozinheiro',
-    budget: 220,
-    start_date: '2026-07-21',
-    created_at: '2026-07-16T10:00:00Z',
-    status: 'open',
-  },
-  {
-    id: 'job-misto',
-    title: 'Evento Misto',
-    category: 'Garçom',
-    budget: 400,
-    start_date: '2026-07-22',
-    created_at: '2026-07-17T10:00:00Z',
-    status: 'in_progress',
-  },
-  {
-    id: 'job-sem-elenco',
-    title: 'Turno Sem Elenco',
-    category: null,
-    budget: 90,
-    start_date: '2026-07-23',
-    created_at: '2026-07-18T10:00:00Z',
-    status: 'open',
-  },
-]
-
-const SHIFT_PAYMENTS_MULTI = [
-  {
-    job_id: 'job-dois-freelas',
-    worker_id: 'worker-ana',
-    amount: 150,
-    source: 'external_pix',
-    status: 'recorded',
-    paid_at: '2026-07-20T18:00:00Z',
-    scheduled_for: null,
-    worker_confirmed_at: null,
-    created_at: '2026-07-20T10:00:00Z',
-  },
-  {
-    job_id: 'job-dois-freelas',
-    worker_id: 'worker-bia',
-    amount: 180,
-    source: 'cash',
-    status: 'recorded',
-    paid_at: '2026-07-20T19:00:00Z',
-    scheduled_for: null,
-    worker_confirmed_at: '2026-07-21T09:00:00Z',
-    created_at: '2026-07-20T11:00:00Z',
-  },
-  // job-misto: só a Carla tem marcador (paga). O Duda está contratado mas SEM marcador
-  // — é o caso central da correção: ele não pode sumir, tem que aparecer 'aberta'.
-  {
-    job_id: 'job-misto',
-    worker_id: 'worker-carla',
-    amount: 210,
-    source: 'external_pix',
-    status: 'recorded',
-    paid_at: '2026-07-22T18:00:00Z',
-    scheduled_for: null,
-    worker_confirmed_at: null,
-    created_at: '2026-07-22T10:00:00Z',
-  },
-]
-
-const APPLICATIONS_MULTI = [
-  { job_id: 'job-dois-freelas', worker_id: 'worker-ana', status: 'completed', invitation_response: 'accepted' },
-  { job_id: 'job-dois-freelas', worker_id: 'worker-bia', status: 'completed', invitation_response: 'accepted' },
-  { job_id: 'job-sem-pagamento', worker_id: 'worker-solo', status: 'hired', invitation_response: 'accepted' },
-  { job_id: 'job-misto', worker_id: 'worker-carla', status: 'completed', invitation_response: 'accepted' },
-  { job_id: 'job-misto', worker_id: 'worker-duda', status: 'hired', invitation_response: 'accepted' },
-  // Convite ainda não aceito não conta como contratado — não deve gerar linha.
-  { job_id: 'job-sem-elenco', worker_id: 'worker-convidado', status: 'invited', invitation_response: null },
-]
-
-const WORKERS_MULTI = [
-  { id: 'worker-ana', full_name: 'Ana Freela' },
-  { id: 'worker-bia', full_name: 'Bia Freela' },
-  { id: 'worker-solo', full_name: 'Freela Solo' },
-  { id: 'worker-carla', full_name: 'Carla Freela' },
-  { id: 'worker-duda', full_name: 'Duda Freela' },
-  { id: 'worker-convidado', full_name: 'Convidado Pendente' },
-]
-
-describe('OrderReportService.getReport — granularidade (turno, freela) — ADR-20260816', () => {
-  it('turno com dois freelas pagos vira duas linhas com nome/valor certos e o total somando as duas; turno sem pagamento continua presente com 1 linha', async () => {
-    routeFrom({
-      jobs: makeChain({ data: JOBS_MULTI, error: null }),
-      shift_payments: makeChain({ data: SHIFT_PAYMENTS_MULTI, error: null }),
-      applications: makeChain({ data: APPLICATIONS_MULTI, error: null }),
-      workers: makeChain({ data: WORKERS_MULTI, error: null }),
-    })
-    const { OrderReportService } = await import('./orderReportService')
-
-    const report = await OrderReportService.getReport(PERIOD)
-
-    // 1 turno + 2 freelas pagos = 2 linhas, ambas com jobId igual.
-    const duploRows = report.rows.filter((r) => r.jobId === 'job-dois-freelas')
-    expect(duploRows).toHaveLength(2)
-
-    const ana = duploRows.find((r) => r.workerName === 'Ana Freela')
-    const bia = duploRows.find((r) => r.workerName === 'Bia Freela')
-    expect(ana).toBeDefined()
-    expect(bia).toBeDefined()
-    expect(ana?.workerId).toBe('worker-ana')
-    expect(bia?.workerId).toBe('worker-bia')
-    expect(ana?.amount).toBe(150)
-    expect(bia?.amount).toBe(180)
-    expect(ana?.status).toBe('paga') // recorded, sem worker_confirmed_at
-    expect(bia?.status).toBe('conciliada') // recorded + worker_confirmed_at
-
-    // Turno sem NENHUM marcador de pagamento continua com 1 linha (não some).
-    const soloRows = report.rows.filter((r) => r.jobId === 'job-sem-pagamento')
-    expect(soloRows).toHaveLength(1)
-    expect(soloRows[0].workerName).toBe('Freela Solo')
-    expect(soloRows[0].workerId).toBe('worker-solo')
-    expect(soloRows[0].status).toBe('aberta')
-    expect(soloRows[0].amount).toBe(220) // fallback pro budget do job
-
-    // Turno sem candidatura contratada nem marcador (só convite pendente) — 1 linha,
-    // freela vazio, não some do relatório.
-    const semElencoRows = report.rows.filter((r) => r.jobId === 'job-sem-elenco')
-    expect(semElencoRows).toHaveLength(1)
-    expect(semElencoRows[0].workerId).toBeNull()
-    expect(semElencoRows[0].workerName).toBeNull()
-    expect(semElencoRows[0].status).toBe('aberta')
-    expect(semElencoRows[0].amount).toBe(90)
-
-    // CASO CENTRAL: turno com dois freelas, um pago (marcador) e um só contratado (sem
-    // marcador) — duas linhas, uma paga e uma aberta, com os nomes certos. O freela sem
-    // pagamento NÃO pode sumir do relatório (era o bug original).
-    const mistoRows = report.rows.filter((r) => r.jobId === 'job-misto')
-    expect(mistoRows).toHaveLength(2)
-
-    const carla = mistoRows.find((r) => r.workerName === 'Carla Freela')
-    const duda = mistoRows.find((r) => r.workerName === 'Duda Freela')
-    expect(carla).toBeDefined()
-    expect(duda).toBeDefined()
-    expect(carla?.workerId).toBe('worker-carla')
-    expect(carla?.status).toBe('paga')
-    expect(carla?.amount).toBe(210)
-    expect(carla?.source).toBe('external_pix')
-
-    expect(duda?.workerId).toBe('worker-duda')
-    expect(duda?.status).toBe('aberta')
-    expect(duda?.amount).toBe(400) // sem marcador -> valor previsto = job.budget
-    expect(duda?.source).toBeNull()
-    expect(duda?.paidAt).toBeNull()
-
-    // Sem dupla contagem nem subcontagem: total = 2 (duplo) + 1 (solo) + 1 (sem elenco) + 2 (misto).
-    expect(report.rows).toHaveLength(6)
-    expect(report.summary.total).toBe(6)
-    expect(report.summary.pagas).toBe(2) // ana + carla
-    expect(report.summary.conciliadas).toBe(1) // bia
-    expect(report.summary.abertas).toBe(3) // solo + sem-elenco + duda
-    expect(report.summary.valorPago).toBe(150 + 180 + 210)
-    expect(report.summary.valorPrevisto).toBe(220 + 90 + 400)
+  it('sem sessão: unauthenticated, sem chamar a RPC', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+    const report = await OrderReportService.getReport({ from: '2026-11-01', to: '2026-11-02' })
+    expect(report.outcome).toBe('unauthenticated')
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 })
 
 describe('toCSV', () => {
-  it('gera CSV pt-BR com ";" e cabeçalho esperado, usando category como Função (fallback title)', async () => {
-    mockAllTables()
-    const { OrderReportService, toCSV } = await import('./orderReportService')
-
-    const report = await OrderReportService.getReport(PERIOD)
-    const csv = toCSV(report)
-    const lines = csv.split('\r\n')
-
-    expect(lines[0]).toBe('Data;Função;Freela;Valor;Forma;Status;Data Pgto')
-
-    const pagaLine = lines.find((l) => l.includes('Freela Paga'))
-    expect(pagaLine).toBeDefined()
-    // job-paga tem category=null -> cai pro title
-    expect(pagaLine).toContain('Cozinheiro Evento Y')
-    expect(pagaLine).toContain('300,00')
-    expect(pagaLine).toContain('PIX')
-    expect(pagaLine).toContain('Paga')
-
-    const abertaLine = lines.find((l) => l.includes('Freela Aberta'))
-    expect(abertaLine).toContain('Garçom') // category presente
-    expect(abertaLine).toContain('—') // sem forma de pagamento
+  it('começa com BOM, usa ; e vírgula decimal, com as colunas novas', () => {
+    const csv = toCSV({ rows: [row()] })
+    expect(csv.charCodeAt(0)).toBe(0xfeff)
+    const [header, line] = csv.slice(1).split('\r\n')
+    expect(header).toBe(
+      'Data;Loja;Turno;Função;Responsável;Freela;Check-in;Check-out;Horas;Valor/hora;Valor;Tipo do valor;Forma;Status;Data Pgto;ID do pagamento',
+    )
+    const cells = line.split(';')
+    expect(cells[0]).toBe('21/11/2026')
+    expect(cells[1]).toBe('Loja Centro')
+    expect(cells[2]).toBe('Evento sábado')
+    expect(cells[4]).toBe('Sabrina')
+    expect(cells[5]).toBe('Ana Souza')
+    expect(cells[8]).toBe('8,00')
+    expect(cells[9]).toBe('20,00')
+    expect(cells[10]).toBe('160,00')
+    expect(cells[11]).toBe('Real')
+    expect(cells[12]).toBe('PIX')
+    expect(cells[13]).toBe('Paga')
+    expect(cells[15]).toBe('pay-aaaa-bbbb')
   })
 
-  it('escapa campos com ";" ou aspas', () => {
-    const csvSource = {
-      rows: [
-        {
-          jobId: 'job-x',
-          workerId: 'worker-x',
-          date: '2026-07-10',
-          title: 'Turno; especial "raro"',
-          category: null,
-          workerName: 'Fulano',
-          amount: 100,
-          source: null,
-          paidAt: null,
-          status: 'aberta' as const,
-        },
-      ],
-      summary: { total: 1, abertas: 1, pagas: 0, conciliadas: 0, valorPago: 0, valorPrevisto: 100 },
-    }
+  it('horas e valor/hora vazios ficam em branco; valor estimado é rotulado', () => {
+    const csv = toCSV({ rows: [row({ hours: null, hourly_rate: null, checkin_at: null, checkout_at: null, amount_kind: 'estimated', status: 'aberta', payment_id: null, source: null, paid_at: null })] })
+    const cells = csv.slice(1).split('\r\n')[1].split(';')
+    expect(cells[6]).toBe('')
+    expect(cells[8]).toBe('')
+    expect(cells[9]).toBe('')
+    expect(cells[11]).toBe('Estimado')
+    expect(cells[13]).toBe('Aberta')
+  })
 
-    return import('./orderReportService').then(({ toCSV }) => {
-      const csv = toCSV(csvSource)
-      expect(csv).toContain('"Turno; especial ""raro"""')
+  it('protege texto livre contra fórmula (= + - @ tab) e escapa ; e aspas', () => {
+    const csv = toCSV({
+      rows: [row({ worker_name: '=HYPERLINK("x")', tag_name: '+cmd', responsible_name: '@alguem', job_title: '\tTab', job_category: null })],
     })
+    const line = csv.slice(1).split('\r\n')[1]
+    expect(line).toContain("\"'=HYPERLINK(\"\"x\"\")\"")
+    expect(line).toContain("'+cmd")
+    expect(line).toContain("'@alguem")
+    expect(line).toContain("'\tTab")
+  })
+
+  it('rotula estimado por horas previstas', () => {
+    const csv = toCSV({ rows: [row({ amount_kind: 'estimated_by_planned_hours' })] })
+    expect(csv).toContain(';Estimado (horas previstas);')
+  })
+
+  it('número negativo legítimo não recebe apóstrofo', () => {
+    const csv = toCSV({ rows: [row({ amount: -10 })] })
+    expect(csv).toContain(';-10,00;')
   })
 })

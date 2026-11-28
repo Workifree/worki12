@@ -23,6 +23,11 @@ vi.mock('../lib/supabase', () => ({
     },
 }))
 vi.mock('../lib/logger', () => ({ logError: vi.fn() }))
+// Sem espera real entre as repetições (1s/2s/4s em produção): o teste só conta as chamadas.
+vi.mock('../lib/retry', async (importActual) => {
+    const actual = await importActual<typeof import('../lib/retry')>()
+    return { ...actual, withRetry: <T,>(fn: () => Promise<T>, o = {}) => actual.withRetry(fn, { ...o, delays: [0, 0, 0] }) }
+})
 vi.mock('../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 vi.mock('../pages/Onboarding', () => ({ default: () => <div>Pagina publica</div> }))
 
@@ -62,9 +67,10 @@ describe('gates sem rede', () => {
     })
 
     it('erro em workers nao leva ao onboarding; "Tentar de novo" recupera', async () => {
-        mockSingle.mockResolvedValueOnce(failedRead)
+        mockSingle.mockResolvedValue(failedRead)
         renderGate()
         await expectError()
+        mockSingle.mockResolvedValue(okProfile)
         fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
         expect(await screen.findByText('Area protegida')).toBeInTheDocument()
     })
@@ -79,11 +85,12 @@ describe('gates sem rede', () => {
         expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
     })
 
+    // espera real do lock de auth (300ms+1200ms por leitura)
     it('AbortError persistente: gate fechado; "Tentar de novo" faz leitura nova e recupera', async () => {
         window.sessionStorage.setItem('worki:auth-lock-reload', '1') // o único reload já foi gasto
         mockGetSession.mockRejectedValue(abort())
         renderGate()
-        expect(await screen.findByRole('button', { name: 'Tentar de novo' }, { timeout: 5000 })).toBeInTheDocument()
+        expect(await screen.findByRole('button', { name: 'Tentar de novo' }, { timeout: 15000 })).toBeInTheDocument()
         await expectError()
         const antes = mockGetSession.mock.calls.length
         mockGetSession.mockResolvedValue(okSession)
@@ -93,10 +100,27 @@ describe('gates sem rede', () => {
         expect(window.sessionStorage.getItem('worki:auth-lock-reload')).toBeNull()
     })
 
-    it('retoma sozinho no evento online', async () => {
-        mockSingle.mockResolvedValueOnce(failedRead)
+    it('falha transitoria em workers: repete sozinho e abre, sem tela de erro', async () => {
+        mockSingle.mockResolvedValueOnce(failedRead).mockResolvedValueOnce({ data: null, error: { code: '', status: 503, message: 'down' } })
+        renderGate()
+        expect(await screen.findByText('Area protegida')).toBeInTheDocument()
+        expect(mockSingle).toHaveBeenCalledTimes(3)
+        expect(screen.queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+    })
+
+    it('erro de permissao (42501) nao e chamado de sem conexao', async () => {
+        mockSingle.mockResolvedValue({ data: null, error: { code: '42501', message: 'permission denied' } })
         renderGate()
         await expectError()
+        expect(screen.queryByText(/Sem conexão/)).not.toBeInTheDocument()
+        expect(mockSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it('retoma sozinho no evento online', async () => {
+        mockSingle.mockResolvedValue(failedRead)
+        renderGate()
+        await expectError()
+        mockSingle.mockResolvedValue(okProfile)
         act(() => { window.dispatchEvent(new Event('online')) })
         expect(await screen.findByText('Area protegida')).toBeInTheDocument()
     })

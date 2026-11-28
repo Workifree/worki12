@@ -30,18 +30,18 @@ describe('CompanyGestao', () => {
     mockTrail = false;
   });
 
-  it('dono único: pode convidar, vê dados, unidades e ajuda; sem trilha', () => {
+  it('dono único: pode convidar, vê dados e ajuda; sem trilha', () => {
     mockCompany = company();
     renderPage();
 
-    expect(card(/Equipe e acessos.*Convidar quem te ajuda/)).toHaveAttribute('href', '/company/configuracoes/equipe');
+    expect(card(/Equipe.*Convide seu primeiro encarregado/)).toHaveAttribute('href', '/company/configuracoes/equipe');
     expect(card(/Dados da empresa/)).toHaveAttribute('href', '/company/profile');
-    expect(card(/Unidades/)).toHaveAttribute('href', '/company/organization');
+    expect(card(/Unidades/)).not.toBeInTheDocument();
     expect(card(/Ajuda/)).toHaveAttribute('href', '/ajuda');
     expect(card(/Trilha/)).not.toBeInTheDocument();
   });
 
-  it('gerente: não vê Unidades', () => {
+  it('gerente: sem Unidades (removidas)', () => {
     mockCompany = company({ role: 'manager' });
     renderPage();
 
@@ -49,12 +49,20 @@ describe('CompanyGestao', () => {
     expect(card(/Dados da empresa/)).toBeInTheDocument();
   });
 
-  it('encarregado com trilha: só Trilha e Ajuda (nada de acesso novo)', () => {
+  it('encarregado com trilha: Relatório (só os turnos dele), Trilha e Ajuda (nada de acesso de Gestor)', () => {
     mockCompany = company({ role: 'encarregado' });
     mockTrail = true;
     renderPage();
 
-    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/company/trilha', '/ajuda']);
+    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/company/relatorio', '/company/trilha', '/ajuda']);
     expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Mais' })).toBeInTheDocument();
+    expect(screen.getByText('Relatórios e ajuda')).toBeInTheDocument();
+  });
+
+  it('gestor: título continua Gestão', () => {
+    mockCompany = company();
+    renderPage();
+    expect(screen.getByRole('heading', { level: 1, name: 'Gestão' })).toBeInTheDocument();
   });
 });

@@ -7,35 +7,31 @@ import { logError } from '../lib/logger';
 import PageMeta from '../components/PageMeta';
 import { Alert, Button, Card, Field, FilterChip } from '../components/ui';
 import { PENDING_INVITE_TOKEN_KEY } from '../lib/inviteToken';
-import { PENDING_MANAGER_INVITE_TOKEN_KEY } from '../lib/managerInviteToken';
 import { safeInternalPath } from '../lib/safeRedirect';
 
 /**
  * Subtítulo da tela de acesso da EMPRESA.
  *
  * Dizia "Acesse 10k+ profissionais avaliados." — e em 22/08/2026 havia **16** freelas cadastrados.
- * Era a primeira frase que um cliente do piloto lia, e prometia o produto errado: o Worki não é
+ * Era a primeira frase que um cliente do piloto lia, e prometia o produto errado: o Workyn não é
  * um pool aberto onde a empresa garimpa desconhecidos, é elenco próprio montado por convite, com
  * chamado 1→N para quem ela já confia. Número inflado atrai a expectativa que o produto não
  * entrega e afunda a que ele entrega.
  */
-const SUBTITULO_EMPRESA = 'Monte seu elenco e preencha turnos com quem você já confia.';
+const SUBTITULO_EMPRESA = 'Monte seu Elenco e preencha turnos com quem você já confia.';
 
 /**
  * Rede de segurança do item 11 (GTM): se o freela chegou ao login sem o ?redirect=
  * (ex.: confirmou email em outra aba e voltou pro /login "seco"), ainda tentamos
  * recuperar o convite pendente guardado pelo InviteAccept em sessionStorage.
  *
- * F13 (R8/R9): mesma rede para o convite de gerente — chave própria
- * (`PENDING_MANAGER_INVITE_TOKEN_KEY`) para não colidir com o convite de equipe.
+ * O convite de equipe (Gestor ou Encarregado) chega pelo `?redirect=` para `/convite-equipe/<token>`.
  */
 function resolvePendingInviteRedirect(explicitRedirect: string | null): string | null {
     // Nunca `startsWith('/')`: `//site-externo` passava (redirect aberto) — ver lib/safeRedirect.
     const explicitSafe = safeInternalPath(explicitRedirect);
     if (explicitSafe) return explicitSafe;
     try {
-        const pendingManagerToken = sessionStorage.getItem(PENDING_MANAGER_INVITE_TOKEN_KEY);
-        if (pendingManagerToken) return safeInternalPath(`/convite-gerente/${pendingManagerToken}`);
         const pendingToken = sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
         if (pendingToken) return safeInternalPath(`/convite/${pendingToken}`);
     } catch {
@@ -65,7 +61,7 @@ export default function Login() {
     // deducao a tela recebe o convidado com a copy de freela e ele cria a conta errada.
     const destinoPendente = resolvePendingInviteRedirect(searchParams.get('redirect'));
     const type = explicitType
-        || (destinoPendente?.startsWith('/convite-gerente/') || destinoPendente?.startsWith('/convite/w_')
+        || (destinoPendente?.startsWith('/convite-equipe/') || destinoPendente?.startsWith('/convite/w_')
             ? 'hire'
             : 'work');
     const reason = searchParams.get('reason');
@@ -75,8 +71,8 @@ export default function Login() {
     const navigate = useNavigate();
 
     // Quem chegou por um link de convite precisa saber disso (a tela de login sozinha não diz).
-    const tipoDeConvite: 'elenco' | 'contato' | 'gerente' | null = destinoPendente?.startsWith('/convite-gerente/')
-        ? 'gerente'
+    const tipoDeConvite: 'elenco' | 'contato' | 'equipe' | null = destinoPendente?.startsWith('/convite-equipe/')
+        ? 'equipe'
         : destinoPendente?.startsWith('/convite/w_')
             ? 'contato'
             : destinoPendente?.startsWith('/convite/') ? 'elenco' : null;
@@ -236,7 +232,7 @@ export default function Login() {
                         // correto ou usar outro e-mail (A1).
                         setRoleMismatch({ actualType: userType });
                     } else if (userType === 'hire') {
-                        navigate('/company/dashboard');
+                        navigate('/company/dashboard', { state: { entrada: true } });
                     } else {
                         navigate('/dashboard');
                     }
@@ -271,7 +267,7 @@ export default function Login() {
     return (
         <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500
                     ${isHire ? 'bg-accent' : 'bg-canvas'}`}>
-            <PageMeta title="Entrar" description="Entre na sua conta Worki para acessar vagas e gerenciar seus freelancers." />
+            <PageMeta title="Entrar" description="Entre na sua conta Workyn para acessar vagas e gerenciar seus freelancers." />
 
             {/* Voltar no fluxo: nunca cobre o título, nem a 320px. */}
             <Button
@@ -306,7 +302,7 @@ export default function Login() {
                     <Alert tone="info" title="Você recebeu um convite" className="mb-4">
                         {tipoDeConvite === 'elenco' && 'Crie sua conta de freela (ou entre) para ver o convite de Elenco. '}
                         {tipoDeConvite === 'contato' && 'Crie ou acesse a conta da sua empresa para usar o link do freela. '}
-                        {tipoDeConvite === 'gerente' && 'Crie ou acesse uma conta de empresa para ver o convite de Gestor. '}
+                        {tipoDeConvite === 'equipe' && 'Crie ou acesse uma conta de empresa para ver o convite da equipe. '}
                         Nada é aceito sem você tocar no botão.
                     </Alert>
                 )}
@@ -472,7 +468,7 @@ export default function Login() {
                 </div>
 
                 <nav aria-label="Links institucionais" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs font-semibold text-gray-600">
-                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Worki</Link>
+                    <Link to="/sobre" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Sobre a Workyn</Link>
                     <Link to="/termos" className="inline-flex items-center justify-center min-h-11 min-w-11 hover:text-black transition-colors">Termos</Link>
                     <Link to="/privacidade" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Privacidade</Link>
                     <Link to="/licencas" className="inline-flex items-center min-h-11 hover:text-black transition-colors">Licenças</Link>

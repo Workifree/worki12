@@ -18,7 +18,8 @@ import { getMyAccessState } from '../services/accessStateService';
 import ErroDeVerificacao from './ErroDeVerificacao';
 import { checkStoredSession } from '../lib/authSession';
 import { isAuthLockAbort, reloadOnceForAuthLock } from '../lib/authLock';
-import { getMyCompanies, pickCurrentCompany, isUnconfirmedEncarregado, invalidateCompanyScope } from '../services/companyScopeService';
+import { isUnauthorizedError, withRetry } from '../lib/retry';
+import { getMyCompanies, pickCurrentCompany, isAwaitingConfirmation, invalidateCompanyScope } from '../services/companyScopeService';
 import type { CompanyRole } from '../types';
 
 /**
@@ -27,16 +28,39 @@ import type { CompanyRole } from '../types';
  * recomputado a cada render (nunca guardado em state, ver comentário acima), então chamar
  * `addToast` ali disparava o toast em loop enquanto a navegação não completava.
  */
-function RoleRedirect({ to }: { to: string }) {
+function RoleRedirect({ to, silent = false }: { to: string; silent?: boolean }) {
     const { addToast } = useToast();
     useEffect(() => {
-        addToast('Você não tem permissão para acessar esta página.', 'error');
+        if (!silent) addToast('Você não tem permissão para acessar esta página.', 'error');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [to]);
     return <Navigate to={to} replace />;
 }
 
-const VERIFICATION_TIMEOUT_MS = 20_000;
+// Generoso de propósito: rede lenta (um fetch levou 12s) + 3 repetições com backoff. O prazo só
+// conta com a aba visível (timers de aba oculta são estrangulados e o fetch pode ficar parado).
+const VERIFICATION_TIMEOUT_MS = 60_000;
+
+/** 401/JWT vencido: renova a sessão antes da próxima repetição. */
+const refreshOnUnauthorized = async (error: unknown) => {
+    if (isUnauthorizedError(error)) await supabase.auth.refreshSession();
+};
+
+/** Lê a sessão salva repetindo (1s/2s/4s) enquanto estiver `unavailable`, antes de desistir. */
+async function readSessionWithRetry() {
+    let last = await checkStoredSession();
+    let first = true;
+    try {
+        await withRetry(async () => {
+            if (!first) last = await checkStoredSession();
+            first = false;
+            if (last.status === 'unavailable') throw last.error;
+        }, { beforeRetry: refreshOnUnauthorized });
+    } catch {
+        // `last` continua `unavailable`: quem chama decide
+    }
+    return last;
+}
 
 /**
  * Ex-membro sem nenhum vínculo e sem empresa própria, segundo o banco (vale em qualquer aparelho).
@@ -62,6 +86,7 @@ export default function ProtectedRoute() {
     // Alguma leitura do gate falhou (sessão, workers, get_my_companies): não sabemos o estado da
     // conta. Mostra erro, nunca decide por ausência e nunca abre a área protegida.
     const [verificationFailed, setVerificationFailed] = useState(false);
+    const [verificationError, setVerificationError] = useState<unknown>(null);
     const [attempt, setAttempt] = useState(0);
     const location = useLocation();
 
@@ -78,29 +103,42 @@ export default function ProtectedRoute() {
     const checking = loading || (!!user && (!onboardingChecked || tosAccepted === null));
     useEffect(() => {
         if (!checking || verificationFailed) return;
-        const timer = setTimeout(() => setVerificationFailed(true), VERIFICATION_TIMEOUT_MS);
+        const timer = setTimeout(() => {
+            if (document.visibilityState === 'hidden') return;
+            setVerificationFailed(true);
+        }, VERIFICATION_TIMEOUT_MS);
         return () => clearTimeout(timer);
     }, [checking, verificationFailed, attempt]);
 
     useEffect(() => {
         if (!verificationFailed) return;
+        const onVisible = () => { if (document.visibilityState === 'visible') retry(); };
         window.addEventListener('online', retry);
-        return () => window.removeEventListener('online', retry);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.removeEventListener('online', retry);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, [verificationFailed, retry]);
 
     useEffect(() => {
         // Cada tentativa é independente: a resposta atrasada de uma anterior não pode sobrescrever
         // a nova (nem recolocar a tela de erro depois de um "Tentar de novo" que deu certo).
         let active = true;
-        const failVerification = () => { if (active) setVerificationFailed(true); };
+        const failVerification = (error?: unknown) => {
+            if (!active) return;
+            setVerificationError(error ?? null);
+            setVerificationFailed(true);
+        };
 
         const checkAuth = async () => {
-            const session = await checkStoredSession();
+            const session = await readSessionWithRetry();
             if (!active) return;
             if (session.status === 'unavailable') {
                 logError('ProtectedRoute.session', session.error);
                 // Lock de auth envenenado: só uma carga nova recupera (uma única vez).
                 if (isAuthLockAbort(session.error) && reloadOnceForAuthLock()) return;
+                setVerificationError(session.error);
                 setVerificationFailed(true);
                 setLoading(false);
                 return;
@@ -135,12 +173,15 @@ export default function ProtectedRoute() {
                 // supabase-js não lança: a falha vem em `error`. Só PGRST116 (zero linhas no
                 // `.single()`) é resposta válida "sem perfil".
                 try {
-                    const { data, error } = await supabase
-                        .from('workers')
-                        .select('onboarding_completed, accepted_tos')
-                        .eq('id', authUser.id)
-                        .single();
-                    if (error && error.code !== 'PGRST116') throw error;
+                    const data = await withRetry(async () => {
+                        const res = await supabase
+                            .from('workers')
+                            .select('onboarding_completed, accepted_tos')
+                            .eq('id', authUser.id)
+                            .single();
+                        if (res.error && res.error.code !== 'PGRST116') throw res.error;
+                        return res.data;
+                    }, { beforeRetry: refreshOnUnauthorized });
 
                     if (data?.onboarding_completed !== true) {
                         setOnboardingRedirect('/worker/onboarding');
@@ -148,7 +189,7 @@ export default function ProtectedRoute() {
                     setTosAccepted(data ? data.accepted_tos === true : true);
                 } catch (error) {
                     logError('Erro ao verificar onboarding', error);
-                    failVerification();
+                    failVerification(error);
                     return;
                 }
 
@@ -162,20 +203,20 @@ export default function ProtectedRoute() {
                     // Atalho anti-loop do onboarding. Única exceção: Encarregado não confirmado não
                     // pode "escapar" da tela de espera por esta rota (R22) — confere o papel antes.
                     try {
-                        const atual = pickCurrentCompany(await getMyCompanies());
+                        const atual = pickCurrentCompany(await withRetry(getMyCompanies, { beforeRetry: refreshOnUnauthorized }));
                         const semEmpresaPronta = !atual || (atual.role === 'owner' && !atual.onboarding_completed);
                         if (semEmpresaPronta && !hasOwnCompanyIntent(authUser.id) && await accessWasEnded()) {
                             setAccessEnded(true);
                         }
                         if (atual) {
                             setCompanyRole(atual.role);
-                            setAwaitingConfirmation(isUnconfirmedEncarregado(atual));
+                            setAwaitingConfirmation(isAwaitingConfirmation(atual));
                         }
                     } catch (error) {
                         // Sem saber se esta conta já tem empresa, o formulário de onboarding NÃO abre
                         // (ele grava por cima da linha existente): tela de erro com "Tentar de novo".
                         logError('Erro ao verificar a empresa no onboarding', error);
-                        failVerification();
+                        failVerification(error);
                         return;
                     }
                     setOnboardingChecked(true);
@@ -184,7 +225,7 @@ export default function ProtectedRoute() {
                 }
 
                 try {
-                    const companies = await getMyCompanies();
+                    const companies = await withRetry(getMyCompanies, { beforeRetry: refreshOnUnauthorized });
                     const current = pickCurrentCompany(companies);
 
                     const querEmpresaPropria = hasOwnCompanyIntent(authUser.id);
@@ -204,7 +245,7 @@ export default function ProtectedRoute() {
                         setTosAccepted(true);
                     } else {
                         setCompanyRole(current.role);
-                        setAwaitingConfirmation(isUnconfirmedEncarregado(current));
+                        setAwaitingConfirmation(isAwaitingConfirmation(current));
                         if (current.role === 'encarregado') {
                             // Encarregado não tem onboarding de CNPJ (a empresa não é dele) e aceita os
                             // Termos por pessoa no próprio convite; o TosGate de empresa não o alcança.
@@ -225,7 +266,7 @@ export default function ProtectedRoute() {
                     // gravaria por cima de uma empresa já cadastrada) nem finge tela de espera para o
                     // dono. Onboarding só com resposta VÁLIDA sem empresa.
                     logError('Erro ao verificar onboarding', error);
-                    failVerification();
+                    failVerification(error);
                     return;
                 }
 
@@ -261,7 +302,7 @@ export default function ProtectedRoute() {
         return () => subscription.unsubscribe();
     }, []);
 
-    if (verificationFailed) return <ErroDeVerificacao onRetry={retry} />;
+    if (verificationFailed) return <ErroDeVerificacao onRetry={retry} error={verificationError} />;
 
     if (loading || (user && !onboardingChecked) || (user && tosAccepted === null)) {
         return (
@@ -275,7 +316,7 @@ export default function ProtectedRoute() {
     if (!user) return <Navigate to="/" replace />;
 
     // R22: Encarregado não confirmado não vê nada além da tela de espera (nem rota, nem menu).
-    if (awaitingConfirmation) return <AguardandoConfirmacao />;
+    if (awaitingConfirmation) return <AguardandoConfirmacao papel={companyRole ?? undefined} />;
     if (accessEnded) {
         return (
             <AcessoEncerrado
@@ -318,18 +359,28 @@ export default function ProtectedRoute() {
         userType === 'hire'
         && companyRole === 'encarregado'
         && (
-            // As demais telas do Gestor mostram "sem acesso" (GestorRouteGuard, no CompanyLayout).
-            // Onboarding de CNPJ e perfil da empresa também são do Gestor: a empresa não é dele.
+            // As telas do Gestor (inclusive Dados da empresa) mostram "sem acesso" (GestorRouteGuard, no
+            // CompanyLayout). Só o onboarding de CNPJ redireciona: a empresa não é dele.
             pathname === '/company/onboarding'
-            || pathname === '/company/profile'
-            || pathname.startsWith('/company/profile/')
         )
     ) {
-        // Onboarding e perfil da empresa são do Gestor.
+        // Onboarding da empresa é do Gestor.
         roleRedirectTarget = '/company/dashboard';
     }
 
-    if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} />;
+    // Entrada (login, raiz): o Encarregado começa em "Hoje", não na visão geral. Navegar
+    // depois para "Visão geral" pela aba continua funcionando (sem `entrada`).
+    let entradaAutomatica = false;
+    const entrada = (location.state as { entrada?: boolean } | null)?.entrada === true;
+    if (
+        !roleRedirectTarget && userType === 'hire' && companyRole === 'encarregado'
+        && pathname === '/company/dashboard' && entrada
+    ) {
+        roleRedirectTarget = '/company/hoje';
+        entradaAutomatica = true;
+    }
+
+    if (roleRedirectTarget) return <RoleRedirect to={roleRedirectTarget} silent={entradaAutomatica} />;
 
     // Pular gate de TOS durante onboarding para nao confundir o usuario
     const isOnboardingRoute = location.pathname.includes('/onboarding');

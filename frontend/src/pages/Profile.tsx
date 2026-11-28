@@ -268,21 +268,21 @@ export default function Profile() {
         try {
             await navigator.clipboard.writeText(url);
             setLinkCopied(true);
-            addToast('Link copiado! Envie para uma empresa te adicionar ao elenco.', 'success');
+            addToast('Link copiado! Envie para uma empresa te adicionar ao Elenco.', 'success');
             setTimeout(() => setLinkCopied(false), 2500);
         } catch {
             addToast('Não foi possível copiar o link.', 'error');
         }
     }, [workerId, addToast]);
 
-    // Copia o Worki ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Worki ID".
+    // Copia o Workyn ID CRU (UUID) — é o que a empresa cola em "Adicionar freela → Workyn ID".
     // Distinto de handleCopyMyLink (que copia a URL do convite).
     const handleCopyWorkiId = useCallback(async () => {
         if (!workerId) return;
         try {
             await navigator.clipboard.writeText(workerId);
             setIdCopied(true);
-            addToast('Código copiado! Envie para a empresa te adicionar ao elenco.', 'success');
+            addToast('Código copiado! Envie para a empresa te adicionar ao Elenco.', 'success');
             setTimeout(() => setIdCopied(false), 2500);
         } catch {
             addToast('Não foi possível copiar o código.', 'error');
@@ -828,7 +828,7 @@ export default function Profile() {
                 </section>
             )}
 
-            {/* Como a empresa te encontra — link e Worki ID no topo (pedido dos usuarios: o link
+            {/* Como a empresa te encontra — link e Workyn ID no topo (pedido dos usuarios: o link
                 do freela precisa estar bem visivel). Mesmos handlers do modal do QR; nenhuma logica nova. */}
             {!isEditing && (
                 <Card
@@ -935,7 +935,7 @@ export default function Profile() {
                 <p className="mt-1 text-sm text-gray-600">
                     {isEditing
                         ? 'Edite o que precisar e salve no fim.'
-                        : 'É o que as empresas veem quando você entra no elenco delas.'}
+                        : 'É o que as empresas veem quando você entra no Elenco delas.'}
                 </p>
 
                 {isEditing ? (
@@ -998,7 +998,7 @@ export default function Profile() {
                             </Field>
                         )}
 
-                        {/* Chave PIX — como a empresa paga o freela por fora do Worki (modo A) */}
+                        {/* Chave PIX — como a empresa paga o freela por fora do Workyn (modo A) */}
                         <Field label="Tipo de chave PIX">
                             <select
                                 value={pixKeyType}
@@ -1018,7 +1018,7 @@ export default function Profile() {
                         <Field
                             label="Chave PIX"
                             error={formData.pix_key.trim() && !isValidPixKey() ? 'Chave inválida para o tipo selecionado.' : undefined}
-                            hint="É assim que as empresas vão te pagar por fora do Worki (PIX)."
+                            hint="É assim que as empresas vão te pagar por fora do Workyn (PIX)."
                         >
                             <input
                                 data-copilot-private
@@ -1159,7 +1159,7 @@ export default function Profile() {
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
                     Marque os dias e períodos em que você topa trabalhar. As empresas do seu
-                    elenco te veem primeiro nos chamados de turno que casam com sua grade.
+                    Elenco te veem primeiro nos chamados de turno que casam com sua grade.
                 </p>
 
                 {isEditing ? (
@@ -1219,7 +1219,7 @@ export default function Profile() {
                     <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4">
                         <p className="text-sm text-gray-700">
                             Você ainda não declarou sua disponibilidade. Declare para aparecer
-                            primeiro nos chamados de turno do seu elenco.
+                            primeiro nos chamados de turno do seu Elenco.
                         </p>
                         <Button variant="secondary" onClick={() => setIsEditing(true)}>
                             Declarar disponibilidade
@@ -1414,7 +1414,7 @@ export default function Profile() {
                         </button>
                     </div>
                     <p className="mb-5 text-sm text-gray-600">
-                        Mostre este QR para uma empresa te adicionar ao elenco dela. Ele identifica você pelo seu código.
+                        Mostre este QR para uma empresa te adicionar ao Elenco dela. Ele identifica você pelo seu código.
                     </p>
                     <div className="mb-5 flex justify-center" data-copilot-private>
                         <div className="rounded-2xl border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -1449,7 +1449,7 @@ export default function Profile() {
                         </Button>
                     </div>
                     <p className="mt-3 text-center text-xs text-gray-600">
-                        Envie o <span className="font-bold">código</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao elenco.
+                        Envie o <span className="font-bold">código</span> quando a empresa pedir, ou envie o link direto (WhatsApp, etc.) para ela te adicionar ao Elenco.
                     </p>
             </Dialog>
         )}

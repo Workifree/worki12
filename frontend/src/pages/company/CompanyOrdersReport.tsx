@@ -1,13 +1,13 @@
 /**
- * CompanyOrdersReport — Relatório de Ordens da empresa.
+ * CompanyOrdersReport — Relatório financeiro da empresa.
  *
- * "Ordem" = par (turno, freela) — não mais "turno" sozinho (ver ADR-20260816-marcador-
- * pagamento-por-freela.md). Um turno com N freelas contratados pode virar até N ordens,
- * cada uma com seu próprio status (aberta/paga/conciliada): o freela com pagamento
- * registrado usa os dados da nota; o freela contratado mas ainda sem pagamento aparece
- * como 'aberta' (passivo em aberto), pra não sumir do relatório. "Nota"/comprovante =
- * pagamento (shift_payments). Ao registrar o pagamento a candidatura do freela já vira
- * 'completed' — esta página dá a visão consolidada + export pro financeiro/estoquista.
+ * "Ordem" = par (turno, freela) (ADR-20260816). Os dados vêm da RPC `get_financial_report`
+ * (ADR-20261127): o banco decide o escopo. Gestor vê a company inteira, com filtro de responsável
+ * e botão da Planilha de pagamento (CPF/PIX). Encarregado confirmado vê só os turnos dele, sem
+ * filtro de responsável, sem planilha e sem nenhum dado pessoal (a RPC nunca devolve CPF/PIX).
+ *
+ * Valor "real" = pagamento registrado/agendado; "estimado" = sem pagamento, usa o orçamento do
+ * turno. Nunca somados num número só. Horas vazias = "sem check-in/out" (nunca "0h").
  *
  * Padrões: useState + useEffect, imports relativos, TS strict, design neo-brutalista empresa.
  */
@@ -15,16 +15,30 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import SectionTabs from '../../components/SectionTabs';
-import { FileText, Printer, Download, Loader2 } from 'lucide-react';
-import { OrderReportService, toCSV } from '../../services/orderReportService';
-import type { OrderReport, OrderRow, OrderStatus } from '../../services/orderReportService';
-import { ORDER_STATUS_LABELS, PAYMENT_SOURCE_LABELS } from '../../services/orderReportService';
+import { FileText, FileSpreadsheet, Printer, Download, Loader2 } from 'lucide-react';
+import {
+  OrderReportService,
+  toCSV,
+  reportOutcomeMessage,
+  formatReportDate,
+  formatReportDateTime,
+  ORDER_STATUS_LABELS,
+  PAYMENT_SOURCE_LABELS,
+  AMOUNT_KIND_LABELS,
+  NO_HOURS_LABEL,
+} from '../../services/orderReportService';
+import type { OrderStatus } from '../../services/orderReportService';
+import { isGestor } from '../../services/companyScopeService';
+import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
 import { logError } from '../../lib/logger';
+import { downloadCsv } from '../../lib/csv';
 import { useToast } from '../../contexts/ToastContext';
 import PageMeta from '../../components/PageMeta';
-import { Button, Card, EmptyState, ErrorState, Field, PageHeader } from '../../components/ui';
+import PaymentSheetModal from '../../components/company/PaymentSheetModal';
+import { Alert, Button, Card, EmptyState, ErrorState, Field, PageHeader } from '../../components/ui';
 import { roleLabel } from '../../lib/statusLabels';
 import { formatBRL } from '../../lib/currency';
+import type { FinancialReport, FinancialReportRow } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Helpers de data/format
@@ -39,39 +53,62 @@ function toDateInput(d: Date): string {
 
 function startOfWeek(d: Date): Date {
   const day = d.getDay(); // 0 = domingo
-  const diff = d.getDate() - day;
-  return new Date(d.getFullYear(), d.getMonth(), diff);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
 }
 
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-function formatDDMMYYYY(value: string): string {
-  const datePart = value.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-    const [y, m, dd] = datePart.split('-').map(Number);
-    const dt = new Date(y, m - 1, dd);
-    return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
-  }
-  const dt = new Date(value);
-  return dt.toLocaleDateString('pt-BR');
+function formatHours(hours: number | null): string {
+  if (hours === null) return NO_HOURS_LABEL;
+  return `${hours.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} h`;
+}
+
+function formatTime(value: string | null): string {
+  return value ? formatReportDateTime(value) : '—';
 }
 
 type PresetKey = 'hoje' | 'semana' | 'mes' | 'custom';
 
 const STATUS_OPTIONS: Array<{ key: OrderStatus | 'todas'; label: string }> = [
   { key: 'todas', label: 'Todas' },
-  { key: 'aberta', label: 'Abertas' },
-  { key: 'paga', label: 'Pagas' },
-  { key: 'conciliada', label: 'Confirmadas pelo freela' },
+  { key: 'aberta', label: 'Aberta' },
+  { key: 'agendada', label: 'Agendada' },
+  { key: 'paga', label: 'Paga' },
+  { key: 'conciliada', label: 'Confirmada pelo freela' },
 ];
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  aberta: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  aberta: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  agendada: 'bg-gray-100 text-gray-700 border-gray-300',
   paga: 'bg-blue-100 text-blue-700 border-blue-300',
   conciliada: 'bg-primary-light text-primary-dark border-primary',
 };
+
+interface Option {
+  id: string;
+  label: string;
+}
+
+/** Une opções novas às já conhecidas (a lista não encolhe quando um filtro é aplicado). */
+function mergeOptions(prev: Option[], next: Option[]): Option[] {
+  const map = new Map(prev.map((o) => [o.id, o]));
+  for (const o of next) map.set(o.id, o);
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
+
+function optionsFromRows(rows: FinancialReportRow[]) {
+  const workers: Option[] = [];
+  const responsibles: Option[] = [];
+  const tags: Option[] = [];
+  for (const r of rows) {
+    if (r.worker_id) workers.push({ id: r.worker_id, label: r.worker_name ?? 'Freela' });
+    if (r.responsible_id) responsibles.push({ id: r.responsible_id, label: r.responsible_name ?? 'Responsável' });
+    if (r.tag_id) tags.push({ id: r.tag_id, label: r.tag_name ?? 'Loja' });
+  }
+  return { workers, responsibles, tags };
+}
 
 // ---------------------------------------------------------------------------
 // Página
@@ -79,33 +116,63 @@ const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
 
 export default function CompanyOrdersReport() {
   const { addToast } = useToast();
+  const { company, resolved } = useCurrentCompanyState();
+  const gestor = resolved && isGestor(company);
 
   const [preset, setPreset] = useState<PresetKey>('mes');
   const [from, setFrom] = useState<string>(toDateInput(startOfMonth(new Date())));
   const [to, setTo] = useState<string>(toDateInput(new Date()));
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'todas'>('todas');
+  const [workerId, setWorkerId] = useState('');
+  const [responsibleId, setResponsibleId] = useState('');
+  const [tagId, setTagId] = useState('');
 
-  const [report, setReport] = useState<OrderReport | null>(null);
+  const [workerOptions, setWorkerOptions] = useState<Option[]>([]);
+  const [responsibleOptions, setResponsibleOptions] = useState<Option[]>([]);
+  const [tagOptions, setTagOptions] = useState<Option[]>([]);
+
+  const [report, setReport] = useState<FinancialReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
 
-  const fetchReport = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await OrderReportService.getReport({ from, to, status: statusFilter });
-      setReport(result);
-    } catch (err) {
-      logError('CompanyOrdersReport.fetchReport', err);
-      setError('Não foi possível carregar o relatório.');
-    } finally {
-      setLoading(false);
-    }
-  }, [from, to, statusFilter]);
+  // O filtro de responsável não existe para o Encarregado (escopo forçado no banco).
+  const effectiveResponsibleId = gestor ? responsibleId : '';
 
   useEffect(() => {
-    fetchReport();
-  }, [fetchReport]);
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const result = await OrderReportService.getReport({
+          from,
+          to,
+          status: statusFilter,
+          workerId,
+          responsibleId: effectiveResponsibleId,
+          tagId,
+        });
+        if (!active) return;
+        setReport(result);
+        if (result.outcome === 'ok') {
+          const opts = optionsFromRows(result.rows);
+          setWorkerOptions((p) => mergeOptions(p, opts.workers));
+          setResponsibleOptions((p) => mergeOptions(p, opts.responsibles));
+          setTagOptions((p) => mergeOptions(p, opts.tags));
+        }
+      } catch (err) {
+        logError('CompanyOrdersReport.fetchReport', err);
+        if (active) setError('Não foi possível carregar o relatório.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [from, to, statusFilter, workerId, effectiveResponsibleId, tagId, reloadTick]);
+
+  const retry = useCallback(() => setReloadTick((n) => n + 1), []);
 
   function applyPreset(key: PresetKey) {
     const now = new Date();
@@ -134,48 +201,41 @@ export default function CompanyOrdersReport() {
       addToast('Nenhum pagamento para exportar.', 'info');
       return;
     }
-    const csv = toCSV(report);
-    // BOM UTF-8 para o Excel pt-BR reconhecer acentos corretamente.
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `relatorio-ordens-${from}_a_${to}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadCsv(toCSV(report), `relatorio-financeiro-${from}_a_${to}.csv`);
   }
 
-  const rows: OrderRow[] = report?.rows ?? [];
-  const summary = report?.summary;
-  const periodLabel = `${formatDDMMYYYY(from)} a ${formatDDMMYYYY(to)}`;
+  const okReport = report?.outcome === 'ok' ? report : null;
+  const rows: FinancialReportRow[] = okReport?.rows ?? [];
+  const totals = okReport?.totals;
+  const periodLabel = `${formatReportDate(from)} a ${formatReportDate(to)}`;
+  const outcomeProblem = report && report.outcome !== 'ok' ? reportOutcomeMessage(report.outcome) : null;
 
   return (
-    <div className="flex flex-col gap-6 pb-20 md:pb-12 font-sans text-accent max-w-5xl mx-auto print:pb-0">
+    <div className="flex flex-col gap-6 pb-20 md:pb-12 font-sans text-accent max-w-7xl mx-auto print:pb-0">
       <PageMeta title="Relatório de Pagamentos" />
 
-      {/* Header — some na impressão (cabeçalho de impressão próprio abaixo) */}
       <div className="print:hidden">
-        <SectionTabs section="relatorios" />
-        {/* Ha DOIS lugares com numeros e o usuario nao tem como adivinhar qual responde o que
-            (cheiro de informacao). Uma linha diz o que ESTA pagina responde e aponta a outra. */}
+        {/* As abas levam a "Operação", que é só do Gestor: o Encarregado não as vê. */}
+        {gestor && <SectionTabs section="relatorios" />}
         <PageHeader
           title="Relatório de Pagamentos"
-          subtitle="Quanto foi pago, a quem, quando — com exportação para o financeiro. Um turno com mais de um freela vira uma ordem por freela."
+          subtitle={
+            gestor
+              ? 'Quanto foi pago, a quem, quando e quantas horas — com exportação para o financeiro. Um turno com mais de um freela vira uma ordem por freela.'
+              : 'Os seus turnos: horas, valores e situação do pagamento de cada freela.'
+          }
           className="!mb-0"
         />
       </div>
 
       {/* Cabeçalho de impressão — só aparece no print */}
       <div className="hidden print:block">
-        <h1 className="text-2xl font-bold">Relatório de Ordens</h1>
+        <h1 className="text-2xl font-bold">Relatório de Pagamentos</h1>
         <p className="text-sm font-semibold">Período: {periodLabel}</p>
       </div>
 
       {/* Filtros + ações — não imprime */}
       <Card className="print:hidden flex flex-col gap-5">
-        {/* Presets */}
         <div role="group" aria-label="Período" className="flex flex-wrap gap-2 self-start">
           {(['hoje', 'semana', 'mes'] as PresetKey[]).map((key) => (
             <button
@@ -187,47 +247,47 @@ export default function CompanyOrdersReport() {
                 preset === key ? 'bg-black text-white border-black' : 'bg-white text-gray-700 border-gray-300 hover:border-black'
               }`}
             >
-              {key === 'hoje' ? 'Hoje' : key === 'semana' ? 'Semana' : 'Mês'}
+              {key === 'hoje' ? 'Dia de hoje' : key === 'semana' ? 'Semana' : 'Mês'}
             </button>
           ))}
         </div>
 
-        {/* Intervalo custom + status */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Field label="De">
-            <input
-              id="fromInput"
-              type="date"
-              value={from}
-              max={to}
-              onChange={(e) => handleCustomDateChange('from', e.target.value)}
-            />
+            <input id="fromInput" type="date" value={from} max={to} onChange={(e) => handleCustomDateChange('from', e.target.value)} />
           </Field>
           <Field label="Até">
-            <input
-              id="toInput"
-              type="date"
-              value={to}
-              min={from}
-              onChange={(e) => handleCustomDateChange('to', e.target.value)}
-            />
+            <input id="toInput" type="date" value={to} min={from} onChange={(e) => handleCustomDateChange('to', e.target.value)} />
           </Field>
           <Field label="Status">
-            <select
-              id="statusSelect"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as OrderStatus | 'todas')}
-            >
+            <select id="statusSelect" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as OrderStatus | 'todas')}>
               {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
+                <option key={opt.key} value={opt.key}>{opt.label}</option>
               ))}
+            </select>
+          </Field>
+          <Field label="Freela">
+            <select id="workerSelect" value={workerId} onChange={(e) => setWorkerId(e.target.value)}>
+              <option value="">Todos</option>
+              {workerOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </Field>
+          {gestor && (
+            <Field label="Responsável">
+              <select id="responsibleSelect" value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)}>
+                <option value="">Todos</option>
+                {responsibleOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Loja">
+            <select id="tagSelect" value={tagId} onChange={(e) => setTagId(e.target.value)}>
+              <option value="">Todas</option>
+              {tagOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </Field>
         </div>
 
-        {/* Ações — uma primária, uma secundária */}
         <div className="flex flex-col sm:flex-row gap-3 border-t-2 border-gray-100 pt-5">
           <Button
             variant="dark"
@@ -238,47 +298,73 @@ export default function CompanyOrdersReport() {
           >
             Exportar CSV
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => window.print()}
-            disabled={loading || rows.length === 0}
-            iconLeft={<Printer size={16} />}
-          >
+          <Button variant="secondary" onClick={() => window.print()} disabled={loading || rows.length === 0} iconLeft={<Printer size={16} />}>
             Imprimir / PDF
           </Button>
+          {gestor && (
+            <Button variant="secondary" onClick={() => setSheetOpen(true)} disabled={loading || !!outcomeProblem} iconLeft={<FileSpreadsheet size={16} />}>
+              Planilha de pagamento
+            </Button>
+          )}
         </div>
       </Card>
 
-      {/* Resumo */}
-      {summary && !loading && !error && (
-        // `summary.total` conta ORDENS (pares turno+freela), não turnos distintos — um
-        // turno com 2 freelas soma 2 aqui. Rótulo "Ordens" em vez de "Total" pra não
-        // sugerir contagem de turnos (orderReportService.ts — JSDoc do topo).
-        // Valor pago (realizado) e valor previsto (passivo em aberto, estimado) são
-        // números de natureza diferente — nunca somados num "Valor Total" só, que
-        // mentiria misturando dinheiro que já saiu com estimativa do que falta pagar.
+      {sheetOpen && gestor && (
+        <PaymentSheetModal
+          filters={{ from, to, workerId, responsibleId, tagId }}
+          statusFilterIgnored={statusFilter !== 'todas'}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
+
+      {okReport?.truncated && (
+        <Alert tone="warning" className="print:hidden">
+          Há mais de 5.000 ordens no período: só parte delas está na lista. Reduza o período ou use os filtros.
+        </Alert>
+      )}
+
+      {/* Resumo: pago e a pagar SEPARADOS (a pagar pode incluir valores estimados) */}
+      {totals && !loading && !error && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
-          <SummaryCard label="A pagar (previsto)" value={formatBRL(summary.valorPrevisto)} detail={`${summary.abertas} em aberto`} className="text-yellow-700" />
-          <SummaryCard label="Pago" value={formatBRL(summary.valorPago)} detail={`${summary.pagas + summary.conciliadas} de ${summary.total} no período`} />
-          <SummaryCard label="Confirmadas pelo freela" value={String(summary.conciliadas)} detail={`${summary.pagas} aguardando confirmação`} />
+          <SummaryCard
+            label="Pago"
+            value={formatBRL(totals.overall.total_paid)}
+            detail={`${rows.filter((r) => r.status === 'paga' || r.status === 'conciliada').length} pagas de ${totals.overall.shifts_count} ordens`}
+          />
+          <SummaryCard
+            label="A pagar (pode incluir estimado)"
+            value={formatBRL(totals.overall.total_to_pay)}
+            detail={`${rows.filter((r) => r.status === 'aberta' || r.status === 'agendada').length} em aberto ou agendadas`}
+            className="text-yellow-700"
+          />
+          <SummaryCard
+            label="Horas medidas"
+            value={formatHours(totals.overall.hours_total > 0 ? totals.overall.hours_total : null)}
+            detail={
+              totals.overall.hours_missing_count > 0
+                ? `${totals.overall.hours_missing_count} ordens ${NO_HOURS_LABEL}`
+                : `${totals.overall.shifts_count} ordens`
+            }
+          />
         </div>
       )}
 
-      {/* Conteúdo */}
       {loading ? (
         <div className="flex items-center justify-center py-16 print:hidden">
           <span role="status"><span className="sr-only">Carregando</span><Loader2 size={28} aria-hidden="true" className="animate-spin text-gray-600" /></span>
         </div>
       ) : error ? (
-        <ErrorState title={error} onRetry={() => void fetchReport()} className="print:hidden" />
+        <ErrorState title={error} onRetry={retry} className="print:hidden" />
+      ) : outcomeProblem ? (
+        <Alert tone="warning" role="alert">{outcomeProblem}</Alert>
       ) : rows.length === 0 ? (
-        <EmptyState icon={FileText} title="Nenhum pagamento no período." description="Troque o período ou o status para ver outras ordens." />
+        <EmptyState icon={FileText} title="Nenhum pagamento no período." description="Troque o período ou os filtros para ver outras ordens." />
       ) : (
         <>
           {/* Mobile: cards */}
           <div className="flex flex-col gap-3 md:hidden print:hidden">
             {rows.map((row) => (
-              <OrderCard key={`${row.jobId}:${row.workerId ?? 'none'}`} row={row} />
+              <OrderCard key={`${row.job_id}:${row.worker_id ?? 'none'}`} row={row} showResponsible={gestor} />
             ))}
           </div>
 
@@ -287,32 +373,100 @@ export default function CompanyOrdersReport() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-black bg-gray-50 text-left">
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Data</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Função</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Freela</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600 text-right">Valor</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Forma</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Status</th>
-                  <th className="px-4 py-3 font-semibold text-xs text-gray-600">Data Pgto</th>
+                  <Th>Data</Th>
+                  <Th>Turno</Th>
+                  <Th>Loja</Th>
+                  {gestor && <Th>Responsável</Th>}
+                  <Th>Freela</Th>
+                  <Th>Check-in / out</Th>
+                  <Th right>Horas</Th>
+                  <Th right>Valor/hora</Th>
+                  <Th right>Valor</Th>
+                  <Th>Forma</Th>
+                  <Th>Status</Th>
+                  <Th>Data Pgto</Th>
+                  <Th>Recibo</Th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.jobId}:${row.workerId ?? 'none'}`} className="border-b border-gray-200 last:border-0">
-                    <td className="px-4 py-3 font-bold whitespace-nowrap">{row.date ? formatDDMMYYYY(row.date) : '—'}</td>
-                    <td className="px-4 py-3 font-medium">{roleLabel(row.category) || row.title}</td>
-                    <td className="px-4 py-3 font-medium">{row.workerName ?? '—'}</td>
-                    <td className="px-4 py-3 font-bold tabular-nums text-right whitespace-nowrap">{formatBRL(row.amount)}</td>
-                    <td className="px-4 py-3">{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={row.status} />
+                  <tr key={`${row.job_id}:${row.worker_id ?? 'none'}`} className="border-b border-gray-200 last:border-0 align-top">
+                    <td className="px-3 py-3 font-bold whitespace-nowrap">{row.job_date ? formatReportDate(row.job_date) : '—'}</td>
+                    <td className="px-3 py-3 font-medium">
+                      {row.job_title ?? '—'}
+                      {roleLabel(row.job_category) && <span className="block text-xs text-gray-600">{roleLabel(row.job_category)}</span>}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{row.paidAt ? formatDDMMYYYY(row.paidAt) : '—'}</td>
+                    <td className="px-3 py-3">{row.tag_name ?? '—'}</td>
+                    {gestor && <td className="px-3 py-3">{row.responsible_name ?? '—'}</td>}
+                    <td className="px-3 py-3 font-medium">{row.worker_name ?? '—'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-xs">
+                      {formatTime(row.checkin_at)}
+                      <span className="block">{formatTime(row.checkout_at)}</span>
+                    </td>
+                    <td className="px-3 py-3 tabular-nums text-right whitespace-nowrap">{formatHours(row.hours)}</td>
+                    <td className="px-3 py-3 tabular-nums text-right whitespace-nowrap">{row.hourly_rate !== null ? formatBRL(row.hourly_rate) : '—'}</td>
+                    <td className="px-3 py-3 font-bold tabular-nums text-right whitespace-nowrap">
+                      {formatBRL(row.amount)}
+                      <span className="block text-xs font-medium text-gray-600">{AMOUNT_KIND_LABELS[row.amount_kind]}</span>
+                    </td>
+                    <td className="px-3 py-3">{row.source ? PAYMENT_SOURCE_LABELS[row.source] ?? row.source : '—'}</td>
+                    <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
+                    <td className="px-3 py-3 whitespace-nowrap">{row.paid_at ? formatReportDate(row.paid_at) : '—'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-xs tabular-nums" title={row.payment_id ?? undefined}>
+                      {row.payment_id ? `#${row.payment_id.slice(0, 8)}` : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </Card>
+
+          {totals && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 break-inside-avoid">
+              <Card padding="none" className="overflow-x-auto">
+                <h2 className="px-4 pt-4 pb-2 text-sm font-bold">Total por freela</h2>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-black bg-gray-50 text-left">
+                      <Th>Freela</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Pago</Th><Th right>A pagar</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {totals.by_worker.map((w) => (
+                      <tr key={w.worker_id ?? 'none'} className="border-b border-gray-200 last:border-0">
+                        <td className="px-3 py-2 font-medium">{w.worker_name ?? 'Sem freela'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{w.shifts_count}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{totalHours(w.hours_total, w.hours_missing_count)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_paid)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(w.total_to_pay)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+              <Card padding="none" className="overflow-x-auto">
+                <h2 className="px-4 pt-4 pb-2 text-sm font-bold">Total por dia</h2>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-black bg-gray-50 text-left">
+                      <Th>Dia</Th><Th right>Ordens</Th><Th right>Horas</Th><Th right>Pago</Th><Th right>A pagar</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {totals.by_day.map((d) => (
+                      <tr key={d.job_date} className="border-b border-gray-200 last:border-0">
+                        <td className="px-3 py-2 font-bold whitespace-nowrap">{formatReportDate(d.job_date)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{d.shifts_count}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{totalHours(d.hours_total, d.hours_missing_count)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_paid)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatBRL(d.total_to_pay)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -322,6 +476,16 @@ export default function CompanyOrdersReport() {
 // ---------------------------------------------------------------------------
 // Subcomponentes
 // ---------------------------------------------------------------------------
+
+/** Horas somadas; "sem check-in/out" quando nenhuma ordem teve medição. */
+function totalHours(total: number, missing: number): string {
+  if (total <= 0) return NO_HOURS_LABEL;
+  return missing > 0 ? `${formatHours(total)} (+${missing} sem check-in/out)` : formatHours(total);
+}
+
+function Th({ children, right = false }: { children: string; right?: boolean }) {
+  return <th className={`px-3 py-3 font-semibold text-xs text-gray-600 ${right ? 'text-right' : ''}`}>{children}</th>;
+}
 
 function SummaryCard({ label, value, detail, className = '' }: { label: string; value: string; detail: string; className?: string }) {
   return (
@@ -341,24 +505,34 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   );
 }
 
-function OrderCard({ row }: { row: OrderRow }) {
-  const context = [roleLabel(row.category), row.title, row.date ? formatDDMMYYYY(row.date) : null].filter(Boolean).join(' · ');
+function OrderCard({ row, showResponsible }: { row: FinancialReportRow; showResponsible: boolean }) {
+  const context = [row.job_title, roleLabel(row.job_category), row.job_date ? formatReportDate(row.job_date) : null].filter(Boolean).join(' · ');
+  const extra = [row.tag_name, showResponsible ? row.responsible_name : null].filter(Boolean).join(' · ');
   return (
     <Card padding="sm" className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-sm break-words">{row.workerName ?? 'Sem freela'}</p>
+          <p className="font-bold text-sm break-words">{row.worker_name ?? 'Sem freela'}</p>
           <p className="text-xs text-gray-600 break-words">{context}</p>
+          {extra && <p className="text-xs text-gray-600 break-words">{extra}</p>}
         </div>
-        <span className="shrink-0 font-bold tabular-nums">{formatBRL(row.amount)}</span>
+        <span className="shrink-0 text-right font-bold tabular-nums">
+          {formatBRL(row.amount)}
+          <span className="block text-xs font-medium text-gray-600">{AMOUNT_KIND_LABELS[row.amount_kind]}</span>
+        </span>
       </div>
+      <p className="text-xs text-gray-600">
+        {formatHours(row.hours)}
+        {row.hourly_rate !== null && ` · ${formatBRL(row.hourly_rate)}/h`}
+      </p>
       <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
         <StatusBadge status={row.status} />
         {row.source && <span>{PAYMENT_SOURCE_LABELS[row.source] ?? row.source}</span>}
-        {row.paidAt && <span>Pago em {formatDDMMYYYY(row.paidAt)}</span>}
+        {row.paid_at && <span>Pago em {formatReportDate(row.paid_at)}</span>}
+        {row.payment_id && <span>Recibo #{row.payment_id.slice(0, 8)}</span>}
       </div>
-      <Link to={`/company/jobs/${row.jobId}/candidates`} className="inline-flex min-h-11 items-center self-start text-sm font-bold underline">
-        {row.status === 'aberta' && row.workerName ? 'Registrar pagamento' : 'Abrir turno'}
+      <Link to={`/company/jobs/${row.job_id}/candidates`} className="inline-flex min-h-11 items-center self-start text-sm font-bold underline">
+        {row.status === 'aberta' && row.worker_name ? 'Registrar pagamento' : 'Abrir turno'}
       </Link>
     </Card>
   );

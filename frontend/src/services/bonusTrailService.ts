@@ -13,7 +13,7 @@
  *
  * `getMyTrail` continua lançando em falha (o hook da tela distingue "sem dado" de "desatualizado").
  *
- * Nada aqui move dinheiro: o bônus é pago por PIX manual, fora do Worki (Article 8). O admin não
+ * Nada aqui move dinheiro: o bônus é pago por PIX manual, fora do Workyn (Article 8). O admin não
  * passa por aqui: usa a edge function `admin-data` (Article 10).
  */
 

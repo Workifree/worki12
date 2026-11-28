@@ -202,9 +202,10 @@ export default function MeusRecebimentos() {
     const confirmed = items.filter((i) => i.payment.status === 'recorded' && !!i.payment.worker_confirmed_at);
     const voided = items.filter((i) => i.payment.status === 'voided');
 
-    const totalRecorded = items
-        .filter((i) => i.payment.status === 'recorded')
+    // "Total recebido" = só o que o freela já confirmou; o resto aguarda confirmação.
+    const totalRecorded = confirmed
         .reduce((sum, i) => sum + (i.payment.amount || 0), 0);
+    const totalPending = pendingConfirmation.reduce((sum, i) => sum + (i.payment.amount || 0), 0);
     const totalScheduled = scheduled.reduce((sum, i) => sum + (i.payment.amount || 0), 0);
 
     if (loading) {
@@ -253,8 +254,8 @@ export default function MeusRecebimentos() {
                         </div>
                     )}
                     <div>
-                        <dt className="text-xs text-gray-600">Aguardam confirmação</dt>
-                        <dd className="text-2xl font-bold tabular-nums">{pendingConfirmation.length}</dd>
+                        <dt className="text-xs text-gray-600">Aguardando confirmação: {pendingConfirmation.length}</dt>
+                        <dd className="text-2xl font-bold tabular-nums">{formatBRL(totalPending)}</dd>
                     </div>
                 </dl>
             )}

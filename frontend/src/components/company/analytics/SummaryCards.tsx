@@ -38,7 +38,7 @@ function CardShell({ label, children }: { label: string; children: ReactNode }) 
 
 export function SpendCard({ block }: { block: SpendSummaryBlock }) {
   return (
-    <CardShell label="Gasto no período">
+    <CardShell label="Pago no período">
       <MetricStateWrapper
         block={block}
         emptyMessage="Nenhum pagamento registrado neste período."
@@ -47,6 +47,9 @@ export function SpendCard({ block }: { block: SpendSummaryBlock }) {
           <div className="flex flex-col gap-1">
             <p className="text-2xl font-bold tabular-nums">{formatBRL(data.totalAmount)}</p>
             <DeltaBadge delta={data.delta} />
+            <p className="text-xs text-gray-600">
+              Pagamentos registrados, pelo dia em que foram pagos. O relatório de Pagamentos agrupa pelo dia do turno.
+            </p>
             {data.conflictingRowsCount > 0 && (
               <p className="text-xs font-bold text-yellow-700">
                 {data.conflictingRowsCount} registro(s) vieram de duas fontes — considerado só o pagamento
@@ -69,7 +72,7 @@ export function HiresCard({ block }: { block: HiresSummaryBlock }) {
             <p className="text-2xl font-bold tabular-nums">{data.count}</p>
             <DeltaBadge delta={data.delta} />
             <p className="text-xs text-gray-600">
-              de {data.jobsCreatedCount} turno(s) no período
+              pessoas contratadas em {data.jobsCreatedCount} turno(s) no período
             </p>
           </div>
         )}

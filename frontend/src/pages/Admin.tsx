@@ -465,9 +465,9 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
 
     return (
         <>
-            {/* Financial Summary - Receita Worki */}
+            {/* Financial Summary - Receita Workyn */}
             <div className="bg-white border-2 border-purple-300 rounded-2xl p-4 sm:p-6 mb-6">
-                <h2 className="text-lg font-bold mb-4 text-purple-800">Receita Worki (taxas de serviço)</h2>
+                <h2 className="text-lg font-bold mb-4 text-purple-800">Receita Workyn (taxas de serviço)</h2>
                 {loadingFinancial ? (
                     <div className="flex justify-center py-4"><Loader2 className="animate-spin" size={24} /></div>
                 ) : financialSummary ? (
@@ -482,7 +482,7 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
                             <p className="text-xs text-red-600 mt-1">{financialSummary.depositCount} depósitos + {financialSummary.withdrawalCount} saques x R$ 1,99</p>
                         </div>
                         <div className={`p-4 rounded-xl border-2 ${financialSummary.netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Lucro líquido Worki</p>
+                            <p className="text-xs font-bold uppercase text-gray-600 mb-1">Lucro líquido Workyn</p>
                             <p className={`text-2xl font-black ${financialSummary.netProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatBRL(financialSummary.netProfit)}</p>
                             <p className="text-xs text-gray-500 mt-1">Receita taxas - Custo Asaas</p>
                         </div>
@@ -607,6 +607,34 @@ function DashboardTab({ stats, transactions }: { stats: Stats | null; transactio
 
 function UsersTab({ users }: { users: AdminUser[] }) {
     const [filter, setFilter] = useState<string>('all');
+    const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
+    const [impersonateError, setImpersonateError] = useState<string | null>(null);
+
+    const handleImpersonate = async (u: AdminUser) => {
+        if (impersonatingId) return;
+        setImpersonatingId(u.id);
+        setImpersonateError(null);
+        try {
+            const data = await invokeFunction<{ token_hash: string; email: string; type: 'magiclink' }>('admin-data', {
+                action: 'impersonate_user',
+                target_email: u.email,
+                reason: 'Suporte SysAdmin',
+            });
+            sessionStorage.setItem('worki_impersonating_email', u.email);
+            sessionStorage.setItem('worki_impersonating_name', u.full_name || u.email);
+            const { error } = await supabase.auth.verifyOtp({
+                token_hash: data.token_hash,
+                type: 'magiclink',
+            });
+            if (error) throw error;
+            window.location.href = u.user_type === 'worker' ? '/dashboard' : '/company/dashboard';
+        } catch (err) {
+            sessionStorage.removeItem('worki_impersonating_email');
+            sessionStorage.removeItem('worki_impersonating_name');
+            setImpersonateError(err instanceof Error ? err.message : 'Erro ao acessar conta');
+            setImpersonatingId(null);
+        }
+    };
 
     const filtered = filter === 'all'
         ? users
@@ -632,6 +660,11 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                     </select>
                 </div>
             </div>
+            {impersonateError && (
+                <div className="mb-4 rounded-xl border-2 border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                    {impersonateError}
+                </div>
+            )}
             <div className="overflow-x-auto">
                 <table className="block w-full text-sm md:table">
                     <thead className="hidden md:table-header-group">
@@ -643,11 +676,12 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                             <th className="text-left py-2 font-bold text-xs">Email confirmado</th>
                             <th className="text-left py-2 font-bold text-xs">Último login</th>
                             <th className="text-left py-2 font-bold text-xs">Cadastro</th>
+                            <th className="text-right py-2 font-bold text-xs">Acesso</th>
                         </tr>
                     </thead>
                     <tbody className="block md:table-row-group">
                         {filtered.length === 0 && (
-                            <tr className="block md:table-row"><td colSpan={7} className="block md:table-cell py-4 text-center text-gray-600">Nenhum usuário</td></tr>
+                            <tr className="block md:table-row"><td colSpan={8} className="block md:table-cell py-4 text-center text-gray-600">Nenhum usuário</td></tr>
                         )}
                         {filtered.map(u => (
                             <tr key={u.id} className="block border-b-2 border-gray-200 py-2 md:table-row md:border-b md:border-gray-100 md:hover:bg-gray-50">
@@ -676,6 +710,16 @@ function UsersTab({ users }: { users: AdminUser[] }) {
                                 </td>
                                 <td data-label="Cadastro" className={`${CELL} py-2 text-gray-600 text-xs whitespace-nowrap`}>
                                     {formatDate(u.created_at)}
+                                </td>
+                                <td data-label="Acesso" className={`${CELL} py-2 md:text-right whitespace-nowrap`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleImpersonate(u)}
+                                        disabled={impersonatingId !== null}
+                                        className="min-h-9 rounded-lg border-2 border-black bg-yellow-300 px-3 py-1 text-xs font-bold text-black hover:bg-yellow-400 disabled:opacity-50"
+                                    >
+                                        {impersonatingId === u.id ? 'Entrando...' : 'Entrar como'}
+                                    </button>
                                 </td>
                             </tr>
                         ))}

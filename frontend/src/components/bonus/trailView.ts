@@ -81,7 +81,7 @@ export function acceptMessage(outcome: AcceptOutcome): string {
       return 'A trilha não está disponível no momento.'
     case 'ack_missing':
     case 'not_invited':
-      return 'Sua inscrição ainda não está liberada. Fale com a equipe do Worki.'
+      return 'Sua inscrição ainda não está liberada. Fale com a equipe do Workyn.'
     default:
       return 'Não foi possível entrar na trilha agora. Tente de novo em instantes.'
   }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import ChatComposerField from '../../components/ChatComposerField';
 import { supabase } from '../../lib/supabase';
 import { MessageSquare, Send, ArrowLeft, User, Check, CheckCheck, Briefcase } from 'lucide-react';
@@ -6,7 +6,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '../../contexts/ToastContext';
-import { getMyCompanies } from '../../services/companyScopeService';
+import { useCurrentCompanyState } from '../../hooks/useCurrentCompany';
+import { groupByWorker, isHiddenEmptyConversation } from '../../lib/messageGroups';
 import { logError } from '../../lib/logger'
 import { fillMissingWorkers } from '../../services/workerCardsService';
 import { Button, PageHeader } from '../../components/ui'
@@ -22,9 +23,12 @@ import { TONE_CLASS, getStatus, statusLabel } from '../../lib/statusLabels';
 interface ConversationItem {
     id: string;
     application_uuid: string;
+    /** Freela da conversa: as não lidas e o "lida" valem só para as mensagens dele. */
+    worker_id: string | null;
     worker_name: string;
     worker_avatar?: string;
     job_title: string;
+    job_status?: string;
     last_message?: string;
     last_message_at?: string;
     /** Prévia confiável ausente: a conversa não tem mensagem alguma. */
@@ -43,7 +47,14 @@ const sortConversations = (list: ConversationItem[]): ConversationItem[] =>
         Number(b.unread_count > 0) - Number(a.unread_count > 0)
         || new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime());
 
-const formatWhen = (iso: string): string => {
+/** Quem falou, na prévia: eu, um colega do lado da empresa, ou o freela (sem prefixo). */
+const previewPrefix = (senderid: string, workerId: string | null, me: string | null): string => {
+    if (senderid === me) return 'Você: ';
+    if (workerId && senderid !== workerId) return 'Equipe: ';
+    return '';
+};
+
+const formatWhen =(iso: string): string => {
     const date = new Date(iso);
     return format(date, date.toDateString() === new Date().toDateString() ? 'HH:mm' : 'dd/MM');
 };
@@ -76,11 +87,16 @@ export default function CompanyMessages() {
     const sendingRef = useRef(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const { addToast } = useToast();
+    // Empresa corrente pelo seam (Gestor e Encarregado); a RLS já escopa pelo turno, o filtro é só a unidade.
+    const { company, resolved: companyResolved, error: companyError } = useCurrentCompanyState();
+    const companyId = company?.company_id ?? null;
 
     const logRef = useRef<HTMLDivElement>(null);
     // Conversa aberta agora: o envio é assíncrono e o eco não pode cair em outra conversa.
     const openConversationRef = useRef<string | null>(null);
     openConversationRef.current = selectedConversation?.id ?? null;
+    const openWorkerRef = useRef<string | null>(null);
+    openWorkerRef.current = selectedConversation?.worker_id ?? null;
     const presenceChannel = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -92,9 +108,9 @@ export default function CompanyMessages() {
     const [erroMensagens, setErroMensagens] = useState(false);
     const [messagesAttempt, setMessagesAttempt] = useState(0);
 
-    const updatePreview = (conversationId: string, content: string, at: string, mine: boolean) => {
+    const updatePreview = (conversationId: string, content: string, at: string, senderid: string) => {
         setConversations(prev => sortConversations(prev.map(c => c.id === conversationId
-            ? { ...c, last_message: mine ? `Você: ${content}` : content, last_message_at: at, no_messages: false }
+            ? { ...c, last_message: `${previewPrefix(senderid, c.worker_id, currentUser)}${content}`, last_message_at: at, no_messages: false }
             : c)));
     };
 
@@ -121,6 +137,16 @@ export default function CompanyMessages() {
 
     // `silent` = recarga ao vivo: falha mantém a tela e a conversa não é reescolhida pela URL.
     const loadData = async (silent = false) => {
+        try {
+            await loadDataUnsafe(silent);
+        } catch (err) {
+            // Exceção fora dos ramos tratados: o spinner nunca fica preso.
+            if (silent) logError('CompanyMessages.loadData', err);
+            else falharCarga('CompanyMessages.loadData', err);
+        }
+    };
+
+    const loadDataUnsafe = async (silent: boolean) => {
         const claim = beginList();
         const falhar = (contexto: string, causa: unknown) =>
             silent ? logError(contexto, causa) : falharCarga(contexto, causa);
@@ -130,16 +156,8 @@ export default function CompanyMessages() {
         const user = session.user;
         setCurrentUser(user.id);
 
-        // Todas as unidades que a sessao OPERA — inclui gerente (company_members), que a
-        // consulta por `owner_id` deixava de fora: ele nao via conversa nenhuma.
-        let operadas: Awaited<ReturnType<typeof getMyCompanies>>;
-        try {
-            operadas = await getMyCompanies();
-        } catch (causa) {
-            return falhar('CompanyMessages.companies', causa);
-        }
-        const companyIds = new Set(operadas.map(c => c.company_id));
-        companyIds.add(user.id); // dono cujo company_id E o proprio uid
+        // Falha ao resolver a empresa corrente não é "nenhuma conversa".
+        if (companyError) return falhar('CompanyMessages.companies', new Error('company_scope'));
 
         // Fetch conversations using EXPLICIT Foreign Key names to avoid ambiguity
         const { data: convData, error } = await supabase
@@ -164,6 +182,7 @@ export default function CompanyMessages() {
                     job:jobs!applications_job_id_fkey (
                         id,
                         title,
+                        status,
                         company_id
                     )
                 )
@@ -173,7 +192,8 @@ export default function CompanyMessages() {
         if (error) return falhar('SUPABASE ERROR fetching conversations:', error);
         if (!silent) setErroCarga(false);
 
-        // Filter to only show conversations for jobs belonging to any of the user's companies
+        // A RLS decide o que cada pessoa lê (Gestor: tudo; Encarregado: só os turnos que opera);
+        // aqui só se restringe à unidade corrente.
         interface ConversationData {
             id: string;
             application_uuid: string;
@@ -194,6 +214,7 @@ export default function CompanyMessages() {
                 job?: {
                     id: string;
                     title: string;
+                    status?: string;
                     company_id: string;
                 };
             };
@@ -204,8 +225,7 @@ export default function CompanyMessages() {
                 return false; // Skip malformed data
             }
 
-            const jobCorpId = c.application.job.company_id;
-            return companyIds.has(jobCorpId);
+            return c.application.job.company_id === companyId;
         });
 
         // Encarregado: o embed `workers` volta `null`; os cartões das RPCs dão o nome.
@@ -214,23 +234,22 @@ export default function CompanyMessages() {
 
         // Fetch all unread messages for these conversations
         const conversationIds = myConversations.map((c) => c.id);
-        let unreadCounts: Record<string, number> = {};
+        const unreadCounts: Record<string, number> = {};
 
         if (conversationIds.length > 0) {
             const { data: unreadData, error: unreadError } = await supabase
                 .from('Message')
-                .select('conversationid')
+                .select('conversationid, senderid')
                 .in('conversationid', conversationIds)
-                .neq('senderid', user.id) // Messages sent by OTHERS (workers)
-                .is('read_at', null);     // That are NOT read
+                .is('read_at', null);
 
             if (unreadError) return falhar('CompanyMessages.unread', unreadError);
 
-            if (unreadData) {
-                unreadCounts = unreadData.reduce((acc: Record<string, number>, curr) => {
-                    acc[curr.conversationid] = (acc[curr.conversationid] || 0) + 1;
-                    return acc;
-                }, {} as Record<string, number>);
+            // Só conta o que o FREELA escreveu: mensagem de colega da empresa não é "não lida" para ninguém.
+            const workerOf = new Map(myConversations.map((c) => [c.id, c.application?.worker_id ?? c.application?.worker?.id ?? null]));
+            for (const row of (unreadData ?? []) as Array<{ conversationid: string; senderid: string }>) {
+                const workerId = workerOf.get(row.conversationid);
+                if (workerId && row.senderid === workerId) unreadCounts[row.conversationid] = (unreadCounts[row.conversationid] || 0) + 1;
             }
         }
 
@@ -252,21 +271,33 @@ export default function CompanyMessages() {
             }
         }
 
-        const convList: ConversationItem[] = myConversations.map((c) => ({
-            id: c.id,
-            application_uuid: c.application_uuid,
-            worker_name: c.application?.worker?.full_name || 'Freela',
-            worker_avatar: c.application?.worker?.avatar_url,
-            job_title: c.application?.job?.title || 'Turno sem título',
-            status: c.application?.status || 'pending',
-            attendance: c.application,
-            last_message: latest.has(c.id)
-                ? `${latest.get(c.id)!.senderid === user.id ? 'Você: ' : ''}${latest.get(c.id)!.content}`
-                : undefined,
-            last_message_at: latest.get(c.id)?.createdat ?? c.createdat,
-            no_messages: previewsComplete && !latest.has(c.id),
-            unread_count: unreadCounts[c.id] || 0
-        }));
+        const openNow = openConversationRef.current;
+        const convList: ConversationItem[] = myConversations.map((c) => {
+            const workerId = c.application?.worker_id ?? c.application?.worker?.id ?? null;
+            const last = latest.get(c.id);
+            return {
+                id: c.id,
+                application_uuid: c.application_uuid,
+                worker_id: workerId,
+                worker_name: c.application?.worker?.full_name || 'Freela',
+                worker_avatar: c.application?.worker?.avatar_url,
+                job_title: c.application?.job?.title || 'Turno sem título',
+                job_status: c.application?.job?.status,
+                status: c.application?.status || 'pending',
+                attendance: c.application,
+                last_message: last ? `${previewPrefix(last.senderid, workerId, user.id)}${last.content}` : undefined,
+                last_message_at: last?.createdat ?? c.createdat,
+                no_messages: previewsComplete && !last,
+                unread_count: unreadCounts[c.id] || 0,
+            };
+        }).filter((c) =>
+            // Cancelada/apagada sem mensagem é ruído; a que está aberta ou foi pedida pela URL nunca some.
+            c.id === selectedConversationId || c.id === openNow || !isHiddenEmptyConversation({
+                applicationStatus: c.status,
+                jobStatus: c.job_status,
+                hasMessages: !c.no_messages,
+                previewsComplete,
+            }));
 
         if (!claim()) return;
 
@@ -284,18 +315,20 @@ export default function CompanyMessages() {
             const conv = convList.find(c => c.id === selectedConversationId);
             if (conv) {
                 setSelectedConversation(conv);
-                markAsRead(conv.id, user.id);
+                markAsRead(conv.id, conv.worker_id);
             }
         }
 
         setLoading(false);
     };
 
-    const markAsRead = async (conversationId: string, userId: string) => {
+    // Marca como lida só a mensagem DO FREELA: o que um colega da empresa escreveu não é "lido" por quem abre.
+    const markAsRead = async (conversationId: string, workerId: string | null) => {
         // Optimistic update
         setConversations(prev => prev.map(c =>
             c.id === conversationId ? { ...c, unread_count: 0 } : c
         ));
+        if (!workerId) return;
 
         // read_at é baixo risco de UX (sem toast), mas merece log — não é hipotético:
         // `Message` já teve RLS ligada sem policy de UPDATE nesta revisão (patterns.md).
@@ -303,7 +336,7 @@ export default function CompanyMessages() {
             .from('Message')
             .update({ read_at: new Date().toISOString() })
             .eq('conversationid', conversationId)
-            .neq('senderid', userId)
+            .eq('senderid', workerId)
             .is('read_at', null)
             .select('id');
         if (error) {
@@ -313,9 +346,10 @@ export default function CompanyMessages() {
 
     // Load data on mount and refresh
     useEffect(() => {
-        loadData();
+        if (!companyResolved) return;
+        void loadData();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData usa state setters estaveis, deps cobrem triggers de refresh
-    }, [navigate, selectedConversationId, refreshTrigger]);
+    }, [navigate, selectedConversationId, refreshTrigger, companyResolved, companyId, companyError]);
 
     // Recupera o que o canal da conversa aberta possa ter perdido, mesclando por id.
     const recoverMessages = async () => {
@@ -332,7 +366,7 @@ export default function CompanyMessages() {
         if (openConversationRef.current !== openId) return;
         const rows = ((data || []) as Omit<Message, 'is_mine'>[]).map(m => ({ ...m, is_mine: m.senderid === currentUser }));
         setMessages(prev => mergeMessages(prev, rows));
-        if (rows.some(m => !m.is_mine && !m.read_at)) void markAsRead(openId, currentUser);
+        if (rows.some(m => m.senderid === openWorkerRef.current && !m.read_at)) void markAsRead(openId, openWorkerRef.current);
     };
 
     useLiveRefresh({
@@ -368,9 +402,7 @@ export default function CompanyMessages() {
             setMessagesFor(openId);
 
             // Mark as read when opening
-            if (currentUser) {
-                markAsRead(openId, currentUser);
-            }
+            markAsRead(openId, openWorkerRef.current);
         };
 
         loadMessages();
@@ -385,15 +417,15 @@ export default function CompanyMessages() {
             }, (payload) => {
                 const newMsg = payload.new as { id: string; content: string; senderid: string; createdat: string; read_at: string | null };
                 const isMine = newMsg.senderid === currentUser;
-                updatePreview(openId, newMsg.content, newMsg.createdat, isMine);
+                updatePreview(openId, newMsg.content, newMsg.createdat, newMsg.senderid);
 
                 setMessages(prev => prev.some(m => m.id === newMsg.id)
                     ? prev
                     : [...prev, { ...newMsg, is_mine: isMine }]);
 
-                // If I am viewing this and it's not mine, mark as read immediately
-                if (!isMine && currentUser) {
-                    markAsRead(openId, currentUser);
+                // Se estou vendo e foi o freela quem escreveu, marca como lida na hora
+                if (openWorkerRef.current && newMsg.senderid === openWorkerRef.current) {
+                    markAsRead(openId, openWorkerRef.current);
                 }
             })
             .subscribe();
@@ -453,7 +485,7 @@ export default function CompanyMessages() {
                 : [...prev, { ...sent, read_at: null, is_mine: true }]);
         }
 
-        if (!error) updatePreview(sent.conversationid, sent.content, sent.createdat, true);
+        if (!error) updatePreview(sent.conversationid, sent.content, sent.createdat, sent.senderid);
 
         if (error) {
             logError('Error sending message:', error);
@@ -470,6 +502,12 @@ export default function CompanyMessages() {
         setSelectedConversation(conv);
         navigate(`/company/messages?conversation=${conv.id}`, { replace: true });
     };
+
+    // Uma linha por freela; o turno é escolhido dentro da conversa (ADR-20261127).
+    const groups = useMemo(() => groupByWorker(conversations), [conversations]);
+    const selectedGroup = selectedConversation
+        ? groups.find(g => g.conversations.some(c => c.id === selectedConversation.id)) ?? null
+        : null;
 
     const getStatusColor = (status: string) => TONE_CLASS[getStatus('application', status).tone];
 
@@ -504,13 +542,18 @@ export default function CompanyMessages() {
 
                 <div className={`w-full md:w-80 border-r-2 border-black flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
                     <div className="px-4 py-3 border-b-2 border-gray-100">
-                        <h2 className="text-sm font-bold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${conversations.length})`}</h2>
+                        <h2 className="text-sm font-bold text-gray-700">{erroCarga ? 'Conversas' : `Conversas (${groups.length})`}</h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
                         {erroCarga ? (
                             <div className="p-4">
-                                <ErroDeCarga onRetry={() => { setLoading(true); setRefreshTrigger(n => n + 1); }} />
+                                <ErroDeCarga onRetry={() => {
+                                    // A empresa corrente só se resolve de novo ao recarregar a sessão.
+                                    if (companyError) { window.location.reload(); return; }
+                                    setLoading(true);
+                                    setRefreshTrigger(n => n + 1);
+                                }} />
                             </div>
                         ) : conversations.length === 0 ? (
                             <div className="p-6 text-center text-gray-600">
@@ -519,16 +562,23 @@ export default function CompanyMessages() {
                                 <p className="text-sm mt-2">Os freelas aparecem aqui quando você inicia uma conversa a partir de um turno.</p>
                             </div>
                         ) : (
-                            conversations.map(conv => (
+                            groups.map(group => {
+                                const conv = {
+                                    ...group.latest,
+                                    unread_count: group.unread_count,
+                                    no_messages: group.no_messages,
+                                };
+                                return (
                                 <button
-                                    key={conv.id}
-                                    onClick={() => handleSelectConversation(conv)}
-                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectedConversation?.id === conv.id ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
+                                    type="button"
+                                    key={group.key}
+                                    onClick={() => handleSelectConversation(group.latest)}
+                                    className={`w-full min-h-16 p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black ${selectedGroup?.key === group.key ? 'bg-gray-50 border-l-4 border-l-black' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
                                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             {conv.worker_avatar ? (
-                                                <img src={conv.worker_avatar} alt={conv.worker_name} className="w-full h-full object-cover" />
+                                                <img src={conv.worker_avatar} alt="" className="w-full h-full object-cover" />
                                             ) : (
                                                 <User size={20} className="text-gray-400" />
                                             )}
@@ -553,16 +603,21 @@ export default function CompanyMessages() {
                                             <div className="mt-1 flex items-center justify-between gap-2">
                                                 <p className="flex min-w-0 items-center gap-1 text-xs text-gray-600">
                                                     <Briefcase size={10} aria-hidden="true" className="shrink-0" />
-                                                    <span className="truncate">{conv.job_title}</span>
+                                                    <span className="truncate">
+                                                        {group.conversations.length > 1 ? `${group.conversations.length} turnos` : conv.job_title}
+                                                    </span>
                                                 </p>
-                                                <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
-                                                    {getStatusLabel(conv.status, conv.attendance)}
-                                                </span>
+                                                {group.conversations.length === 1 && (
+                                                    <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${getStatusColor(conv.status)}`}>
+                                                        {getStatusLabel(conv.status, conv.attendance)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 </button>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 </div>
@@ -601,6 +656,28 @@ export default function CompanyMessages() {
                                 </div>
                             </div>
 
+                            {selectedGroup && selectedGroup.conversations.length > 1 && (
+                                <div className="px-3 sm:px-4 py-2 border-b border-gray-200 bg-white">
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                                        <span className="shrink-0">Turno</span>
+                                        <select
+                                            value={selectedConversation.id}
+                                            onChange={(e) => {
+                                                const next = selectedGroup.conversations.find(c => c.id === e.target.value);
+                                                if (next) handleSelectConversation(next);
+                                            }}
+                                            className="min-h-11 min-w-0 flex-1 rounded-xl border-2 border-black bg-white px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                                        >
+                                            {selectedGroup.conversations.map(c => (
+                                                <option key={c.id} value={c.id}>
+                                                    {`${c.job_title} · ${getStatusLabel(c.status, c.attendance)}${c.unread_count > 0 ? ` · ${c.unread_count === 1 ? '1 nova' : `${c.unread_count} novas`}` : ''}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
+                            )}
+
                             <div
                                 ref={logRef}
                                 onScroll={(e) => {
@@ -624,11 +701,14 @@ export default function CompanyMessages() {
                                         <p className="text-sm mt-2">Inicie a conversa com o freela.</p>
                                     </div>
                                 ) : (
-                                    messages.map(msg => (
-                                        <div key={msg.id} className={`flex ${msg.is_mine ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${msg.is_mine ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
+                                    messages.map(msg => {
+                                        // Lado da empresa = eu OU um colega (Gestor/Encarregado); o freela fica à esquerda.
+                                        const companySide = selectedConversation.worker_id ? msg.senderid !== selectedConversation.worker_id : msg.is_mine;
+                                        return (
+                                        <div key={msg.id} className={`flex ${companySide ? 'justify-end' : 'justify-start'} animate-slide-in`}>
+                                            <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-black rounded-2xl ${companySide ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white rounded-tl-none'}`}>
                                                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${msg.is_mine ? 'text-white/90' : 'text-gray-600'}`}>
+                                                <div className={`flex items-center justify-end gap-1 mt-1 text-xs font-medium ${companySide ? 'text-white/90' : 'text-gray-600'}`}>
                                                     {/* O relógio saiu: ele era renderizado em TODA mensagem, para sempre. Ícone de
                                                         relógio ao lado de uma mensagem significa "pendente" em qualquer app de
                                                         conversa — aqui não significava nada, e nunca sumia.
@@ -636,7 +716,7 @@ export default function CompanyMessages() {
                                                         lida, então não comunicava leitura nenhuma. Agora segue a convenção que todo
                                                         mundo já conhece: um check = enviada, dois checks = lida. */}
                                                     {format(new Date(msg.createdat), 'HH:mm', { locale: ptBR })}
-                                                    {msg.is_mine && (
+                                                    {companySide && (
                                                         msg.read_at ? (
                                                             <CheckCheck
                                                                 size={12}
@@ -650,7 +730,8 @@ export default function CompanyMessages() {
                                                 </div>
                                             </div>
                                         </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
 

@@ -38,7 +38,7 @@ const ROUTES: readonly RouteDef[] = [
   { pattern: '/company/jobs/:id/edit', name: 'Editar turno' },
   { pattern: '/company/jobs/:id/candidates', name: 'Presença e pagamento' },
   { pattern: '/company/team', name: 'Meu Elenco' },
-  { pattern: '/company/indicacoes', name: 'Indicações' },
+  { pattern: '/company/indicacoes', name: 'Indicar freela' },
   { pattern: '/company/relatorio', name: 'Relatório de pagamentos' },
   { pattern: '/company/operacao', name: 'Operação' },
   { pattern: '/company/gestao', name: 'Gestão' },
@@ -49,7 +49,6 @@ const ROUTES: readonly RouteDef[] = [
   { pattern: '/company/notifications', name: 'Notificações', policy: 'readonly' },
   { pattern: '/company/trilha', name: 'Trilha de bônus', policy: 'readonly', confirmToOpen: true },
   { pattern: '/company/configuracoes/equipe', name: 'Equipe e acessos', policy: 'readonly' },
-  { pattern: '/company/organization', name: 'Unidades', policy: 'readonly' },
 ]
 
 /** Destinos que a ferramenta `navigate` aceita. O modelo escolhe um id, nunca uma URL. */

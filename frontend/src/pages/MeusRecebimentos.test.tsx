@@ -125,7 +125,7 @@ describe('MeusRecebimentos', () => {
 
     await waitFor(() => expect(screen.getByText('Garçom')).toBeInTheDocument())
     expect(screen.getAllByText('Confirme o recebimento').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Aguardam confirmação/i)).toBeInTheDocument()
+    expect(screen.getByText(/Aguardando confirmação/i)).toBeInTheDocument()
     expect(screen.getByText('Barman')).toBeInTheDocument()
   })
 
@@ -194,5 +194,21 @@ describe('MeusRecebimentos', () => {
     expect(screen.getAllByText('R$ 100,00').length).toBeGreaterThan(0)
     expect(screen.getByText(/Total previsto/i)).toBeInTheDocument()
     expect(screen.queryByText(/saldo/i)).not.toBeInTheDocument()
+  })
+
+  it('Total recebido soma só confirmados; pendentes aparecem em "Aguardando confirmação"', async () => {
+    mockListForWorker.mockResolvedValue([
+      makeItem({ id: 'sp-1', status: 'recorded', amount: 100, worker_confirmed_at: '2026-07-01T10:00:00Z' }, 'Garçom'),
+      makeItem({ id: 'sp-2', status: 'recorded', amount: 70, worker_confirmed_at: null }, 'Barman'),
+    ])
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText(/Total recebido/i)).toBeInTheDocument())
+    const recebido = screen.getByText(/Total recebido/i).closest('div') as HTMLElement
+    expect(recebido).toHaveTextContent('R$ 100,00')
+    expect(recebido).not.toHaveTextContent('R$ 170,00')
+    const aguardando = screen.getByText(/Aguardando confirmação: 1/i).closest('div') as HTMLElement
+    expect(aguardando).toHaveTextContent('R$ 70,00')
   })
 })

@@ -18,7 +18,7 @@ export interface ErrorStateProps {
 export function ErrorState({
   onRetry,
   title = 'Não conseguimos carregar',
-  message = 'Verifique sua conexão e tente de novo.',
+  message = 'Não foi possível carregar agora. Tente de novo; se persistir, verifique sua conexão.',
   retrying = false,
   className,
 }: ErrorStateProps) {

@@ -220,7 +220,7 @@ export default function CompanyOnboarding() {
 
                 <PageHeader
                     title="Primeiro acesso"
-                    subtitle="Vamos configurar sua empresa para montar seu elenco e organizar os turnos."
+                    subtitle="Vamos configurar sua empresa para montar seu Elenco e organizar os turnos."
                 />
 
                 {/* Progresso: uma linha de texto + barra segmentada (substitui os círculos numerados) */}
