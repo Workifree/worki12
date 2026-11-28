@@ -24,111 +24,92 @@ import {
 import PageMeta from '../components/PageMeta';
 import { Button, IconButton } from '../components/ui';
 
-const PILLARS = [
+const BENEFITS = [
   {
-    eyebrow: 'Velocidade na escala',
+    eyebrow: 'Para quem toca a loja',
     icon: Megaphone,
-    accent: 'text-blue-700 bg-blue-50 border-blue-200',
-    title: 'Feche falta de última hora em minutos',
+    title: 'Cubra faltas antes de virar correria',
     description:
-      'Em vez de mandar mensagem um por um no WhatsApp, dispare um único chamado para todo o seu Elenco ou para listas salvas (Salão, Cozinha, Bar). Quem aceitar primeiro garante a vaga, com prazo configurável até 1h antes do turno.',
+      'Em vez de mandar mensagem um por um esperando resposta no WhatsApp, você avisa todo o seu time de confiança de uma vez. Quem aceitar primeiro já fica confirmado na escala.',
   },
   {
-    eyebrow: 'Presença comprovada',
+    eyebrow: 'Previsibilidade',
     icon: QrCode,
-    accent: 'text-primary bg-[#D7F5E4] border-primary/30',
-    title: 'Check-in com QR dinâmico e GPS no local',
+    title: 'Saiba quem realmente vai aparecer',
     description:
-      'O encarregado mostra o QR que muda na tela do celular e o freela registra chegada e saída na hora. Acabou o achismo sobre horário de entrada ou saída: as horas reais vão direto para o relatório.',
+      'O freela confirma presença na véspera e registra entrada e saída no local pelo celular. Você abre o painel e vê quem já está no posto, sem ficar cobrando no telefone.',
   },
   {
-    eyebrow: 'Fechamento sem retrabalho',
+    eyebrow: 'Para o financeiro',
     icon: FileSpreadsheet,
-    accent: 'text-blue-700 bg-blue-50 border-blue-200',
-    title: 'Planilha de PIX pronta para o financeiro',
+    title: 'Feche os pagamentos sem planilha manual',
     description:
-      'Filtre por período, loja, encarregado ou freela e exporte o CSV pronto para pagar. Nome, CPF, chave PIX, horas trabalhadas, total a pagar e número do recibo reunidos em um clique.',
+      'Chega de caçar chave PIX em grupo ou conferir diária em print de conversa. Filtre o período e baixe a lista pronta para pagar com nome, horas reais, valor e recibo de cada pessoa.',
   },
   {
-    eyebrow: 'Governança de equipe',
+    eyebrow: 'Mais de uma loja ou turno',
     icon: Building2,
-    accent: 'text-accent bg-gray-100 border-gray-300',
-    title: 'Encarregados por loja, financeiro só com o Gestor',
+    title: 'Delegue a escala sem perder o controle',
     description:
-      'Convide encarregados por link único preso ao e-mail. Cada encarregado opera apenas os próprios turnos já marcados com a sua loja, enquanto CPF, PIX e relatórios completos ficam restritos ao Gestor.',
+      'Cada encarregado gerencia apenas os próprios turnos e a própria loja, sem acessar dados financeiros nem a escala dos colegas. O Gestor enxerga tudo consolidado em um só painel.',
   },
   {
-    eyebrow: 'Ninguém perde o horário',
+    eyebrow: 'Resposta rápida',
     icon: Bell,
-    accent: 'text-primary bg-[#D7F5E4] border-primary/30',
-    title: 'Avisos no celular e por e-mail fora do app',
+    title: 'Quem trabalha com você não perde o convite',
     description:
-      'Convites de turno, confirmações automáticas de véspera, aceites e cancelamentos chegam por notificação push no celular e por e-mail. A empresa sabe antes quem vai aparecer.',
+      'Os convites e lembretes de turno chegam direto no celular e no e-mail do freela mesmo com o navegador fechado. Menos esquecimento, menos furo e escala fechada muito mais cedo.',
   },
   {
-    eyebrow: 'Relação limpa dos dois lados',
+    eyebrow: 'Segurança dos dois lados',
     icon: ShieldCheck,
-    accent: 'text-accent bg-gray-100 border-gray-300',
-    title: 'Recibo registrado e alerta semanal de frequência',
+    title: 'Tudo combinado, provado e documentado',
     description:
-      'Você paga por fora (PIX ou dinheiro) e registra no Workyn. O app alerta quando um mesmo freela está trabalhando muitos dias na semana e gera comprovante portátil de renda para o profissional.',
+      'Você paga direto do seu jeito (PIX ou dinheiro) e registra o recibo. A empresa acompanha a frequência semanal de cada freela e o profissional guarda seu histórico e comprovante de renda.',
   },
 ];
 
 const COMPARISON = [
   {
-    antes: 'Ficar 1 hora no WhatsApp chamando freela um por um quando alguém falta na abertura.',
-    depois: 'Disparar 1 chamado para o seu Elenco: o primeiro que aceitar fecha a vaga na hora.',
+    antes: 'Perder a manhã no WhatsApp chamando freela um por um quando alguém falta na abertura.',
+    depois: 'Avisar todo o seu Elenco de confiança em um toque e fechar a vaga em minutos.',
   },
   {
-    antes: 'Só descobrir no horário do turno que o freela esqueceu ou pegou outro serviço.',
-    depois: 'Confirmação automática na véspera, push no celular e painel Hoje com quem já chegou.',
+    antes: 'Só descobrir no horário do expediente que o freela esqueceu o turno ou pegou outro serviço.',
+    depois: 'Receber confirmação na véspera e acompanhar em tempo real quem já chegou no local.',
   },
   {
-    antes: 'Juntar print de conversa, chave PIX e diária na mão toda semana para o financeiro pagar.',
-    depois: 'Exportar a planilha de PIX filtrada por loja e período com horas reais e recibo.',
+    antes: 'Gastar horas toda semana juntando chave PIX, nome e valor de diária em planilha manual.',
+    depois: 'Baixar a lista de pagamento pronta para o financeiro, separada por loja e encarregado.',
   },
   {
-    antes: 'Perder controle de quem chamou quem em cada loja ou expor dados do financeiro.',
-    depois: 'Cada encarregado vê só os próprios turnos; o Gestor audita todas as lojas num painel.',
+    antes: 'Deixar encarregados sem ferramenta ou expor dados financeiros para quem só toca a operação.',
+    depois: 'Dar acesso na medida certa: encarregado opera os próprios turnos; financeiro fica com o Gestor.',
   },
 ];
 
 const FAQ_ITEMS = [
   {
     q: 'O Workyn cobra mensalidade ou comissão sobre o valor do freela?',
-    a: 'Comece gratuitamente. Você continua pagando o freela direto por PIX ou dinheiro, e o Workyn organiza os turnos, a presença no local, os recibos e a planilha de pagamento.',
+    a: 'Você começa grátis. O pagamento da diária continua sendo feito direto por você ao profissional (PIX ou dinheiro), enquanto o Workyn organiza a escala, a presença, os recibos e o fechamento do financeiro.',
   },
   {
     q: 'Preciso contratar desconhecidos ou posso usar meus próprios freelas?',
-    a: 'O foco do Workyn é o seu Elenco de confiança. Você envia um link para os freelas com quem já trabalha, separa por listas de função e chama direto sempre que abrir um turno.',
+    a: 'Você trabalha com quem já conhece. Basta enviar o link do seu Elenco para os freelas que já atendem sua empresa, organizar por função e chamar direto quando abrir um turno.',
   },
   {
     q: 'Funciona para empresas com vários encarregados ou mais de uma loja?',
-    a: 'Sim. Em Configurações → Equipe você convida encarregados e gestores por link único e vincula cada encarregado à sua loja. Todo turno criado por ele já sai separado por loja no relatório financeiro.',
+    a: 'Sim. Cada encarregado acessa apenas os próprios turnos, já vinculados à sua loja, e o Gestor acompanha toda a operação e o financeiro separados por loja e responsável.',
   },
   {
-    q: 'Como o Workyn ajuda no controle de recorrência de freelas?',
-    a: 'Ao montar um chamado ou série de turnos, o Workyn mostra quantas vezes aquele freela já trabalhou na semana na sua empresa, ajudando você a distribuir melhor a escala.',
+    q: 'Como o Workyn ajuda a controlar a recorrência de um mesmo freela?',
+    a: 'Na hora de chamar um profissional, o Workyn mostra quantas vezes ele já trabalhou na semana na sua empresa para você distribuir os turnos com segurança.',
   },
   {
     q: 'O freela precisa baixar aplicativo na loja do celular?',
-    a: 'Funciona direto no navegador do celular e pode ser adicionado à Tela de Início como app, com notificações push e avisos por e-mail.',
+    a: 'Funciona direto no navegador do celular e pode ser salvo na Tela de Início com avisos no aparelho e por e-mail.',
   },
 ];
-
-const FAQ_JSON_LD = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: FAQ_ITEMS.map((item) => ({
-    '@type': 'Question',
-    name: item.q,
-    acceptedAnswer: {
-      '@type': 'Answer',
-      text: item.a,
-    },
-  })),
-};
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -137,15 +118,11 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-canvas font-sans text-accent flex flex-col overflow-x-hidden">
       <PageMeta
-        title="Gestão de freelas, turnos, presença e planilha de PIX"
-        description="Organize seu Elenco de freelas de confiança, dispare chamados de turno em um toque, confirme presença com QR e GPS e exporte a planilha de PIX pronta para o financeiro."
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+        title="Escala de freelas, controle de presença e fechamento de diárias"
+        description="Nunca mais perca a abertura da loja por falta de freela. Chame sua equipe de confiança em segundos, confirme presença no local e feche os pagamentos da semana sem planilha manual."
       />
 
-      {/* Header Neo-Brutalista Refinado */}
+      {/* Header */}
       <header className="sticky top-0 z-40 bg-canvas/95 backdrop-blur-md border-b-2 border-black">
         <nav
           aria-label="Navegação principal"
@@ -160,14 +137,14 @@ export default function Onboarding() {
               alt=""
               width={34}
               height={34}
-              className="w-8 h-8 border-2 border-black rounded-lg shadow-[2px_2px_0_0_#111] bg-white"
+              className="w-8 h-8 border-2 border-black rounded-lg shadow-[2px_2px_0_0_#000] bg-white"
             />
             <span className="text-2xl font-black tracking-tight">Workyn.</span>
           </a>
 
           <div className="hidden md:flex items-center gap-7 text-sm font-bold text-gray-700">
-            <a href="#recursos" className="hover:text-black transition-colors">
-              Recursos
+            <a href="#beneficios" className="hover:text-black transition-colors">
+              Benefícios
             </a>
             <a href="#comparativo" className="hover:text-black transition-colors">
               Na prática
@@ -181,19 +158,14 @@ export default function Onboarding() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => navigate('/login')}
-              className="border-2 border-black bg-white shadow-[2px_2px_0_0_#111] font-bold text-xs sm:text-sm"
-            >
+            <Button variant="secondary" size="md" onClick={() => navigate('/login')}>
               Entrar
             </Button>
             <Button
               variant="dark"
               size="md"
               onClick={() => navigate('/login?type=hire&cadastro=1')}
-              className="hidden sm:inline-flex border-2 border-black shadow-[3px_3px_0_0_#00A651] font-bold text-xs sm:text-sm"
+              className="hidden sm:inline-flex"
             >
               Começar grátis
             </Button>
@@ -202,86 +174,87 @@ export default function Onboarding() {
       </header>
 
       <main>
-        {/* Hero Moderno-Brutalista */}
+        {/* Hero */}
         <section
           className="relative px-4 sm:px-6 md:px-10 pt-10 pb-16 md:pt-16 md:pb-24"
           style={{
-            backgroundImage: 'radial-gradient(rgba(17,17,17,0.08) 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
+            backgroundImage: 'radial-gradient(rgba(17,17,17,0.07) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
           }}
         >
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-            {/* Esquerda: Headline + Argumento Central */}
+            {/* Esquerda: Proposta de Valor WIIFM */}
             <div className="lg:col-span-7 space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border-2 border-black bg-white px-3.5 py-1.5 text-xs font-bold tracking-wide shadow-[2px_2px_0_0_#111]">
+              <div className="inline-flex items-center gap-2 rounded-full border-2 border-black bg-white px-3.5 py-1.5 text-xs font-bold tracking-wide shadow-brutal-xs">
                 <span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
-                <span>Feito para restaurantes, bares, eventos e operações com freelas</span>
+                <span>Para restaurantes, bares, eventos e profissionais autônomos</span>
               </div>
 
-              <h1 className="text-4xl sm:text-5xl md:text-[3.5rem] font-black leading-[1.03] tracking-tight text-accent">
-                Sua escala de freelas organizada,{' '}
-                <span className="text-primary underline decoration-4 decoration-black underline-offset-4">
-                  do convite ao PIX.
-                </span>
+              <h1 className="text-4xl sm:text-5xl md:text-[3.4rem] font-black leading-[1.04] tracking-tight text-accent">
+                Nunca mais perca a abertura da loja por{' '}
+                <span className="text-primary">falta de freela.</span>
               </h1>
 
               <p className="text-base sm:text-lg md:text-xl text-gray-700 max-w-2xl leading-relaxed">
-                Chame seu Elenco de confiança em um toque, comprove presença no local com QR e GPS e
-                feche a semana com a planilha de pagamento pronta para o financeiro.
+                Chame sua equipe de confiança em segundos, saiba na véspera quem confirmou presença
+                e feche os pagamentos da semana sem juntar conversa de WhatsApp.
               </p>
 
-              {/* 3 Pilares rápidos */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                <div className="rounded-xl border-2 border-black bg-white p-3.5 shadow-[3px_3px_0_0_#111]">
-                  <p className="text-[11px] font-black uppercase tracking-wider text-blue-700">
-                    Chamado 1 → N
-                  </p>
-                  <p className="text-sm font-bold text-accent mt-1">
-                    Quem aceitar primeiro fecha a vaga
-                  </p>
-                </div>
-                <div className="rounded-xl border-2 border-black bg-white p-3.5 shadow-[3px_3px_0_0_#111]">
-                  <p className="text-[11px] font-black uppercase tracking-wider text-primary">
-                    Financeiro limpo
-                  </p>
-                  <p className="text-sm font-bold text-accent mt-1">
-                    Horas reais, recibo e CSV de PIX
-                  </p>
-                </div>
-                <div className="rounded-xl border-2 border-black bg-white p-3.5 shadow-[3px_3px_0_0_#111]">
-                  <p className="text-[11px] font-black uppercase tracking-wider text-gray-700">
-                    No celular
-                  </p>
-                  <p className="text-sm font-bold text-accent mt-1">
-                    Push e e-mail fora do app
-                  </p>
-                </div>
-              </div>
+              {/* 3 Ganhos Reais (WIIFM) */}
+              <ul className="space-y-3 pt-1 max-w-xl">
+                <li className="flex items-start gap-3 text-sm sm:text-base text-gray-800">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-black bg-[#D7F5E4] text-primary">
+                    <Check size={14} strokeWidth={3} aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong className="text-accent">Volte a ter paz na abertura:</strong> preencha
+                    faltas de última hora avisando todo o seu time de confiança de uma vez.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 text-sm sm:text-base text-gray-800">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-black bg-[#D7F5E4] text-primary">
+                    <Check size={14} strokeWidth={3} aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong className="text-accent">Feche o financeiro em minutos:</strong> cada
+                    turno chega com horas reais trabalhadas, loja e dados prontos para pagar.
+                  </span>
+                </li>
+                <li className="flex items-start gap-3 text-sm sm:text-base text-gray-800">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-black bg-[#D7F5E4] text-primary">
+                    <Check size={14} strokeWidth={3} aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong className="text-accent">Segurança para os dois lados:</strong> recibo
+                    registrado para a empresa e comprovante de renda portátil para o freela.
+                  </span>
+                </li>
+              </ul>
             </div>
 
-            {/* Direita: Cartões de Entrada Táteis (Empresa + Freela) */}
+            {/* Direita: Cartões de Entrada (Padrão Neo-Brutalista Limpo, sem sombras coloridas) */}
             <div className="lg:col-span-5 grid gap-5 w-full">
               {/* Card Empresa */}
               <button
                 type="button"
                 data-copilot="publico.entrada.escolher-empresa"
                 onClick={() => navigate('/login?type=hire&cadastro=1')}
-                className="group relative bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-[6px_6px_0_0_#2563EB] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[8px_8px_0_0_#2563EB] active:translate-x-0.5 active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                className="group relative bg-accent text-white border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-brutal transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
               >
                 <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center border-2 border-white/90">
+                  <div className="w-11 h-11 bg-white/10 text-white rounded-xl flex items-center justify-center border-2 border-white/80">
                     <Briefcase size={22} strokeWidth={2.5} aria-hidden="true" />
                   </div>
-                  <span className="bg-blue-600 text-white border border-white/30 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
+                  <span className="bg-white/15 text-white border border-white/25 text-xs font-bold px-3 py-1 rounded-full">
                     Para empresas
                   </span>
                 </div>
                 <h2 className="text-2xl font-black tracking-tight mb-1.5">Quero contratar</h2>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  Monte seu Elenco de confiança, delegue turnos para encarregados por loja e exporte
-                  os pagamentos da semana sem planilha manual.
+                  Organize seus freelas de confiança, delegue turnos para encarregados e acabe com
+                  as planilhas manuais no dia de pagamento.
                 </p>
-                <span className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white px-4 text-sm font-extrabold text-black group-hover:bg-blue-50 transition-colors">
+                <span className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-white bg-white px-4 text-sm font-bold text-black group-hover:bg-gray-100 transition-colors">
                   Criar conta de empresa <ArrowRight size={17} aria-hidden="true" />
                 </span>
               </button>
@@ -291,22 +264,22 @@ export default function Onboarding() {
                 type="button"
                 data-copilot="publico.entrada.escolher-freela"
                 onClick={() => navigate('/login?type=work&cadastro=1')}
-                className="group relative bg-white text-accent border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-[6px_6px_0_0_#00A651] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[8px_8px_0_0_#00A651] active:translate-x-0.5 active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                className="group relative bg-white text-accent border-2 border-black rounded-2xl p-6 sm:p-7 text-left shadow-brutal transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
               >
                 <div className="flex items-center justify-between gap-2 mb-4">
                   <div className="w-11 h-11 bg-[#D7F5E4] text-primary rounded-xl flex items-center justify-center border-2 border-black">
                     <DollarSign size={22} strokeWidth={2.5} aria-hidden="true" />
                   </div>
-                  <span className="bg-[#D7F5E4] text-primary border border-primary/40 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
+                  <span className="bg-[#D7F5E4] text-primary border border-primary/30 text-xs font-bold px-3 py-1 rounded-full">
                     Para freelas
                   </span>
                 </div>
                 <h2 className="text-2xl font-black tracking-tight mb-1.5">Quero trabalhar</h2>
                 <p className="text-gray-600 text-sm leading-relaxed">
-                  Receba convites no celular, comprove suas horas no local e construa sua carteira
-                  portátil com avaliações e comprovantes de renda.
+                  Receba convites de empresas que já confiam no seu trabalho e construa um histórico
+                  com avaliações e comprovantes de renda que são seus.
                 </p>
-                <span className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-black bg-primary px-4 text-sm font-extrabold text-white group-hover:bg-black transition-colors">
+                <span className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-black bg-primary px-4 text-sm font-bold text-white group-hover:bg-black transition-colors">
                   Criar conta de freela <ArrowRight size={17} aria-hidden="true" />
                 </span>
               </button>
@@ -314,7 +287,7 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* Faixa Marquee Preta & Verde (sem amarelo) */}
+        {/* Faixa de marca */}
         <div className="relative flex w-full items-center bg-accent border-y-2 border-black">
           <div className="min-w-0 flex-1 overflow-hidden py-3" aria-hidden="true">
             <div
@@ -323,7 +296,7 @@ export default function Onboarding() {
             >
               {Array(16)
                 .fill(
-                  'WORKYN • ELENCO DE CONFIANÇA • CHAMADO 1 PARA VÁRIOS • PRESENÇA COM QR E GPS • PLANILHA DE PIX PRONTA • RECIBO AUTOMÁTICO • ',
+                  'WORKYN • ESCALA ORGANIZADA • EQUIPE DE CONFIANÇA • PRESENÇA COMPROVADA • FECHAMENTO EM MINUTOS • RECIBO PARA OS DOIS LADOS • ',
                 )
                 .map((text, i) => (
                   <span key={i}>{text}</span>
@@ -339,19 +312,19 @@ export default function Onboarding() {
           </IconButton>
         </div>
 
-        {/* Antes x Depois: Argumento Operacional Direto */}
+        {/* Antes x Depois */}
         <section id="comparativo" className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-white border-b-2 border-black">
           <div className="max-w-7xl mx-auto">
             <div className="max-w-3xl mb-12">
-              <span className="inline-block rounded-full border-2 border-black bg-blue-50 text-blue-800 px-3.5 py-1 text-xs font-black uppercase tracking-wider mb-3">
+              <span className="inline-block rounded-full border-2 border-black bg-canvas text-accent px-3.5 py-1 text-xs font-bold uppercase tracking-wider mb-3">
                 Na prática
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-accent">
-                O que muda na primeira semana usando o Workyn
+                O que muda já na primeira semana usando o Workyn
               </h2>
               <p className="mt-3 text-base sm:text-lg text-gray-600">
-                Menos tempo apagando incêndio no WhatsApp e fechamento financeiro sem conferir print
-                de conversa.
+                Sua operação deixa de depender de memória e grupos de WhatsApp para funcionar com
+                clareza do começo ao fim do turno.
               </p>
             </div>
 
@@ -359,7 +332,7 @@ export default function Onboarding() {
               {COMPARISON.map((row, idx) => (
                 <div
                   key={idx}
-                  className="rounded-2xl border-2 border-black bg-canvas p-6 shadow-[4px_4px_0_0_#111] flex flex-col gap-4"
+                  className="rounded-2xl border-2 border-black bg-canvas p-6 shadow-brutal flex flex-col gap-4"
                 >
                   <div className="flex items-start gap-3">
                     <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-black bg-white text-red-600">
@@ -381,37 +354,35 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* Recursos Completos */}
-        <section id="recursos" className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-canvas border-b-2 border-black">
+        {/* Benefícios Reais (WIIFM) */}
+        <section id="beneficios" className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-canvas border-b-2 border-black">
           <div className="max-w-7xl mx-auto">
             <div className="max-w-3xl mb-12">
-              <span className="inline-block rounded-full border-2 border-black bg-[#D7F5E4] text-primary px-3.5 py-1 text-xs font-black uppercase tracking-wider mb-3">
-                Tudo no mesmo painel
+              <span className="inline-block rounded-full border-2 border-black bg-[#D7F5E4] text-primary px-3.5 py-1 text-xs font-bold uppercase tracking-wider mb-3">
+                Por que usar o Workyn
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-accent">
-                Cada etapa do turno registrada do começo ao fim
+                Menos improviso na escala, mais controle no caixa
               </h2>
               <p className="mt-3 text-base sm:text-lg text-gray-700">
-                Operação, presença e financeiro conversando no mesmo lugar, pensado primeiro para
-                quem resolve tudo pelo celular.
+                Tudo o que uma operação com freelas precisa para rodar leve no dia a dia e prestar
+                contas com transparência.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {PILLARS.map((item) => {
+              {BENEFITS.map((item) => {
                 const Icon = item.icon;
                 return (
                   <article
                     key={item.title}
-                    className="rounded-2xl border-2 border-black bg-white p-6 shadow-[4px_4px_0_0_#111] transition-transform hover:-translate-y-0.5 flex flex-col"
+                    className="rounded-2xl border-2 border-black bg-white p-6 shadow-brutal transition-transform hover:-translate-y-0.5 flex flex-col"
                   >
                     <div className="flex items-center justify-between gap-2 mb-5">
-                      <div
-                        className={`w-11 h-11 rounded-xl border-2 border-black flex items-center justify-center ${item.accent}`}
-                      >
+                      <div className="w-11 h-11 rounded-xl border-2 border-black bg-canvas text-accent flex items-center justify-center">
                         <Icon size={22} strokeWidth={2.5} aria-hidden="true" />
                       </div>
-                      <span className="text-[11px] font-black uppercase tracking-wider text-gray-500">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
                         {item.eyebrow}
                       </span>
                     </div>
@@ -428,68 +399,68 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* Como Funciona — Dois Lados */}
+        {/* Como Funciona */}
         <section id="como-funciona" className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-white border-b-2 border-black">
           <div className="max-w-7xl mx-auto">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="inline-block rounded-full border-2 border-black bg-canvas text-accent px-3.5 py-1 text-xs font-black uppercase tracking-wider mb-3">
+              <span className="inline-block rounded-full border-2 border-black bg-canvas text-accent px-3.5 py-1 text-xs font-bold uppercase tracking-wider mb-3">
                 Em 3 passos
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-accent">
-                Simples para o dono, claro para o freela
+                Simples para o dono, justo para o freela
               </h2>
               <p className="mt-3 text-base sm:text-lg text-gray-600">
-                Sua empresa traz quem já confia, chama direto para cada turno e fecha o pagamento
-                com recibo registrado para os dois lados.
+                Você traz os profissionais que já confia, chama direto para cada turno e fecha o
+                pagamento com recibo registrado para os dois lados.
               </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Para Empresas */}
-              <div className="rounded-2xl border-2 border-black bg-canvas p-6 sm:p-8 shadow-[6px_6px_0_0_#2563EB]">
+              <div className="rounded-2xl border-2 border-black bg-canvas p-6 sm:p-8 shadow-brutal">
                 <div className="flex items-center justify-between gap-2 mb-7 pb-4 border-b-2 border-black/15">
                   <h3 className="text-xl font-black flex items-center gap-2.5 text-accent">
-                    <Briefcase size={22} strokeWidth={2.5} className="text-blue-700" aria-hidden="true" />
+                    <Briefcase size={22} strokeWidth={2.5} aria-hidden="true" />
                     Para empresas
                   </h3>
-                  <span className="rounded-full border-2 border-black bg-blue-600 text-white px-3 py-0.5 text-[11px] font-black uppercase tracking-wider">
+                  <span className="rounded-full border-2 border-black bg-white text-accent px-3 py-0.5 text-xs font-bold">
                     Gestor e Encarregado
                   </span>
                 </div>
                 <ol className="space-y-6">
                   <li className="flex items-start gap-4">
-                    <div className="w-10 h-10 shrink-0 bg-blue-600 text-white border-2 border-black rounded-xl flex items-center justify-center shadow-[2px_2px_0_0_#111]">
+                    <div className="w-10 h-10 shrink-0 bg-accent text-white border-2 border-black rounded-xl flex items-center justify-center">
                       <UserPlus size={18} strokeWidth={2.5} aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="font-extrabold text-base text-accent">1. Monte seu Elenco</p>
+                      <p className="font-extrabold text-base text-accent">1. Traga seu time de confiança</p>
                       <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
-                        Envie o link do Elenco para os freelas com quem você já trabalha e separe
-                        em listas por função.
+                        Envie um link único para os freelas com quem você já trabalha e separe em
+                        listas por função.
                       </p>
                     </div>
                   </li>
                   <li className="flex items-start gap-4">
-                    <div className="w-10 h-10 shrink-0 bg-blue-600 text-white border-2 border-black rounded-xl flex items-center justify-center shadow-[2px_2px_0_0_#111]">
+                    <div className="w-10 h-10 shrink-0 bg-accent text-white border-2 border-black rounded-xl flex items-center justify-center">
                       <CalendarCheck size={18} strokeWidth={2.5} aria-hidden="true" />
                     </div>
                     <div>
                       <p className="font-extrabold text-base text-accent">
-                        2. Dispare turnos e confirme presença
+                        2. Abra o turno e acompanhe a presença
                       </p>
                       <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
-                        Crie turnos avulsos, em série ou em lote. Chame vários freelas de uma vez e
-                        registre chegada e saída no local pelo QR.
+                        Chame vários freelas de uma vez, receba confirmação na véspera e registre
+                        chegada e saída no local pelo celular.
                       </p>
                     </div>
                   </li>
                   <li className="flex items-start gap-4">
-                    <div className="w-10 h-10 shrink-0 bg-blue-600 text-white border-2 border-black rounded-xl flex items-center justify-center shadow-[2px_2px_0_0_#111]">
+                    <div className="w-10 h-10 shrink-0 bg-accent text-white border-2 border-black rounded-xl flex items-center justify-center">
                       <Receipt size={18} strokeWidth={2.5} aria-hidden="true" />
                     </div>
                     <div>
                       <p className="font-extrabold text-base text-accent">
-                        3. Exporte a planilha de PIX
+                        3. Feche o financeiro sem retrabalho
                       </p>
                       <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
                         Pague por fora (PIX ou dinheiro), registre o pagamento e baixe o relatório
@@ -501,13 +472,13 @@ export default function Onboarding() {
               </div>
 
               {/* Para Freelas */}
-              <div className="rounded-2xl border-2 border-black bg-accent text-white p-6 sm:p-8 shadow-[6px_6px_0_0_#00A651]">
+              <div className="rounded-2xl border-2 border-black bg-accent text-white p-6 sm:p-8 shadow-brutal">
                 <div className="flex items-center justify-between gap-2 mb-7 pb-4 border-b-2 border-white/15">
                   <h3 className="text-xl font-black flex items-center gap-2.5 text-[#5EF0A3]">
                     <Users size={22} strokeWidth={2.5} aria-hidden="true" />
                     Para freelas
                   </h3>
-                  <span className="rounded-full border border-white/30 bg-primary text-white px-3 py-0.5 text-[11px] font-black uppercase tracking-wider">
+                  <span className="rounded-full border border-white/30 bg-white/10 text-white px-3 py-0.5 text-xs font-bold">
                     Sua carreira
                   </span>
                 </div>
@@ -517,10 +488,10 @@ export default function Onboarding() {
                       <Clock size={18} strokeWidth={2.5} aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="font-extrabold text-base text-white">1. Aceite em um toque</p>
+                      <p className="font-extrabold text-base text-white">1. Aceite o turno em um toque</p>
                       <p className="text-sm text-gray-300 mt-0.5 leading-relaxed">
-                        Receba aviso no celular e por e-mail quando uma empresa do seu Elenco abrir
-                        um turno e garanta a vaga na hora.
+                        Receba o aviso no celular e no e-mail quando uma empresa do seu Elenco abrir
+                        vaga e garanta seu dia de trabalho.
                       </p>
                     </div>
                   </li>
@@ -530,11 +501,11 @@ export default function Onboarding() {
                     </div>
                     <div>
                       <p className="font-extrabold text-base text-white">
-                        2. Comprove suas horas no local
+                        2. Comprove suas horas trabalhadas
                       </p>
                       <p className="text-sm text-gray-300 mt-0.5 leading-relaxed">
-                        Leia o QR do responsável na chegada e na saída para deixar seu horário real
-                        registrado sem discussão.
+                        Registre entrada e saída direto no local para deixar seu horário documentado
+                        com clareza para você e para a empresa.
                       </p>
                     </div>
                   </li>
@@ -548,7 +519,7 @@ export default function Onboarding() {
                       </p>
                       <p className="text-sm text-gray-300 mt-0.5 leading-relaxed">
                         Confirme cada pagamento recebido e leve seu histórico, avaliações e
-                        comprovantes de renda com você.
+                        comprovantes de renda com você para qualquer lugar.
                       </p>
                     </div>
                   </li>
@@ -558,11 +529,11 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* FAQ (SEO + Objeções Reais) */}
+        {/* FAQ */}
         <section id="duvidas" className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-canvas border-b-2 border-black">
           <div className="max-w-4xl mx-auto">
             <div className="mb-10">
-              <span className="inline-block rounded-full border-2 border-black bg-white px-3.5 py-1 text-xs font-black uppercase tracking-wider mb-3 shadow-[2px_2px_0_0_#111]">
+              <span className="inline-block rounded-full border-2 border-black bg-white px-3.5 py-1 text-xs font-bold uppercase tracking-wider mb-3 shadow-brutal-xs">
                 Perguntas frequentes
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-accent">
@@ -574,7 +545,7 @@ export default function Onboarding() {
               {FAQ_ITEMS.map((item) => (
                 <details
                   key={item.q}
-                  className="group rounded-2xl border-2 border-black bg-white shadow-[4px_4px_0_0_#111]"
+                  className="group rounded-2xl border-2 border-black bg-white shadow-brutal-sm"
                 >
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 font-extrabold text-base sm:text-lg text-accent">
                     <span>{item.q}</span>
@@ -593,7 +564,7 @@ export default function Onboarding() {
           </div>
         </section>
 
-        {/* CTA Final Moderno-Brutalista (Preto + Verde Workyn, sem amarelo) */}
+        {/* CTA Final (botões 100% padrão do sistema, sem sombra colorida) */}
         <section className="px-4 sm:px-6 md:px-10 py-16 md:py-24 bg-accent text-white text-center border-b-2 border-black">
           <div className="max-w-3xl mx-auto space-y-6">
             <span className="inline-block rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#5EF0A3]">
@@ -603,15 +574,14 @@ export default function Onboarding() {
               Coloque sua escala de freelas em ordem hoje
             </h2>
             <p className="text-base sm:text-lg text-gray-300 max-w-xl mx-auto leading-relaxed">
-              Leva menos de 2 minutos para criar a conta, convidar seu Elenco e abrir o primeiro
-              turno no celular.
+              Leva menos de 2 minutos para criar a conta, convidar seu time de confiança e abrir o
+              primeiro turno pelo celular.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
               <Button
                 variant="primary"
                 size="lg"
                 onClick={() => navigate('/login?type=hire&cadastro=1')}
-                className="border-2 border-white shadow-[4px_4px_0_0_#2563EB] font-extrabold"
               >
                 Criar conta de empresa
               </Button>
@@ -619,7 +589,6 @@ export default function Onboarding() {
                 variant="secondary"
                 size="lg"
                 onClick={() => navigate('/login?type=work&cadastro=1')}
-                className="border-2 border-white bg-white text-black shadow-[4px_4px_0_0_#00A651] font-extrabold"
               >
                 Criar conta de freela
               </Button>
@@ -634,8 +603,8 @@ export default function Onboarding() {
           <div className="text-center md:text-left">
             <p className="text-xl font-black tracking-tight">Workyn.</p>
             <p className="text-xs text-gray-600 mt-1">
-              &copy; {new Date().getFullYear()} Workyn. Gestão de turnos, presença e pagamentos para
-              o trabalho freela.
+              &copy; {new Date().getFullYear()} Workyn. Escala de freelas, presença e pagamentos
+              organizados.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 text-sm font-bold">

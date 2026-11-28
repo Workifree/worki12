@@ -1,4 +1,11 @@
 User-agent: *
+Allow: /
 Disallow: /admin
-# cobre /convite/, /convite-equipe/ e /convite-gerente/
-Disallow: /convite
+Disallow: /company/
+Disallow: /dashboard
+Disallow: /my-jobs
+Disallow: /messages
+Disallow: /profile
+Disallow: /recebimentos
+
+Sitemap: https://www.workyn.app/sitemap.xml
