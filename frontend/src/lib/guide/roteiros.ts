@@ -373,7 +373,7 @@ const EMPRESA_ROTEIROS: readonly RoteiroGuia[] = [
     {
         id: 'empresa-mensagens', papeis: EMPRESA,
         titulo: 'Responder mensagem de um freela',
-        descricao: 'Conversar pelo chat do Worki.',
+        descricao: 'Conversar pelo chat do Workyn.',
         frases: ['chat', 'falar com freela', 'conversa'],
         passos: [{
             rota: 'empresa.mensagens', alvos: ['empresa.mensagens.enviar'],

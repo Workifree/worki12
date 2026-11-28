@@ -350,7 +350,7 @@ describe('CompanyJobCandidates — modal de confirmação de entrega', () => {
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        'Entrega confirmada. O pagamento é feito por fora do Worki.',
+        'Entrega confirmada. O pagamento é feito por fora do Workyn.',
         'success'
       )
     })

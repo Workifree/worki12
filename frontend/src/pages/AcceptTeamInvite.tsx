@@ -331,7 +331,7 @@ export default function AcceptTeamInvite() {
 
   const frame = (children: ReactNode) => (
     <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
-      <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Worki." noindex />
+      <PageMeta title="Convite para a equipe" description="Entre na equipe de uma empresa no Workyn." noindex />
       <div className="w-full max-w-md">
         <Card padding="lg" className="shadow-brutal-lg [overflow-wrap:anywhere]">
           {children}

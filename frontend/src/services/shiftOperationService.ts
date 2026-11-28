@@ -488,7 +488,7 @@ export function cancelJobMessage(result: CancelJobResult, role: ViewerRole = 'ge
         ? 'Esse turno tem pagamento agendado ou registrado. Estorne o pagamento registrado antes de cancelar o turno.'
         : 'Esse turno tem pagamento agendado ou registrado. Peça ao Gestor para estornar o pagamento antes de cancelar.';
     case 'active_escrow':
-      return 'Este turno tem uma reserva de saldo ativa; fale com o suporte do Worki.';
+      return 'Este turno tem uma reserva de saldo ativa; fale com o suporte do Workyn.';
     case 'attendance_started':
       return 'Esse turno já teve presença registrada. Não dá para cancelar um turno que já começou.';
     case 'job_in_the_past':

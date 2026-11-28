@@ -6,6 +6,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { isRateLimited } from '../_shared/rate-limit.ts';
 
 const ALLOWED_ORIGINS = new Set([
+  'https://www.workyn.app',
+  'https://workyn.app',
   'https://worki-opal.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -13,7 +15,7 @@ const ALLOWED_ORIGINS = new Set([
 
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('origin') ?? '';
-  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : 'https://worki-opal.vercel.app';
+  const allowOrigin = ALLOWED_ORIGINS.has(origin) ? origin : 'https://www.workyn.app';
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

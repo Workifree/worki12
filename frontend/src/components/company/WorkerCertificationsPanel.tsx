@@ -21,7 +21,7 @@ import { Dialog } from '../ui/Dialog';
 // F8 (empresa) — o que a empresa vê no perfil de um freela do seu elenco: as certificações
 // EXTERNAS que ele auto-declarou (CREF, manipulação de alimentos) e os treinamentos INTERNOS
 // que a própria empresa já registrou. v1 SEM ARQUIVO (ADR-20260821, D1): não há documento pra
-// abrir aqui — a "conferência" é a empresa confirmando que VIU o original fora do Worki.
+// abrir aqui — a "conferência" é a empresa confirmando que VIU o original fora do Workyn.
 //
 // D3 é uma regra de produto, não de estilo: proibido "Verificado" isolado ou selo sem empresa
 // nomeada. `verified_by_company_id` é sempre exibido nomeado; e só a MESMA empresa que conferiu

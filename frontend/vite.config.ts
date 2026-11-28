@@ -55,7 +55,7 @@ function avisoLegalDoChunk(chunk: { isEntry: boolean; moduleIds: string[] }): st
   const noChunk = (trecho: string) => chunk.moduleIds.some((id) => id.replace(/\\/g, '/').includes(trecho))
   const linhas: string[] = []
   if (chunk.isEntry) {
-    linhas.push('Worki usa codigo aberto de terceiros. Avisos de copyright e licencas (MIT, ISC, Apache-2.0, 0BSD): /licencas-de-terceiros.txt e /licencas')
+    linhas.push('Workyn usa codigo aberto de terceiros. Avisos de copyright e licencas (MIT, ISC, Apache-2.0, 0BSD): /licencas-de-terceiros.txt e /licencas')
   }
   if (noChunk('node_modules/@page-agent/') || noChunk('node_modules/ai-motion/')) {
     linhas.push(

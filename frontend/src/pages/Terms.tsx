@@ -62,7 +62,7 @@ export default function Terms() {
           </ul>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">9. Propriedade Intelectual</h2>
-          <p>Todo o conteúdo da Plataforma (marca, logotipo, interface, código-fonte) é propriedade da Worki. O uso não autorizado constitui violação de direitos autorais e de propriedade intelectual.</p>
+          <p>Todo o conteúdo da Plataforma (marca, logotipo, interface, código-fonte) é propriedade da Workyn. O uso não autorizado constitui violação de direitos autorais e de propriedade intelectual.</p>
 
           <h2 className="text-lg font-bold mt-8 first:mt-0">10. Proteção de Dados (LGPD)</h2>
           <p>O tratamento de dados pessoais pela Workyn está em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Consulte nossa <a href="/privacidade" className="text-primary-dark font-bold underline">Política de Privacidade</a> para detalhes sobre coleta, uso, compartilhamento e seus direitos como titular dos dados.</p>

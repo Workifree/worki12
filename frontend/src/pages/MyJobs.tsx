@@ -728,12 +728,11 @@ export default function MyJobs() {
 
     return (
         <div className="flex flex-col gap-6 pb-12 font-sans text-accent max-w-4xl mx-auto">
-            <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Worki." />
+            <PageMeta title="Meus Turnos" description="Acompanhe seus convites, turnos agendados e histórico na Workyn." />
 
             <PageHeader title="Meus Turnos" className="mb-0" />
 
-            {/* Permissão de aviso só é oferecida quando há o que avisar. */}
-            {isAvisosEnabled() && pendingInvites.length > 0 && <PedidoDeAvisos />}
+            {isAvisosEnabled() && <PedidoDeAvisos />}
 
             {/* Convite disputado tem prazo: com cartões acima das abas, ele ficaria fora da dobra. */}
             {pendingInvites.some((i) => i.disputed) && (todayJobs.length > 0 || pendingConfirmations.length > 0) && (

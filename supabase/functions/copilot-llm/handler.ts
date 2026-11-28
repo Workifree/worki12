@@ -48,7 +48,7 @@ interface ProviderPayload {
   usage?: { cost?: unknown }
 }
 
-const DEFAULT_ORIGINS = ['https://worki-opal.vercel.app', 'http://localhost:5173']
+const DEFAULT_ORIGINS = ['https://www.workyn.app', 'https://workyn.app', 'https://worki-opal.vercel.app', 'http://localhost:5173']
 export const MAX_BODY_BYTES = 120_000
 export const MAX_USER_CHARS = 40_000
 

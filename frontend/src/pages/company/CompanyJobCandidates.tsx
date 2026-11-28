@@ -600,7 +600,7 @@ export default function CompanyJobCandidates() {
         }
         setConfirmDeliveryApp(null);
         setReleasing(false);
-        addToast('Entrega confirmada. O pagamento é feito por fora do Worki.', 'success');
+        addToast('Entrega confirmada. O pagamento é feito por fora do Workyn.', 'success');
         fetchCandidates();
     };
 
@@ -1981,7 +1981,7 @@ export default function CompanyJobCandidates() {
                                 </Field>
 
                                 <p className="text-xs text-gray-600">
-                                    O dinheiro não passa pelo Worki. Este registro é declaratório e não é documento fiscal.
+                                    O dinheiro não passa pelo Workyn. Este registro é declaratório e não é documento fiscal.
                                 </p>
                                 <p className="text-sm font-bold">Ao confirmar, o turno é marcado como concluído.</p>
                             </div>

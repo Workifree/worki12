@@ -2,8 +2,8 @@
 // Set RESEND_API_KEY in Supabase secrets
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
-const FROM_EMAIL = 'Worki <noreply@worki.com.br>';
-const APP_URL = Deno.env.get('APP_URL') ?? 'https://worki-opal.vercel.app';
+const FROM_EMAIL = Deno.env.get('NOTICE_EMAIL_FROM') ?? 'Workyn <avisos@workyn.app>';
+const APP_URL = Deno.env.get('APP_URL') ?? 'https://www.workyn.app';
 
 interface EmailPayload {
     to: string;

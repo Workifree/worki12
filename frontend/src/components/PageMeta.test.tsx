@@ -18,10 +18,10 @@ describe('PageMeta', () => {
   })
 
   it('renderiza meta description quando prop description fornecida', () => {
-    render(<PageMeta title="Entrar" description="Entre na sua conta Worki." />)
+    render(<PageMeta title="Entrar" description="Entre na sua conta Workyn." />)
     const metaDesc = document.querySelector('meta[name="description"]')
     expect(metaDesc).not.toBeNull()
-    expect(metaDesc?.getAttribute('content')).toBe('Entre na sua conta Worki.')
+    expect(metaDesc?.getAttribute('content')).toBe('Entre na sua conta Workyn.')
   })
 
   it('não renderiza meta description quando prop description ausente', () => {

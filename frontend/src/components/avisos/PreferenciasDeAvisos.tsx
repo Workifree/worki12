@@ -151,7 +151,7 @@ export default function PreferenciasDeAvisos({ whatsappDisponivel = false }: Pre
                     disabled={salvando}
                 />
                 <p className="text-sm text-gray-700">
-                    Avisos por e-mail serão ativados em breve. Sua escolha já fica salva.
+                    Receba avisos de turnos, confirmações e recibos direto no seu e-mail.
                 </p>
             </div>
 

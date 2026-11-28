@@ -2,7 +2,13 @@
 // Nunca CPF, PIX, valor, endereco ou nome de terceiro: o payload do banco nem tem esses campos.
 
 export type NoticeEventKind =
-    | 'shift_call_target' | 'sos_call_target' | 'attendance_request' | 'shift_cancelled' | 'payment_recorded';
+    | 'shift_call_target'
+    | 'sos_call_target'
+    | 'attendance_request'
+    | 'shift_cancelled'
+    | 'payment_recorded'
+    | 'shift_accepted'
+    | 'team_member_waiting';
 
 export interface NoticePayload {
     company_name?: string | null;
@@ -76,6 +82,16 @@ export function noticeText(kind: NoticeEventKind, payload: NoticePayload): Notic
             return {
                 path, cta: 'Ver recibo', title: 'Pagamento registrado',
                 body: `${company} registrou o pagamento do turno de ${day}. Abra o Workyn para conferir o recibo.`,
+            };
+        case 'shift_accepted':
+            return {
+                path, cta: 'Ver turno', title: 'Vaga preenchida no turno',
+                body: `Um freela confirmou presença no turno de ${when}${where}. Abra o Workyn para conferir.`,
+            };
+        case 'team_member_waiting':
+            return {
+                path, cta: 'Confirmar na Equipe', title: 'Confirme novo membro da equipe',
+                body: `Uma pessoa convidada entrou em ${company} e aguarda sua confirmação para operar.`,
             };
     }
 }

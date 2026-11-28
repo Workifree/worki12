@@ -1,5 +1,5 @@
 /**
- * `PageController` do page-agent com a camada de segurança do Worki. O laço do agente
+ * `PageController` do page-agent com a camada de segurança do Workyn. O laço do agente
  * (`PageAgentCore`) só alcança a página por esta classe.
  *
  *  - leitura: `observePage` (a serialização original NUNCA roda);

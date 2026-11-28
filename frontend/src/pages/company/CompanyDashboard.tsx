@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Briefcase, Bell, AlertTriangle, RefreshCw, PlayCircle, Share2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import PageMeta from '../../components/PageMeta';
+import PedidoDeAvisos from '../../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../../lib/features';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -287,6 +289,7 @@ export default function CompanyDashboard() {
 
             <div className="space-y-8">
                 <GuideChecklist ocultavel />
+                {isAvisosEnabled() && <PedidoDeAvisos papel="empresa" />}
                 <TrailShortcutCard />
 
                 {isErrorPending && (

@@ -234,7 +234,7 @@ export default function InviteAccept() {
 
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
-      <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Worki." noindex />
+      <PageMeta title="Convite de Elenco" description="Veja o convite de Elenco no Workyn." noindex />
 
       <div className="w-full max-w-md">
         {state === 'loading' && (

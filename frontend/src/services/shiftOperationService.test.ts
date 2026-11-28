@@ -203,7 +203,7 @@ describe('cancelJob', () => {
     expect(cancelJobMessage({ outcome: 'active_payment', ...base }, 'gestor')).toMatch(/Estorne o pagamento registrado/);
     expect(cancelJobMessage({ outcome: 'active_payment', ...base }, 'encarregado')).toMatch(/Peça ao Gestor/);
     const escrow = cancelJobMessage({ outcome: 'active_escrow', ...base });
-    expect(escrow).toBe('Este turno tem uma reserva de saldo ativa; fale com o suporte do Worki.');
+    expect(escrow).toBe('Este turno tem uma reserva de saldo ativa; fale com o suporte do Workyn.');
     expect(escrow).not.toMatch(/Devolva/);
   });
 

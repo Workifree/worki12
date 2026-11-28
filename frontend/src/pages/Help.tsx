@@ -19,7 +19,7 @@ const faqs = [
     },
     {
         q: 'Como funciona o pagamento?',
-        a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Worki. Depois de pagar, a empresa registra o pagamento no app, e o Workyn emite um recibo para os dois lados como comprovante.',
+        a: 'Neste piloto, o pagamento é combinado e feito diretamente entre empresa e freela, por PIX ou dinheiro — o valor não passa pela plataforma e não há taxa do Workyn. Depois de pagar, a empresa registra o pagamento no app, e o Workyn emite um recibo para os dois lados como comprovante.',
     },
     {
         q: 'Sou freela: o valor do recibo está errado ou não recebi. E agora?',

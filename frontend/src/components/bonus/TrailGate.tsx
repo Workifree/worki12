@@ -26,7 +26,7 @@ export default function TrailGate({ status, minPayoutCents, onAccept }: TrailGat
         <Lock aria-hidden="true" className="mx-auto h-8 w-8" />
         <h2 className="mt-3 text-xl font-bold">A trilha é para quem opera com login próprio</h2>
         <p className="mt-2 text-sm text-gray-700">
-          Quando você entrar com o seu próprio acesso, a trilha aparece aqui. Se tiver dúvida, fale com a equipe do Worki.
+          Quando você entrar com o seu próprio acesso, a trilha aparece aqui. Se tiver dúvida, fale com a equipe do Workyn.
         </p>
       </Card>
     )

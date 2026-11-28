@@ -6,6 +6,8 @@ import { levelProgress } from '../lib/gamification';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import PageMeta from '../components/PageMeta';
+import PedidoDeAvisos from '../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../lib/features';
 import {
     Clock, Star, TrendingUp,
     ChevronRight, CheckCircle2, AlertCircle, Send, Building2, ArrowRight, CalendarClock
@@ -329,6 +331,8 @@ export default function Dashboard() {
             {falhaParcial && (
                 <ErroDeCarga onRetry={tentarDeNovo} mensagem="Parte das suas informações não carregou. Tente de novo." />
             )}
+
+            {isAvisosEnabled() && <PedidoDeAvisos />}
 
             <section aria-label="Seu nível" className="flex items-center gap-3 rounded-2xl border-2 border-black bg-white p-3 shadow-brutal-sm">
                 <span aria-hidden="true" className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full border-2 border-black bg-[#D7F5E4] leading-none">

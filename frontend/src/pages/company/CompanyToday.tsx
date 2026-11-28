@@ -13,6 +13,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PedidoDeAvisos from '../../components/avisos/PedidoDeAvisos';
+import { isAvisosEnabled } from '../../lib/features';
 import { CalendarClock, LayoutDashboard, Megaphone, Plus, Repeat, Users, X, XCircle } from 'lucide-react';
 import PageMeta from '../../components/PageMeta';
 import PassJobsModal, { type PassDestination } from '../../components/company/PassJobsModal';
@@ -414,6 +416,11 @@ export default function CompanyToday() {
       />
 
       <GuideChecklist ocultavel className="mb-6" />
+      {isAvisosEnabled() && (
+        <div className="mb-6">
+          <PedidoDeAvisos papel="empresa" />
+        </div>
+      )}
       <TrailShortcutCard className="mb-6" />
 
       {teamEnabled && operatorsFailed && (

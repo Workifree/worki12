@@ -14,7 +14,7 @@ const AJUDA: CartaoBoasVindas = {
 export const BOAS_VINDAS: Readonly<Record<PapelGuia, readonly CartaoBoasVindas[]>> = {
     gestor: [
         { titulo: 'Boas-vindas ao Workyn', texto: 'Aqui você cria turnos, chama seu Elenco, confere presença e registra pagamentos.' },
-        { titulo: 'O pagamento é por fora', texto: 'Você paga por PIX ou dinheiro e registra no Worki. O recibo fica guardado para os dois lados.' },
+        { titulo: 'O pagamento é por fora', texto: 'Você paga por PIX ou dinheiro e registra no Workyn. O recibo fica guardado para os dois lados.' },
         AJUDA,
     ],
     encarregado: [

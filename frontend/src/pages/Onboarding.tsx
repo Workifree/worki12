@@ -15,7 +15,7 @@ export default function Onboarding() {
       <nav className="flex items-center justify-between p-6 md:px-12 z-10 border-b-2 border-black/5">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="" width={32} height={32} className="w-8 h-8" />
-          <span className="text-2xl font-bold tracking-tight">Worki.</span>
+          <span className="text-2xl font-bold tracking-tight">Workyn.</span>
         </div>
         <div className="flex items-center gap-4">
           <button

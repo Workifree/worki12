@@ -299,7 +299,7 @@ export default function WorkerPublicProfile() {
         <div className="max-w-4xl mx-auto pb-20">
             <PageMeta
               title={profile ? profile.full_name : 'Perfil do Profissional'}
-              description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Worki.` : undefined}
+              description={profile ? `${profile.bio ?? 'Profissional'} | Veja o perfil completo de ${profile.full_name} na Workyn.` : undefined}
               ogTitle={profile ? `${profile.full_name} — Workyn` : undefined}
             />
             {/* Header / Nav */}
